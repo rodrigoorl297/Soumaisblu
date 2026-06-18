@@ -1,0 +1,119 @@
+/* ==========================================================
+   SOU + BLU – Simulador de Troco [OTIMIZADO]
+   ========================================================== */
+
+window.SimulacaoTroco = {
+  PARCELAS: 22,
+
+  // Tabelas de Fatores (mantidas para referência do negócio)
+  TABELAS: (() => {
+    const neo = 0.04199;
+    const aki = 0.04499;
+    const f = (base, pct) => base / pct;
+    return [
+      { grupo: 'NEO', id: 'NEO_NORMAL', label: 'NEO NORMAL — 100%', code: '100%', fator: f(neo, 1) },
+      { grupo: 'NEO', id: 'NEO_FLEX1', label: 'NEO FLEX 1 — 82%', code: '82%', fator: f(neo, 0.82) },
+      { grupo: 'NEO', id: 'NEO_FLEX2', label: 'NEO FLEX 2 — 67%', code: '67%', fator: f(neo, 0.67) },
+      { grupo: 'NEO', id: 'NEO_FLEX3', label: 'NEO FLEX 3 — 52%', code: '52%', fator: f(neo, 0.52) },
+      { grupo: 'NEO', id: 'NEO_FLEX4', label: 'NEO FLEX 4 — 37%', code: '37%', fator: f(neo, 0.37) },
+      { grupo: 'NEO', id: 'NEO_FLEX5', label: 'NEO FLEX 5 — 17%', code: '17%', fator: f(neo, 0.17) },
+      { grupo: 'AKI CAPITAL', id: 'AKI_100', label: 'AKI CAPITAL — 100%', code: '100%', fator: f(aki, 1) },
+      { grupo: 'AKI CAPITAL', id: 'AKI_70', label: 'AKI CAPITAL — 70%', code: '70%', fator: f(aki, 0.70) },
+      { grupo: 'AKI CAPITAL', id: 'AKI_35', label: 'AKI CAPITAL — 35%', code: '35%', fator: f(aki, 0.35) },
+      { grupo: 'AKI CAPITAL', id: 'AKI_17', label: 'AKI CAPITAL — 17%', code: '17%', fator: f(aki, 0.17) },
+      { grupo: 'Outras', id: 'FOX', label: 'FOX — 100%', code: '100%', fator: f(neo, 1) },
+      { grupo: 'Outras', id: 'BLU', label: 'BLU — 100%', code: '100%', fator: f(neo, 1) },
+      { grupo: 'Outras', id: 'GL3', label: 'GL3 — 100%', code: '100%', fator: f(neo, 1) },
+    ];
+  })(),
+
+  // Formatação robusta de moeda
+  fmt: (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+
+  getTabela: (id) => window.SimulacaoTroco.TABELAS.find(t => t.id === id) || null,
+
+  // Cálculo preciso (utilizando arredondamento matemático padrão)
+  calcular(parcela, tabelaId, margemAdicional) {
+    const p = parseFloat(parcela) || 0;
+    const margem = parseFloat(margemAdicional) || 0;
+    const tab = this.getTabela(tabelaId);
+    
+    if (!p || !tab?.fator) {
+      return { saldoDevedor: 0, saldoLiberado: 0, margemLiberada: 0, troco: 0, tabela: tab };
+    }
+
+    const saldoDevedor = p * this.PARCELAS;
+    const saldoLiberado = p / tab.fator;
+    const margemLiberada = margem > 0 ? (margem / tab.fator) : 0;
+    const troco = saldoLiberado - saldoDevedor + margemLiberada;
+
+    return { 
+      saldoDevedor: saldoDevedor.toFixed(2), 
+      saldoLiberado: saldoLiberado.toFixed(2), 
+      margemLiberada: margemLiberada.toFixed(2), 
+      troco: troco.toFixed(2), 
+      tabela: tab 
+    };
+  },
+
+  fillSelect(selectEl, defaultId) {
+    if (!selectEl) return;
+    const grupos = [...new Set(this.TABELAS.map(t => t.grupo))];
+    
+    selectEl.innerHTML = '<option value="">Selecione a tabela</option>' + 
+      grupos.map(gk => `
+        <optgroup label="${gk}">
+          ${this.TABELAS.filter(t => t.grupo === gk).map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+        </optgroup>
+      `).join('');
+    
+    if (defaultId) selectEl.value = defaultId;
+  },
+
+  render() {
+    const inputs = {
+      parcela: document.getElementById('simParcela'),
+      tabela: document.getElementById('simTabela'),
+      margem: document.getElementById('simMargemAdicional')
+    };
+    const outputs = {
+      devedor: document.getElementById('simSaldoDevedor'),
+      liberado: document.getElementById('simSaldoLiberado'),
+      margemLib: document.getElementById('simMargemLiberada'),
+      troco: document.getElementById('simTrocoValor'),
+      hint: document.getElementById('simTabelaHint')
+    };
+
+    if (!inputs.parcela || !inputs.tabela) return;
+
+    const r = this.calcular(inputs.parcela.value, inputs.tabela.value, inputs.margem?.value);
+
+    if (outputs.devedor) outputs.devedor.textContent = r.saldoDevedor > 0 ? this.fmt(r.saldoDevedor) : '—';
+    if (outputs.liberado) outputs.liberado.textContent = r.saldoLiberado > 0 ? this.fmt(r.saldoLiberado) : '—';
+    if (outputs.margemLib) outputs.margemLib.textContent = r.margemLiberada > 0 ? this.fmt(r.margemLiberada) : '—';
+    if (outputs.troco) outputs.troco.textContent = this.fmt(r.troco);
+
+    if (outputs.hint) {
+      outputs.hint.textContent = r.tabela ? `${r.tabela.label} · Fator: ${r.tabela.fator} · ${r.tabela.code}` : 'Selecione parcela e tabela.';
+    }
+  },
+
+  init() {
+    const tabelaEl = document.getElementById('simTabela');
+    const parcelaEl = document.getElementById('simParcela');
+    const margemEl = document.getElementById('simMargemAdicional');
+
+    if (!tabelaEl || tabelaEl.dataset.simInit) return;
+    tabelaEl.dataset.simInit = '1';
+
+    this.fillSelect(tabelaEl, 'NEO_NORMAL');
+
+    // Listener unificado
+    [tabelaEl, parcelaEl, margemEl].forEach(el => {
+      el?.addEventListener('input', () => this.render());
+      el?.addEventListener('change', () => this.render());
+    });
+
+    this.render();
+  }
+};

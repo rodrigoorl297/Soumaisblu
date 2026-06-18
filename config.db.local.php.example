@@ -1,0 +1,23 @@
+<?php
+/**
+ * Copie para config.db.local.php na raiz do site (Hostinger).
+ * Mesma pasta que config.pix.local.php e api/
+ */
+
+define('DB_HOST', 'soumaisblu.mysql.dbaas.com.br');
+define('DB_NAME', 'soumaisblu');
+define('DB_USER', 'soumaisblu');
+define('DB_PASS', 'sua_senha_mysql');
+define('DB_CHARSET', 'utf8mb4');
+
+/**
+ * Chave usada pelo navegador e pelo PHP (header X-API-Key).
+ * Deve ser IGUAL a SOUBLU_CONFIG.API_KEY em js/hostinger-connect.js
+ */
+define('API_INTERNAL_KEY', 'soublu_api_52e8c7a6b3df4019');
+
+/** URL pública do site (sem barra final). */
+define('SITE_URL', 'https://www.soumaisblu.com.br');
+
+/** Pasta de uploads (relativa à raiz do projeto). */
+define('UPLOAD_DIR', __DIR__ . '/uploads');

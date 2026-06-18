@@ -1,0 +1,1518 @@
+/* ═══════════════════════════════════════════════════════════════
+   SOU+BLU — Painel dos Sonhos · Premium Dream Board UI
+   Glassmorphism · deep blue / purple / soft gold
+   ═══════════════════════════════════════════════════════════════ */
+
+.painel-sonhos-wrap {
+  --ps-blue-deep: #0b1224;
+  --ps-blue: #1e3a8a;
+  --ps-indigo: #4338ca;
+  --ps-purple: #6d28d9;
+  --ps-violet: #7c3aed;
+  --ps-gold: #f5c451;
+  --ps-gold-soft: #fde68a;
+  --ps-glass: rgba(255, 255, 255, 0.08);
+  --ps-glass-strong: rgba(255, 255, 255, 0.14);
+  --ps-glass-border: rgba(255, 255, 255, 0.22);
+  --ps-text: #f8fafc;
+  --ps-text-muted: rgba(248, 250, 252, 0.72);
+  --ps-shadow: 0 24px 48px rgba(8, 12, 28, 0.35);
+  --ps-radius: 20px;
+  --ps-radius-sm: 14px;
+  position: relative;
+  isolation: isolate;
+  font-family: 'Barlow', var(--font-body, system-ui, sans-serif);
+  color: var(--ps-text);
+  border-radius: calc(var(--ps-radius) + 4px);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 120% 80% at 10% -10%, rgba(124, 58, 237, 0.45), transparent 50%),
+    radial-gradient(ellipse 90% 70% at 95% 5%, rgba(37, 99, 235, 0.4), transparent 45%),
+    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(245, 196, 81, 0.18), transparent 55%),
+    linear-gradient(145deg, #0f172a 0%, #1e1b4b 38%, #312e81 68%, #1e3a8a 100%);
+  box-shadow: var(--ps-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 28px 24px 32px;
+  margin: 0 0 8px;
+}
+
+.painel-sonhos-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px),
+    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px);
+  background-size: 48px 48px, 64px 64px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+/* ── Hero ── */
+.painel-sonhos-hero {
+  position: relative;
+  margin-bottom: 28px;
+  padding: 28px 28px 24px;
+  border-radius: var(--ps-radius);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--ps-glass-border);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.painel-sonhos-hero__orbs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.painel-sonhos-hero__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.55;
+  animation: psOrbFloat 12s ease-in-out infinite;
+}
+
+.painel-sonhos-hero__orb--1 {
+  width: 180px; height: 180px;
+  top: -40px; right: 8%;
+  background: rgba(124, 58, 237, 0.5);
+}
+
+.painel-sonhos-hero__orb--2 {
+  width: 120px; height: 120px;
+  bottom: -20px; left: 12%;
+  background: rgba(245, 196, 81, 0.35);
+  animation-delay: -4s;
+}
+
+.painel-sonhos-hero__orb--3 {
+  width: 90px; height: 90px;
+  top: 40%; right: 35%;
+  background: rgba(59, 130, 246, 0.4);
+  animation-delay: -8s;
+}
+
+@keyframes psOrbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(8px, -12px) scale(1.05); }
+}
+
+.painel-sonhos-hero__stars {
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(1.5px 1.5px at 15% 25%, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1px 1px at 45% 15%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 75% 35%, rgba(245, 196, 81, 0.9), transparent),
+    radial-gradient(1px 1px at 88% 70%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 30% 80%, rgba(255, 255, 255, 0.5), transparent);
+  opacity: 0.8;
+  pointer-events: none;
+}
+
+.painel-sonhos-hero__content {
+  position: relative;
+  z-index: 1;
+}
+
+.painel-sonhos-hero__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.painel-sonhos-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.25), rgba(245, 196, 81, 0.08));
+  border: 1px solid rgba(245, 196, 81, 0.45);
+  color: var(--ps-gold-soft);
+  box-shadow: 0 4px 16px rgba(245, 196, 81, 0.15);
+}
+
+.painel-sonhos-hero__badge-icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.painel-sonhos-hero__eyebrow {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ps-gold);
+  opacity: 0.95;
+}
+
+.painel-sonhos-hero__greeting {
+  margin: 0 0 10px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.75rem, 4vw, 2.35rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #fff 0%, #e0e7ff 45%, var(--ps-gold-soft) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.painel-sonhos-hero__sub {
+  margin: 0 0 10px;
+  max-width: 52ch;
+  font-size: 15px;
+  line-height: 1.55;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonhos-hero__sub:first-of-type {
+  font-size: 17px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  margin-bottom: 8px;
+}
+
+.painel-sonhos-hero__sub--muted {
+  font-size: 14px;
+  opacity: 0.88;
+  margin-bottom: 20px;
+}
+
+.painel-sonhos-hero__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.painel-sonhos-kpi {
+  padding: 14px 16px;
+  border-radius: var(--ps-radius-sm);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+
+.painel-sonhos-kpi:hover {
+  transform: translateY(-2px);
+  border-color: rgba(245, 196, 81, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.painel-sonhos-kpi strong {
+  display: block;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 1.65rem;
+  line-height: 1.1;
+  color: #fff;
+}
+
+.painel-sonhos-kpi span {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonhos-kpi--gold strong {
+  background: linear-gradient(135deg, var(--ps-gold-soft), var(--ps-gold));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.painel-sonhos-hero__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonhos-hero__dot { opacity: 0.5; }
+
+/* ── Layout grid ── */
+.painel-sonhos-grid {
+  display: grid;
+  grid-template-columns: 1fr minmax(280px, 340px);
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+@media (max-width: 960px) {
+  .painel-sonhos-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Glass panels (override .card inside wrap) ── */
+.painel-sonhos-wrap .card {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05)) !important;
+  border: 1px solid var(--ps-glass-border) !important;
+  border-radius: var(--ps-radius) !important;
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  color: var(--ps-text);
+}
+
+.painel-sonhos-wrap .card-padded {
+  padding: 22px 24px !important;
+}
+
+.painel-sonhos-board__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.painel-sonhos-board__title {
+  margin: 0 0 4px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 1.25rem;
+  color: #fff;
+}
+
+.painel-sonhos-board__sub {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ps-text-muted);
+}
+
+/* ── Filters ── */
+.painel-sonhos-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.painel-sonhos-filter {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ps-text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.painel-sonhos-filter:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.painel-sonhos-filter.active {
+  background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(59, 130, 246, 0.4));
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+}
+
+/* ── Vision grid (achievement cards) ── */
+.painel-sonhos-vision-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 18px;
+}
+
+.painel-sonho-vision-card {
+  position: relative;
+  border-radius: var(--ps-radius-sm);
+  overflow: hidden;
+  background: rgba(15, 23, 42, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s;
+}
+
+.painel-sonho-vision-card:hover {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(245, 196, 81, 0.2);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.painel-sonho-vision-card.is-done {
+  border-color: rgba(245, 196, 81, 0.45);
+  box-shadow: 0 12px 32px rgba(245, 196, 81, 0.12);
+}
+
+.painel-sonho-vision-card__media {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  cursor: zoom-in;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e2e8f0, #f8fafc);
+}
+
+.painel-sonho-vision-card__media img,
+.painel-sonho-vision-card__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s ease;
+}
+
+.painel-sonho-vision-card__media.is-broken {
+  cursor: default;
+  background: linear-gradient(145deg, rgba(67, 56, 202, 0.25), rgba(30, 58, 138, 0.2));
+}
+
+.painel-sonho-vision-card__media.is-broken .painel-sonho-vision-card__shine {
+  display: none;
+}
+
+.painel-sonho-vision-card__placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  text-align: center;
+  background: linear-gradient(145deg, rgba(15, 23, 42, 0.55), rgba(30, 27, 75, 0.65));
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.painel-sonho-photo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 196, 81, 0.55);
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.95), #d97706);
+  color: #1e1b4b;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(245, 196, 81, 0.35);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.painel-sonho-photo-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 28px rgba(245, 196, 81, 0.45);
+}
+
+.painel-sonho-photo-btn__icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.painel-sonho-vision-card__photo-side-btn {
+  display: none;
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 196, 81, 0.45);
+  background: rgba(245, 196, 81, 0.15);
+  color: var(--ps-gold-soft);
+  font-size: 11px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.painel-sonho-vision-card__photo-side-btn:hover {
+  background: rgba(245, 196, 81, 0.28);
+  border-color: var(--ps-gold);
+}
+
+.painel-sonho-vision-card.has-broken-photo .painel-sonho-vision-card__photo-side-btn {
+  display: inline-flex;
+}
+
+.painel-sonhos-cadastrar-btn {
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(245, 196, 81, 0.45);
+  background: rgba(245, 196, 81, 0.12);
+  color: var(--ps-gold-soft);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.painel-sonhos-cadastrar-btn:hover {
+  background: rgba(245, 196, 81, 0.22);
+  border-color: var(--ps-gold);
+  transform: translateY(-1px);
+}
+
+.painel-sonhos-form-card.is-highlight {
+  animation: psFormPulse 1.2s ease 2;
+  box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.55), 0 16px 40px rgba(245, 196, 81, 0.15);
+}
+
+.painel-sonhos-form-card__edit-hint {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonhos-form-card__edit-hint strong {
+  color: #fff;
+}
+
+.painel-sonhos-form__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+@keyframes psFormPulse {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.35); }
+  50% { box-shadow: 0 0 0 4px rgba(245, 196, 81, 0.65), 0 16px 40px rgba(245, 196, 81, 0.2); }
+}
+
+.painel-sonho-vision-card:hover .painel-sonho-vision-card__media img {
+  transform: scale(1.06);
+}
+
+.painel-sonho-vision-card__shine {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(125deg, transparent 40%, rgba(255, 255, 255, 0.15) 50%, transparent 60%);
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.painel-sonho-vision-card:hover .painel-sonho-vision-card__shine {
+  opacity: 1;
+}
+
+.painel-sonho-vision-card__badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, var(--ps-gold), #d97706);
+  color: #1e1b4b;
+  box-shadow: 0 4px 12px rgba(245, 196, 81, 0.4);
+}
+
+.painel-sonho-vision-card__upload {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  padding: 20px;
+  cursor: pointer;
+  border: none;
+  background: linear-gradient(145deg, rgba(67, 56, 202, 0.25), rgba(30, 58, 138, 0.2));
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+  text-align: center;
+  font-size: 13px;
+  color: var(--ps-text-muted);
+  transition: background 0.2s, color 0.2s, transform 0.2s;
+  font-family: inherit;
+}
+
+.painel-sonho-vision-card__upload:hover {
+  background: linear-gradient(145deg, rgba(124, 58, 237, 0.35), rgba(59, 130, 246, 0.25));
+  color: #fff;
+}
+
+.painel-sonho-vision-card__upload-icon { font-size: 28px; }
+
+.painel-sonho-vision-card__body {
+  padding: 16px 18px 18px;
+}
+
+.painel-sonho-vision-card__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.painel-sonho-vision-card__title {
+  flex: 1;
+  margin: 0;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+  line-height: 1.3;
+  color: #fff;
+}
+
+.painel-sonho-vision-card__desc {
+  margin: 0 0 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonho-vision-card__date {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ps-gold-soft);
+  margin-bottom: 10px;
+}
+
+.painel-sonho-vision-card__remove {
+  flex-shrink: 0;
+  width: 28px; height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ps-text-muted);
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.painel-sonho-vision-card__remove:hover {
+  background: rgba(239, 68, 68, 0.25);
+  color: #fecaca;
+}
+
+/* ── Progress (gamified) ── */
+.painel-sonho-progress { margin-top: 10px; }
+
+.painel-sonho-progress__track {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.painel-sonho-progress__fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--ps-indigo), var(--ps-violet), var(--ps-gold));
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+  transition: width 0.5s ease;
+}
+
+.painel-sonho-progress__fill.is-complete {
+  background: linear-gradient(90deg, var(--ps-gold), #fbbf24);
+  box-shadow: 0 0 12px rgba(245, 196, 81, 0.5);
+}
+
+.painel-sonho-progress__label {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ps-text-muted);
+}
+
+/* ── Compact list cards ── */
+.painel-sonhos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.painel-sonhos-list--after-grid {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.painel-sonho-card {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 16px;
+  border-radius: var(--ps-radius-sm);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.painel-sonho-card:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateX(4px);
+}
+
+.painel-sonho-card.is-done {
+  border-color: rgba(245, 196, 81, 0.3);
+  opacity: 0.92;
+}
+
+.painel-sonho-card__thumb {
+  width: 56px; height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  background: rgba(67, 56, 202, 0.3);
+}
+
+.painel-sonho-card__thumb img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+
+.painel-sonho-card__thumb--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.painel-sonho-card__title {
+  margin: 0 0 4px;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+}
+
+.painel-sonho-card__desc,
+.painel-sonho-card__meta {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonho-card__check {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ── Custom checkbox ── */
+.painel-sonho-check-wrap {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.painel-sonho-check-wrap input { position: absolute; opacity: 0; width: 0; height: 0; }
+
+.painel-sonho-check-wrap__box {
+  width: 22px; height: 22px;
+  border-radius: 7px;
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.06);
+  transition: all 0.2s;
+}
+
+.painel-sonho-check-wrap input:checked + .painel-sonho-check-wrap__box {
+  background: linear-gradient(135deg, var(--ps-gold), #d97706);
+  border-color: var(--ps-gold);
+  box-shadow: 0 0 12px rgba(245, 196, 81, 0.4);
+}
+
+.painel-sonho-check-wrap input:checked + .painel-sonho-check-wrap__box::after {
+  content: '✓';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 12px;
+  font-weight: 900;
+  color: #1e1b4b;
+}
+
+/* ── Empty state ── */
+.painel-sonhos-empty {
+  text-align: center;
+  padding: 48px 24px;
+  border-radius: var(--ps-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.painel-sonhos-empty__icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 4px 12px rgba(245, 196, 81, 0.3));
+}
+
+.painel-sonhos-empty p { color: var(--ps-text-muted); }
+
+/* ── Form sidebar ── */
+.painel-sonhos-form-card__title {
+  margin: 0 0 16px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  color: #fff;
+}
+
+.painel-sonhos-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.painel-sonhos-stat {
+  text-align: center;
+  padding: 14px 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.painel-sonhos-stat strong {
+  display: block;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: 1.5rem;
+  color: #fff;
+}
+
+.painel-sonhos-stat span {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ps-text-muted);
+}
+
+.painel-sonhos-stat--done strong {
+  color: var(--ps-gold-soft);
+}
+
+.painel-sonhos-wrap .form-group label {
+  color: var(--ps-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.painel-sonhos-wrap .form-control {
+  background: rgba(15, 23, 42, 0.5) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 12px !important;
+  color: #fff !important;
+}
+
+.painel-sonhos-wrap .form-control:focus {
+  border-color: rgba(124, 58, 237, 0.6) !important;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2) !important;
+}
+
+.painel-sonhos-wrap .form-control::placeholder {
+  color: rgba(248, 250, 252, 0.35);
+}
+
+/* ── Dropzone ── */
+.painel-sonhos-dropzone {
+  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border-radius: var(--ps-radius-sm);
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  background: rgba(67, 56, 202, 0.12);
+  transition: all 0.2s;
+}
+
+.painel-sonhos-dropzone:hover,
+.painel-sonhos-dropzone.is-dragover {
+  border-color: var(--ps-gold);
+  background: rgba(124, 58, 237, 0.2);
+}
+
+.painel-sonhos-dropzone__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: var(--ps-text-muted);
+  font-size: 13px;
+}
+
+.painel-sonhos-dropzone__icon { font-size: 32px; }
+
+.painel-sonhos-dropzone__hint {
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.painel-sonhos-dropzone__preview img {
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 12px;
+  object-fit: cover;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.painel-sonhos-dropzone__clear {
+  display: block;
+  margin: 12px auto 0;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.painel-sonhos-submit {
+  margin-top: 8px;
+  border: none !important;
+  border-radius: 14px !important;
+  padding: 14px !important;
+  font-weight: 800 !important;
+  background: linear-gradient(135deg, var(--ps-violet), var(--ps-blue), #2563eb) !important;
+  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4) !important;
+  transition: transform 0.2s, box-shadow 0.2s !important;
+}
+
+.painel-sonhos-submit:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.5) !important;
+}
+
+/* ── Lightbox ── */
+.painel-sonhos-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(11, 18, 36, 0.88);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.painel-sonhos-lightbox[hidden] { display: none !important; }
+
+.painel-sonhos-lightbox__inner {
+  position: relative;
+  max-width: min(920px, 96vw);
+  max-height: 90vh;
+  border-radius: var(--ps-radius);
+  overflow: hidden;
+  background: rgba(30, 27, 75, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: var(--ps-shadow);
+}
+
+.painel-sonhos-lightbox__inner img {
+  display: block;
+  max-width: 100%;
+  max-height: 75vh;
+  object-fit: contain;
+}
+
+.painel-sonhos-lightbox__inner p {
+  margin: 0;
+  padding: 16px 20px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+  text-align: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.painel-sonhos-lightbox__close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 2;
+  width: 40px; height: 40px;
+  border: none;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+/* ── Profile teaser ── */
+.painel-sonhos-teaser {
+  background: linear-gradient(135deg, #1e1b4b, #312e81) !important;
+  border: 1px solid rgba(124, 58, 237, 0.35) !important;
+  color: #fff;
+}
+
+.painel-sonhos-teaser__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.painel-sonhos-teaser__thumbs {
+  display: flex;
+  gap: 6px;
+}
+
+.painel-sonhos-teaser__thumbs img {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 2px solid rgba(245, 196, 81, 0.5);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.painel-sonhos-teaser__emoji { font-size: 32px; }
+
+.painel-sonhos-teaser__title {
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.painel-sonhos-teaser__sub {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Minha Conta · Premium profile (RH Manager)
+   ═══════════════════════════════════════════════════════════════ */
+
+.minha-conta-wrap {
+  --ps-blue-deep: #0b1224;
+  --ps-blue: #1e3a8a;
+  --ps-indigo: #4338ca;
+  --ps-purple: #6d28d9;
+  --ps-violet: #7c3aed;
+  --ps-gold: #f5c451;
+  --ps-gold-soft: #fde68a;
+  --ps-glass: rgba(255, 255, 255, 0.08);
+  --ps-glass-strong: rgba(255, 255, 255, 0.14);
+  --ps-glass-border: rgba(255, 255, 255, 0.22);
+  --ps-text: #f8fafc;
+  --ps-text-muted: rgba(248, 250, 252, 0.72);
+  --ps-shadow: 0 24px 48px rgba(8, 12, 28, 0.35);
+  --ps-radius: 20px;
+  --ps-radius-sm: 14px;
+  position: relative;
+  isolation: isolate;
+  font-family: 'Barlow', var(--font-body, system-ui, sans-serif);
+  color: var(--ps-text);
+  border-radius: calc(var(--ps-radius) + 4px);
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 120% 80% at 10% -10%, rgba(124, 58, 237, 0.45), transparent 50%),
+    radial-gradient(ellipse 90% 70% at 95% 5%, rgba(37, 99, 235, 0.4), transparent 45%),
+    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(245, 196, 81, 0.18), transparent 55%),
+    linear-gradient(145deg, #0f172a 0%, #1e1b4b 38%, #312e81 68%, #1e3a8a 100%);
+  box-shadow: var(--ps-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  padding: 28px 24px 32px;
+  margin: 0 0 8px;
+}
+
+.minha-conta-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px),
+    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px);
+  background-size: 48px 48px, 64px 64px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.minha-conta-back {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ps-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.minha-conta-back:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(245, 196, 81, 0.4);
+  color: #fff;
+}
+
+/* ── Hero ── */
+.minha-conta-hero {
+  position: relative;
+  margin-bottom: 24px;
+  padding: 28px 28px 24px;
+  border-radius: var(--ps-radius);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--ps-glass-border);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+}
+
+.minha-conta-hero__orbs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.minha-conta-hero__orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(40px);
+  opacity: 0.55;
+  animation: psOrbFloat 12s ease-in-out infinite;
+}
+
+.minha-conta-hero__orb--1 {
+  width: 160px; height: 160px;
+  top: -30px; right: 10%;
+  background: rgba(124, 58, 237, 0.5);
+}
+
+.minha-conta-hero__orb--2 {
+  width: 110px; height: 110px;
+  bottom: -20px; left: 8%;
+  background: rgba(245, 196, 81, 0.35);
+  animation-delay: -4s;
+}
+
+.minha-conta-hero__orb--3 {
+  width: 80px; height: 80px;
+  top: 45%; right: 40%;
+  background: rgba(59, 130, 246, 0.4);
+  animation-delay: -8s;
+}
+
+.minha-conta-hero__content {
+  position: relative;
+  z-index: 1;
+  padding-top: 4px;
+}
+
+.minha-conta-hero__layout {
+  display: grid;
+  grid-template-columns: 1fr minmax(240px, 300px);
+  gap: 28px;
+  align-items: start;
+}
+
+.minha-conta-hero__identity {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.minha-conta-hero__avatar-wrap {
+  flex-shrink: 0;
+}
+
+.minha-conta-hero__avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--ps-violet), var(--ps-indigo));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Nunito', sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  color: #fff;
+  border: 3px solid rgba(245, 196, 81, 0.45);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.minha-conta-hero__avatar:hover {
+  transform: scale(1.04);
+  box-shadow: 0 12px 32px rgba(245, 196, 81, 0.2);
+}
+
+.minha-conta-hero__avatar--img {
+  object-fit: cover;
+  padding: 0;
+}
+
+.minha-conta-hero__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.minha-conta-hero__eyebrow {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ps-gold);
+  opacity: 0.95;
+}
+
+.minha-conta-hero__greeting {
+  margin: 0 0 6px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 900;
+  font-size: clamp(1.5rem, 3.5vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, #fff 0%, #e0e7ff 45%, var(--ps-gold-soft) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.minha-conta-hero__name {
+  margin: 0 0 10px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 1.1rem;
+  text-transform: capitalize;
+  color: rgba(255, 255, 255, 0.95);
+}
+
+.minha-conta-hero__badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  margin-bottom: 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: linear-gradient(135deg, rgba(245, 196, 81, 0.25), rgba(245, 196, 81, 0.08));
+  border: 1px solid rgba(245, 196, 81, 0.45);
+  color: var(--ps-gold-soft);
+}
+
+.minha-conta-hero__meta {
+  font-size: 14px;
+  color: var(--ps-text-muted);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+/* Profile menu on dark hero */
+.minha-conta-wrap .profile-menu-wrap {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+}
+
+.minha-conta-wrap .profile-menu-trigger {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.minha-conta-wrap .profile-menu-trigger:hover,
+.minha-conta-wrap .profile-menu-trigger[aria-expanded="true"] {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(245, 196, 81, 0.45);
+}
+
+.minha-conta-wrap .profile-menu-dropdown {
+  background: rgba(15, 23, 42, 0.95);
+  border-color: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+}
+
+.minha-conta-wrap .profile-menu-item {
+  color: var(--ps-text);
+}
+
+.minha-conta-wrap .profile-menu-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.minha-conta-wrap .profile-menu-item svg {
+  color: var(--ps-gold);
+}
+
+.minha-conta-wrap .profile-menu-divider {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* ── Wallet card ── */
+.minha-conta-wallet-card {
+  padding: 20px 22px;
+  border-radius: var(--ps-radius-sm);
+  background: linear-gradient(145deg, rgba(0, 0, 0, 0.28), rgba(255, 255, 255, 0.08));
+  border: 1px solid rgba(245, 196, 81, 0.35);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+.minha-conta-wallet-card__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.85;
+}
+
+.minha-conta-wallet-card__brand {
+  color: #fff;
+}
+
+.minha-conta-wallet-card__tag {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: rgba(245, 196, 81, 0.15);
+  border: 1px solid rgba(245, 196, 81, 0.35);
+  color: var(--ps-gold-soft);
+}
+
+.minha-conta-wallet-card__balance {
+  font-family: 'Nunito', sans-serif;
+  font-size: clamp(1.75rem, 4vw, 2.25rem);
+  font-weight: 900;
+  line-height: 1.1;
+  color: #4ade80;
+  margin-bottom: 4px;
+}
+
+.minha-conta-wallet-card__label {
+  font-size: 13px;
+  color: var(--ps-text-muted);
+  margin: 0 0 14px;
+}
+
+.minha-conta-wallet-card__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.minha-conta-wallet-card__actions .btn-primary {
+  background: linear-gradient(135deg, var(--ps-gold), #e6a817);
+  border: none;
+  color: #1e1b4b;
+  font-weight: 800;
+}
+
+.minha-conta-wallet-card__actions .btn-primary:hover {
+  filter: brightness(1.08);
+}
+
+.minha-conta-wallet-card__hint {
+  font-size: 11px;
+  color: var(--ps-text-muted);
+  margin: 10px 0 0;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+/* ── Vendor tier card inside wrap ── */
+.minha-conta-wrap #vendorTierProfileCard {
+  position: relative;
+  z-index: 1;
+  margin-bottom: 20px;
+}
+
+/* ── Content grid ── */
+.minha-conta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+.minha-conta-panel {
+  padding: 22px 24px;
+  border-radius: var(--ps-radius);
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05));
+  border: 1px solid var(--ps-glass-border);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.minha-conta-panel__title {
+  margin: 0 0 18px;
+  font-family: 'Nunito', sans-serif;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #fff;
+}
+
+/* ── KPI stats ── */
+.minha-conta-kpis {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.minha-conta-kpis .painel-sonhos-kpi strong {
+  font-size: 1.35rem;
+}
+
+/* ── Transactions ── */
+.minha-conta-wrap .tx-item {
+  border-bottom-color: rgba(255, 255, 255, 0.1);
+  padding: 14px 0;
+}
+
+.minha-conta-wrap .tx-icon.earn {
+  background: rgba(74, 222, 128, 0.15);
+  border: 1px solid rgba(74, 222, 128, 0.3);
+}
+
+.minha-conta-wrap .tx-icon.spend {
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.25);
+}
+
+.minha-conta-wrap .tx-title {
+  color: #fff;
+  font-size: 14px;
+}
+
+.minha-conta-wrap .tx-date {
+  color: var(--ps-text-muted);
+}
+
+.minha-conta-wrap .tx-amount.earn {
+  color: #4ade80;
+}
+
+.minha-conta-wrap .tx-amount.spend {
+  color: #f87171;
+}
+
+/* ── Empty state ── */
+.minha-conta-empty {
+  text-align: center;
+  padding: 40px 20px;
+  border-radius: var(--ps-radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.minha-conta-empty__icon {
+  font-size: 42px;
+  margin-bottom: 12px;
+  filter: drop-shadow(0 4px 12px rgba(245, 196, 81, 0.3));
+}
+
+.minha-conta-empty p {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.minha-conta-empty__sub {
+  font-size: 13px;
+  color: var(--ps-text-muted);
+}
+
+/* ── Sidebar name fix ── */
+.rh-sidebar-account .user-name {
+  text-transform: none;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .minha-conta-hero__layout {
+    grid-template-columns: 1fr;
+  }
+
+  .minha-conta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .minha-conta-wrap {
+    padding: 20px 16px 24px;
+  }
+
+  .minha-conta-hero {
+    padding: 22px 20px 20px;
+  }
+
+  .minha-conta-hero__identity {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .minha-conta-wrap .profile-menu-wrap {
+    top: -4px;
+    right: -4px;
+  }
+}

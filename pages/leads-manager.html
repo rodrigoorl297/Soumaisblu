@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <script src="../js/base-path.js?v=1781704178"></script>
+  <script src="../js/db-connect.js?v=1781704178"></script>
+  <title>Gerenciador de Leads · SOU+BLU</title>
+  <meta name="description" content="Sistema de gerenciamento e distribuição de leads para equipes de vendas"/>
+  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/global.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/leads.css?v=1781704178"/>
+  <!-- SheetJS for XLSX parsing -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js?v=1781704178"></script>
+</head>
+<body class="leads-app">
+  <!-- Loader -->
+  <div id="globalLoader" class="loader-overlay">
+    <div class="loader-spinner"></div>
+    <p class="loader-text">Carregando Gerenciador de Leads...</p>
+  </div>
+
+  <div class="app-layout" id="appLayout" style="display:none;">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg></div>
+        <div class="logo-text">SOU <span>+ BLU</span></div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Leads</div>
+        <a class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line></svg></span> Dashboard
+        </a>
+        <a class="nav-item" data-tab="upload" onclick="switchTab('upload')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg></span> Upload
+        </a>
+        <a class="nav-item" data-tab="distribute" onclick="switchTab('distribute')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg></span> Distribuição
+        </a>
+        <a class="nav-item" data-tab="employees" onclick="switchTab('employees')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span> Funcionários
+        </a>
+        <a class="nav-item" data-tab="unlock" onclick="switchTab('unlock')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 9.9-1"></path></svg></span> Desbloqueios
+          <span class="nav-badge hidden" id="unlockBadge">0</span>
+        </a>
+
+        <div class="nav-section-label">Sistema</div>
+        <a class="nav-item" onclick="navigateBack()">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span> Voltar ao Painel
+        </a>
+        <a class="nav-item" onclick="Auth.logout()">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span> Sair
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user" id="sidebarUser">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <div class="user-info">
+            <div class="user-name" id="userName">Carregando...</div>
+            <div class="user-role" id="userRole">—</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="btn btn-ghost btn-sm" id="menuToggle" onclick="toggleSidebar()" style="display:none;font-size:20px;">☰</button>
+          <h1 id="pageTitle">Dashboard</h1>
+        </div>
+        <div class="topbar-right">
+          <select class="form-control" id="batchSelect" style="max-width:260px;font-size:13px;">
+            <option value="">Selecione um lote...</option>
+          </select>
+        </div>
+      </header>
+
+      <!-- ═══ TAB: Dashboard ═══ -->
+      <div class="tab-content active" id="tab-dashboard">
+        <div class="page-content">
+          <div class="stats-grid" id="dashboardStats">
+            <div class="stat-card accent">
+              <div class="stat-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg></div>
+              <div class="stat-value" id="statTotalLeads">0</div>
+              <div class="stat-label">Total de Leads</div>
+            </div>
+            <div class="stat-card success">
+              <div class="stat-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg></div>
+              <div class="stat-value" id="statCompleted">0</div>
+              <div class="stat-label">Trabalhados</div>
+            </div>
+            <div class="stat-card warning">
+              <div class="stat-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
+              <div class="stat-value" id="statPending">0</div>
+              <div class="stat-label">Pendentes</div>
+            </div>
+            <div class="stat-card danger">
+              <div class="stat-icon"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+              <div class="stat-value" id="statLocked">0</div>
+              <div class="stat-label">Bloqueados</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg></div>
+              <div class="stat-value" id="statEmployees">0</div>
+              <div class="stat-label">Funcionários Ativos</div>
+            </div>
+          </div>
+
+          <!-- Employee Progress Table -->
+          <div class="card">
+            <div class="flex items-center justify-between mb-md" style="padding: 24px 24px 0 24px; margin-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 18px; font-weight: 800;">Progresso por Funcionário</h3>
+              <div class="search-bar" style="max-width: 300px; width: 100%;">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="employeeSearch" placeholder="Buscar funcionário..." oninput="filterEmployeeTable()"/>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="employeeProgressTable">
+                <thead>
+                  <tr>
+                    <th>Funcionário</th>
+                    <th>Total</th>
+                    <th>Trabalhados</th>
+                    <th>Pendentes</th>
+                    <th>Vendas</th>
+                    <th>Progresso</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="employeeProgressBody">
+                  <tr><td colspan="7" class="text-center text-muted" style="padding:32px;">Selecione um lote para ver o progresso</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB: Upload ═══ -->
+      <div class="tab-content" id="tab-upload">
+        <div class="page-content">
+          <div class="card">
+            <h3 style="margin-bottom:20px;">📤 Upload de Planilha</h3>
+            <p class="text-muted" style="margin-bottom:20px;font-size:14px;">
+              Envie uma planilha (.xlsx, .xls, .csv) com os dados dos leads.
+              O sistema aceita até <strong>60.000+ registros</strong> e detecta automaticamente as colunas.
+            </p>
+
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="handleFileUpload(event)"/>
+              <div class="upload-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg></div>
+              <div class="upload-title">Arraste sua planilha aqui</div>
+              <div class="upload-desc">ou clique para selecionar · .xlsx, .xls, .csv</div>
+            </div>
+
+            <!-- Column Mapping -->
+            <div id="mappingSection" class="hidden mt-lg">
+              <h3>🗺️ Mapeamento de Colunas</h3>
+              <p class="text-muted" style="margin-bottom:12px;font-size:14px;">
+                Verifique se as colunas foram detectadas corretamente:
+              </p>
+              <div class="column-mapper" id="columnMapper"></div>
+            </div>
+
+            <!-- Preview -->
+            <div id="previewSection" class="hidden preview-section">
+              <h3><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg> Preview dos Dados</h3>
+              <div class="preview-stats" id="previewStats"></div>
+
+              <div id="validationAlerts"></div>
+
+              <div class="table-wrap" style="max-height:400px;overflow-y:auto;">
+                <table class="data-table">
+                  <thead id="previewHead"></thead>
+                  <tbody id="previewBody"></tbody>
+                </table>
+              </div>
+
+              <div class="flex justify-between items-center mt-lg" style="gap:12px;">
+                <button class="btn btn-outline" onclick="resetUpload()">Cancelar</button>
+                <div class="flex gap-sm">
+                  <input type="text" class="form-control" id="batchName" placeholder="Nome do lote (ex: Leads Junho)" style="max-width:280px;"/>
+                  <button class="btn btn-accent btn-lg" id="confirmImportBtn" onclick="confirmImport()">
+                    Importar Leads
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Import Progress -->
+            <div id="importProgress" class="hidden mt-lg">
+              <h3><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Importando...</h3>
+              <div class="progress-bar" style="height:16px;margin-top:16px;">
+                <div class="progress-fill" id="importProgressBar" style="width:0%"></div>
+              </div>
+              <p class="text-center mt-sm text-muted" id="importProgressText">0 de 0</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB: Distribute ═══ -->
+      <div class="tab-content" id="tab-distribute">
+        <div class="page-content">
+          <div class="card">
+            <h3 style="margin-bottom:8px;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg> Distribuição de Leads</h3>
+            <p class="text-muted" style="margin-bottom:20px;font-size:14px;">
+              Selecione os funcionários e configure a meta semanal. Os leads serão distribuídos igualmente.
+            </p>
+
+            <div id="distNoBatch" class="empty-state">
+              <div class="empty-icon"><svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line><polygon points="12 22.08 12 12 3 6.92 3 17.08 12 22.08"></polygon><polygon points="12 22.08 12 12 21 6.92 21 17.08 12 22.08"></polygon><polygon points="12 12 3 6.92 12 1.84 21 6.92 12 12"></polygon><line x1="3.27" y1="6.92" x2="12" y2="12.01"></line><line x1="20.73" y1="6.92" x2="12" y2="12.01"></line></svg></div>
+              <h3>Nenhum lote selecionado</h3>
+              <p>Selecione um lote no menu superior ou faça upload de uma nova planilha.</p>
+            </div>
+
+            <div id="distContent" class="hidden">
+              <div class="alert alert-info" id="distBatchInfo">
+                <!-- Batch info populated by JS -->
+              </div>
+
+              <div class="distribution-setup">
+                <!-- Toggle Master -> Supervisor -->
+                <div id="distTargetToggle" class="hidden" style="grid-column: 1 / -1; margin-bottom: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border);">
+                  <h4 style="margin-bottom:12px;">Destinatário da Distribuição</h4>
+                  <div class="flex items-center" style="gap: 24px;">
+                    <label class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
+                      <input type="radio" name="distTarget" value="employees" checked onchange="loadDistributeTab()"/>
+                      <strong>Distribuir para Vendedores</strong>
+                    </label>
+                    <label class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
+                      <input type="radio" name="distTarget" value="supervisors" onchange="loadDistributeTab()"/>
+                      <strong>Repassar para Supervisores</strong>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Left: Employee Selection -->
+                <div>
+                  <div class="flex items-center justify-between mb-md">
+                    <h4 id="distListTitle">Selecionar Funcionários</h4>
+                    <button class="btn btn-ghost btn-sm" onclick="toggleAllEmployees()">Selecionar Todos</button>
+                  </div>
+                  <div class="employee-selector" id="employeeSelector">
+                    <!-- Populated by JS -->
+                  </div>
+                </div>
+
+                <!-- Right: Configuration + Preview -->
+                <div>
+                  <h4 style="margin-bottom:16px;">Configuração</h4>
+                  <div class="form-group" id="weeksConfigGroup">
+                    <label for="weeksInput">Número de Semanas</label>
+                    <input type="number" class="form-control" id="weeksInput" min="1" max="52" value="1" oninput="updateDistPreview()"/>
+                  </div>
+
+                  <div class="distribution-preview" id="distPreview">
+                    <h4><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg> Preview da Distribuição</h4>
+                    <div id="distSummary">
+                      <p class="text-muted">Selecione funcionários para ver o preview</p>
+                    </div>
+                  </div>
+
+                  <button class="btn btn-accent btn-lg btn-full mt-lg" id="confirmDistributeBtn" onclick="confirmDistribute()" disabled>
+                    Confirmar Distribuição
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB: Employees ═══ -->
+      <div class="tab-content" id="tab-employees">
+        <div class="page-content">
+          <div class="card">
+            <div class="flex items-center justify-between mb-md" style="padding: 24px 24px 0 24px; margin-bottom: 16px;">
+              <h3 style="margin: 0; font-size: 18px; font-weight: 800;">📋 Funcionários e seus Leads</h3>
+              <div class="search-bar" style="max-width: 300px; width: 100%;">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="empListSearch" placeholder="Buscar..." oninput="filterEmpList()"/>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="employeesTable">
+                <thead>
+                  <tr>
+                    <th>Funcionário</th>
+                    <th>Meta Semanal</th>
+                    <th>Meta Diária</th>
+                    <th>Hoje</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="empListBody">
+                  <tr><td colspan="6" class="text-center text-muted" style="padding:32px;">Selecione um lote</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ TAB: Unlock Requests ═══ -->
+      <div class="tab-content" id="tab-unlock">
+        <div class="page-content">
+          <div class="card">
+            <h3 style="margin-bottom:20px;">🔓 Solicitações de Desbloqueio</h3>
+            <div class="unlock-list" id="unlockList">
+              <div class="empty-state">
+                <div class="empty-icon">✅</div>
+                <h3>Nenhum pedido pendente</h3>
+                <p>Todos os funcionários estão com acesso liberado.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Scripts (produção Locaweb = MySQL via db-connect.js no head) -->
+  <script src="../js/config.js?v=1781704178"></script>
+  <script src="../js/db.js?v=1781704178"></script>
+  <script src="../js/auth.js?v=1781704178"></script>
+  <script src="../js/leads-db.js?v=1781704178"></script>
+  <script src="../js/leads-import.js?v=1781704178"></script>
+  <script src="../js/leads-manager.js?v=1781704178"></script>
+</body>
+</html>

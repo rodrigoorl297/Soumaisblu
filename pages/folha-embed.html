@@ -1,0 +1,190 @@
+<div id="rhFolhaEmbedRoot" class="rh-folha-inline" hidden>
+  <div class="fp-page">
+
+    <!-- HEADER -->
+    <div class="fp-header">
+      <h1>Gerar Folha Funcionário</h1>
+      <p>Selecione a empresa, o mês de referência e informe os valores. Dados bancários vêm do cadastro do colaborador.</p>
+    </div>
+
+    <!-- FILTERS CARD -->
+    <div class="fp-card">
+      <div class="fp-card-title">
+        <div class="fp-card-title-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/></svg></div>
+        Gerar Folha Funcionário
+      </div>
+
+      <div class="fp-meta-grid">
+        <div class="fp-form-group">
+          <label class="fp-label" for="fpProtocolo">Protocolo</label>
+          <input type="text" class="fp-input" id="fpProtocolo" readonly/>
+        </div>
+        <div class="fp-form-group">
+          <label class="fp-label">&nbsp;</label>
+          <span class="fp-auto-label">GERAR AUTOMÁTICO</span>
+        </div>
+        <div class="fp-form-group">
+          <label class="fp-label" for="fpSolicitante">Solicitante</label>
+          <input type="text" class="fp-input" id="fpSolicitante" readonly/>
+        </div>
+        <div class="fp-form-group">
+          <label class="fp-label" for="fpLoginFuncionario">Login do funcionário</label>
+          <input type="text" class="fp-input" id="fpLoginFuncionario" readonly placeholder="Exibido na tabela ao carregar"/>
+        </div>
+      </div>
+
+      <div class="fp-filter-grid">
+        <div class="fp-form-group">
+          <label class="fp-label" for="selectEmpresa">Selecionar Empresa</label>
+          <select class="fp-select" id="selectEmpresa" onchange="onEmpresaChange()">
+            <option value="">Selecione a empresa...</option>
+          </select>
+        </div>
+
+        <div class="fp-form-group">
+          <label class="fp-label" for="selectMes">Mês de Referência</label>
+          <input type="month" class="fp-input" id="selectMes"/>
+        </div>
+
+        <button class="fp-btn-load" id="btnCarregar" onclick="carregarFuncionarios()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          Carregar Funcionários
+        </button>
+      </div>
+      <p class="fp-hint-bar">Aparecem todos os funcionários cadastrados no RH vinculados a esta empresa (CNPJ).</p>
+    </div>
+
+    <!-- SUMMARY -->
+    <div class="fp-summary" id="fpSummary" style="display:none;">
+      <div class="fp-stat">
+        <div class="fp-stat-icon blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+        <div>
+          <div class="fp-stat-value blue" id="statTotal">0</div>
+          <div class="fp-stat-label">Funcionários na Folha</div>
+        </div>
+      </div>
+      <div class="fp-stat">
+        <div class="fp-stat-icon green"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+        <div>
+          <div class="fp-stat-value green" id="statIncluidos">0</div>
+          <div class="fp-stat-label">Incluídos no Pagamento</div>
+        </div>
+      </div>
+      <div class="fp-stat">
+        <div class="fp-stat-icon blue"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+        <div>
+          <div class="fp-stat-value blue" id="statValorTotal">R$ 0,00</div>
+          <div class="fp-stat-label">Total a Pagar</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TABLE CARD -->
+    <div class="fp-card" id="fpTableCard" style="display:none;">
+      <div class="fp-card-title" style="margin-bottom:0;">
+        <div class="fp-card-title-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></div>
+        <span id="fpTableTitle">Funcionários</span>
+        <span style="margin-left:auto;font-size:12px;font-weight:400;color:var(--color-text-muted);cursor:pointer;" onclick="toggleSelectAll()">
+          <input type="checkbox" id="chkSelectAll" class="fp-check" style="margin-right:4px;" onchange="toggleSelectAll()"/>
+          Selecionar todos
+        </span>
+      </div>
+      <div style="margin-top:16px;"></div>
+
+      <div class="fp-table-wrap">
+        <table class="fp-table" id="fpTable">
+          <thead>
+            <tr>
+              <th class="th-check">
+                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              </th>
+              <th>Nome</th>
+              <th>Login</th>
+              <th>Matrícula</th>
+              <th>Valor (R$)</th>
+              <th>Dados Bancários (PIX)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="fpTableBody">
+            <tr>
+              <td colspan="7">
+                <div class="fp-empty">
+                  <div class="fp-empty-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+                  <div class="fp-empty-title">Selecione a empresa para carregar</div>
+                  <div class="fp-empty-desc">Os funcionários aparecerão aqui</div>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div><!-- /fp-page -->
+
+  <!-- STICKY FOOTER -->
+  <div class="fp-footer-bar" id="fpFooterBar" style="display:none;">
+    <div class="fp-footer-info">
+      <span id="fpFooterInfo">Selecione funcionários e informe os valores</span>
+    </div>
+    <div class="fp-footer-actions">
+      <button type="button" class="fp-btn-export" onclick="salvarFolhaRascunho()" id="btnSalvarFolha">
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+        Salvar
+      </button>
+      <button class="fp-btn-export" onclick="exportXlsx()" id="btnExportFooter" disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Exportar XLSX
+      </button>
+      <button class="fp-btn-process" id="btnProcessar" onclick="processarFolha()" disabled>
+        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        Processar Folha de Pagamento
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: CONFIRMAÇÃO -->
+  <div class="fp-modal-overlay" id="modalConfirmar">
+    <div class="fp-modal">
+      <div class="fp-modal-header">
+        <div class="fp-modal-title-wrap">
+          <div class="fp-modal-title-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
+          <div class="fp-modal-title">Confirmar Folha</div>
+        </div>
+        <button type="button" class="fp-modal-close" onclick="closeFolhaModal()" aria-label="Fechar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </div>
+      <div class="fp-modal-body">
+        <p style="margin:0 0 16px;color:var(--color-text-secondary);">
+          Revise o resumo antes de processar:
+        </p>
+        <div class="fp-receipt" id="fpReceipt"></div>
+        <p class="fp-modal-note">
+          <span class="fp-modal-note-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          <span>Ao processar, a folha será registrada e poderá ser exportada em XLSX para envio ao financeiro.</span>
+        </p>
+      </div>
+      <div class="fp-modal-footer">
+        <button type="button" class="fp-btn-export" onclick="closeFolhaModal()">Cancelar</button>
+        <button class="fp-btn-export" onclick="imprimirRecibo()">
+          <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Imprimir
+        </button>
+        <button class="fp-btn-process" onclick="confirmarProcessamento()" style="font-size:14px;height:42px;">
+          Confirmar e Processar
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOADER -->
+  <div class="fp-loader" id="fpLoader">
+    <div class="fp-loader-spinner"></div>
+    <div class="fp-loader-text" id="fpLoaderText">Carregando...</div>
+  </div>
+
+  <!-- TOASTS -->
+  <div class="fp-toast-container" id="fpToastContainer"></div>
+</div>

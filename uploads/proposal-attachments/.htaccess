@@ -1,0 +1,5 @@
+# Permite leitura direta de PDFs/imagens (fallback se attachment-proxy falhar)
+Options -Indexes
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*"
+</IfModule>

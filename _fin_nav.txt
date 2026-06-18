@@ -1,0 +1,3 @@
+  const gestaoBtns = document.querySelectorAll(
+    '.sidebar-nav .leads-manager-nav, .sidebar-nav .nav-item[data-section="secEmployees"], .sidebar-nav .nav-item[data-section="secBalance"], .sidebar-nav .nav-item[data-section="secProducts"], .sidebar-nav .nav-item[data-section="secOrders"], .sidebar-nav .store-shop-nav, .sidebar-nav .nav-item[data-section="secWithdrawals"], .sidebar-nav #navClients, .sidebar-nav #navManageProposals, .sidebar-nav #navPartnerOps, .sidebar-nav #navSimulacao, .sidebar-nav #navManageTickets, .sidebar-nav #navFinanceiroHub, .sidebar-nav #navMonitoriaAtendimento'
+  );

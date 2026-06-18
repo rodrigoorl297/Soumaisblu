@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <script src="../js/base-path.js?v=1781704178"></script>
+  <script src="../js/db-connect.js?v=1781704178"></script>
+  <title>Atendimento de Leads · SOU+BLU</title>
+  <meta name="description" content="Painel de atendimento de leads para funcionários"/>
+  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/global.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/leads.css?v=1781704178"/>
+</head>
+<body class="leads-app">
+  <!-- Loader -->
+  <div id="globalLoader" class="loader-overlay">
+    <div class="loader-spinner"></div>
+    <p class="loader-text">Carregando Atendimento...</p>
+  </div>
+
+  <!-- LOCKED SCREEN (shown when user is soft-locked) -->
+  <div id="lockedScreen" class="locked-screen" style="display:none;">
+    <div class="locked-card">
+      <div class="lock-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
+      <h2>Acesso Bloqueado</h2>
+      <p>Sua conta foi temporariamente bloqueada por não atingir a meta diária de leads.</p>
+      <div class="lock-details" id="lockDetails">
+        <div class="detail-row">
+          <span class="label">Data do bloqueio</span>
+          <span class="value" id="lockDate">—</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">Motivo</span>
+          <span class="value" id="lockReason">—</span>
+        </div>
+      </div>
+      <p style="font-size:14px;color:var(--color-text-muted);margin-top:16px;">
+        Aguarde a aprovação do seu supervisor/gerente para liberar o acesso.
+      </p>
+      <button class="btn btn-outline btn-lg btn-full mt-lg" onclick="Auth.logout()">Sair</button>
+    </div>
+  </div>
+
+  <!-- MAIN APP -->
+  <div class="app-layout" id="appLayout" style="display:none;">
+    <!-- Sidebar Mínima -->
+    <aside class="sidebar" id="sidebar" style="width:68px;">
+      <div class="sidebar-header" style="padding:16px 14px;justify-content:center;">
+        <div class="logo-icon" style="width:36px;height:36px;font-size:16px;display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></div>
+      </div>
+      <nav class="sidebar-nav" style="padding:12px 8px;">
+        <a class="nav-item active" title="Meus Leads" style="justify-content:center;padding:12px;">
+          <span class="nav-icon" style="font-size:20px;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span>
+        </a>
+        <a class="nav-item" title="Voltar ao Painel" onclick="navigateBack()" style="justify-content:center;padding:12px;">
+          <span class="nav-icon" style="font-size:20px;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span>
+        </a>
+        <a class="nav-item" title="Sair" onclick="Auth.logout()" style="justify-content:center;padding:12px;">
+          <span class="nav-icon" style="font-size:20px;"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span>
+        </a>
+      </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" style="margin-left:68px;">
+      <!-- Topbar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="btn btn-ghost btn-sm" id="menuToggle" onclick="toggleSidebar()" style="display:none;font-size:20px;">☰</button>
+          <h1>Atendimento de Leads</h1>
+        </div>
+        <div class="topbar-right">
+          <span id="topbarUserName" style="font-weight:700;font-size:14px;">—</span>
+          <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--color-accent),#818CF8);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;" id="topbarAvatar">?</div>
+        </div>
+      </header>
+
+      <div class="page-content">
+        <!-- Daily Progress Widget -->
+        <div class="daily-progress" id="dailyProgressWidget">
+          <div class="progress-header">
+            <div>
+              <div class="progress-count">
+                <span id="todayDone">0</span><span class="total">/<span id="todayTarget">0</span></span>
+              </div>
+              <div class="progress-label">Leads trabalhados hoje · <span id="todayDate">—</span></div>
+            </div>
+            <div style="text-align:right;">
+              <div id="todayStatus" class="badge badge-muted">—</div>
+              <div style="font-size:13px;color:var(--color-text-muted);margin-top:4px;" id="todayTimeLeft"></div>
+            </div>
+          </div>
+          <div class="progress-bar" style="height:12px;">
+            <div class="progress-fill" id="todayProgressBar" style="width:0%"></div>
+          </div>
+        </div>
+
+        <!-- Week Overview -->
+        <div class="card mb-lg">
+          <h3 style="margin-bottom:16px;">📅 Visão da Semana</h3>
+          <div class="week-overview" id="weekOverview">
+            <!-- Populated by JS -->
+          </div>
+        </div>
+
+        <!-- Today's Leads -->
+        <div class="card">
+          <div class="flex items-center justify-between mb-md flex-wrap gap-md">
+            <h3>📋 Leads de Hoje (<span id="leadsCount">0</span>)</h3>
+            <div class="flex gap-sm flex-wrap">
+              <button class="btn btn-ghost btn-sm" onclick="filterLeads('all')" id="filterAll">Todos</button>
+              <button class="btn btn-ghost btn-sm" onclick="filterLeads('pending')" id="filterPending">⏳ Pendentes</button>
+              <button class="btn btn-ghost btn-sm" onclick="filterLeads('worked')" id="filterWorked">✅ Trabalhados</button>
+            </div>
+          </div>
+
+          <div class="leads-grid" id="leadsGrid">
+            <div class="empty-state">
+              <div class="empty-icon">📭</div>
+              <h3>Nenhum lead para hoje</h3>
+              <p>Aguarde a distribuição do seu gerente.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Lead Detail Modal -->
+  <div class="modal-overlay" id="leadModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="modalLeadName">Lead</h3>
+        <button class="modal-close" onclick="closeLeadModal()">✕</button>
+      </div>
+
+      <div id="modalLeadDetails">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="form-group mt-md">
+        <label for="modalNotes">Observações</label>
+        <textarea class="form-control" id="modalNotes" placeholder="Anotações sobre o atendimento..."></textarea>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px;">
+        <button class="btn" style="background:var(--color-warning);color:#fff;" onclick="setLeadStatus('nao_atende')">
+          📵 Não Atende
+        </button>
+        <button class="btn" style="background:#DC2626;color:#fff;" onclick="setLeadStatus('sem_interesse')">
+          👎 Sem Interesse
+        </button>
+        <button class="btn" style="background:var(--color-info);color:#fff;" onclick="setLeadStatus('em_negociacao')">
+          🤝 Em Negociação
+        </button>
+        <button class="btn btn-success" onclick="setLeadStatus('venda_fechada')">
+          ✅ Venda Fechada
+        </button>
+        <button class="btn" style="background:#25D366;color:#fff;grid-column:span 2;" onclick="setLeadStatus('whatsapp')">
+          💬 WhatsApp
+        </button>
+      </div>
+
+      <div class="modal-footer" style="border-top:none;padding-top:8px;">
+        <button class="btn btn-ghost btn-sm" onclick="setLeadStatus('pending')">↩️ Voltar para Pendente</button>
+        <button class="btn btn-outline btn-sm" onclick="closeLeadModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../js/config.js?v=1781704178"></script>
+  <script src="../js/db.js?v=1781704178"></script>
+  <script src="../js/auth.js?v=1781704178"></script>
+  <script src="../js/leads-db.js?v=1781704178"></script>
+  <script src="../js/leads-employee.js?v=1781704178"></script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# Impede acesso direto a configs na pasta api
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(local|env)\.php$">
+    Require all denied
+  </FilesMatch>
+</IfModule>

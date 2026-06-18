@@ -1,0 +1,27 @@
+# SOU+BLU — segurança básica (Apache / Locaweb)
+
+AddDefaultCharset UTF-8
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  # Rota curta /reg -> reg.html
+  RewriteRule ^reg/?$ reg.html [L]
+  # API MySQL compatível PostgREST — /api/rest/v1/{tabela}
+  RewriteRule ^api/rest/v1/([a-zA-Z0-9_]+)/?$ api/rest-v1.php?table=$1 [QSA,L]
+</IfModule>
+
+<IfModule mod_authz_core.c>
+  <FilesMatch "^(config\.(pix|db)\.local\.php|\.env|\.gitignore)$">
+    Require all denied
+  </FilesMatch>
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+</IfModule>
+
+# Bloqueia listagem de diretórios
+Options -Indexes

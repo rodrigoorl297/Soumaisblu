@@ -1,0 +1,11 @@
+# Credenciais locais — nunca versionar
+config.db.local.php
+config.pix.local.php
+*.p12
+*.pem
+.env
+.env.*
+
+# Uploads de usuários
+uploads/**/*
+!uploads/**/.htaccess

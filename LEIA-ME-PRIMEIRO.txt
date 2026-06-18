@@ -1,0 +1,22 @@
+﻿SOU+BLU â€” enviar pasta INTEIRA na Locaweb
+=======================================
+
+OPCAO A (recomendada) â€” ZIP na raiz de public_html
+  1) Apague lixo antigo em public_html (deploy/, hostinger/, scripts/...).
+  2) Envie enviar-locaweb-SITE.zip para public_html.
+  3) Extraia o ZIP DENTRO de public_html.
+  4) Deve existir: public_html/index.html (na raiz, nao dentro de outra pasta).
+
+OPCAO B â€” enviar a pasta enviar-locaweb inteira
+  1) Envie a pasta para public_html.
+  2) Se o site abrir em /enviar-locaweb/, esta ERRADO.
+  3) Mova TODO o conteudo (index.html, api/, js/...) para a RAIZ de public_html
+     e apague a pasta vazia enviar-locaweb.
+
+MySQL â€” REIMPORTAR (phpMyAdmin):
+  enviar-locaweb/IMPORTAR-NO-PHPMYADMIN.../REIMPORTAR-PHPMYADMIN.txt
+
+Teste: https://www.soumaisblu.com.br/
+
+Remontar pacote no PC:
+  .\scripts\montar-enviar-locaweb.ps1

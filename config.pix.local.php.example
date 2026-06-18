@@ -1,0 +1,41 @@
+<?php
+/**
+ * Copie para config.pix.local.php na raiz do site (mesma pasta que api/).
+ * Não commitar — contém segredos.
+ *
+ * Hostinger (tudo no mesmo servidor):
+ * - Painel → MySQL via /api/rest/v1/ (js/db-connect.js em produção)
+ * - PIX (PHP) → MySQL (config.db.local.php) + Efi Pay
+ *
+ * Migração: PIX_DB_BACKEND = mysql e config.db.local.php na raiz.
+ */
+
+define('PIX_DB_BACKEND', 'mysql');
+
+/* No navegador (js/db-connect.js): painel em localhost usa PIX_REMOTE_SITE abaixo.
+ * Só use FORCE_LOCAL_PIX no HTML se tiver PHP local na porta 8080. */
+
+define('PIX_INTERNAL_TOKEN', 'soublu_pix_52e8c7a6b3df4019');
+
+/* FonteData — preenchimento automático no cadastro de cliente (CPF) */
+define('FONTE_DATA_API_KEY', 'SUA-CHAVE-FONTEDATA');
+define('FONTE_DATA_INTERNAL_TOKEN', 'soublu_pix_52e8c7a6b3df4019');
+define('FONTE_DATA_ENDPOINT', 'cadastro-pf-basica');
+define('PIX_PROVIDER', 'mock');
+define('POINTS_TO_BRL', 1.0);
+define('PIX_AUTO_ON_APPROVAL', true);
+
+/** Só para scripts de export (migrar-hostinger.ps1) na sua máquina — não obrigatório no servidor */
+define('SUPABASE_URL', 'https://dqptnlywbarvznpzgtuj.supabase.co');
+define('SUPABASE_SERVICE_KEY', '');
+
+/* Efi Pay — troque PIX_PROVIDER para efipay em produção */
+define('EFI_CLIENT_ID', 'Client_Id_...');
+define('EFI_CLIENT_SECRET', 'Client_Secret_...');
+define('EFI_CERT_PATH', __DIR__ . '/certs/efipay-homolog.p12');
+define('EFI_CERT_PASSWORD', '');
+define('EFI_SANDBOX', true);
+define('EFI_PAYER_PIX_KEY', 'efipay@sejaefi.com.br');
+
+define('EFI_WEBHOOK_URL', 'https://www.soumaisblu.com.br/api/pix_api.php?action=webhook&ignorar=');
+define('EFI_WEBHOOK_SKIP_MTLS', true);

@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <script>window.SOUBLU_FINANCEIRO_PAGE = true;</script>
+  <script charset="UTF-8" src="../js/base-path.js"></script>
+  <script charset="UTF-8" src="../js/db-connect.js?v=12"></script>
+  <title>Financeiro · SOU+BLU</title>
+  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css"/>
+  <link rel="stylesheet" href="../css/global.css?v=4"/>
+  <link rel="stylesheet" href="../css/layout.css"/>
+  <link rel="stylesheet" href="../css/withdrawal.css"/>
+  <link rel="stylesheet" href="../css/store.css"/>
+  <link rel="stylesheet" href="../css/colors-orange.css"/>
+  <link rel="stylesheet" href="../css/leads.css"/>
+  <style>
+    #finPageContent .section { display: none; }
+    #finPageContent .section.active { display: block; }
+    #tab-inicio .fin-inicio-wrap { padding: var(--space-lg, 24px); }
+    #tab-modulos .page-content { padding: var(--space-lg, 24px); }
+    .fin-dash-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+    .fin-dash-grid .stat-card { background: #fff; border: 1px solid var(--color-border); border-radius: var(--radius-lg, 12px); padding: 16px; display: flex; gap: 14px; align-items: flex-start; }
+    .fin-dash-grid .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .fin-dash-grid .stat-icon svg { width: 22px; height: 22px; }
+    .fin-dash-grid .stat-icon.blue { background: rgba(59,130,246,.12); color: #2563eb; }
+    .fin-dash-grid .stat-icon.orange { background: rgba(249,115,22,.12); color: #ea580c; }
+    .fin-dash-grid .stat-icon.green { background: rgba(16,185,129,.12); color: #059669; }
+    .fin-dash-grid .stat-icon.purple { background: rgba(139,92,246,.12); color: #7c3aed; }
+    .fin-dash-grid .stat-icon.yellow { background: rgba(234,179,8,.15); color: #ca8a04; }
+    .fin-dash-grid .stat-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--color-text-muted); margin-bottom: 4px; }
+    .fin-dash-grid .stat-value { font-family: 'Nunito', sans-serif; font-weight: 900; font-size: 26px; line-height: 1.1; }
+    .fin-dash-grid .stat-sub { font-size: 12px; color: var(--color-text-muted); margin-top: 4px; }
+    .fin-dash-banner { background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%); color: #fff; border-radius: var(--radius-lg, 12px); padding: 20px 24px; margin-bottom: 20px; }
+    .fin-dash-banner h2 { font-family: 'Nunito', sans-serif; font-weight: 900; margin: 0 0 6px; font-size: 22px; }
+    .fin-dash-banner p { margin: 0; opacity: .9; font-size: 14px; }
+  </style>
+  <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
+  <script charset="UTF-8" src="../js/config.js?v=14" defer></script>
+  <script charset="UTF-8" src="../js/db.js?v=44" defer></script>
+  <script charset="UTF-8" src="../js/auth.js?v=5" defer></script>
+  <script charset="UTF-8" src="../js/ui.js?v=3" defer></script>
+  <script charset="UTF-8" src="../js/withdrawal-rules.js" defer></script>
+  <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2" defer></script>
+  <script charset="UTF-8" src="../js/marketplace-blu.js" defer></script>
+  <script charset="UTF-8" src="../js/fontedata.js" defer></script>
+  <script charset="UTF-8" src="../js/fornecedor-financeiro.js" defer></script>
+  <script charset="UTF-8" src="../js/prestador-servicos.js?v=1" defer></script>
+  <script charset="UTF-8" src="../js/conta-corrente.js?v=8" defer></script>
+  <script charset="UTF-8" src="../js/fiscal-parceiro.js" defer></script>
+  <script charset="UTF-8" src="../js/esteira-credito.js?v=3" defer></script>
+  <script charset="UTF-8" src="../js/clients.js" defer></script>
+  <script charset="UTF-8" src="../js/proposals.js?v=33" defer></script>
+  <script charset="UTF-8" src="../js/masterProposal.js" defer></script>
+  <script charset="UTF-8" src="../js/admin.js?v=43" defer></script>
+  <script charset="UTF-8" src="../js/financeiro-boot.js?v=7" defer></script>
+  <script charset="UTF-8" src="../js/financeiro-page.js?v=11" defer></script>
+</head>
+<body class="leads-app">
+  <div id="globalLoader" class="loader-overlay">
+    <div class="loader-spinner"></div>
+    <p class="loader-text">Carregando Financeiro…</p>
+  </div>
+
+  <div class="app-layout" id="appLayout" style="display:none;">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon" style="display:flex;align-items:center;justify-content:center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        </div>
+        <div class="logo-text">SOU <span>+ BLU</span></div>
+      </div>
+
+      <nav class="sidebar-nav" id="finSidebarNav">
+        <div class="nav-section-label">Financeiro</div>
+        <a class="nav-item active" href="#" data-tab="inicio" id="navFinInicio">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+          Início
+        </a>
+        <a class="nav-item" href="#" data-section="secMarketplaceManage">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg></span>
+          Catálogo marketplace
+        </a>
+        <a class="nav-item" href="#" data-section="secMarketplaceOrders">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
+          Solicitações marketplace
+        </a>
+        <a class="nav-item" href="#" data-section="secContaCorrenteGestao">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span>
+          Gestão de conta
+        </a>
+        <a class="nav-item" href="#" data-section="secWithdrawals" id="navFinPix">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+          Saque PIX
+          <span class="nav-badge hidden" id="finPixBadge">0</span>
+        </a>
+        <a class="nav-item" href="#" data-section="secBalance">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/></svg></span>
+          Gerenciar Pontos
+        </a>
+        <a class="nav-item" href="#" data-section="secManageProposals" id="navFinProposals">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
+          Propostas
+        </a>
+        <a class="nav-item" href="#" data-section="secFornecedorFinanceiro">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/></svg></span>
+          Fornecedor
+        </a>
+        <a class="nav-item" href="#" data-section="secPrestadorServicos">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          Prestadores (terceirizados)
+        </a>
+        <a class="nav-item" href="#" id="navFinFolhaGerar">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+          Gerar Folha Mensal
+        </a>
+        <a class="nav-item" href="#" data-section="secFiscalParceiro">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+          Fiscal parceiro
+        </a>
+        <a class="nav-item" href="#" data-section="secContaCorrente">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
+          Conta corrente administrar
+        </a>
+        <a class="nav-item" href="#" data-section="secEsteiraCredito" id="navFinEsteira">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+          Esteira proposta crédito
+        </a>
+        <a class="nav-item" href="#" data-section="secFornecedorFinanceiro" data-tab-param="despesas">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+          Emitir cobranças
+        </a>
+        <a class="nav-item" href="#" data-section="secEsteiraCredito" data-tab-param="ccb">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+          Emitir CCB
+        </a>
+        <a class="nav-item" href="#" id="navFinFolha">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+          Folha de Pagamento
+        </a>
+
+        <div class="nav-section-label">Sistema</div>
+        <a class="nav-item" href="#" id="navFinVoltar">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
+          <span id="navFinVoltarLabel">Voltar ao Painel</span>
+        </a>
+        <a class="nav-item" href="#" onclick="Auth.logout(); return false;">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+          Sair
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user" id="sidebarUser">
+          <div class="user-avatar" id="userAvatar">?</div>
+          <div class="user-info">
+            <div class="user-name" id="userName">—</div>
+            <div class="user-role" id="userRole">Financeiro</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <h1 id="pageTitle">Financeiro</h1>
+        </div>
+      </header>
+
+      <div class="tab-content active" id="tab-inicio">
+        <div class="fin-inicio-wrap">
+          <div class="fin-dash-banner">
+            <h2>Dashboard Financeiro</h2>
+              <p id="finPageSubtitle">Visão geral de PIX, despesas e fiscal</p>
+          </div>
+          <div id="finDashKpis" class="fin-dash-grid"></div>
+          <div id="finDashAlerts"></div>
+        </div>
+      </div>
+
+      <div class="tab-content" id="tab-modulos" style="display:none;">
+        <div class="page-content" id="finPageContent"></div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

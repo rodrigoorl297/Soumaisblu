@@ -1,0 +1,1164 @@
+LINE 135 migrate
+<?php
+/**
+ * Migração: tabela monitoria_atendimento (Monitoria de Atendimento — Administrativo).
+ * GET com header X-API-Key (API_INTERNAL_KEY) ou apikey.
+ */
+declare(strict_types=1);
+
+require_once __DIR__ . '/bootstrap.php';
+
+header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
+    http_response_code(204);
+    exit;
+}
+
+if (!soublu_api_auth_ok()) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'error' => 'Não autorizado'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+$applied = [];
+
+try {
+    $pdo = soublu_pdo();
+    $stmt = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
+    );
+    $stmt->execute(['monitoria_atendimento']);
+    if ((int) $stmt->fetchColumn() === 0) {
+        $pdo->exec("CREATE TABLE `monitoria_atendimento` (
+            `id` VARCHAR(64) NOT NULL,
+            `protocolo` VARCHAR(32) NOT NULL,
+            `motivo` VARCHAR(64) NOT NULL,
+            `data_avaliacao` DATE NULL DEFAULT NULL,
+            `origem` VARCHAR(120) NULL DEFAULT NULL,
+            `protocolo_monitoria` VARCHAR(64) NULL DEFAULT NULL,
+            `colaborador_id` VARCHAR(64) NULL DEFAULT NULL,
+            `colaborador_nome` VARCHAR(255) NOT NULL,
+            `colaborador_cpf` VARCHAR(20) NULL DEFAULT NULL,
+            `evidence_attachments` JSON NULL,
+            `observacoes` TEXT NULL,
+            `created_by` VARCHAR(64) NULL DEFAULT NULL,
+            `created_by_name` VARCHAR(255) NULL DEFAULT NULL,
+            `created_at` DATETIME NULL DEFAULT NULL,
+            `updated_at` DATETIME NULL DEFAULT NULL,
+            PRIMARY KEY (`id`),
+            KEY `idx_mon_colab` (`colaborador_id`),
+            KEY `idx_mon_data` (`data_avaliacao`),
+            KEY `idx_mon_protocolo` (`protocolo`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+        $applied[] = 'monitoria_atendimento';
+    }
+    echo json_encode([
+        'ok' => true,
+        'applied' => $applied,
+        'message' => $applied ? 'Migração monitoria aplicada.' : 'Nada a migrar — tabela já existe.',
+    ], JSON_UNESCAPED_UNICODE);
+} catch (Throwable $e) {
+    http_response_code(500);
+    echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
+}
+
+---
+LINE 139 migrate
+/* SOU+BLU — Monitoria de Atendimento (Administrativo) */
+const MonitoriaAtendimento = (() => {
+  const MOTIVOS = [
+    { value: 'erro_atendimento', label: 'Erro atendimento' },
+    { value: 'erro_tag_rotulos', label: 'Erro tag / rótulos' },
+    { value: 'outro', label: 'Outro' },
+  ];
+
+  const ORIGENS = [
+    'Ligação', 'Chat', 'WhatsApp', 'E-mail', 'Backoffice', 'Supervisão', 'Ouvidoria', 'Outro',
+  ];
+
+  let _tab = 'dashboard';
+  let _rows = [];
+  let _users = [];
+  let _pendingEvidence = [];
+  let _editId = null;
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function motivoLabel(v) {
+    return MOTIVOS.find(m => m.value === v)?.label || v || '—';
+  }
+
+  function qualidadeFromCount(n) {
+    const c = Number(n) || 0;
+    if (c <= 5) return 'ALTA';
+    if (c <= 10) return 'MÉDIA';
+    return 'BAIXA';
+  }
+
+  function qualidadeBadge(q) {
+    const v = String(q || '').toUpperCase();
+    const cls = v === 'ALTA' ? 'mon-badge--alta' : (v === 'MÉDIA' ? 'mon-badge--media' : 'mon-badge--baixa');
+    return `<span class="mon-badge ${cls}">${esc(v || '—')}</span>`;
+  }
+
+  function currentMonth() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  function canAccess() {
+    return typeof Auth !== 'undefined' && Auth.canAccessMonitoriaAtendimento && Auth.canAccessMonitoriaAtendimento();
+  }
+
+  async function ensureSchema() {
+    if (sessionStorage.getItem('soublu_mon_schema') === '1') return;
+    const cfg = window.SOUBLU_CONFIG || {};
+    const url = (cfg.API_BASE_URL || cfg.SITE_URL || location.origin).replace(/\/+$/, '') + '/api/migrate-monitoria-atendimento.php';
+    try {
+      await fetch(url, {
+        headers: { 'X-API-Key': cfg.API_KEY || '', apikey: cfg.API_KEY || '' },
+      });
+      sessionStorage.setItem('soublu_mon_schema', '1');
+    } catch (_) { /* noop */ }
+  }
+
+  async function reload() {
+    _rows = await DB.getMonitoriaAtendimentos();
+    _users = await DB.getAllUsers().catch(() => []);
+  }
+
+  function countByColaboradorMonth(colabKey, month) {
+    return _rows.filter(r => {
+      const key = r.colaborador_id || r.colaborador_cpf || r.colaborador_nome;
+      return String(key) === String(colabKey) && String(r.data_avaliacao || '').slice(0, 7) === month;
+    }).length;
+  }
+
+  async function syncRhQualidade(colaboradorId, colaboradorCpf, month) {
+    const key = colaboradorId || colaboradorCpf;
+    if (!key) return;
+    const count = countByColaboradorMonth(key, month);
+    const qualidade = qualidadeFromCount(count);
+    const emps = await DB.getRhEmployees().catch(() => []);
+    const emp = emps.find(e =>
+      (colaboradorId && String(e.id) === String(colaboradorId))
+      || (colaboradorCpf && String(e.cpf || '').replace(
+---
+/* Monitoria de Atendimento — Administrativo */
+.mon-app .mon-hero {
+  background: linear-gradient(135deg, #0a2d8f 0%, #f97316 100%);
+  color: #fff;
+  border: none;
+  margin-bottom: 16px;
+  padding: 24px;
+}
+
+.mon-app .mon-hero h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 900;
+}
+
+.mon-app .mon-hero__eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+  margin: 0 0 6px;
+}
+
+.mon-app .mon-hero__content p {
+  margin: 0;
+  opacity: 0.95;
+}
+
+.mon-dash-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 16px;
+}
+
+.mon-rules__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mon-rules__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.mon-rules__list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.mon-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.mon-badge--alta { background: #dcfce7; color: #166534; }
+.mon-badge--media { background: #fef3c7; color: #92400e; }
+.mon-badge--baixa { background: #fee2e2; color: #b91c1c; }
+
+.mon-stat-card__value {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.mon-stat-card__label {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.mon-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mon-section-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.mon-modal-header {
+  background: linear-gradient(135deg, #0a2d8f, #f97316);
+  color: #fff;
+}
+
+.mon-modal-header h3 { color: #fff; }
+.mon-modal-header .modal-close { color: #fff; }
+
+.mon-form-protocol {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.mon-form-protocol strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--color-primary);
+}
+
+.mon-evidence-zone {
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--color-surface-2);
+}
+
+.mon-evidence-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.mon-evidence-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.mon-motivos-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
+
+@media (max-width: 900px) {
+  .mon-dash-grid { grid-template-columns: 1fr; }
+}
+
+---
+LINE 139 css
+/* SOU+BLU — Monitoria de Atendimento (Administrativo) */
+const MonitoriaAtendimento = (() => {
+  const MOTIVOS = [
+    { value: 'erro_atendimento', label: 'Erro atendimento' },
+    { value: 'erro_tag_rotulos', label: 'Erro tag / rótulos' },
+    { value: 'outro', label: 'Outro' },
+  ];
+
+  const ORIGENS = [
+    'Ligação', 'Chat', 'WhatsApp', 'E-mail', 'Backoffice', 'Supervisão', 'Ouvidoria', 'Outro',
+  ];
+
+  let _tab = 'dashboard';
+  let _rows = [];
+  let _users = [];
+  let _pendingEvidence = [];
+  let _editId = null;
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function motivoLabel(v) {
+    return MOTIVOS.find(m => m.value === v)?.label || v || '—';
+  }
+
+  function qualidadeFromCount(n) {
+    const c = Number(n) || 0;
+    if (c <= 5) return 'ALTA';
+    if (c <= 10) return 'MÉDIA';
+    return 'BAIXA';
+  }
+
+  function qualidadeBadge(q) {
+    const v = String(q || '').toUpperCase();
+    const cls = v === 'ALTA' ? 'mon-badge--alta' : (v === 'MÉDIA' ? 'mon-badge--media' : 'mon-badge--baixa');
+    return `<span class="mon-badge ${cls}">${esc(v || '—')}</span>`;
+  }
+
+  function currentMonth() {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }
+
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(`${iso}T12:00:00`).toLocaleDateString('pt-BR');
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  function canAccess() {
+    return typeof Auth !== 'undefined' && Auth.canAccessMonitoriaAtendimento && Auth.canAccessMonitoriaAtendimento();
+  }
+
+  async function ensureSchema() {
+    if (sessionStorage.getItem('soublu_mon_schema') === '1') return;
+    const cfg = window.SOUBLU_CONFIG || {};
+    const url = (cfg.API_BASE_URL || cfg.SITE_URL || location.origin).replace(/\/+$/, '') + '/api/migrate-monitoria-atendimento.php';
+    try {
+      await fetch(url, {
+        headers: { 'X-API-Key': cfg.API_KEY || '', apikey: cfg.API_KEY || '' },
+      });
+      sessionStorage.setItem('soublu_mon_schema', '1');
+    } catch (_) { /* noop */ }
+  }
+
+  async function reload() {
+    _rows = await DB.getMonitoriaAtendimentos();
+    _users = await DB.getAllUsers().catch(() => []);
+  }
+
+  function countByColaboradorMonth(colabKey, month) {
+    return _rows.filter(r => {
+      const key = r.colaborador_id || r.colaborador_cpf || r.colaborador_nome;
+      return String(key) === String(colabKey) && String(r.data_avaliacao || '').slice(0, 7) === month;
+    }).length;
+  }
+
+  async function syncRhQualidade(colaboradorId, colaboradorCpf, month) {
+    const key = colaboradorId || colaboradorCpf;
+    if (!key) return;
+    const count = countByColaboradorMonth(key, month);
+    const qualidade = qualidadeFromCount(count);
+    const emps = await DB.getRhEmployees().catch(() => []);
+    const emp = emps.find(e =>
+      (colaboradorId && String(e.id) === String(colaboradorId))
+      || (colaboradorCpf && String(e.cpf || '').replace(/\D/g, '') === String(colaboradorCpf).replace(/\D/g, ''))
+    );
+    if (!emp) return;
+    if (String(emp.qualidade_monitoria || '').toUpperCase() === qualidade) return;
+    await DB.saveRhEmployee({ ...emp, qualidade_monitoria: qualidade });
+  }
+
+  function renderRulesCard() {
+    return `
+      <div class="mon-rules card card-padded">
+        <h4 class="mon-rules__title">Regras de qualidade</h4>
+        <ul class="mon-rules__list">
+          <li><span class="mon-badge mon-badge--alta">ALTA</span> 0 a 5 apontamentos no mês</li>
+          <li><span class="mon-badge mon-badge--media">MÉDIA</span> 6 a 10 apontamentos no mês</li>
+          <li><span class="mon-badge mon-badge--baixa">BAIXA</span> 11 ou mais apontamentos no mês</li>
+        </ul>
+      </div>`;
+  }
+
+  function renderDashboard() {
+    const month = currentMonth();
+    const monthRows = _rows.filter(r => String(r.data_avaliacao || '').slice(0, 7) === month);
+    const byColab = {};
+    monthRows.forEach(r => {
+      const key = r.colaborador_id || r.colaborador_cpf || r.colaborador_nome;
+      if (!key) return;
+      if (!byColab[key]) {
+        byColab[key] = {
+          nome: r.colaborador_nome || '—',
+          id: r.colaborador_id,
+          cpf: r.colaborador_cpf,
+          count: 0,
+        };
+      }
+      byColab[key].count += 1;
+    });
+    const stats = Object.values(byColab).sort((a, b) => b.count - a.count);
+    const total = monthRows.length;
+
+    return `
+      <div class="mon-hero card">
+        <div class="mon-hero__content">
+          <p class="mon-hero__eyebrow">Administrativo</p>
+          <h2>Monitoria de Atendimento</h2>
+          <p>Registre apontamentos, anexe evidências e acompanhe a qualidade dos colaboradores.</p>
+        </div>
+      </div>
+      <div class="mon-dash-grid">
+        ${renderRulesCard()}
+        <div class="card card-padded mon-stat-card">
+          <div class="mon-stat-card__value">${total}</div>
+          <div class="mon-stat-card__label">Apontamentos em ${fmtDate(`${month}-01`)}</div>
+        </div>
+        <div class="card card-padded mon-stat-card">
+          <div class="mon-stat-card__value">${stats.length}</div>
+          <div class="mon-stat-card__label">Colaboradores monitorados</div>
+        </div>
+      </div>
+      <div class="card card-padded" style="margin-top:16px;">
+        <div class="mon-section-head">
+          <h3>Qualidade por colaborador — ${month.split('-').reverse().join('/')}</h3>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Colaborador</th><th>Apontamentos</th><th>Qualidade</th><th></th>
+            </tr></thead>
+            <tbody>
+              ${stats.length ? stats.map(s => `
+                <tr>
+                  <td><strong>${esc(s.nome)}</strong></td>
+                  <td>${s.count}</td>
+                  <td>${qualidadeBadge(qualidadeFromCount(s.count))}</td>
+                  <td><button type="button" class="btn btn-ghost btn-sm" onclick="MonitoriaAtendimento.filterColaborador('${esc(s.id || s.cpf || s.nome)}')">Ver registros</button></td>
+                </tr>`).join('') : '<tr><td colspan="4" class="text-muted text-center">Nenhum apontamento neste mês.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  let _filterColab = '';
+
+  function renderLista() {
+    let list = [..._rows];
+    if (_filterColab) {
+      list = list.filter(r => {
+        const key = r.colaborador_id || r.colaborador_cpf || r.colaborador_nome;
+        return String(key) === String(_filterColab);
+      });
+    }
+    return `
+      <div class="page-header">
+        <div class="page-header-text">
+          <h2>Registros de monitoria</h2>
+          <p>${_filterColab ? 'Filtrado por colaborador — ' : ''}${list.length} registro(s)</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          ${_filterColab ? '<button type="button" class="btn btn-ghost btn-sm" onclick="MonitoriaAtendimento.clearFilter()">Limpar filtro</button>' : ''}
+          <button type="button" class="btn btn-primary" onclick="MonitoriaAtendimento.openForm()">+ Nova monitoria</button>
+        </div>
+      </div>
+      ${renderRulesCard()}
+      <div class="card card-padded">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr>
+              <th>Protocolo</th><th>Data</th><th>Colaborador</th><th>Motivo</th><th>Origem</th><th>Evidências</th><th></th>
+            </tr></thead>
+            <tbody id="monTbody">
+              ${list.length ? list.map(r => `
+                <tr>
+                  <td><strong>${esc(r.protocolo)}</strong></td>
+                  <td>${esc(fmtDate(r.data_avaliacao))}</td>
+                  <td>${esc(r.colaborador_nome || '—')}</td>
+                  <td>${esc(motivoLabel(r.motivo))}</td>
+                  <td>${esc(r.origem || '—')}</td>
+                  <td>${(r.evidence_attachments || []).length || 0}</td>
+                  <td style="white-space:nowrap;">
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="MonitoriaAtendimento.openForm('${esc(r.id)}')">Editar</button>
+                    <button type="button" class="btn btn-ghost btn-sm" onclick="MonitoriaAtendimento.remove('${esc(r.id)}')">Excluir</button>
+                  </td>
+                </tr>`).join('') : '<tr><td colspan="7" class="text-muted text-center">Nenhum registro. Clique em <strong>+ Nova monitoria</strong>.</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>`;
+  }
+
+  function renderRegras() {
+    return `
+      <div class="page-header">
+        <div class="page-header-text">
+          <h2>Regras e referência</h2>
+          <p>Critérios de classificação da qualidade de monitoria</p>
+        </div>
+      </div>
+      ${renderRulesCard()}
+      <div class="card card-padded">
+        <h3 style="margin-bottom:12px;">Motivos cadastrados</h3>
+        <ul class="mon-motivos-list">
+          ${MOTIVOS.map(m => `<li>${esc(m.label)}</li>`).join('')}
+        </ul>
+        <p class="form-hint" style="margin-top:16px;">A qualidade do colaborador no cadastro RH é atualizada automaticamente ao salvar apontamentos do mês.</p>
+      </div>`;
+  }
+
+  function renderTab() {
+    const root = document.getElementById('monTabRoot');
+    if (!root) return;
+    if (_tab === 'dashboard') root.innerHTML = renderDashboard();
+    else if (_tab === 'registros') root.innerHTML = renderLista();
+    else root.innerHTML = renderRegras();
+    const titles = { dashboard: 'Dashboard', registros: 'Registros', regras: 'Regras' };
+    const titleEl = document.getElementById('monPageTitle');
+    if (titleEl) titleEl.textContent = titles[_tab] || 'Monitoria';
+  }
+
+  function switchTab(tab) {
+    _tab = tab || 'dashboard';
+    document.querySelectorAll('.mon-app .nav-item[data-tab]').forEach(el => {
+      el.classList.toggle('active', el.dataset.tab === _tab);
+    });
+    renderTab();
+  }
+
+  function ensureModal() {
+    if (document.getElementById('monFormModal')) return;
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="modal-overlay" id="monFormModal">
+        <div class="modal" style="max-width:640px;">
+          <div class="modal-header mon-modal-header">
+            <h3 id="monFormTitle">Nova monitoria</h3>
+            <button type="button" class="modal-close" onclick="closeModal('monFormModal')"></button>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="monFormId"/>
+            <div class="mon-form-protocol">
+              <span>Protocolo</span>
+              <strong id="monProtocoloPreview">—</strong>
+              <span class="form-hint">Gerado automaticamente</span>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="monDataAvaliacao">Data da avaliação *</label>
+                <input type="date" id="monDataAvaliacao" class="form-control" required/>
+              </div>
+              <div class="form-group">
+                <label for="monMotivo">Motivo *</label>
+                <select id="monMotivo" class="form-control">
+                  ${MOTIVOS.map(m => `<option value="${m.value}">${esc(m.label)}</option>`).join('')}
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="monOrigem">Origem da monitoria</label>
+                <select id="monOrigem" class="form-control">
+                  <option value="">Selecione</option>
+                  ${ORIGENS.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')}
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="monProtocoloMon">Protocolo da monitoria</label>
+                <input type="text" id="monProtocoloMon" class="form-control" placeholder="Referência externa (opcional)"/>
+              </div>
+            </div>
+            <div class="form-group">
+              <label for="monColaborador">Colaborador *</label>
+              <select id="monColaborador" class="form-control" required>
+                <option value="">Selecione o colaborador</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="monObservacoes">Observações</label>
+              <textarea id="monObservacoes" class="form-control" rows="3" placeholder="Detalhes do apontamento..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Anexar evidências</label>
+              <div class="mon-evidence-zone" id="monEvidenceZone">
+                <input type="file" id="monEvidenceInput" accept="image/*,.pdf" multiple style="display:none" onchange="MonitoriaAtendimento.onEvidencePick(this)"/>
+                <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('monEvidenceInput').click()">+ Adicionar arquivo</button>
+                <div id="monEvidenceList" class="mon-evidence-list"></div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-ghost" onclick="closeModal('monFormModal')">Cancelar</button>
+            <button type="button" class="btn btn-primary" onclick="MonitoriaAtendimento.save()">Salvar</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(wrap.firstElementChild);
+  }
+
+  function paintEvidenceList() {
+    const el = document.getElementById('monEvidenceList');
+    if (!el) return;
+    if (!_pendingEvidence.length) {
+      el.innerHTML = '<p class="form-hint">Nenhum anexo ainda.</p>';
+      return;
+    }
+    el.innerHTML = _pendingEvidence.map((f, i) => `
+      <div class="mon-evidence-item">
+        <span>${esc(f.name || f.url || 'Arquivo')}</span>
+        <button type="button" class="btn btn-ghost btn-xs" onclick="MonitoriaAtendimento.removeEvidence(${i})">✕</button>
+      </div>`).join('');
+  }
+
+  function populateColaboradoresSelect(selectedId) {
+    const sel = document.getElementById('monColaborador');
+    if (!sel) return;
+    const internal = _users.filter(u => {
+      const r = String(u.role || '').toLowerCase();
+      return u.active !== false && !['master', 'fundador', 'parceiro'].includes(r);
+    }).sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+    sel.innerHTML = '<option value="">Selecione o colaborador</option>' + internal.map(u =>
+      `<option value="${esc(u.id)}" data-cpf="${esc(u.cpf || '')}" data-name="${esc(u.name || '')}">${esc(u.name || u.id)}${u.department ? ` — ${esc(u.department)}` : ''}</option>`
+    ).join('');
+    if (selectedId) sel.value = selectedId;
+  }
+
+  async function openForm(id) {
+    ensureModal();
+    _editId = id || null;
+    _pendingEvidence = [];
+    const row = id ? await DB.getMonitoriaAtendimento(id) : null;
+    const d = new Date();
+    const proto = row?.protocolo || `MON-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    document.getElementById('monFormId').value = row?.id || '';
+    document.getElementById('monFormTitle').textContent = row ? 'Editar monitoria' : 'Nova monitoria';
+    document.getElementById('monProtocoloPreview').textContent = proto;
+    document.getElementById('monDataAvaliacao').value = row?.data_avaliacao || d.toISOString().slice(0, 10);
+    document.getElementById('monMotivo').value = row?.motivo || 'erro_atendimento';
+    document.getElementById('monOrigem').value = row?.origem || '';
+    document.getElementById('monProtocoloMon').value = row?.protocolo_monitoria || '';
+    document.getElementById('monObservacoes').value = row?.observacoes || '';
+    populateColaboradoresSelect(row?.colaborador_id || '');
+    _pendingEvidence = [...(row?.evidence_attachments || [])];
+    paintEvidenceList();
+    openModal('monFormModal');
+  }
+
+  async function onEvidencePick(input) {
+    const files = Array.from(input?.files || []);
+    if (!files.length) return;
+    showLoading('Enviando evidência...');
+    try {
+      for (const file of files) {
+        let url = '';
+        if (typeof uploadImage === 'function') {
+          url = await uploadImage(file, 'monitoria-atendimento', `evidencias/${Date.now()}`);
+        }
+        _pendingEvidence.push({
+          name: file.name,
+          url: url || '',
+          mime: file.type || '',
+        });
+      }
+      paintEvidenceList();
+    } catch (e) {
+      showToast('Falha ao enviar evidência.', 'error');
+    } finally {
+      hideLoading();
+      if (input) input.value = '';
+    }
+  }
+
+  function removeEvidence(idx) {
+    _pendingEvidence.splice(idx, 1);
+    paintEvidenceList();
+  }
+
+  async function save() {
+    const sel = document.getElementById('monColaborador');
+    const opt = sel?.selectedOptions?.[0];
+    if (!sel?.value) {
+      showToast('Selecione o colaborador.', 'warning');
+      return;
+    }
+    const session = Auth.getSession();
+    const dataAval = document.getElementById('monDataAvaliacao')?.value;
+    if (!dataAval) {
+      showToast('Informe a data da avaliação.', 'warning');
+      return;
+    }
+    showLoading('Salvando...');
+    try {
+      const protoText = document.getElementById('monProtocoloPreview')?.textContent?.trim();
+      const payload = {
+        id: document.getElementById('monFormId')?.value || undefined,
+        protocolo: protoText,
+        motivo: document.getElementById('monMotivo')?.value,
+        data_avaliacao: dataAval,
+        origem: document.getElementById('monOrigem')?.value?.trim() || '',
+        protocolo_monitoria: document.getElementById('monProtocoloMon')?.value?.trim() || '',
+        colaborador_id: sel.value,
+        colaborador_nome: opt?.dataset?.name || opt?.textContent || '',
+        colaborador_cpf: opt?.dataset?.cpf || '',
+        observacoes: document.getElementById('monObservacoes')?.value?.trim() || '',
+        evidence_attachments: _pendingEvidence,
+        created_by: session?.id,
+        created_by_name: session?.name,
+      };
+      await DB.saveMonitoriaAtendimento(payload);
+      const month = String(dataAval).slice(0, 7);
+      await syncRhQualidade(payload.colaborador_id, payload.colaborador_cpf, month);
+      closeModal('monFormModal');
+      await reload();
+      renderTab();
+      showToast('Monitoria salva!', 'success');
+    } catch (e) {
+      showToast('Erro ao salvar monitoria.', 'error');
+    } finally {
+      hideLoading();
+    }
+  }
+
+  async function remove(id) {
+    if (!id || !confirm('Excluir este registro de monitoria?')) return;
+    const row = await DB.getMonitoriaAtendimento(id);
+    await DB.deleteMonitoriaAtendimento(id);
+    if (row) {
+      const month = String(row.data_avaliacao || '').slice(0, 7);
+      await syncRhQualidade(row.colaborador_id, row.colaborador_cpf, month);
+    }
+    await reload();
+    renderTab();
+    showToast('Registro excluído.', 'info');
+  }
+
+  function filterColaborador(key) {
+    _filterColab = key;
+    switchTab('registros');
+  }
+
+  function clearFilter() {
+    _filterColab = '';
+    renderTab();
+  }
+
+  async function boot() {
+    if (!Auth.getSession()) {
+      window.location.href = Auth.loginPageHref ? Auth.loginPageHref() : '../index.html';
+      return;
+    }
+    if (!canAccess()) {
+      showToast('Sem permissão para Monitoria de Atendimento.', 'error');
+      setTimeout(() => { window.location.href = Auth.adminPageHref(); }, 1200);
+      return;
+    }
+    showLoading('Carregando monitoria...');
+    try {
+      await ensureSchema();
+      await reload();
+      const s = Auth.getSession();
+      const nameEl = document.getElementById('monUserName');
+      const roleEl = document.getElementById('monUserRole');
+      const avEl = document.getElementById('monUserAvatar');
+      if (nameEl) nameEl.textContent = s?.name || '—';
+      if (roleEl) roleEl.textContent = s?.role || '—';
+      if (avEl) avEl.textContent = (s?.name || '?').charAt(0).toUpperCase();
+      document.getElementById('appLayout').style.display = '';
+      switchTab('dashboard');
+    } finally {
+      hideLoading();
+    }
+  }
+
+  return {
+    boot,
+    switchTab,
+    openForm,
+    save,
+    remove,
+    onEvidencePick,
+    removeEvidence,
+    filterColaborador,
+    clearFilter,
+    canAccess,
+    qualidadeFromCount,
+  };
+})();
+
+window.MonitoriaAtendimento = MonitoriaAtendimento;
+
+function switchTab(tab) {
+  MonitoriaAtendimento.switchTab(tab);
+}
+
+function navigateBack() {
+  window.location.href = typeof Auth !== 'undefined' && Auth.adminPageHref
+    ? Auth.adminPageHref()
+    : 'admin.html';
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar')?.classList.toggle('open');
+}
+
+document.addEventListener('DOMContentLoaded', () => MonitoriaAtendimento.boot());
+
+---
+/* Monitoria de Atendimento — Administrativo */
+.mon-app .mon-hero {
+  background: linear-gradient(135deg, #0a2d8f 0%, #f97316 100%);
+  color: #fff;
+  border: none;
+  margin-bottom: 16px;
+  padding: 24px;
+}
+
+.mon-app .mon-hero h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 900;
+}
+
+.mon-app .mon-hero__eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.9;
+  margin: 0 0 6px;
+}
+
+.mon-app .mon-hero__content p {
+  margin: 0;
+  opacity: 0.95;
+}
+
+.mon-dash-grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 16px;
+}
+
+.mon-rules__title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.mon-rules__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 8px;
+}
+
+.mon-rules__list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.mon-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.mon-badge--alta { background: #dcfce7; color: #166534; }
+.mon-badge--media { background: #fef3c7; color: #92400e; }
+.mon-badge--baixa { background: #fee2e2; color: #b91c1c; }
+
+.mon-stat-card__value {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 900;
+  color: var(--color-primary);
+  line-height: 1;
+}
+
+.mon-stat-card__label {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.mon-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.mon-section-head h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.mon-modal-header {
+  background: linear-gradient(135deg, #0a2d8f, #f97316);
+  color: #fff;
+}
+
+.mon-modal-header h3 { color: #fff; }
+.mon-modal-header .modal-close { color: #fff; }
+
+.mon-form-protocol {
+  background: var(--color-surface-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  display: grid;
+  gap: 4px;
+}
+
+.mon-form-protocol strong {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--color-primary);
+}
+
+.mon-evidence-zone {
+  border: 1.5px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px;
+  background: var(--color-surface-2);
+}
+
+.mon-evidence-list {
+  margin-top: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.mon-evidence-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+}
+
+.mon-motivos-list {
+  margin: 0;
+  padding-left: 18px;
+  line-height: 1.8;
+}
+
+@media (max-width: 900px) {
+  .mon-dash-grid { grid-template-columns: 1fr; }
+}
+
+---
+LINE 140
+  rhManagerPageHref() {
+    const rel = this._isInPagesDir() ? 'rh-manager.html' : 'pages/rh-manager.html';
+    return this.resolveHref(rel);
+  },
+
+  monitoriaAtendimentoPageHref() {
+    const rel = this._isInPagesDir() ? 'monitoria-atendimento.html' : 'pages/monitoria-atendimento.html';
+    return this.resolveHref(rel);
+  },
+
+  /** Monitoria de Atendimento — departamento administrativo interno. */
+  canAccessMonitoriaAtendimento() {
+    const s = this.getSession();
+    if (!s || window.PARTNER_ROOT_ID) return false;
+    const r = String(s.role || '').toLowerCase();
+    return ['master', 'fundador', 'desenvolvedor', 'gerente', 'supervisor', 'backoffice',
+      'operacional', 'sup_backoffice', 'rh', 'ouvidoria', 'admin', 'diretoria'].includes(r);
+  },
+---
+LINE 140 admin
+    btn.style.display = canRH ? '' : 'none';
+  })();
+
+  /* ── MONITORIA ATENDIMENTO (Administrativo) ── */
+  (function _injectMonitoriaNav() {
+    const canMon = cfg?.canMonitoriaAtendimento;
+    let btn = document.getElementById('navMonitoriaAtendimento');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'navMonitoriaAtendimento';
+      btn.type = 'button';
+      btn.className = 'nav-item monitoria-atendimento-nav';
+      btn.innerHTML = `<span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span><span class="nav-label">Monitoria</span>`;
+      btn.onclick = () => {
+        if (typeof Auth.monitoriaAtendimentoPageHref === 'function') {
+          window.location.href = Auth.monitoriaAtendimentoPageHref();
+        }
+      };
+      const sidebarNav = document.querySelector('.sidebar-nav');
+      const anchor = document.getElementById('navRHManager') || document.getElementById('navFolhaPagamento');
+      if (anchor?.parentNode) anchor.parentNode.insertBefore(btn, anchor.nextSibling);
+      else if (sidebarNav) sidebarNav.appendChild(btn);
+    }
+    btn.style.display = canMon ? '' : 'none';
+  })();
+
+  if (window.Tim && typeof Tim.applyNavVisibility === 'function') Tim.applyNavVisibility(cfg);
+---
+    const canFinanceiroHub = !_inPartnerOrg && (IS_MASTER || IS_FUNDA || IS_FINANCIAL);
+    const canMonitoriaAtendimento = p.canMonitoriaAtendimento !== undefined ? !!p.canMonitoriaAtendimento
+      : (!_inPartnerOrg && typeof Auth.canAccessMonitoriaAtendimento === 'function' && Auth.canAccessMonitoriaAtendimento());
+    const canContaCorrente = p.canContaCorrente !== undefined ? !!p.canContaCorrente : (!_inPartnerOrg
+---
+      canContestacao, canFiscalParceiro, canMarketplaceBlu, canFornecedorFinanceiro, canContaCorrente,
+      canFinanceiroHub, canMonitoriaAtendimento,
+    };
+---
+  const gestaoBtns = document.querySelectorAll(
+    '.sidebar-nav .leads-manager-nav, .sidebar-nav .nav-item[data-section="secEmployees"], .sidebar-nav .nav-item[data-section="secBalance"], .sidebar-nav .nav-item[data-section="secProducts"], .sidebar-nav .nav-item[data-section="secOrders"], .sidebar-nav .store-shop-nav, .sidebar-nav .nav-item[data-section="secWithdrawals"], .sidebar-nav #navClients, .sidebar-nav #navManageProposals, .sidebar-nav #navPartnerOps, .sidebar-nav #navSimulacao, .sidebar-nav #navManageTickets, .sidebar-nav #navFinanceiroHub, .sidebar-nav #navMonitoriaAtendimento'
+  );
+---
+LINE 140 css
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <script charset="UTF-8" src="../js/base-path.js"></script>
+  <script charset="UTF-8" src="../js/db-connect.js"></script>
+  <title>Monitoria de Atendimento · SOU+BLU</title>
+  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css"/>
+  <link rel="stylesheet" href="../css/global.css"/>
+  <link rel="stylesheet" href="../css/colors-orange.css"/>
+  <link rel="stylesheet" href="../css/leads.css"/>
+  <link rel="stylesheet" href="../css/monitoria-atendimento.css"/>
+</head>
+<body class="leads-app mon-app">
+  <div id="globalLoader" class="loader-overlay">
+    <div class="loader-spinner"></div>
+    <p class="loader-text">Carregando Monitoria de Atendimento...</p>
+  </div>
+
+  <div class="app-layout" id="appLayout" style="display:none;">
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="logo-icon" style="display:flex;align-items:center;justify-content:center;">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        </div>
+        <div class="logo-text">SOU <span>+ BLU</span></div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section-label">Administrativo</div>
+        <a class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+          Dashboard
+        </a>
+        <a class="nav-item" data-tab="registros" onclick="switchTab('registros')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+          Registros
+        </a>
+        <a class="nav-item" data-tab="regras" onclick="switchTab('regras')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></span>
+          Regras
+        </a>
+
+        <div class="nav-section-label">Sistema</div>
+        <a class="nav-item" onclick="navigateBack()">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
+          Voltar ao Painel
+        </a>
+        <a class="nav-item" onclick="Auth.logout()">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+          Sair
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="user-avatar" id="monUserAvatar">?</div>
+          <div class="user-info">
+            <div class="user-name" id="monUserName">—</div>
+            <div class="user-role" id="monUserRole">—</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="btn btn-ghost btn-sm" onclick="toggleSidebar()" style="display:none;font-size:20px;">☰</button>
+          <h1 id="monPageTitle">Dashboard</h1>
+        </div>
+        <div class="topbar-right">
+          <button type="button" class="btn btn-primary btn-sm" onclick="MonitoriaAtendimento.openForm()">+ Nova monitoria</button>
+        </div>
+      </header>
+
+      <div class="tab-content active page-content" id="monTabRoot"></div>
+    </main>
+  </div>
+
+  <script charset="UTF-8" src="../js/config.js" defer></script>
+  <script charset="UTF-8" src="../js/db.js" defer></script>
+  <script charset="UTF-8" src="../js/auth.js" defer></script>
+  <script charset="UTF-8" src="../js/ui.js?v=6" defer></script>
+  <script charset="UTF-8" src="../js/monitoria-atendimento.js?v=1" defer></script>
+</body>
+</html>
+
+---
+LINE 141 migrate
+LINE 175 migrate

@@ -1,0 +1,2913 @@
+window.Proposals = {
+  init: function() {
+    this._initAnexoFolderDelegation();
+    this._initStaticProposalSelects();
+    if (document.getElementById('propAnexosFolders')) {
+      this.initAnexoFolders();
+    }
+  },
+
+  /** Catálogo de produtos (planilha ALTERAÇÃO PRODUTOS). */
+  _PRODUTOS: [
+    { v: 'NOVO', l: 'NOVO' },
+    { v: 'COMPRA DE DÍVIDA', l: 'COMPRA DE DÍVIDA' },
+    { v: 'CARTÃO', l: 'CARTÃO' },
+    { v: 'CNC', l: 'CNC' },
+  ],
+
+  _CONVENIOS: ['FEDERAL', 'ESTADUAL', 'MUNICIPAL', 'INSS', 'CLT'],
+
+  /** Pastas de anexo da proposta (vendedor + gestão). Chaves gravadas em proposals.attachments (JSON). */
+  _ANEXO_CATEGORIES: [
+    {
+      key: 'identidade',
+      titulo: '🪪 Documento de Identidade',
+      folderIdSuffix: 'DocIdentidade',
+      grupoPrefix: 'identidade_',
+      initialSlots: [
+        { slotSuffix: 'Frente', grupo: 'identidade_frente', label: 'Frente' },
+        { slotSuffix: 'Verso', grupo: 'identidade_verso', label: 'Verso' },
+      ],
+      viewSeed: [
+        { key: 'identidade_frente', label: 'Frente', legado: ['identidade', 'arquivo_1'] },
+        { key: 'identidade_verso', label: 'Verso', legado: [] },
+      ],
+    },
+    {
+      key: 'contracheque',
+      titulo: '📋 Contracheque',
+      folderIdSuffix: 'CC',
+      grupoPrefix: 'contracheque_',
+      viewSeed: [{ key: 'contracheque_1', legado: ['paystub'] }],
+    },
+    {
+      key: 'boleto',
+      titulo: '💳 Boleto de Quitação',
+      folderIdSuffix: 'Bol',
+      grupoPrefix: 'boleto_',
+      viewSeed: [
+        { key: 'boleto_1', legado: ['boleto1'] },
+        { key: 'boleto_2', legado: ['boleto2'] },
+      ],
+    },
+    {
+      key: 'extrato',
+      titulo: '📄 Extrato de Consignação',
+      folderIdSuffix: 'Ext',
+      grupoPrefix: 'extrato_',
+      viewSeed: [
+        { key: 'extrato_1', legado: ['extrato1'] },
+        { key: 'extrato_2', legado: ['extrato2'] },
+      ],
+    },
+    {
+      key: 'nota_promissoria',
+      titulo: '📝 Nota Promissória',
+      folderIdSuffix: 'NotaProm',
+      grupoPrefix: 'nota_promissoria_',
+      viewSeed: [{ key: 'nota_promissoria_1', legado: [] }],
+    },
+    {
+      key: 'termo_confissao_divida',
+      titulo: '📜 Termo de Confissão de Dívida',
+      folderIdSuffix: 'TermoConfDivida',
+      grupoPrefix: 'termo_confissao_divida_',
+      viewSeed: [{ key: 'termo_confissao_divida_1', legado: [] }],
+    },
+  ],
+
+  /** Entidades / categorias por convênio. */
+  _CONVENIO_ENTIDADES: {
+    FEDERAL: ['SIAPE'],
+    ESTADUAL: [
+      'GOV SP', 'GOV RJ', 'GOV MG', 'GOV PI', 'GOV ES', 'GOV PB', 'GOV PR', 'GOV PA', 'GOV TO',
+    ],
+    MUNICIPAL: [
+      'PREF SP', 'PREF RJ', 'PREF BH', 'PREF SÃO LUIS', 'PREF CAMPO GRANDE',
+    ],
+    INSS: ['INSS', 'APOSENTADO', 'PENSIONISTA', 'BPC LOAS'],
+    CLT: ['CLT - DATAPREV'],
+  },
+
+  _ENTIDADE_LABELS: {
+    INSS: 'Categoria INSS',
+    CLT: 'Entidade CLT',
+    DEFAULT: 'Entidade / Órgão',
+  },
+
+  /** Situações disponíveis para o vendedor marcar na proposta. */
+  /** Banco comprado (planilha Alteração Banco comprado). */
+  _BANCOS_COMPRADOS: [
+    '001 - Banco do Brasil S.A.',
+    '237 - Banco Bradesco S.A.',
+    '104 - Caixa Econômica Federal',
+    '341 - Itaú Unibanco S.A.',
+    '033 - Banco Santander (Brasil) S.A.',
+    '260 - Nu Pagamentos S.A. (Nubank)',
+    '077 - Banco Inter S.A.',
+    '290 - PagBank (PagSeguro)',
+    '336 - Banco C6 S.A',
+    '380 - Mercantil do Brasil',
+    '318 - BMG',
+    '707 - Daycoval',
+    '329 - Fintech do Corban',
+    '654 - Digimais',
+    '465 - Capital Consig',
+    '643 - Banco Pine',
+    '321 - 321bank',
+    '149 - Facta',
+    '121 - Agibank',
+    '422 - Safra Financeira',
+    '069 - Crefisa',
+  ],
+
+  /** Banco digitado (planilha Banco digitado). */
+  _BANCOS_DIGITADOS: [
+    '329 - Fintech do Corban',
+    '465 - AKI CAPITAL',
+    '321 - 321bank',
+    '318 - BMG',
+    '270 - NEO',
+  ],
+
+  _VENDOR_SITUACOES: [
+    { v: 'Em Andamento', l: 'Em Andamento' },
+    { v: 'Digitação', l: 'Digitação' },
+    { v: 'AG. BOLETO', l: 'Aguardando boleto' },
+    { v: 'PROPOSTA DIGITADA', l: 'Proposta digitada' },
+    { v: 'AG. ASS TERMO', l: 'Aguardando assinatura do termo' },
+    { v: 'AG. VÍDEO', l: 'Aguardando vídeo' },
+    { v: 'AG. ASS PROPOSTA', l: 'Aguardando assinatura da proposta' },
+    { v: 'BOLETO VALIDADO', l: 'Boleto validado' },
+    { v: 'AG. QUITAÇÃO', l: 'Aguardando quitação' },
+    { v: 'BOLETO QUITADO', l: 'Boleto quitado' },
+    { v: 'AG. LIBERAÇÃO MARGEM', l: 'Aguardando liberação de margem' },
+    { v: 'AVERBADO', l: 'Averbado' },
+    { v: 'PAGO', l: 'Pago' },
+    { v: 'Pendenciado', l: 'Pendenciado' },
+    { v: 'Cancelado', l: 'Cancelado' },
+  ],
+
+  _getConvenioEntidadesMap: function() {
+    return this._CONVENIO_ENTIDADES;
+  },
+
+  _normalizeConvenioKey: function(convenio) {
+    const c = String(convenio || '').trim().toUpperCase();
+    if (this._CONVENIO_ENTIDADES[c]) return c;
+    if (c.includes('INSS')) return 'INSS';
+    if (c === 'CLT' || c.includes('DATAPREV')) return 'CLT';
+    return c;
+  },
+
+  _fixMojibake: function(str) {
+    if (str == null || str === '') return '';
+    let s = String(str);
+    s = s.replace(/COMPRA DE D[\u251C\u00AD\u0094|\-\s]VIDA/gi, 'COMPRA DE DÍVIDA');
+    s = s.replace(/COMPRA DE D.IVIDA/gi, 'COMPRA DE DÍVIDA');
+    s = s.replace(/D[\u251C\u00AD\u0094|]VIDA/gi, 'DÍVIDA');
+    if (/Ã./.test(s)) {
+      try { s = decodeURIComponent(escape(s)); } catch (_) { /* noop */ }
+    }
+    return s;
+  },
+
+  _normalizeProductValue: function(product) {
+    const raw = this._fixMojibake(String(product || '').trim());
+    if (!raw) return '';
+    const p = raw.toUpperCase();
+    if (p === 'COMPRA DE DÍV' || p === 'COMPRA DE DIVIDA' || /^COMPRA DE D[\W]?IVIDA$/.test(p)) {
+      return 'COMPRA DE DÍVIDA';
+    }
+    const known = (this._PRODUTOS || []).find(o => String(o.v || o).toUpperCase() === p);
+    if (known) return known.v || known.l || raw;
+    return raw;
+  },
+
+  _fillProductSelect: function(selectId, currentValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const cur = this._normalizeProductValue(currentValue != null ? currentValue : sel.value);
+    let html = '<option value="">Selecione o Produto</option>';
+    (this._PRODUTOS || []).forEach((o) => {
+      const v = o.v || o;
+      const l = o.l || o.v || o;
+      html += `<option value="${this._escAttr(v)}"${cur === v ? ' selected' : ''}>${this._escHtml(l)}</option>`;
+    });
+    if (cur && !(this._PRODUTOS || []).some((o) => (o.v || o) === cur)) {
+      html += `<option value="${this._escAttr(cur)}" selected>${this._escHtml(cur)}</option>`;
+    }
+    sel.innerHTML = html;
+    if (cur) sel.value = cur;
+  },
+
+  _fillConvenioSelect: function(selectId, entidadeSelectId, currentValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const cur = String(currentValue != null ? currentValue : sel.value || '').trim().toUpperCase();
+    let html = '<option value="">Selecione o Convênio</option>';
+    (this._CONVENIOS || []).forEach((c) => {
+      html += `<option value="${this._escAttr(c)}"${cur === c ? ' selected' : ''}>${this._escHtml(c)}</option>`;
+    });
+    if (cur && !(this._CONVENIOS || []).includes(cur)) {
+      html += `<option value="${this._escAttr(cur)}" selected>${this._escHtml(cur)}</option>`;
+    }
+    sel.innerHTML = html;
+    if (cur) sel.value = cur;
+    if (entidadeSelectId) this._fillEntidadeSelect(entidadeSelectId, cur || sel.value);
+  },
+
+  _initProposalCatalogSelects: function() {
+    ['propProduct', 'empPropProduct'].forEach((id) => this._fillProductSelect(id));
+    this._fillConvenioSelect('propConvenio', 'propEntidade');
+    this._fillConvenioSelect('empPropConvenio', 'empPropEntidade');
+    const propConv = document.getElementById('propConvenio');
+    if (propConv && !propConv.dataset.catalogBound) {
+      propConv.dataset.catalogBound = '1';
+      propConv.addEventListener('change', () => this.updateEntidades());
+    }
+    const empConv = document.getElementById('empPropConvenio');
+    if (empConv && !empConv.dataset.catalogBound) {
+      empConv.dataset.catalogBound = '1';
+      empConv.addEventListener('change', () => this.updateEmployeeEntidades());
+    }
+  },
+
+  _vendorSituacaoOptionsHtml: function(selected) {
+    const sel = String(selected || '');
+    let html = '<option value="">Selecione</option>';
+    (this._VENDOR_SITUACOES || []).forEach(o => {
+      const val = o.v || o;
+      const lbl = o.l || o.v || o;
+      html += `<option value="${this._escAttr(val)}"${sel === val ? ' selected' : ''}>${this._escHtml(lbl)}</option>`;
+    });
+    return html;
+  },
+
+  _fillBankSelect: function(selectId, catalog, currentValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const cur = String(currentValue != null ? currentValue : sel.value || '').trim();
+    let html = '<option value="">Selecione o banco</option>';
+    (catalog || []).forEach((label) => {
+      html += `<option value="${this._escAttr(label)}"${cur === label ? ' selected' : ''}>${this._escHtml(label)}</option>`;
+    });
+    if (cur && !(catalog || []).includes(cur)) {
+      html += `<option value="${this._escAttr(cur)}" selected>${this._escHtml(cur)}</option>`;
+    }
+    sel.innerHTML = html;
+    if (cur) sel.value = cur;
+  },
+
+  _initBankSelects: function(preset) {
+    const p = preset || {};
+    this._fillBankSelect('propBancoComprado', this._BANCOS_COMPRADOS, p.bancoComprado);
+    this._fillBankSelect('propBancoDigitado', this._BANCOS_DIGITADOS, p.bancoDigitado);
+    this._fillBankSelect('managePropBanco', this._BANCOS_COMPRADOS, p.bancoComprado);
+    this._fillBankSelect('managePropBancoDigitado', this._BANCOS_DIGITADOS, p.bancoDigitado);
+  },
+
+  _initStaticProposalSelects: function() {
+    this._initProposalCatalogSelects();
+    this._initBankSelects();
+    ['propEtapaVendedor', 'empPropEtapa'].forEach(id => {
+      const el = document.getElementById(id);
+      if (!el || el.dataset.situLoaded) return;
+      const cur = el.value;
+      el.innerHTML = this._vendorSituacaoOptionsHtml(cur);
+      el.dataset.situLoaded = '1';
+    });
+    const tabFin = document.getElementById('managePropTabela');
+    if (tabFin && !tabFin.dataset.tabelaLoaded) {
+      this._fillTabelaSelect('managePropTabela', tabFin.value);
+      tabFin.dataset.tabelaLoaded = '1';
+    }
+  },
+
+  _fillEntidadeSelect: function(selectId, convenio, currentValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const conv = this._normalizeConvenioKey(convenio);
+    const map = this._getConvenioEntidadesMap();
+    const opts = map[conv] || [];
+    const current = currentValue != null ? currentValue : sel.value;
+    const label = this._ENTIDADE_LABELS[conv] || this._ENTIDADE_LABELS.DEFAULT;
+    const labelEl = sel.closest('.form-group')?.querySelector('label');
+    if (labelEl) labelEl.textContent = label;
+
+    const emptyOpt = conv === 'INSS'
+      ? 'Selecione a categoria'
+      : 'Selecione a entidade';
+    sel.innerHTML = `<option value="">${emptyOpt}</option>` +
+      opts.map(o => `<option value="${this._escAttr(o)}">${this._escHtml(o)}</option>`).join('');
+    if (current) {
+      if (!opts.includes(current)) {
+        sel.insertAdjacentHTML('beforeend',
+          `<option value="${this._escAttr(current)}">${this._escHtml(current)}</option>`);
+      }
+      sel.value = current;
+    }
+  },
+
+  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '' },
+  _employeeList: { page: 1, pageSize: 20, total: 0 },
+  _employeeEditCache: {},
+  _adminEditCache: {},
+  _searchDebounce: null,
+
+  /** Tabelas financeiras (valor final = valor bruto × pct). */
+  _TABELA_GROUPS: [
+    {
+      group: 'NEO',
+      items: [
+        { value: 'NEO_NORMAL', label: 'NEO NORMAL — 100%', pct: 1 },
+        { value: 'NEO_FLEX1', label: 'NEO FLEX 1 — 82%', pct: 0.82 },
+        { value: 'NEO_FLEX2', label: 'NEO FLEX 2 — 67%', pct: 0.67 },
+        { value: 'NEO_FLEX3', label: 'NEO FLEX 3 — 52%', pct: 0.52 },
+        { value: 'NEO_FLEX4', label: 'NEO FLEX 4 — 37%', pct: 0.37 },
+        { value: 'NEO_FLEX5', label: 'NEO FLEX 5 — 17%', pct: 0.17 },
+      ],
+    },
+    {
+      group: 'AKI CAPITAL',
+      items: [
+        { value: 'AKI_100', label: 'AKI CAPITAL — 100%', pct: 1 },
+        { value: 'AKI_70', label: 'AKI CAPITAL — 70%', pct: 0.70 },
+        { value: 'AKI_35', label: 'AKI CAPITAL — 35%', pct: 0.35 },
+        { value: 'AKI_17', label: 'AKI CAPITAL — 17%', pct: 0.17 },
+      ],
+    },
+    {
+      group: 'Outras',
+      items: [
+        { value: 'FOX', label: 'FOX — 100%', pct: 1 },
+        { value: 'BLU', label: 'BLU — 100%', pct: 1 },
+        { value: 'GL3', label: 'GL3 — 100%', pct: 1 },
+      ],
+    },
+  ],
+
+  _tabelaPct: {
+    NEO_NORMAL: 1, NEO_FLEX1: 0.82, NEO_FLEX2: 0.67, NEO_FLEX3: 0.52, NEO_FLEX4: 0.37, NEO_FLEX5: 0.17,
+    AKI_100: 1, AKI_70: 0.70, AKI_35: 0.35, AKI_17: 0.17,
+    FOX: 1, BLU: 1, GL3: 1,
+    NORMAL: 1, FLEX1: 0.82, FLEX2: 0.67, FLEX3: 0.52, FLEX4: 0.37, FLEX5: 0.17, S: 1,
+  },
+
+  _tabelaLabel: function(code) {
+    if (!code) return '';
+    for (const g of this._TABELA_GROUPS) {
+      const hit = g.items.find(i => i.value === code);
+      if (hit) return hit.label;
+    }
+    const legacy = {
+      NORMAL: 'NEO NORMAL — 100%', FLEX1: 'NEO FLEX 1 — 82%', FLEX2: 'NEO FLEX 2 — 67%',
+      FLEX3: 'NEO FLEX 3 — 52%', FLEX4: 'NEO FLEX 4 — 37%', FLEX5: 'NEO FLEX 5 — 17%', S: 'S',
+    };
+    return legacy[code] || code;
+  },
+
+  _tabelaSelectHtml: function(selected) {
+    let html = '<option value="">— Aguardando análise —</option>';
+    for (const g of this._TABELA_GROUPS) {
+      html += `<optgroup label="${g.group}">`;
+      html += g.items.map(i => {
+        const sel = selected === i.value ? ' selected' : '';
+        return `<option value="${this._escAttr(i.value)}"${sel}>${this._escHtml(i.label)}</option>`;
+      }).join('');
+      html += '</optgroup>';
+    }
+    const known = new Set(this._TABELA_GROUPS.flatMap(g => g.items.map(i => i.value)));
+    if (selected && !known.has(selected)) {
+      html += `<option value="${this._escAttr(selected)}" selected>${this._escHtml(selected)} (legado)</option>`;
+    }
+    return html;
+  },
+
+  _fillTabelaSelect: function(selectId, selected) {
+    const el = document.getElementById(selectId);
+    if (!el) return;
+    const cur = selected != null ? selected : el.value;
+    el.innerHTML = this._tabelaSelectHtml(cur);
+    if (cur) el.value = cur;
+  },
+
+  /** DB.getProposals devolve um array — o UI antigo esperava { items, total }; normaliza aqui. */
+  _rowsFromProposalQuery: function(result) {
+    if (Array.isArray(result)) return result;
+    if (result && Array.isArray(result.items)) return result.items;
+    return [];
+  },
+
+  /** Escopo para listar vendedores no filtro/modal de proposta (Master/financeiro = todos). */
+  _proposalVendorScopeAdmin: function(session) {
+    const r = session?.role || '';
+    const globalRoles = ['master', 'fundador', 'desenvolvedor', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria'];
+    if (globalRoles.includes(r)) return null;
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return window.PARTNER_ROOT_ID;
+    if (r === 'supervisor' || r === 'sup_backoffice' || r === 'parceiro') return session?.id || null;
+    return session?.adminId || session?.id || null;
+  },
+
+  /** Mantém só propostas da equipe do parceiro (vendedores vinculados). Master não usa. */
+  _filterProposalsToPartnerOrg: async function(proposals) {
+    const rootId = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+    if (!rootId || !Array.isArray(proposals)) return proposals;
+    const teamIds = await DB.getPartnerTeamIds(rootId).catch(() => new Set());
+    return proposals.filter(p => {
+      const ids = typeof DB._proposalVendorIds === 'function'
+        ? DB._proposalVendorIds(p)
+        : [p.vendorId, p.vendor_id, p.employee_id, p.vendorId];
+      return ids.some(id => id && teamIds.has(String(id)));
+    });
+  },
+
+  /** Gestão interna: remove propostas de qualquer organização parceira. */
+  _filterProposalsExcludePartnerOrg: async function(proposals) {
+    const rootId = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+    if (rootId || !Array.isArray(proposals)) return proposals;
+    if (typeof window.PartnerOps === 'undefined') return proposals;
+    return PartnerOps.filterExcludePartnerProposals(proposals);
+  },
+
+  /** Master/backoffice interno vê propostas de parceiros na mesma lista (destaque azul). */
+  _canSeePartnerProposalsInAdminList: function() {
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return false;
+    const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    const r = (session?.role || '').toLowerCase();
+    if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
+    return ['fundador', 'desenvolvedor', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria', 'backoffice', 'operacional'].includes(r);
+  },
+
+  async _partnerProposalIdSet(proposals) {
+    const set = new Set();
+    if (!Array.isArray(proposals) || typeof PartnerOps === 'undefined') return set;
+    const index = await PartnerOps._getIndex().catch(() => []);
+    proposals.forEach(p => {
+      if (index.some(e => PartnerOps._proposalBelongsToIndex(p, e))) set.add(String(p.id));
+    });
+    return set;
+  },
+
+  async _proposalBelongsToSessionPartnerOrg(proposal) {
+    const rootId = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+    if (!rootId) return true;
+    if (typeof PartnerOps === 'undefined') return false;
+    const index = await PartnerOps._getIndex().catch(() => []);
+    const entry = index.find(e => e.rootId === rootId);
+    if (!entry) return false;
+    return PartnerOps._proposalBelongsToIndex(proposal, entry);
+  },
+
+  _matchesVendorIdFilter: function(p, vendorId) {
+    const want = String(vendorId || '').trim();
+    if (!want) return true;
+    const primary = String(p.vendorId || p.vendor_id || p.employee_id || '').trim();
+    return primary === want;
+  },
+
+  _matchesStatusFilter: function(p, status) {
+    const want = String(status || '').trim().toLowerCase();
+    if (!want) return true;
+    const pStatus = String(p.status || '').trim().toLowerCase();
+    const pStatusOp = String(p.statusOp || p.status_op || '').trim().toLowerCase();
+    
+    const match = (val) => {
+      if (val === want) return true;
+      if (want === 'ag. boleto' && (val === 'ag. boleto' || val === 'aguardando boleto')) return true;
+      if (want === 'ag. ass termo' && (val === 'ag. ass termo' || val === 'aguardando assinatura do termo')) return true;
+      if (want === 'ag. vídeo' && (val === 'ag. vídeo' || val === 'aguardando vídeo' || val === 'ag. video' || val === 'aguardando video')) return true;
+      if (want === 'ag. ass proposta' && (val === 'ag. ass proposta' || val === 'aguardando assinatura da proposta')) return true;
+      if (want === 'ag. quitação' && (val === 'ag. quitação' || val === 'aguardando quitação' || val === 'ag. quitacao' || val === 'aguardando quitacao')) return true;
+      if (want === 'ag. liberação margem' && (val === 'ag. liberação margem' || val === 'aguardando liberação margem' || val === 'ag. liberacao margem' || val === 'aguardando liberacao margem')) return true;
+      if (want === 'digitação' && (val === 'digitação' || val === 'digitacao')) return true;
+      if (want === 'pendenciado' && (val === 'pendenciado' || val === 'pendente')) return true;
+      return false;
+    };
+    
+    return match(pStatus) || match(pStatusOp);
+  },
+
+  _matchesProposalQuickSearch: function(p, query) {
+    const n = String(query || '').trim().toLowerCase();
+    if (!n) return true;
+    const blob = [
+      p.numero, p.id,
+      p.clientName, p.client_name, p.clientCpf, p.client_cpf,
+      p.product, p.convenio, p.entidade,
+      p.vendorName, p.vendor_name,
+      p.protocolo, p.matricula, p.status,
+    ]
+      .map(x => (x != null ? String(x) : '')).join(' ')
+      .toLowerCase();
+    return blob.includes(n);
+  },
+
+  _folderRootId: 'propAnexosFolders',
+  _folderPrefix: 'prop',
+  _folderDynamicSlots: {},
+  _customFolders: [],
+
+  _setFolderContext: function(rootId, prefix) {
+    this._folderRootId = rootId || 'propAnexosFolders';
+    this._folderPrefix = prefix || 'prop';
+  },
+
+  _resolveAnexoRootFromEl: function(el) {
+    const root = el?.closest?.('#empPropAnexosFolders, #propAnexosFolders, #managePropAnexosFolders');
+    if (!root) return null;
+    const cfg = {
+      empPropAnexosFolders: ['empPropAnexosFolders', 'empProp'],
+      managePropAnexosFolders: ['managePropAnexosFolders', 'manageProp'],
+      propAnexosFolders: ['propAnexosFolders', 'prop'],
+    }[root.id];
+    if (cfg) this._setFolderContext(cfg[0], cfg[1]);
+    return root;
+  },
+
+  _initAnexoFolderDelegation: function() {
+    if (this._anexoDelegationWired) return;
+    this._anexoDelegationWired = true;
+    document.addEventListener('click', (e) => {
+      const fileBtn = e.target.closest('.prop-folder__btn');
+      if (fileBtn) {
+        e.preventDefault();
+        this._resolveAnexoRootFromEl(fileBtn);
+        fileBtn.parentElement?.querySelector('input[type="file"]')?.click();
+        return;
+      }
+      const addBtn = e.target.closest('.prop-folder__add');
+      if (addBtn) {
+        e.preventDefault();
+        this._resolveAnexoRootFromEl(addBtn);
+        const folder = addBtn.closest('.prop-folder');
+        if (!folder) return;
+        if (folder.dataset.folderKey) this.addFolderSlot(folder.dataset.folderKey);
+        else if (folder.dataset.customId) this.addCustomFolderSlot(folder.dataset.customId);
+        return;
+      }
+      const removeBtn = e.target.closest('.prop-folder__remove');
+      if (removeBtn) {
+        e.preventDefault();
+        this._resolveAnexoRootFromEl(removeBtn);
+        const folder = removeBtn.closest('.prop-folder');
+        if (folder?.dataset.customId) this.removeCustomFolder(folder.dataset.customId);
+      }
+    });
+    document.addEventListener('change', (e) => {
+      const inp = e.target.closest?.('.prop-folder__input');
+      if (!inp?.id) return;
+      this._resolveAnexoRootFromEl(inp);
+      this._labelFile(inp.id, inp.id + 'Label');
+    });
+  },
+
+  _getFolderDefs: function() {
+    const p = this._folderPrefix || 'prop';
+    return (this._ANEXO_CATEGORIES || []).map(cat => {
+      const def = {
+        key: cat.key,
+        titulo: cat.titulo,
+        idPrefix: p + cat.folderIdSuffix,
+        grupoPrefix: cat.grupoPrefix,
+      };
+      if (cat.initialSlots?.length) {
+        def.initialSlots = cat.initialSlots.map(s => ({
+          id: p + cat.folderIdSuffix + (s.slotSuffix || ''),
+          grupo: s.grupo,
+          label: s.label,
+        }));
+      }
+      return def;
+    });
+  },
+
+  _getAnexoViewGroups: function() {
+    return (this._ANEXO_CATEGORIES || []).map(cat => ({
+      titulo: cat.titulo,
+      prefix: cat.grupoPrefix,
+      seed: cat.viewSeed || [],
+    }));
+  },
+
+  _initDynamicFolderSlots: function() {
+    this._folderDynamicSlots = {};
+    this._getFolderDefs().forEach(def => {
+      if (def.initialSlots) {
+        this._folderDynamicSlots[def.key] = def.initialSlots.map(s => ({ ...s }));
+      } else {
+        this._folderDynamicSlots[def.key] = [{
+          id: def.idPrefix + '1',
+          grupo: def.grupoPrefix + '1',
+        }];
+      }
+    });
+  },
+
+  _nextFolderSlot: function(def) {
+    const slots = this._folderDynamicSlots[def.key] || [];
+    const n = slots.length + 1;
+    if (def.initialSlots && n <= def.initialSlots.length) {
+      return { ...def.initialSlots[n - 1] };
+    }
+    return {
+      id: def.idPrefix + n,
+      grupo: def.grupoPrefix + n,
+    };
+  },
+
+  _folderSlotRowHtml: function(inputId, labelText) {
+    const safeId = this._escAttr(inputId);
+    const lblId = inputId + 'Label';
+    const sub = labelText
+      ? `<span class="prop-folder__slot-label">${this._escHtml(labelText)}</span>`
+      : '';
+    return `<div class="prop-folder__slot">
+      ${sub}
+      <input type="file" id="${safeId}" class="form-control prop-folder__input" accept="image/*,.pdf">
+      <button type="button" class="btn btn-outline btn-sm prop-folder__btn" title="Selecionar arquivo">📁</button>
+      <span id="${lblId}" class="prop-file-label">-</span>
+    </div>`;
+  },
+
+  _buildFolderSlotsHtml: function(folderKey) {
+    const slots = this._folderDynamicSlots[folderKey] || [];
+    return slots.map((s, idx) =>
+      `<div class="prop-folder__slot-wrap" data-slot="${idx + 1}">` +
+      this._folderSlotRowHtml(s.id, s.label) + '</div>'
+    ).join('');
+  },
+
+  _appendSlotToFolderEl: function(folderEl, slot, slotIndex) {
+    if (!folderEl || !slot) return;
+    const slotsEl = folderEl.querySelector('.prop-folder__slots');
+    if (!slotsEl) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'prop-folder__slot-wrap';
+    wrap.dataset.slot = String(slotIndex);
+    wrap.innerHTML = this._folderSlotRowHtml(slot.id, slot.label);
+    slotsEl.appendChild(wrap);
+  },
+
+  _renderAnexoFolders: function() {
+    const root = document.getElementById(this._folderRootId);
+    if (!root) return;
+
+    this._customFolders.forEach(cf => {
+      const el = document.getElementById(cf.nameInputId);
+      if (el) cf.name = el.value;
+    });
+
+    let html = '';
+    this._getFolderDefs().forEach(def => {
+      html += `<div class="prop-folder" data-folder-key="${this._escAttr(def.key)}">
+        <div class="prop-folder__header">
+          <span class="prop-folder__title">${def.titulo}</span>
+        </div>
+        <div class="prop-folder__slots">${this._buildFolderSlotsHtml(def.key)}</div>
+        <button type="button" class="btn btn-ghost btn-sm prop-folder__add">+ Adicionar arquivo</button>
+      </div>`;
+    });
+
+    this._customFolders.forEach(cf => {
+      html += this._buildCustomFolderHtml(cf);
+    });
+
+    root.innerHTML = html;
+  },
+
+  initAnexoFolders: function() {
+    if (!this._folderDynamicSlots || !Object.keys(this._folderDynamicSlots).length) {
+      this._initDynamicFolderSlots();
+    }
+    this._renderAnexoFolders();
+  },
+
+  resetAnexoFolders: function() {
+    this._customFolders = [];
+    this._initDynamicFolderSlots();
+    this._renderAnexoFolders();
+  },
+
+  addFolderSlot: function(folderKey) {
+    const def = this._getFolderDefs().find(d => d.key === folderKey);
+    if (!def) return;
+    if (!this._folderDynamicSlots[folderKey]) this._initDynamicFolderSlots();
+    const slot = this._nextFolderSlot(def);
+    this._folderDynamicSlots[folderKey].push(slot);
+    const root = document.getElementById(this._folderRootId);
+    const folder = root?.querySelector(`.prop-folder[data-folder-key="${folderKey}"]`);
+    this._appendSlotToFolderEl(folder, slot, this._folderDynamicSlots[folderKey].length);
+  },
+
+  _buildCustomFolderHtml: function(cf) {
+    const slotsHtml = cf.slots.map((s, idx) =>
+      `<div class="prop-folder__slot-wrap" data-slot="${idx + 1}">` +
+      this._folderSlotRowHtml(s.id) + '</div>'
+    ).join('');
+    return `<div class="prop-folder prop-folder--custom" data-custom-id="${this._escAttr(cf.id)}">
+      <div class="prop-folder__header">
+        <input type="text" class="form-control prop-folder__custom-name" id="${this._escAttr(cf.nameInputId)}" placeholder="Nome da pasta" value="${this._escAttr(cf.name || '')}">
+        <button type="button" class="btn btn-ghost btn-sm prop-folder__remove" title="Remover pasta">✕</button>
+      </div>
+      <div class="prop-folder__slots">${slotsHtml}</div>
+      <button type="button" class="btn btn-ghost btn-sm prop-folder__add">+ Adicionar arquivo</button>
+    </div>`;
+  },
+
+  addCustomFolder: function(fromEl) {
+    if (fromEl) {
+      const prev = fromEl.previousElementSibling;
+      if (prev?.id && /AnexosFolders$/.test(prev.id)) this._resolveAnexoRootFromEl(prev);
+      else this._resolveAnexoRootFromEl(fromEl);
+    }
+    const root = document.getElementById(this._folderRootId);
+    if (!root) return;
+    const p = this._folderPrefix || 'prop';
+    const id = String(Date.now()) + '_' + (this._customFolders.length + 1);
+    const cf = {
+      id,
+      name: '',
+      nameInputId: p + 'CustomName_' + id,
+      slots: [{ id: p + 'Custom_' + id + '_1', grupo: 'custom_' + id + '_1' }],
+    };
+    this._customFolders.push(cf);
+    root.insertAdjacentHTML('beforeend', this._buildCustomFolderHtml(cf));
+  },
+
+  removeCustomFolder: function(customId) {
+    this._customFolders = this._customFolders.filter(cf => cf.id !== customId);
+    const root = document.getElementById(this._folderRootId);
+    root?.querySelector(`.prop-folder[data-custom-id="${customId}"]`)?.remove();
+  },
+
+  addCustomFolderSlot: function(customId) {
+    const cf = this._customFolders.find(c => c.id === customId);
+    if (!cf) return;
+    const p = this._folderPrefix || 'prop';
+    const nameEl = document.getElementById(cf.nameInputId);
+    if (nameEl) cf.name = nameEl.value;
+    const n = cf.slots.length + 1;
+    const slot = { id: p + 'Custom_' + cf.id + '_' + n, grupo: 'custom_' + cf.id + '_' + n };
+    cf.slots.push(slot);
+    const root = document.getElementById(this._folderRootId);
+    const folder = root?.querySelector(`.prop-folder[data-custom-id="${customId}"]`);
+    this._appendSlotToFolderEl(folder, slot, n);
+  },
+
+  _getAllAnexoFieldDefs: function() {
+    const list = [];
+    Object.keys(this._folderDynamicSlots || {}).forEach(key => {
+      (this._folderDynamicSlots[key] || []).forEach(s => list.push({ id: s.id, grupo: s.grupo }));
+    });
+    this._customFolders.forEach(cf => {
+      cf.slots.forEach(s => list.push({ id: s.id, grupo: s.grupo, customNameId: cf.nameInputId }));
+    });
+    return list;
+  },
+
+  _collectAttachments: async function(proposalId) {
+    if (!proposalId) throw new Error('ID da proposta é obrigatório para anexos.');
+    const getFile = id => document.getElementById(id)?.files?.[0];
+    const attachments = {};
+    const defs = this._getAllAnexoFieldDefs();
+    await Promise.all(defs.map(async ({ id, grupo, customNameId }) => {
+      const f = getFile(id);
+      if (!f) return;
+      if (f.size > 25 * 1024 * 1024) {
+        throw new Error(`"${f.name}" excede 25 MB.`);
+      }
+      attachments[grupo] = await (window.DB || DB).uploadProposalFile(f, proposalId, grupo);
+      attachments[grupo + '_nome'] = f.name;
+      if (customNameId) {
+        const folderName = (document.getElementById(customNameId)?.value || '').trim();
+        if (folderName) attachments[grupo + '_pasta'] = folderName;
+      }
+    }));
+    return attachments;
+  },
+
+  _isVendedorRole: function(role) {
+    return role === 'vendedor';
+  },
+
+  _labelEtapaVendedor: function(val) {
+    const hit = (this._VENDOR_SITUACOES || []).find(o => o.v === val);
+    if (hit) return hit.l;
+    return val || '—';
+  },
+
+  /** Situação do vendedor — só em status/statusOp no banco (sem coluna etapaVendedor). */
+  _vendorStage: function(p) {
+    if (!p) return '';
+    return String(p.statusOp || p.status_op || p.status || '').trim();
+  },
+
+  _getProposalSearchQuery: function() {
+    return (document.getElementById('proposalSearch')?.value || '').toLowerCase().trim();
+  },
+
+  _onProposalSearchInput: function() {
+    clearTimeout(this._searchDebounce);
+    this._searchDebounce = setTimeout(() => {
+      this._adminList.page = 1;
+      this.renderAdminList();
+    }, 350);
+  },
+
+  _getAdminVendorFilter: function() {
+    const headerSel = document.getElementById('proposalVendorFilterHeader');
+    if (headerSel) {
+      const val = headerSel.value;
+      return val === 'todos' ? '' : val;
+    }
+    return this._adminList.vendorId || '';
+  },
+
+  onAdminVendorFilter: function() {
+    const val = this._getAdminVendorFilter();
+    this._adminList.vendorId = val;
+    this._adminList.page = 1;
+    
+    const headerSel = document.getElementById('proposalVendorFilterHeader');
+    if (headerSel) headerSel.value = val === '' ? '' : val;
+    this.renderAdminList();
+  },
+
+  _getAdminStatusFilter: function() {
+    const sel = document.getElementById('proposalStatusFilterHeader');
+    if (sel) {
+      const val = sel.value;
+      return val === 'todos' ? '' : val;
+    }
+    return this._adminList.statusFilter || '';
+  },
+
+  onAdminStatusFilter: function() {
+    this._adminList.statusFilter = this._getAdminStatusFilter();
+    this._adminList.page = 1;
+    this.renderAdminList();
+  },
+
+  adminSetPage: function(page) {
+    this._adminList.page = Math.max(1, page);
+    this.renderAdminList();
+  },
+
+  employeeSetPage: function(page) {
+    this._employeeList.page = Math.max(1, page);
+    this.renderEmployeeList();
+  },
+
+  _renderPagination: function(containerId, meta, goFn) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    const { page, pageSize, total } = meta;
+    const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize));
+    if (total <= pageSize && totalPages <= 1) {
+      el.innerHTML = total > 0
+        ? `<span class="list-pagination__info">${total} proposta${total !== 1 ? 's' : ''}</span>`
+        : '';
+      return;
+    }
+    const from = total ? (page - 1) * pageSize + 1 : 0;
+    const to = Math.min(page * pageSize, total);
+    el.innerHTML = `
+      <div class="list-pagination">
+        <button type="button" class="btn btn-outline btn-sm" ${page <= 1 ? 'disabled' : ''} onclick="${goFn}(${page - 1})">← Anterior</button>
+        <span class="list-pagination__info">Página ${page} de ${totalPages} · ${from}–${to} de ${total}</span>
+        <button type="button" class="btn btn-outline btn-sm" ${page >= totalPages ? 'disabled' : ''} onclick="${goFn}(${page + 1})">Próxima →</button>
+      </div>`;
+  },
+
+  _initAdminProposalFilters: async function() {
+    const selHeader = document.getElementById('proposalVendorFilterHeader');
+    if (!selHeader || selHeader.dataset.loaded) return;
+    try {
+      const session = Auth.getSession();
+      const scopeAdmin = this._proposalVendorScopeAdmin(session);
+      const vendors = await DB.getVendorsForSelect(scopeAdmin);
+      selHeader.innerHTML = '<option value="">VENDEDOR</option>' +
+        '<option value="todos">TODOS OS VENDEDORES</option>' +
+        (vendors || []).map(v => `<option value="${this._escAttr(v.id)}">${this._escHtml(v.name.toUpperCase())}</option>`).join('');
+      selHeader.title = 'Filtrar por vendedor';
+      if (this._adminList.vendorId) selHeader.value = this._adminList.vendorId;
+      selHeader.dataset.loaded = '1';
+    } catch (e) {
+      console.warn('[Proposals] vendor filter:', e);
+    }
+  },
+
+  _escHtml: function(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  },
+
+  _escAttr: function(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/'/g, '&#39;')
+      .replace(/"/g, '&quot;');
+  },
+
+  _actionIconSvg: function(name) {
+    const icons = {
+      eye: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+      pen: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+      trash: '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    };
+    return icons[name] || '';
+  },
+
+  /** Ícones compactos — gestão admin, parceiros e cards do vendedor */
+  actionsRowHtml: function(id, opts = {}) {
+    const safeId = this._escAttr(id);
+    const safeLabel = this._escAttr(opts.label || id);
+    const employee = !!opts.employee;
+    const canEdit = opts.canEdit !== false;
+    const canDelete = !!opts.canDelete;
+    const onView = employee
+      ? `Proposals.openEmployeeViewModal('${safeId}')`
+      : `Proposals.openAdminViewModal('${safeId}')`;
+    const onEdit = employee
+      ? `Proposals.openEmployeeModal('${safeId}')`
+      : `Proposals.openAdminModal('${safeId}')`;
+    const onDelete = `Proposals.masterDeleteProposal('${safeId}', '${safeLabel}')`;
+    const eye = this._actionIconSvg('eye');
+    const pen = this._actionIconSvg('pen');
+    const trash = this._actionIconSvg('trash');
+    let inner = `<button type="button" class="client-actions__btn" title="Ver" aria-label="Ver proposta" onclick="${onView}">${eye}</button>`;
+    if (canEdit) {
+      inner += `<button type="button" class="client-actions__btn" title="Editar" aria-label="Editar proposta" onclick="${onEdit}">${pen}</button>`;
+    }
+    if (canDelete) {
+      inner += `<button type="button" class="client-actions__btn client-actions__btn--danger" title="Excluir" aria-label="Excluir proposta" onclick="${onDelete}">${trash}</button>`;
+    }
+    return `<div class="client-actions" role="group" aria-label="Ações da proposta">${inner}</div>`;
+  },
+
+  _escUrlAttr: function(s) {
+    return String(s ?? '').replace(/"/g, '&quot;');
+  },
+
+  _parseAttachments: function(att) {
+    if (!att) return {};
+    if (typeof att === 'string') {
+      try { return JSON.parse(att) || {}; } catch { return {}; }
+    }
+    return att;
+  },
+
+  _proposalSaveErrorMsg: function(err) {
+    let msg = String(err?.message || err || '');
+    if (typeof friendlyApiError === 'function' && (/<html|<!doctype|nginx/i.test(msg) || msg.length > 300)) {
+      msg = friendlyApiError(0, msg);
+    }
+    if (msg === 'PAYLOAD_TOO_LARGE' || msg === 'ATTACHMENTS_TOO_LARGE') {
+      return 'Esta proposta tem anexos muito grandes para salvar de uma vez. Remova anexos antigos, envie um PDF por vez (até 25 MB) ou peça ao suporte para liberar o envio.';
+    }
+    if (msg.includes('57014') || /statement timeout/i.test(msg)) {
+      return 'Tempo esgotado ao salvar. Anexos grandes devem ir ao Storage — use Ctrl+F5 e tente de novo. Confira o bucket "proposal-attachments" no Supabase.';
+    }
+    if (/payload too large|413|entity too large|muito grandes/i.test(msg)) {
+      return 'Anexo muito grande para salvar de uma vez. Use PDF menor (até 25 MB) ou envie um arquivo por vez.';
+    }
+    if (/403|acesso negado|forbidden/i.test(msg)) {
+      return 'Acesso negado ao salvar. Verifique permissões, reduza anexos ou contate o suporte técnico.';
+    }
+    if (/<html|<!doctype|<body[\s>]|nginx/i.test(msg)) {
+      return 'Erro no servidor ao salvar. Tente novamente com arquivos menores ou contate o suporte.';
+    }
+    if (msg.length > 220) {
+      return 'Não foi possível salvar a proposta. Tente novamente ou contate o suporte.';
+    }
+    return msg || 'Não foi possível salvar a proposta.';
+  },
+
+  _proposalSaveErrorNotify: function(err) {
+    const msg = this._proposalSaveErrorMsg(err);
+    if (typeof showToast === 'function') showToast(msg, 'error', 6000);
+    else alert('Erro ao salvar proposta: ' + msg);
+  },
+
+  _attachmentViewerCache: [],
+  _lastAttachmentBlobUrl: null,
+
+  _normalizeAttachmentUrl: function(val) {
+    if (val == null || val === '') return '';
+    if (typeof val === 'string') {
+      const s = val.trim();
+      if (!s) return '';
+      if (/^(https?:\/\/|data:|blob:)/i.test(s)) return s;
+      const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL)
+        ? String(SUPABASE_URL).replace(/\/$/, '')
+        : (typeof window !== 'undefined' && window.SOUBLU_CONFIG?.SUPABASE_URL)
+          ? String(window.SOUBLU_CONFIG.SUPABASE_URL).replace(/\/$/, '')
+          : '';
+      if (base) {
+        if (s.startsWith('/storage/')) return base + s;
+        if (s.startsWith('storage/v1/')) return base + '/' + s;
+      }
+      if (/^[A-Za-z0-9+/=\s-]+$/.test(s.replace(/\s/g, '')) && s.length > 80) {
+        return 'data:application/octet-stream;base64,' + s.replace(/\s/g, '');
+      }
+      return '';
+    }
+    if (typeof val === 'object') {
+      const nested = val.url || val.path || val.src || val.href || val.publicUrl || val.public_url || val.signedUrl || val.signed_url;
+      if (nested) return this._normalizeAttachmentUrl(nested);
+    }
+    return '';
+  },
+
+  _isValidAttachmentUrl: function(url) {
+    if (!url || typeof url !== 'string') return false;
+    const s = url.trim();
+    return /^https?:\/\//i.test(s) || /^data:/i.test(s) || /^blob:/i.test(s);
+  },
+
+  _hasProposalAttachments: function(att) {
+    const parsed = this._parseAttachments(att);
+    return Object.keys(parsed || {}).some((k) => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta')) return false;
+      const url = this._normalizeAttachmentUrl(parsed[k]);
+      return this._isValidAttachmentUrl(url);
+    });
+  },
+
+  _loadProposalAttachments: async function(id, proposal, attEl, cacheObj) {
+    const render = (p) => {
+      if (!attEl) return;
+      if (!this._hasProposalAttachments(p?.attachments)) {
+        attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Nenhum anexo.</p>';
+        return;
+      }
+      this._renderProposalAttachments(p, attEl);
+    };
+
+    const initial = this._parseAttachments(proposal?.attachments);
+    if (this._hasProposalAttachments(initial)) {
+      proposal.attachments = initial;
+      render(proposal);
+    } else if (attEl) {
+      attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Carregando anexos...</p>';
+    }
+
+    try {
+      const attRow = await DB.getProposalAttachments(id);
+      if (attRow?.attachments != null) {
+        proposal.attachments = this._parseAttachments(attRow.attachments);
+        if (cacheObj) cacheObj.attachments = proposal.attachments;
+      }
+      render(proposal);
+    } catch (err) {
+      console.warn('[Proposals] anexos:', err);
+      if (!this._hasProposalAttachments(proposal?.attachments) && attEl) {
+        attEl.innerHTML = '<p style="color:var(--color-danger);font-size:13px;">Erro ao carregar anexos.</p>';
+      }
+    }
+  },
+
+  _dataUrlToBlobUrl: function(dataUrl) {
+    const parts = String(dataUrl).split(',');
+    if (parts.length < 2) throw new Error('Invalid data URL');
+    const header = parts[0];
+    const mimeMatch = header.match(/data:([^;]+)/i);
+    const mime = mimeMatch ? mimeMatch[1] : 'application/octet-stream';
+    const binary = atob(parts.slice(1).join(','));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return URL.createObjectURL(new Blob([bytes], { type: mime }));
+  },
+
+  _toDisplayUrl: function(url) {
+    if (!url || !String(url).startsWith('data:')) return url;
+    if (String(url).length < 500000) return url;
+    try {
+      return this._dataUrlToBlobUrl(url);
+    } catch {
+      return url;
+    }
+  },
+
+  _revokeAttachmentBlobUrl: function() {
+    if (this._lastAttachmentBlobUrl) {
+      try { URL.revokeObjectURL(this._lastAttachmentBlobUrl); } catch { /* ignore */ }
+      this._lastAttachmentBlobUrl = null;
+    }
+  },
+
+  openAttachment: function(cacheIdxOrUrl, nome) {
+    let url = '';
+    let name = nome || 'Anexo';
+
+    if (typeof cacheIdxOrUrl === 'number') {
+      const item = this._attachmentViewerCache?.[cacheIdxOrUrl];
+      if (!item) {
+        alert('Anexo indisponível.');
+        return;
+      }
+      url = item.url;
+      name = item.nome || name;
+    } else {
+      url = this._normalizeAttachmentUrl(cacheIdxOrUrl);
+    }
+
+    if (!this._isValidAttachmentUrl(url)) {
+      alert('Anexo indisponível ou inválido.');
+      return;
+    }
+
+    const modal = document.getElementById('attachmentViewerModal');
+    const displayUrl = this._toDisplayUrl(url);
+
+    this._revokeAttachmentBlobUrl();
+    if (displayUrl !== url && String(displayUrl).startsWith('blob:')) {
+      this._lastAttachmentBlobUrl = displayUrl;
+    }
+
+    if (!modal) {
+      const w = window.open(displayUrl, '_blank', 'noopener,noreferrer');
+      if (!w) alert('Não foi possível abrir o anexo. Verifique se pop-ups estão permitidos.');
+      return;
+    }
+
+    const titleEl = document.getElementById('attachmentViewerTitle');
+    const bodyEl = document.getElementById('attachmentViewerBody');
+    const openExtEl = document.getElementById('attachmentViewerOpenExternal');
+    if (titleEl) titleEl.textContent = name;
+    if (openExtEl) {
+      openExtEl.onclick = () => {
+        const w = window.open(displayUrl, '_blank', 'noopener,noreferrer');
+        if (!w) alert('Não foi possível abrir em nova aba.');
+      };
+    }
+
+    const safeDisplay = this._escUrlAttr(displayUrl);
+    const safeName = this._escHtml(name);
+
+    if (bodyEl) {
+      if (this._isImageUrl(url, name)) {
+        bodyEl.innerHTML = `<img src="${safeDisplay}" alt="${safeName}" style="max-width:100%;max-height:70vh;display:block;margin:0 auto;border-radius:8px;object-fit:contain;"/>`;
+      } else {
+        bodyEl.innerHTML = `<iframe src="${safeDisplay}" title="${safeName}" style="width:100%;height:70vh;border:0;border-radius:8px;background:#fff;"></iframe>`;
+      }
+    }
+
+    if (typeof openModal === 'function') openModal('attachmentViewerModal');
+    else modal.classList.add('open');
+  },
+
+  closeAttachmentViewer: function() {
+    this._revokeAttachmentBlobUrl();
+    const bodyEl = document.getElementById('attachmentViewerBody');
+    if (bodyEl) bodyEl.innerHTML = '';
+    if (typeof closeModal === 'function') closeModal('attachmentViewerModal');
+    else document.getElementById('attachmentViewerModal')?.classList.remove('open');
+  },
+
+  _isImageUrl: function(url, nome) {
+    if (!url) return false;
+    if (String(url).startsWith('data:image/')) return true;
+    const ref = ((nome || '') + ' ' + String(url).split('?')[0]).toLowerCase();
+    return /\.(jpe?g|png|gif|webp|jfif|bmp|heic)(\?|$)/i.test(ref);
+  },
+
+  _isPdfUrl: function(url, nome) {
+    if (!url) return false;
+    if (String(url).startsWith('data:application/pdf')) return true;
+    const ref = ((nome || '') + ' ' + String(url).split('?')[0]).toLowerCase();
+    return /\.pdf(\?|$)/i.test(ref);
+  },
+
+  _renderAttachmentPreview: function(doc, cacheIdx) {
+    const url = doc.url || '';
+    const nome = doc.nome || ('Anexo ' + (cacheIdx + 1));
+    if (!this._isValidAttachmentUrl(url)) {
+      return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:120px;height:150px;border-radius:10px;border:2px dashed var(--color-border);background:var(--color-surface-2);color:var(--color-text-muted);font-size:11px;padding:8px;text-align:center;flex-shrink:0;" title="Anexo inválido">
+        <span style="font-size:24px;margin-bottom:4px;">⚠️</span>
+        <span>inválido</span>
+      </div>`;
+    }
+    const safePreview = this._escUrlAttr(url);
+    const safeNome = this._escHtml(nome);
+    const box = 'display:block;width:120px;height:150px;border-radius:10px;border:2px solid var(--color-success);overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;cursor:pointer;';
+    const click = `role="button" tabindex="0" onclick="Proposals.openAttachment(${cacheIdx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Proposals.openAttachment(${cacheIdx});}"`;
+
+    if (this._isImageUrl(url, nome)) {
+      return `<div ${click} style="${box}" title="${safeNome} — clique para ampliar">
+        <img src="${safePreview}" alt="${safeNome}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;" loading="lazy"/>
+      </div>`;
+    }
+    if (this._isPdfUrl(url, nome)) {
+      return `<div ${click} style="${box}position:relative;" title="${safeNome} — clique para abrir">
+        <embed src="${safePreview}#toolbar=0&navpanes=0" type="application/pdf" style="width:100%;height:100%;pointer-events:none;border:0;"/>
+        <span style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);color:#fff;font-size:9px;padding:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">📄 ${safeNome}</span>
+      </div>`;
+    }
+    return `<div ${click} style="${box}display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-primary);padding:8px;text-align:center;" title="${safeNome}">
+      <span style="font-size:28px;margin-bottom:6px;">📎</span>
+      <span style="font-size:10px;line-height:1.2;word-break:break-word;">${safeNome}</span>
+    </div>`;
+  },
+
+  _proposalCreatedAt: function(p) {
+    return p.createdAt || p.created_at || '';
+  },
+
+  _proposalSortAt: function(p) {
+    if (typeof DB !== 'undefined' && typeof DB.proposalSortTime === 'function') {
+      return DB.proposalSortTime(p);
+    }
+    const raw = p?.updatedAt || p?.updated_at || p?.createdAt || p?.created_at || '';
+    const t = new Date(raw).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  },
+
+  _sortProposalsNewestFirst: function(list) {
+    return (list || []).slice().sort((a, b) => this._proposalSortAt(b) - this._proposalSortAt(a));
+  },
+
+  _obsLineValue: function(obs, label) {
+    const lines = String(obs || '').split(/\r?\n/);
+    const prefix = String(label || '').trim() + ':';
+    for (const line of lines) {
+      const t = line.trim();
+      if (t.toLowerCase().startsWith(prefix.toLowerCase())) {
+        return t.slice(prefix.length).trim();
+      }
+    }
+    return '';
+  },
+
+  _normProposal: function(p) {
+    if (!p) return p;
+    return {
+      ...p,
+      vendorName: this._fixMojibake(p.vendorName || p.vendor_name || ''),
+      clientName: this._fixMojibake(p.clientName || p.client_name || ''),
+      clientCpf: p.clientCpf || p.client_cpf || '',
+      product: this._normalizeProductValue(p.product || ''),
+      convenio: this._fixMojibake(p.convenio || ''),
+      entidade: this._fixMojibake(p.entidade || ''),
+      valor: p.valor != null ? p.valor : null,
+      valorFinal: p.valorFinal ?? p.valor_final ?? p.valor ?? null,
+      createdAt: p.createdAt || p.created_at || null,
+      updatedAt: p.updatedAt || p.updated_at || null,
+      vendorId: p.vendorId || p.vendor_id || p.employee_id || '',
+      employee_id: p.employee_id || p.vendorId || p.vendor_id || '',
+      statusOp: p.statusOp || p.status_op || p.status || '',
+      protocolo: p.protocolo || p.numero_protocolo || '',
+      senhaContracheque: p.senhaContracheque || p.senha_contracheque || '',
+      senhaConsignacao: p.senhaConsignacao || p.senha_consignacao || '',
+      compraDivida: p.compraDivida || p.compra_divida || '',
+      bancoComprado: p.bancoComprado || p.banco_comprado || '',
+      bancoDigitado: p.bancoDigitado || p.banco_digitado || this._obsLineValue(p.obs, 'Banco digitado') || '',
+      solicitouBoleto: p.solicitouBoleto || p.solicitou_boleto || '',
+      dataSolicitacao: p.dataSolicitacao || p.data_solicitacao || '',
+      protocoloBacen: p.protocoloBacen || p.protocolo_bacen || '',
+      dataSolicitacaoBacen: p.dataSolicitacaoBacen || p.data_solicitacao_bacen || '',
+      posVenda: p.posVenda || p.pos_venda || '',
+      attachments: this._parseAttachments(p.attachments),
+    };
+  },
+
+  _proposalVendorId: function(p) {
+    return p?.vendorId || p?.vendor_id || p?.employee_id || '';
+  },
+
+  _ownsProposal: function(proposal, user) {
+    if (!proposal || !user?.id) return false;
+    if (typeof DB._matchProposalToVendor === 'function' && DB._matchProposalToVendor(proposal, user)) return true;
+    return String(this._proposalVendorId(proposal)) === String(user.id);
+  },
+
+  _propDateStr: function(p) {
+    const raw = p?.createdAt || p?.created_at;
+    if (!raw) return '—';
+    try { return new Date(raw).toLocaleDateString('pt-BR'); } catch { return '—'; }
+  },
+
+  _matchProposalSearch: function(p, q) {
+    if (!q) return true;
+    const etapaLabel = this._vendorStage(p) ? this._labelEtapaVendedor(this._vendorStage(p)) : '';
+    const haystack = [
+      p.id, p.numero, p.clientName, p.clientCpf, p.vendorName,
+      p.product, p.convenio, p.entidade, p.status, p.statusOp,
+      etapaLabel, p.matricula, p.protocolo
+    ].filter(Boolean).join(' ').toLowerCase();
+    if (haystack.includes(q)) return true;
+    const qDigits = q.replace(/\D/g, '');
+    if (qDigits) {
+      const cpfDigits = String(p.clientCpf || '').replace(/\D/g, '');
+      const matriculaDigits = String(p.matricula || '').replace(/\D/g, '');
+      if (cpfDigits.includes(qDigits) || matriculaDigits.includes(qDigits)) return true;
+    }
+    return false;
+  },
+
+  _isSupervisorOrAbove: function(role) {
+    return ['supervisor', 'sup_backoffice', 'parceiro', 'backoffice', 'operacional', 'master', 'gerente', 'financeiro', 'financial', 'rh', 'admin'].includes(role || '');
+  },
+
+  _canPickVendor: function(role) {
+    return this._isSupervisorOrAbove(role);
+  },
+
+  _canEditNumeroValor: function(role) {
+    return this._isSupervisorOrAbove(role);
+  },
+
+  _isMaster: function() {
+    return typeof Auth !== 'undefined' && Auth.isMaster();
+  },
+
+  /** Master, gerente e sup. backoffice podem excluir propostas (supervisor de vendas não). */
+  _canDeleteProposal: function() {
+    if (this._isMaster()) return true;
+    const role = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
+    return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
+  },
+
+  _BR_UFS: ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'],
+
+  _parseAddress: function(raw) {
+    const text = String(raw || '').replace(/\s+/g, ' ').trim();
+    const out = { estado: '', municipio: '', rua: '', bairro: '', cep: '' };
+    if (!text) return out;
+
+    const defs = [
+      { key: 'estado', re: /(?:Estado|UF)\s*:/gi },
+      { key: 'municipio', re: /(?:Município|Municipio|Cidade)\s*:/gi },
+      { key: 'rua', re: /(?:Rua|Logradouro|Endereço|Endereco)\s*:/gi },
+      { key: 'bairro', re: /Bairro\s*:/gi },
+      { key: 'cep', re: /(?:Cep|CEP)\s*:/gi },
+    ];
+    const markers = [];
+    defs.forEach((d) => {
+      const re = new RegExp(d.re.source, d.re.flags);
+      let m;
+      while ((m = re.exec(text)) !== null) {
+        markers.push({ key: d.key, start: m.index, valStart: m.index + m[0].length });
+      }
+    });
+    if (!markers.length) {
+      out.rua = text;
+      return out;
+    }
+    markers.sort((a, b) => a.start - b.start);
+    markers.forEach((mk, i) => {
+      const end = i + 1 < markers.length ? markers[i + 1].start : text.length;
+      out[mk.key] = text.slice(mk.valStart, end).trim();
+    });
+    return out;
+  },
+
+  _formatAddress: function(parts) {
+    const p = parts || {};
+    const bits = [];
+    if (p.estado) bits.push(`Estado: ${p.estado}`);
+    if (p.municipio) bits.push(`Município: ${p.municipio}`);
+    if (p.rua) bits.push(`Rua : ${p.rua}`);
+    if (p.bairro) bits.push(`Bairro: ${p.bairro}`);
+    if (p.cep) bits.push(`Cep: ${p.cep}`);
+    return bits.join(' ');
+  },
+
+  _estadoUfFromParsed: function(estado, municipio) {
+    const e = String(estado || '').trim().toUpperCase();
+    if (this._BR_UFS.includes(e)) return e;
+    const byCity = {
+      'SÃO PAULO': 'SP', 'SAO PAULO': 'SP', 'RIO DE JANEIRO': 'RJ', 'BELO HORIZONTE': 'MG',
+      'CURITIBA': 'PR', 'PORTO ALEGRE': 'RS', 'BRASÍLIA': 'DF', 'BRASILIA': 'DF',
+    };
+    const m = String(municipio || '').trim().toUpperCase();
+    if (byCity[m]) return byCity[m];
+    return '';
+  },
+
+  _proposalClientFallback: function(client, proposal) {
+    if (client) return client;
+    const cpf = String(proposal?.clientCpf || proposal?.client_cpf || '').replace(/\D/g, '');
+    const name = String(proposal?.clientName || proposal?.client_name || '').trim();
+    if (!cpf && !name) return null;
+    return { id: cpf || name, cpf: cpf || '', name, _fromProposalOnly: true };
+  },
+
+  _lookupClientByCpf: async function(cpf) {
+    const digits = String(cpf || '').replace(/\D/g, '');
+    if (!digits) return null;
+    if (typeof DB.getClientByCpf === 'function') {
+      const hit = await DB.getClientByCpf(digits).catch(() => null);
+      if (hit) return hit;
+    }
+    if (typeof DB.findClientByCpf === 'function') {
+      const hit = await DB.findClientByCpf(digits).catch(() => null);
+      if (hit) return hit;
+    }
+    if (typeof DB.get === 'function') {
+      return await DB.get('clients', digits).catch(() => null);
+    }
+    return null;
+  },
+
+  _fmtClientBlock: function(client, proposal) {
+    client = this._proposalClientFallback(client, proposal);
+    if (!client) {
+      return `<p style="color:var(--color-text-muted);margin:0;">Cadastro completo do cliente não encontrado no sistema (CPF ${proposal?.clientCpf || '—'}).</p>`;
+    }
+    const row = (label, val) => val ? `<div><strong>${label}:</strong> ${this._escHtml(val)}</div>` : '';
+    if (client._fromProposalOnly) {
+      return [
+        `<p style="color:var(--color-text-muted);margin:0 0 8px;font-size:13px;">Dados informados na proposta (cadastro completo não localizado).</p>`,
+        row('Nome completo', client.name),
+        row('CPF', client.cpf),
+      ].filter(Boolean).join('');
+    }
+    const addr = this._parseAddress(client.address);
+    const hasAddrParts = !!(addr.estado || addr.municipio || addr.rua || addr.bairro || addr.cep);
+    const addrHtml = hasAddrParts
+      ? [
+        row('Estado (UF)', addr.estado),
+        row('Município', addr.municipio),
+        row('Rua', addr.rua),
+        row('Bairro', addr.bairro),
+        row('CEP', addr.cep),
+      ].filter(Boolean).join('')
+      : row('Endereço', client.address);
+    return [
+      row('Nome completo', client.name),
+      row('CPF', client.cpf || client.id),
+      row('RG', client.rg),
+      row('Celular', client.phone1),
+      row('Celular 2', client.phone2),
+      row('E-mail', client.email),
+      row('Estado civil', client.civilState),
+      addrHtml,
+      row('Nome da mãe', client.motherName),
+      row('Nome do pai', client.fatherName),
+    ].filter(Boolean).join('');
+  },
+
+  _renderEditableClientDetail: function(client, proposal, opts) {
+    opts = opts || {};
+    const prefix = opts.prefix || 'manage';
+    const editable = opts.editable !== false;
+    client = this._proposalClientFallback(client, proposal);
+    if (!client) {
+      return `<p style="color:var(--color-text-muted);margin:0;">Cadastro do cliente não encontrado (CPF ${this._escHtml(proposal?.clientCpf || '—')}).</p>`;
+    }
+
+    const dis = editable ? '' : ' readonly';
+    const disSel = editable ? '' : ' disabled';
+    const cpf = String(client.cpf || client.id || proposal?.clientCpf || '').replace(/\D/g, '');
+    const addr = this._parseAddress(client.address);
+    const ufSel = this._estadoUfFromParsed(addr.estado, addr.municipio);
+    const ufOpts = ['<option value="">—</option>'].concat(
+      this._BR_UFS.map((uf) => `<option value="${uf}"${ufSel === uf ? ' selected' : ''}>${uf}</option>`)
+    ).join('');
+    const p = prefix;
+
+    return `
+      <input type="hidden" id="${p}ClientOrigCpf" value="${this._escAttr(cpf)}"/>
+      <div class="prop-client-edit" style="display:grid;gap:10px;">
+        <p style="color:var(--color-text-muted);margin:0 0 4px;font-size:13px;">${editable ? 'Altere os dados do cliente abaixo. As mudanças serão salvas na proposta e no cadastro do cliente (quando existir).' : 'Dados cadastrais do cliente.'}</p>
+        <div class="form-group" style="margin:0;">
+          <label style="font-size:11px;">Nome completo</label>
+          <input type="text" id="${p}ClientName" class="form-control prop-client-field" value="${this._escAttr(client.name || proposal?.clientName || '')}"${dis}/>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">CPF</label>
+            <input type="text" id="${p}ClientCpf" class="form-control prop-client-field" placeholder="000.000.000-00" value="${this._escAttr(cpf)}"${dis}/>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">RG</label>
+            <input type="text" id="${p}ClientRg" class="form-control prop-client-field" value="${this._escAttr(client.rg || '')}"${dis}/>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Celular</label>
+            <input type="text" id="${p}ClientPhone1" class="form-control prop-client-field" value="${this._escAttr(client.phone1 || '')}"${dis}/>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Celular 2</label>
+            <input type="text" id="${p}ClientPhone2" class="form-control prop-client-field" value="${this._escAttr(client.phone2 || '')}"${dis}/>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">E-mail</label>
+            <input type="email" id="${p}ClientEmail" class="form-control prop-client-field" value="${this._escAttr(client.email || '')}"${dis}/>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Estado civil</label>
+            <input type="text" id="${p}ClientCivilState" class="form-control prop-client-field" value="${this._escAttr(client.civilState || '')}"${dis}/>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Nome da mãe</label>
+            <input type="text" id="${p}ClientMotherName" class="form-control prop-client-field" value="${this._escAttr(client.motherName || '')}"${dis}/>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Nome do pai</label>
+            <input type="text" id="${p}ClientFatherName" class="form-control prop-client-field" value="${this._escAttr(client.fatherName || '')}"${dis}/>
+          </div>
+        </div>
+        <div style="margin-top:6px;padding-top:12px;border-top:1px dashed var(--color-border);">
+          <p style="font-weight:700;margin:0 0 10px;font-size:13px;color:var(--color-primary);">Endereço</p>
+          <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:10px;">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:11px;">UF</label>
+              <select id="${p}ClientEstado" class="form-control prop-client-field"${disSel}>${ufOpts}</select>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:11px;">Município</label>
+              <input type="text" id="${p}ClientMunicipio" class="form-control prop-client-field" value="${this._escAttr(addr.municipio)}"${dis}/>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:11px;">CEP</label>
+              <input type="text" id="${p}ClientCep" class="form-control prop-client-field" placeholder="00000-000" value="${this._escAttr(addr.cep)}"${dis}/>
+            </div>
+          </div>
+          <div class="form-group" style="margin:10px 0 0;">
+            <label style="font-size:11px;">Rua / nº / complemento</label>
+            <input type="text" id="${p}ClientRua" class="form-control prop-client-field" value="${this._escAttr(addr.rua)}"${dis}/>
+          </div>
+          <div class="form-group" style="margin:10px 0 0;">
+            <label style="font-size:11px;">Bairro</label>
+            <input type="text" id="${p}ClientBairro" class="form-control prop-client-field" value="${this._escAttr(addr.bairro)}"${dis}/>
+          </div>
+        </div>
+      </div>
+    `;
+  },
+
+  _renderManageClientDetail: function(client, proposal, editable) {
+    return this._renderEditableClientDetail(client, proposal, { prefix: 'manage', editable: editable !== false });
+  },
+
+  _readProposalClientForm: function(prefix) {
+    const p = prefix || 'manage';
+    const gv = (suffix) => document.getElementById(`${p}Client${suffix}`)?.value?.trim() || '';
+    return {
+      origCpf: gv('OrigCpf').replace(/\D/g, ''),
+      name: gv('Name'),
+      cpf: gv('Cpf').replace(/\D/g, ''),
+      rg: gv('Rg'),
+      phone1: gv('Phone1'),
+      phone2: gv('Phone2'),
+      email: gv('Email'),
+      civilState: gv('CivilState'),
+      motherName: gv('MotherName'),
+      fatherName: gv('FatherName'),
+      address: this._formatAddress({
+        estado: gv('Estado'),
+        municipio: gv('Municipio'),
+        rua: gv('Rua'),
+        bairro: gv('Bairro'),
+        cep: gv('Cep'),
+      }),
+    };
+  },
+
+  _saveProposalClientData: async function(proposal, prefix) {
+    const form = this._readProposalClientForm(prefix);
+    if (!form.name && !form.cpf) return;
+
+    proposal.clientName = form.name || proposal.clientName;
+    proposal.client_name = form.name || proposal.client_name;
+    if (form.cpf) {
+      proposal.clientCpf = form.cpf;
+      proposal.client_cpf = form.cpf;
+    }
+
+    const lookupCpf = form.cpf || form.origCpf;
+    if (!lookupCpf) return;
+
+    let client = await this._lookupClientByCpf(lookupCpf);
+    if (!client && form.origCpf && form.origCpf !== form.cpf) {
+      client = await this._lookupClientByCpf(form.origCpf);
+    }
+
+    const updated = {
+      ...(client || {}),
+      id: client?.id || form.cpf || lookupCpf,
+      cpf: form.cpf || client?.cpf || lookupCpf,
+      name: form.name || client?.name || proposal.clientName,
+      rg: form.rg,
+      phone1: form.phone1,
+      phone2: form.phone2,
+      email: form.email,
+      civilState: form.civilState,
+      motherName: form.motherName,
+      fatherName: form.fatherName,
+      address: form.address,
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (!updated.name && !updated.cpf) return;
+    await DB.save('clients', updated);
+    if (typeof invalidateClientsListCache === 'function') invalidateClientsListCache();
+  },
+
+  _saveManageClientAddress: async function(proposal) {
+    const p = proposal || { id: document.getElementById('managePropId')?.value };
+    if (!p?.id) return;
+    await this._saveProposalClientData(p, 'manage');
+  },
+
+  _applyVendedorFormRules: function() {
+    const anexosSec = document.getElementById('propAnexosSection');
+    if (anexosSec) anexosSec.style.display = '';
+    const anexosTitle = document.getElementById('propAnexosTitle');
+    if (anexosTitle) anexosTitle.textContent = '📎 Documentos (opcional)';
+    const numeroRow = document.getElementById('propNumeroValorRow');
+    if (numeroRow) numeroRow.style.display = '';
+    const etapaRow = document.getElementById('propEtapaVendedorRow');
+    if (etapaRow) etapaRow.style.display = '';
+  },
+
+  calcValorFinal: function() {
+    // usado apenas quando o formulário mostra o campo tabela visivelmente
+    const valor  = parseFloat(document.getElementById('propValor')?.value) || 0;
+    const tabela = document.getElementById('propTabela')?.value || 'NORMAL';
+    const pct    = this._tabelaPct[tabela] ?? 1;
+    const final  = valor * pct;
+    const desconto = valor - final;
+    const dispEl = document.getElementById('propValorFinalDisplay');
+    if (dispEl) dispEl.value = final > 0 ? 'R$ ' + final.toLocaleString('pt-BR',{minimumFractionDigits:2}) : '';
+    const descEl = document.getElementById('propDesconto');
+    if (descEl) descEl.value = desconto.toFixed(2);
+  },
+
+  _labelFile: function(inputId, labelId) {
+    const inp = document.getElementById(inputId);
+    const lbl = document.getElementById(labelId);
+    if (!inp || !lbl) return;
+    const f = inp.files[0];
+    if (!f) {
+      lbl.innerHTML = '<span style="color:#999;">-</span>';
+      return;
+    }
+    // cria URL temporária para visualização
+    const url = URL.createObjectURL(f);
+    lbl.innerHTML =
+      `<span style="color:var(--color-success);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;display:inline-block;vertical-align:middle;" title="${f.name}">${f.name}</span>` +
+      `<a href="${url}" target="_blank" title="Visualizar" style="margin-left:6px;font-size:18px;text-decoration:none;vertical-align:middle;">👁</a>`;
+  },
+
+  updateAnexosLabel: function() {},  // compatibilidade
+
+  calcAdminValorFinal: function() {
+    const fmtR = v => 'R$ ' + parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
+    const bruto  = parseFloat(document.getElementById('managePropValorBruto')?.value?.replace(/[^\d,]/g,'').replace(',','.')) || 0;
+    const tabela = document.getElementById('managePropTabela')?.value || '';
+    const pct    = tabela ? (this._tabelaPct[tabela] ?? 1) : null;
+    const finalV = pct !== null ? parseFloat((bruto * pct).toFixed(2)) : null;
+    const desconto = finalV !== null ? parseFloat((bruto - finalV).toFixed(2)) : null;
+
+    const calcEl = document.getElementById('managePropValorFinalCalc');
+    const infoEl = document.getElementById('managePropTabelaInfo');
+
+    if (calcEl) calcEl.value = finalV !== null ? fmtR(finalV) : '';
+    if (infoEl && tabela && pct !== null) {
+      const pctLabel = Math.round(pct * 100);
+      const tabNome = this._tabelaLabel(tabela) || tabela;
+      infoEl.innerHTML = `<span style="color:#3b82f6;font-weight:600;">${tabNome} (${pctLabel}% do valor bruto)</span>
+        &nbsp;·&nbsp; Desconto: <strong>${fmtR(desconto)}</strong>
+        &nbsp;·&nbsp; Valor Final: <strong style="color:var(--color-success);">${fmtR(finalV)}</strong>`;
+    } else if (infoEl) {
+      infoEl.innerHTML = '<span style="color:var(--color-text-muted);">Selecione uma tabela para calcular o valor final.</span>';
+    }
+  },
+
+  updateEntidades: function() {
+    const conv = document.getElementById('propConvenio')?.value;
+    this._fillEntidadeSelect('propEntidade', conv, '');
+  },
+
+  updateEmployeeEntidades: function() {
+    const conv = document.getElementById('empPropConvenio')?.value;
+    this._fillEntidadeSelect('empPropEntidade', conv, '');
+  },
+
+  openModal: function() {
+    try {
+      const container = document.getElementById('propFormContainer');
+      if (!container) {
+        alert('Erro: O formulário de proposta não foi encontrado.');
+        return;
+      }
+      container.style.display = 'block';
+      this._initProposalCatalogSelects();
+      const ids = ['propCpf','propNumero','propValor','propDesconto','propValorFinalDisplay','propObs',
+                   'propMatricula','propSenhaContracheque','propSenhaConsignacao',
+                   'propBancoComprado','propProtocolo','propProtocoloBacen','propFases','propHistoryNote'];
+      ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      const tabEl = document.getElementById('propTabela'); if (tabEl) tabEl.value = '';
+      this._setFolderContext('propAnexosFolders', 'prop');
+      this.resetAnexoFolders();
+      ['propProduct','propConvenio','propEntidade','propCompraDivida','propBancoComprado','propBancoDigitado',
+       'propSolicitouBoleto','propBacen','propAssinouTermo','propStatusOp','propPosVenda','propNuvidio','propEtapaVendedor'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+      });
+      this._initBankSelects();
+      const area = document.getElementById('propFormArea');
+      if (area) area.style.display = 'none';
+      const fileEl = document.getElementById('filePaystub');
+      if (fileEl) fileEl.value = '';
+
+      // Mostrar seção operacional para roles com permissão
+      this._toggleOperacionalSection();
+      this.initAnexoFolders();
+      this._initStaticProposalSelects();
+      this._applyVendedorFormRules();
+      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch(e) {
+      alert("Erro ao abrir formulário: " + e.message);
+    }
+  },
+
+  _toggleOperacionalSection: function() {
+    const sec = document.getElementById('propOperacionalSection');
+    if (!sec) return;
+    const s = (typeof Auth !== 'undefined') ? Auth.getSession() : null;
+    const opRoles = ['master','operacional','backoffice','supervisor','admin'];
+    if (s && opRoles.includes(s.role)) {
+      sec.style.display = 'block';
+    } else {
+      sec.style.display = 'none';
+    }
+  },
+
+  searchCpf: async function() {
+    try {
+      const cpfStr = document.getElementById('propCpf').value;
+      const cpf = cpfStr.replace(/\D/g, '');
+      if (cpf.length !== 11) {
+        alert("Por favor, digite um CPF válido.");
+        return;
+      }
+      
+      const btn = event.target || document.querySelector('#propFormContainer .btn-primary');
+      const oldText = btn ? btn.innerText : 'Buscar Cliente';
+      if(btn) btn.innerText = 'Buscando...';
+
+      // Procura por CPF (id ou campo cpf)
+      const client = await this._lookupClientByCpf(cpf);
+      
+      if(btn) btn.innerText = oldText;
+
+      if (client) {
+        let summary = `<strong>Nome:</strong> ${client.name}<br>
+                       <strong>CPF:</strong> ${client.cpf || cpf}<br>
+                       <strong>RG:</strong> ${client.rg || '—'}<br>
+                       <strong>Celular:</strong> ${client.phone1 || 'Não informado'}<br>
+                       <strong>Celular 2:</strong> ${client.phone2 || '—'}<br>
+                       <strong>E-mail:</strong> ${client.email || 'Não informado'}<br>
+                       <strong>Endereço:</strong> ${client.address || '—'}`;
+        document.getElementById('propClientSummary').innerHTML = summary;
+        document.getElementById('propClientName').value = client.name;
+        document.getElementById('propFormArea').style.display = 'block';
+        this._setFolderContext('propAnexosFolders', 'prop');
+        this.initAnexoFolders();
+        this._applyVendedorFormRules();
+      } else {
+        alert("Cliente não encontrado. Por favor, vá na aba 'Clientes' e cadastre o cliente primeiro.");
+        document.getElementById('propFormArea').style.display = 'none';
+      }
+    } catch (e) {
+      alert("Erro ao buscar cliente: " + e.message);
+    }
+  },
+
+  // Helper to read file as Base64
+  readFileAsBase64: function(file) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = error => reject(error);
+      reader.readAsDataURL(file);
+    });
+  },
+
+  submit: async function() {
+    try {
+      const user = Auth.getSession();
+      if (!user) return;
+
+      const cpf = document.getElementById('propCpf').value.replace(/\D/g, '');
+      const name = document.getElementById('propClientName').value;
+
+      if (!cpf || !name) {
+        alert("Busque o cliente primeiro.");
+        return;
+      }
+
+      const role = user.role || '';
+      const isVendedor = this._isVendedorRole(role);
+      const etapaVendedor = (document.getElementById('propEtapaVendedor')?.value || '').trim();
+
+      const saveBtn = document.querySelector('#propFormArea .btn-primary');
+      let oldText = 'Enviar Proposta';
+      if (saveBtn) {
+        oldText = saveBtn.innerText;
+        saveBtn.innerText = 'Enviando...';
+        saveBtn.disabled = true;
+      }
+
+      let attachments = {};
+      const proposalId = 'PROP-' + Date.now();
+      try {
+        attachments = await this._collectAttachments(proposalId);
+      } catch (e) {
+        alert(e.message || "Erro ao enviar anexo. Use PDFs menores ou menos arquivos por vez.");
+        if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+        return;
+      }
+
+      const gv = id => document.getElementById(id)?.value || '';
+      const valor      = parseFloat(gv('propValor')) || 0;
+      const tabela     = '';
+      const valorFinal = valor;
+      const desconto   = 0;
+      const statusInicial = isVendedor
+        ? (etapaVendedor || 'Em Andamento')
+        : (gv('propStatusOp') || 'Em Andamento');
+
+      const proposal = {
+        id: proposalId,
+        employee_id: user.id,
+        numero: gv('propNumero'),
+        vendorId: user.id,
+        vendor_id: user.id,
+        vendorName: user.name,
+        vendor_name: user.name,
+        clientCpf: cpf,
+        client_cpf: cpf,
+        clientName: name,
+        client_name: name,
+        matricula: gv('propMatricula'),
+        senhaContracheque: gv('propSenhaContracheque'),
+        senhaConsignacao: gv('propSenhaConsignacao'),
+        product: this._normalizeProductValue(gv('propProduct')),
+        convenio: this._normalizeConvenioKey(gv('propConvenio')),
+        entidade: gv('propEntidade'),
+        obs: gv('propObs'),
+        tabela: tabela,
+        valor: valor,
+        desconto: desconto,
+        valorFinal: valorFinal,
+        compraDivida: gv('propCompraDivida'),
+        bancoComprado: gv('propBancoComprado'),
+        bancoDigitado: gv('propBancoDigitado'),
+        solicitouBoleto: gv('propSolicitouBoleto'),
+        protocolo: gv('propProtocolo'),
+        dataSolicitacao: gv('propDataSolicitacao'),
+        bacen: gv('propBacen'),
+        protocoloBacen: gv('propProtocoloBacen'),
+        dataSolicitacaoBacen: gv('propDataSolicitacaoBacen'),
+        assinou: gv('propAssinouTermo'),
+        statusOp: statusInicial,
+        posVenda: gv('propPosVenda'),
+        nuvidio: gv('propNuvidio'),
+        fases: gv('propFases'),
+        attachments: attachments,
+        status: statusInicial,
+        history: [{
+          date: new Date().toISOString(),
+          actorName: user.name,
+          action: 'Proposta Criada',
+          note: gv('propObs')
+        }],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+
+      if (typeof showLoading === 'function') showLoading('Enviando proposta…');
+      try {
+        await DB.save('proposals', proposal);
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
+      if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
+      
+      if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+      alert("Proposta enviada com sucesso!");
+      
+      document.getElementById('propFormContainer').style.display = 'none';
+      
+      if (document.getElementById('manageProposalsTbody')) {
+        this._adminList.page = 1;
+        await this.renderAdminList();
+      }
+      else {
+        this._employeeList.page = 1;
+        await this.renderEmployeeList();
+      }
+    } catch(e) {
+      console.error(e);
+      const msg = String(e.message || e);
+      const friendly = msg.includes('57014') || msg.includes('statement timeout')
+        ? 'Tempo esgotado ao salvar. Os anexos são enviados ao Storage — recarregue (Ctrl+F5) e tente de novo. Se persistir, crie o bucket "proposal-attachments" no Supabase.'
+        : msg.includes('etapaVendedor') || msg.includes('PGRST204') || /Could not find the .* column/i.test(msg)
+        ? 'Erro ao enviar proposta: campo inválido no servidor. Recarregue a página (Ctrl+F5) e tente novamente. Se persistir, aplique a migração 006_proposals_banco_digitado.sql no Supabase.'
+        : 'Erro ao enviar proposta: ' + msg;
+      alert(friendly);
+      const saveBtn = document.querySelector('#propFormArea .btn-primary');
+      if (saveBtn) { saveBtn.innerText = 'Enviar Proposta'; saveBtn.disabled = false; }
+    }
+  },
+
+  renderEmployeeList: async function() {
+    const listEl = document.getElementById('proposalsList');
+    if (!listEl) return;
+
+    const user = Auth.getSession();
+    if (!user?.id) return;
+
+    listEl.innerHTML = '<p style="color:var(--color-text-muted);">Carregando propostas...</p>';
+
+    try {
+      const me = await DB.getUser(user.id).catch(() => null);
+      const vendorUser = { id: user.id, name: me?.name || user.name || '' };
+
+      const raw = await DB.getProposals(user.id, vendorUser);
+      let proposals = this._rowsFromProposalQuery(raw)
+        .map(p => this._normProposal(p))
+        .filter(p => this._ownsProposal(p, vendorUser));
+
+      proposals = this._sortProposalsNewestFirst(proposals);
+
+      this._employeeList.total = proposals.length;
+      const startEmp = (this._employeeList.page - 1) * this._employeeList.pageSize;
+      proposals = proposals.slice(startEmp, startEmp + this._employeeList.pageSize);
+
+      if (proposals.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--color-text-muted);">Nenhuma proposta cadastrada.</p>';
+        this._renderPagination('employeeProposalsPagination', this._employeeList, 'Proposals.employeeSetPage');
+        return;
+      }
+
+      const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
+      let html = '';
+      proposals.forEach(p => {
+        let badgeClass = 'badge-muted';
+        if (p.status === 'Em Andamento') badgeClass = 'badge-info';
+        if (p.status === 'Digitação') badgeClass = 'badge-accent';
+        if (p.status === 'AG. BOLETO') badgeClass = 'badge-warning';
+        if (p.status === 'Pago') badgeClass = 'badge-success';
+        if (p.status === 'Cancelado') badgeClass = 'badge-danger';
+        if (p.status === 'Pendenciado') badgeClass = 'badge-warning';
+
+        const etapaLabel = this._vendorStage(p) ? this._labelEtapaVendedor(this._vendorStage(p)) : '';
+        const safeId = this._escAttr(p.id);
+        html += `
+          <div class="card" style="padding: 16px; margin-bottom: 12px;">
+             <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px;">
+                <div>
+                  <strong style="font-size:16px;">${p.numero || p.id}</strong>
+                  ${p.numero ? `<span style="font-size:11px;color:var(--color-text-muted);margin-left:8px;">(${p.id})</span>` : ''}
+                </div>
+                <span class="badge ${badgeClass}">${etapaLabel || p.status}</span>
+             </div>
+             <div style="margin-bottom:4px; font-size:14px;"><strong>Cliente:</strong> ${p.clientName} (CPF: ${p.clientCpf})</div>
+             <div style="font-size:14px;"><strong>Produto:</strong> ${this._escHtml(p.product || '—')} | <strong>Convênio:</strong> ${this._escHtml(p.convenio || '—')} | <strong>Entidade:</strong> ${this._escHtml(p.entidade || '—')}${etapaLabel ? ` | <strong>Situação:</strong> ${this._escHtml(etapaLabel)}` : ''}</div>
+             ${p.protocolo ? `<div style="font-size:14px;margin-top:4px;"><strong>Nº Protocolo:</strong> ${this._escHtml(p.protocolo)}</div>` : ''}
+             <div style="display:flex; gap:20px; margin-top:10px; background:var(--color-surface-2); padding:10px; border-radius:8px; flex-wrap:wrap;">
+               <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Proposta</span><br><strong>${fmtR(p.valor)}</strong></div>
+               <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Desconto</span><br><strong style="color:var(--color-danger);">− ${fmtR(p.desconto)}</strong></div>
+               <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Final</span><br><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></div>
+             </div>
+             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px;">
+               <div style="font-size: 12px; color: var(--color-text-muted);">Criada em: ${this._propDateStr(p)}</div>
+               <div style="flex-shrink:0;">${this.actionsRowHtml(p.id, { employee: true })}</div>
+             </div>
+          </div>
+        `;
+      });
+      listEl.innerHTML = html;
+      this._renderPagination('employeeProposalsPagination', this._employeeList, 'Proposals.employeeSetPage');
+    } catch (e) {
+      console.error('[Proposals] renderEmployeeList:', e);
+      listEl.innerHTML = '<p style="color:var(--color-danger);">Erro ao carregar propostas. Recarregue a página.</p>';
+    }
+  },
+
+  /** Lista filtrada da gestão (sem paginação) — usada na tabela e na exportação CSV. */
+  _fetchAdminProposalsFiltered: async function() {
+    const q = this._getProposalSearchQuery();
+    const session = Auth.getSession();
+    const isVendorSession = session?.role === 'vendedor';
+    let vendorId = this._getAdminVendorFilter();
+    if (isVendorSession) vendorId = session.id;
+    this._adminList.vendorId = vendorId;
+
+    const statusFilter = this._getAdminStatusFilter();
+    this._adminList.statusFilter = statusFilter;
+
+    const headerVendor = document.getElementById('proposalVendorFilterHeader');
+    if (headerVendor) {
+      if (vendorId && vendorId !== 'todos') headerVendor.classList.add('filter-active');
+      else headerVendor.classList.remove('filter-active');
+    }
+    const headerStatus = document.getElementById('proposalStatusFilterHeader');
+    if (headerStatus) {
+      if (statusFilter && statusFilter !== 'todos') headerStatus.classList.add('filter-active');
+      else headerStatus.classList.remove('filter-active');
+    }
+
+    const vendorFilterHeaderEl = document.getElementById('proposalVendorFilterHeader');
+    if (vendorFilterHeaderEl) {
+      vendorFilterHeaderEl.disabled = isVendorSession;
+      vendorFilterHeaderEl.style.display = isVendorSession ? 'none' : '';
+    }
+
+    const partnerRoot = !isVendorSession && typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+    const propOpts = partnerRoot ? { partnerRootId: partnerRoot } : {};
+    const [, rawRows] = await Promise.all([
+      this._initAdminProposalFilters(),
+      isVendorSession
+        ? DB.getProposals(session.id, { id: session.id, name: session.name })
+        : DB.getProposals(null, null, propOpts),
+    ]);
+
+    let proposals = this._rowsFromProposalQuery(rawRows).map(p => this._normProposal(p));
+    if (isVendorSession) {
+      proposals = proposals.filter(p => this._ownsProposal(p, { id: session.id, name: session.name }));
+    } else if (!partnerRoot) {
+      proposals = await this._filterProposalsToPartnerOrg(proposals);
+    }
+    if (!window.PARTNER_ROOT_ID && !this._canSeePartnerProposalsInAdminList()) {
+      proposals = await this._filterProposalsExcludePartnerOrg(proposals);
+    }
+    proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
+    proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
+    proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
+    proposals = this._sortProposalsNewestFirst(proposals);
+
+    return { proposals, q, vendorId, statusFilter, isVendorSession };
+  },
+
+  _proposalExportRow: function(p) {
+    const etapa = this._vendorStage(p);
+    const situacao = etapa ? this._labelEtapaVendedor(etapa) : '';
+    const num = (v) => (v != null && v !== '' && Number.isFinite(parseFloat(v)) ? parseFloat(v) : '');
+    const dt = this._proposalCreatedAt(p);
+    let dataCriacao = '';
+    if (dt) {
+      try { dataCriacao = new Date(dt).toLocaleString('pt-BR'); } catch (_) { dataCriacao = String(dt); }
+    }
+    return {
+      'Nº Proposta': p.numero || p.id || '',
+      'ID Sistema': p.id || '',
+      Vendedor: p.vendorName || '',
+      Cliente: p.clientName || '',
+      CPF: p.clientCpf || '',
+      Produto: p.product || '',
+      Convênio: p.convenio || '',
+      Entidade: p.entidade || '',
+      Matrícula: p.matricula || '',
+      Protocolo: p.protocolo || '',
+      'Banco comprado': p.bancoComprado || '',
+      'Banco digitado': p.bancoDigitado || '',
+      'Valor Proposta (R$)': num(p.valor),
+      'Desconto (R$)': num(p.desconto),
+      'Valor Final (R$)': num(p.valorFinal),
+      Tabela: p.tabela || '',
+      Status: p.status || p.statusOp || '',
+      'Situação vendedor': situacao,
+      Observações: (p.obs || '').replace(/\s+/g, ' ').trim(),
+      Fases: (p.fases || '').replace(/\s+/g, ' ').trim(),
+      'Data criação': dataCriacao,
+    };
+  },
+
+  _downloadProposalCsv: function(rows, filenameBase) {
+    const headers = rows.length
+      ? Object.keys(rows[0])
+      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Status', 'Data criação'];
+    const stamp = new Date().toISOString().slice(0, 10);
+    const fname = `${filenameBase}_${stamp}.csv`;
+    const bom = '\uFEFF';
+    const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const csv = [headers.join(';'), ...rows.map(r => headers.map(h => esc(r[h])).join(';'))].join('\n');
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fname;
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+
+  exportAdminExcel: async function() {
+    return this.exportAdminCsv();
+  },
+
+  exportAdminCsv: async function() {
+    if (!document.getElementById('manageProposalsTbody')) return;
+    if (typeof showLoading === 'function') showLoading('Gerando CSV...');
+    try {
+      const { proposals, q } = await this._fetchAdminProposalsFiltered();
+      if (!proposals.length) {
+        if (typeof showToast === 'function') {
+          showToast(q ? 'Nenhuma proposta encontrada com os filtros atuais.' : 'Não há propostas para exportar.', 'warning');
+        } else alert('Nenhuma proposta para exportar.');
+        return;
+      }
+      const rows = proposals.map(p => this._proposalExportRow(p));
+      this._downloadProposalCsv(rows, 'propostas_soublu');
+      if (typeof showToast === 'function') {
+        showToast(`${proposals.length} proposta(s) exportada(s) em CSV.`, 'success', 4500);
+      }
+    } catch (e) {
+      console.error('[Proposals] exportAdminCsv:', e);
+      if (typeof showToast === 'function') showToast('Erro ao gerar CSV. Tente novamente.', 'error');
+      else alert('Erro ao gerar CSV.');
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  },
+
+  renderAdminList: async function() {
+    const tbody = document.getElementById('manageProposalsTbody');
+    if (!tbody) return;
+
+    const emptyMsg = (q) => `<tr><td colspan="11" style="text-align:center;color:var(--color-text-muted);padding:24px;">${q ? 'Nenhuma proposta encontrada para esta busca.' : 'Nenhuma proposta cadastrada.'}</td></tr>`;
+
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--color-text-muted);padding:24px;">Carregando propostas...</td></tr>';
+
+    try {
+      const { proposals: allFiltered, q, vendorId } = await this._fetchAdminProposalsFiltered();
+
+      this._adminList.total = allFiltered.length;
+      let proposals = allFiltered.slice(
+        (this._adminList.page - 1) * this._adminList.pageSize,
+        this._adminList.page * this._adminList.pageSize
+      );
+
+      if (proposals.length === 0) {
+        tbody.innerHTML = emptyMsg(q || vendorId);
+        this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
+        return;
+      }
+
+      const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
+      const canDelete = this._canDeleteProposal();
+      const showPartnerStyle = this._canSeePartnerProposalsInAdminList();
+      const partnerIds = showPartnerStyle ? await this._partnerProposalIdSet(allFiltered) : new Set();
+      const partnerRoot = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+      let html = '';
+      proposals.forEach(p => {
+        let badgeClass = 'badge-muted';
+        if (p.status === 'Em Andamento') badgeClass = 'badge-info';
+        if (p.status === 'Digitação') badgeClass = 'badge-accent';
+        if (p.status === 'AG. BOLETO') badgeClass = 'badge-warning';
+        if (p.status === 'Pago') badgeClass = 'badge-success';
+        if (p.status === 'Cancelado') badgeClass = 'badge-danger';
+        if (p.status === 'Pendenciado') badgeClass = 'badge-warning';
+
+        const etapaLabel = this._vendorStage(p) ? this._labelEtapaVendedor(this._vendorStage(p)) : '';
+        const statusLabel = p.status || p.statusOp || '—';
+        const subStatus = (etapaLabel && etapaLabel !== statusLabel) ? etapaLabel : '';
+        const safeId = this._escAttr(p.id);
+        const safeLabel = this._escAttr(p.numero || p.clientName || p.id);
+        const isPartnerRow = partnerIds.has(String(p.id));
+        const rowClass = isPartnerRow ? 'proposal-row--partner' : '';
+        const partnerBadge = isPartnerRow
+          ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
+          : '';
+        const canEditRow = !partnerRoot || isPartnerRow;
+        html += `<tr${rowClass ? ` class="${rowClass}"` : ''}>
+            <td>${partnerBadge}<strong>${p.numero || p.id}</strong></td>
+            <td>${p.vendorName || '—'}</td>
+            <td>${p.clientName || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.clientCpf || ''}</div></td>
+            <td>${this._escHtml(p.product || '—')}${subStatus ? ` <div style="font-size:11px;color:var(--color-text-muted);">${this._escHtml(subStatus)}</div>` : ''}</td>
+            <td>${p.convenio || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.entidade || ''}</div></td>
+            <td>${p.protocolo ? this._escHtml(p.protocolo) : '—'}</td>
+            <td>${fmtR(p.valor)}</td>
+            <td><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></td>
+            <td>${this._propDateStr(p)}</td>
+            <td><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
+            <td class="td-proposal-actions">${this.actionsRowHtml(p.id, {
+              canEdit: canEditRow,
+              canDelete: canDelete && canEditRow,
+              label: p.numero || p.clientName || p.id,
+            })}</td>
+          </tr>`;
+      });
+      tbody.innerHTML = html;
+      this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
+    } catch (e) {
+      console.error('[Proposals] renderAdminList:', e);
+      const msg = (e && e.message) ? String(e.message).slice(0, 200) : 'Erro desconhecido';
+      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--color-danger);padding:24px;">Erro ao carregar propostas.<br><small style="opacity:.85;">${this._escHtml(msg)}</small><br><button type="button" class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="Proposals.renderAdminList()">Tentar novamente</button></td></tr>`;
+    }
+  },
+
+
+  _attachmentKeysForGroup: function(att, prefix, seedItems) {
+    const items = (seedItems || []).map(i => ({ ...i, legado: i.legado || [] }));
+    const seen = new Set(items.map(i => i.key));
+    Object.keys(att || {}).forEach(k => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta')) return;
+      if (k.startsWith(prefix) && !seen.has(k)) {
+        seen.add(k);
+        items.push({ key: k, legado: [] });
+      }
+    });
+    return items;
+  },
+
+  _renderProposalAttachments: function(proposal, attEl) {
+    if (!attEl) return;
+    const att = this._parseAttachments(proposal.attachments);
+    this._attachmentViewerCache = [];
+    const grupos = this._getAnexoViewGroups();
+    const _resolve = (item) => {
+      const tryKey = (k) => {
+        if (att[k] == null || att[k] === '') return null;
+        const url = this._normalizeAttachmentUrl(att[k]);
+        if (!this._isValidAttachmentUrl(url)) return null;
+        return { url, nome: att[k + '_nome'] || item.label || item.key || k };
+      };
+      let doc = tryKey(item.key);
+      if (doc) return doc;
+      for (const lk of (item.legado || [])) {
+        doc = tryKey(lk);
+        if (doc) return doc;
+      }
+      return null;
+    };
+    let html = '<div style="display:flex;flex-direction:column;gap:14px;width:100%;margin-top:8px;">';
+    const usedKeys = new Set();
+    grupos.forEach(g => {
+      const itens = this._attachmentKeysForGroup(att, g.prefix, g.seed);
+      html += `<div>
+        <div style="font-size:12px;font-weight:700;color:var(--color-text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">${g.titulo}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">`;
+      let algum = false;
+      itens.forEach((item) => {
+        const doc = _resolve(item);
+        if (!doc) return;
+        algum = true;
+        usedKeys.add(item.key);
+        (item.legado || []).forEach((lk) => usedKeys.add(lk));
+        const cacheIdx = this._attachmentViewerCache.length;
+        this._attachmentViewerCache.push({ url: doc.url, nome: doc.nome });
+        html += this._renderAttachmentPreview(doc, cacheIdx);
+      });
+      if (!algum) html += `<span style="font-size:12px;color:var(--color-text-muted);align-self:center;">Nenhum arquivo</span>`;
+      html += `</div></div>`;
+    });
+
+    const customGroupIds = new Set();
+    Object.keys(att).forEach(k => {
+      if (!k.startsWith('custom_') || k.endsWith('_nome') || k.endsWith('_pasta')) return;
+      const m = k.match(/^custom_(.+)_(\d+)$/);
+      if (m) customGroupIds.add(m[1]);
+    });
+    customGroupIds.forEach(groupId => {
+      const keys = Object.keys(att).filter(k =>
+        k.startsWith('custom_' + groupId + '_') && !k.endsWith('_nome') && !k.endsWith('_pasta')
+      ).sort();
+      const titulo = att['custom_' + groupId + '_1_pasta'] || att[keys[0] + '_pasta'] || '📁 Pasta extra';
+      html += `<div>
+        <div style="font-size:12px;font-weight:700;color:var(--color-text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">${this._escHtml(titulo)}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">`;
+      let algumCustom = false;
+      keys.forEach(key => {
+        const doc = _resolve({ key, legado: [] });
+        if (!doc) return;
+        algumCustom = true;
+        const cacheIdx = this._attachmentViewerCache.length;
+        this._attachmentViewerCache.push({ url: doc.url, nome: doc.nome });
+        html += this._renderAttachmentPreview(doc, cacheIdx);
+      });
+      if (!algumCustom) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
+      html += `</div></div>`;
+    });
+
+    const miscKeys = Object.keys(att).filter(k =>
+      !k.endsWith('_nome') && !k.endsWith('_pasta') && !usedKeys.has(k)
+    );
+    if (miscKeys.length) {
+      html += `<div>
+        <div style="font-size:12px;font-weight:700;color:var(--color-text-muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">📎 Outros documentos</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">`;
+      let algumMisc = false;
+      miscKeys.forEach((key) => {
+        const doc = _resolve({ key, legado: [] });
+        if (!doc) return;
+        algumMisc = true;
+        const cacheIdx = this._attachmentViewerCache.length;
+        this._attachmentViewerCache.push({ url: doc.url, nome: doc.nome });
+        html += this._renderAttachmentPreview(doc, cacheIdx);
+      });
+      if (!algumMisc) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
+      html += `</div></div>`;
+    }
+
+    html += '</div>';
+    attEl.innerHTML = html;
+  },
+
+  _applyEmployeeModalMode: function(viewOnly) {
+    const modal = document.getElementById('employeeProposalModal');
+    if (!modal) return;
+    const title = document.getElementById('employeeProposalTitle');
+    if (title) title.textContent = viewOnly ? 'Visualizar Proposta' : 'Editar Proposta';
+    const editBlock = document.getElementById('empPropEditFields');
+    if (editBlock) editBlock.style.display = viewOnly ? 'none' : '';
+    const saveBtn = document.getElementById('empPropSaveBtn');
+    if (saveBtn) saveBtn.style.display = viewOnly ? 'none' : '';
+    const cancelBtn = document.getElementById('empPropCancelBtn');
+    if (cancelBtn) cancelBtn.textContent = viewOnly ? 'Fechar' : 'Cancelar';
+    modal.querySelectorAll('#empPropEditFields input, #empPropEditFields select, #empPropEditFields textarea, .prop-client-field').forEach(el => {
+      if (el.type === 'file' && viewOnly) { el.disabled = true; return; }
+      if (el.type === 'file' && !viewOnly) { el.disabled = false; return; }
+      if (viewOnly) {
+        if (el.tagName === 'SELECT') el.disabled = true;
+        else el.readOnly = true;
+      } else {
+        el.disabled = false;
+        el.readOnly = false;
+      }
+    });
+  },
+
+  openEmployeeViewModal: function(id) {
+    return this.openEmployeeModal(id, true);
+  },
+
+  openEmployeeModal: async function(id, viewOnly) {
+    viewOnly = !!viewOnly;
+    const user = Auth.getSession();
+    if (!user?.id) return;
+
+    const modal = document.getElementById('employeeProposalModal');
+    this._applyEmployeeModalMode(viewOnly);
+    modal?.classList.add('open');
+
+    const attEl = document.getElementById('empPropAttachments');
+    const histEl = document.getElementById('empPropHistoryList');
+    if (attEl) attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Carregando anexos...</p>';
+    if (histEl) histEl.innerHTML = '<p style="color:var(--color-text-muted);">Carregando...</p>';
+
+    if (typeof showLoading === 'function') showLoading('Carregando proposta...');
+
+    try {
+      const raw = await DB.getProposal(id);
+      const proposal = this._normProposal(raw);
+      if (!proposal) {
+        alert('Proposta não encontrada.');
+        modal?.classList.remove('open');
+        return;
+      }
+      if (!this._ownsProposal(proposal, user)) {
+        alert('Você só pode visualizar ou editar suas próprias propostas.');
+        modal?.classList.remove('open');
+        return;
+      }
+
+      const cpf = String(proposal.clientCpf || '').replace(/\D/g, '');
+      const client = cpf ? await this._lookupClientByCpf(cpf) : null;
+
+      const sv = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val ?? ''; };
+      sv('empPropId', proposal.id);
+
+      const detailEl = document.getElementById('empPropClientDetail');
+      if (detailEl) {
+        detailEl.style.display = '';
+        detailEl.innerHTML = '<strong style="display:block;margin-bottom:8px;">Dados cadastrais do cliente</strong>' +
+          this._renderEditableClientDetail(client, proposal, { prefix: 'emp', editable: !viewOnly });
+      }
+
+      const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
+      const etapaLabel = this._vendorStage(proposal) ? this._labelEtapaVendedor(this._vendorStage(proposal)) : '';
+      const infoEl = document.getElementById('empPropClientInfo');
+      if (infoEl) {
+        infoEl.innerHTML = `
+          <strong>Cliente:</strong> ${this._escHtml(proposal.clientName)} (CPF: ${this._escHtml(proposal.clientCpf)})<br>
+          <strong>Produto:</strong> ${this._escHtml(proposal.product || '—')} / ${this._escHtml(proposal.convenio || '—')} / ${this._escHtml(proposal.entidade || '—')}<br>
+          <strong>Nº Proposta:</strong> ${this._escHtml(proposal.numero || '—')} &nbsp;|&nbsp;
+          <strong>Valor:</strong> ${fmtR(proposal.valor)} &nbsp;|&nbsp;
+          <strong>Valor Final:</strong> <span style="color:var(--color-success);font-weight:700;">${fmtR(proposal.valorFinal)}</span><br>
+          ${proposal.protocolo ? `<strong>Nº Protocolo:</strong> ${this._escHtml(proposal.protocolo)}<br>` : ''}
+          ${etapaLabel ? `<strong>Situação:</strong> ${this._escHtml(etapaLabel)}<br>` : ''}
+          <strong>Status:</strong> ${this._escHtml(proposal.status || '—')}<br>
+          <strong>Obs:</strong> ${this._escHtml(proposal.obs || '—')}
+        `;
+      }
+
+      sv('empPropMatricula', proposal.matricula);
+      sv('empPropSenhaCC', proposal.senhaContracheque);
+      sv('empPropSenhaConsig', proposal.senhaConsignacao);
+      this._fillProductSelect('empPropProduct', proposal.product);
+      this._fillConvenioSelect('empPropConvenio', 'empPropEntidade', proposal.convenio);
+      this._fillEntidadeSelect('empPropEntidade', proposal.convenio, proposal.entidade);
+      const etapaSel = document.getElementById('empPropEtapa');
+      if (etapaSel) {
+        etapaSel.innerHTML = this._vendorSituacaoOptionsHtml(this._vendorStage(proposal));
+      } else {
+        sv('empPropEtapa', this._vendorStage(proposal));
+      }
+      sv('empPropProtocolo', proposal.protocolo);
+      sv('empPropObs', proposal.obs);
+
+      const uploadSec = document.getElementById('empPropAnexosUpload');
+      if (uploadSec) uploadSec.style.display = viewOnly ? 'none' : '';
+      if (!viewOnly) {
+        this._setFolderContext('empPropAnexosFolders', 'empProp');
+        this.resetAnexoFolders();
+        this._initStaticProposalSelects();
+      }
+
+      let histHtml = '';
+      (proposal.history || []).forEach(h => {
+        histHtml += `
+          <div class="card" style="padding:12px;margin-bottom:10px;border-left:4px solid var(--color-primary);">
+            <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
+              <strong>${this._escHtml(h.actorName)}</strong>
+              <span style="color:var(--color-text-muted)">${new Date(h.date).toLocaleString()}</span>
+            </div>
+            <div style="font-size:14px;"><strong>${this._escHtml(h.action)}</strong></div>
+            ${h.note ? `<div style="margin-top:6px;font-size:14px;background:var(--color-surface-2);padding:8px;border-radius:4px;">${this._escHtml(h.note)}</div>` : ''}
+          </div>`;
+      });
+      if (histEl) histEl.innerHTML = histHtml || '<p style="color:var(--color-text-muted);">Sem histórico.</p>';
+
+      this._employeeEditCache[id] = { ...proposal };
+
+      if (typeof hideLoading === 'function') hideLoading();
+
+      this._loadProposalAttachments(id, proposal, attEl, this._employeeEditCache[id]);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
+      modal?.classList.remove('open');
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  },
+
+  employeeSave: async function() {
+    const user = Auth.getSession();
+    if (!user?.id) return;
+    const gv = id => document.getElementById(id)?.value?.trim() || '';
+    const id = gv('empPropId');
+    let proposal = this._employeeEditCache[id] ? { ...this._employeeEditCache[id] } : await DB.getProposal(id);
+    if (!proposal) return;
+    if (!proposal.attachments) {
+      const attRow = await DB.getProposalAttachments(id);
+      if (attRow?.attachments != null) proposal.attachments = attRow.attachments;
+    }
+    const norm = this._normProposal(proposal);
+    if (!this._ownsProposal(norm, user)) {
+      alert('Você só pode editar suas próprias propostas.');
+      return;
+    }
+
+    const matricula = gv('empPropMatricula');
+    const senhaCC = gv('empPropSenhaCC');
+    const senhaConsig = gv('empPropSenhaConsig');
+    const product = gv('empPropProduct');
+    const etapa = gv('empPropEtapa');
+
+    const saveBtn = document.getElementById('empPropSaveBtn');
+    const oldText = saveBtn?.innerText || 'Salvar';
+    if (saveBtn) { saveBtn.innerText = 'Salvando...'; saveBtn.disabled = true; }
+
+    proposal.matricula = matricula;
+    proposal.senhaContracheque = senhaCC;
+    proposal.senhaConsignacao = senhaConsig;
+    proposal.product = this._normalizeProductValue(gv('empPropProduct'));
+    proposal.convenio = this._normalizeConvenioKey(gv('empPropConvenio'));
+    proposal.entidade = gv('empPropEntidade');
+    proposal.protocolo = gv('empPropProtocolo');
+    proposal.obs = gv('empPropObs');
+    if (etapa) {
+      proposal.statusOp = etapa;
+      proposal.status = etapa;
+    }
+
+    this._setFolderContext('empPropAnexosFolders', 'empProp');
+    const att = this._parseAttachments(proposal.attachments);
+    try {
+      const uploaded = await this._collectAttachments(id);
+      Object.assign(att, uploaded);
+      proposal.attachments = att;
+    } catch (e) {
+      console.error('[employeeSave] anexo', e);
+      alert('Erro ao processar anexo: ' + (e.message || 'tente de novo. Arquivos muito grandes podem falhar no modo local.'));
+      if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+      return;
+    }
+
+    proposal.history = proposal.history || [];
+    proposal.history.push({
+      date: new Date().toISOString(),
+      actorName: user.name,
+      action: 'Proposta atualizada pelo vendedor',
+      note: proposal.obs || ''
+    });
+
+    if (typeof showLoading === 'function') showLoading('Salvando proposta…');
+    try {
+      await this._saveProposalClientData(proposal, 'emp');
+      await DB.saveProposal(proposal);
+      if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
+      delete this._employeeEditCache[id];
+      if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
+      else alert('Proposta atualizada!');
+      closeModal('employeeProposalModal');
+      this._employeeList.page = 1;
+      await this.renderEmployeeList();
+    } catch (e) {
+      console.error('[employeeSave]', e);
+      this._proposalSaveErrorNotify(e);
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+      if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+    }
+  },
+
+  openAdminViewModal: function(id) {
+    return this.openAdminModal(id, true);
+  },
+
+  _applyManageModalMode: function(viewOnly) {
+    const modal = document.getElementById('manageProposalModal');
+    if (!modal) return;
+
+    const title = document.getElementById('manageProposalTitle');
+    if (title) title.textContent = viewOnly ? 'Visualizar Proposta' : 'Atualizar Proposta';
+
+    const body = modal.querySelector('.modal-body');
+    if (body) {
+      const alwaysReadonly = ['managePropValorBruto', 'managePropValorFinalCalc'];
+      body.querySelectorAll('input, select, textarea').forEach(el => {
+        if (el.type === 'hidden') return;
+        if (viewOnly) {
+          if (el.tagName === 'SELECT') el.disabled = true;
+          else el.readOnly = true;
+        } else {
+          el.disabled = false;
+          el.readOnly = alwaysReadonly.includes(el.id);
+        }
+      });
+    }
+
+    if (viewOnly) {
+      document.querySelectorAll('.backoffice-edit-block').forEach(el => { el.style.display = 'none'; });
+      const vb = document.getElementById('managePropVendorBlock');
+      if (vb) vb.style.display = 'none';
+    }
+
+    const saveBtn = modal.querySelector('.modal-footer .btn-primary');
+    if (saveBtn) saveBtn.style.display = viewOnly ? 'none' : '';
+    const cancelBtn = modal.querySelector('.modal-footer .btn-ghost');
+    if (cancelBtn) cancelBtn.textContent = viewOnly ? 'Fechar' : 'Cancelar';
+    const delBtn = document.getElementById('managePropDeleteBtn');
+    if (delBtn) delBtn.style.display = (!viewOnly && this._canDeleteProposal()) ? '' : 'none';
+  },
+
+    openAdminModal: async function(id, viewOnly) {
+    viewOnly = !!viewOnly;
+    const modal = document.getElementById('manageProposalModal');
+    const attEl = document.getElementById('managePropAttachments');
+    if (attEl) attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Carregando anexos...</p>';
+    if (typeof showLoading === 'function') showLoading('Carregando proposta...');
+
+    try {
+    const raw = await DB.getProposal(id);
+    const proposal = this._normProposal(raw);
+    if (!proposal) return;
+
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
+      const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
+      if (!belongs) viewOnly = true;
+    }
+
+    const sv = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
+
+    sv('managePropId', proposal.id);
+
+    const user = Auth.getSession();
+    const role = user?.role || '';
+    const canEditProp = this._canEditNumeroValor(role);
+    const canPickVendor = this._canPickVendor(role);
+
+    document.querySelectorAll('.backoffice-edit-block').forEach(el => {
+      el.style.display = canEditProp ? '' : 'none';
+    });
+
+    const vendorBlock = document.getElementById('managePropVendorBlock');
+    if (vendorBlock) vendorBlock.style.display = canPickVendor ? '' : 'none';
+
+    if (canPickVendor) {
+      const vendorSel = document.getElementById('managePropVendor');
+      if (vendorSel) {
+        const scopeAdmin = this._proposalVendorScopeAdmin(user);
+        let vendors = await DB.getVendorsForSelect(scopeAdmin).catch(() => []);
+
+        const vid = proposal.vendorId || proposal.employee_id || '';
+        if (vid && !vendors.some(v => v.id === vid)) {
+          const current = await DB.getUser(vid).catch(() => null);
+          if (current) vendors = [current, ...vendors];
+        }
+
+        vendors.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        vendorSel.innerHTML = vendors.length
+          ? vendors.map(v => `<option value="${v.id}">${v.name || v.email || v.id}</option>`).join('')
+          : '<option value="">Nenhum vendedor encontrado</option>';
+        if (vid && vendors.some(v => v.id === vid)) vendorSel.value = vid;
+        else if (vendors.length) vendorSel.selectedIndex = 0;
+      }
+    }
+    sv('managePropNumeroEdit', proposal.numero);
+    const valEl = document.getElementById('managePropValorEdit');
+    if (valEl) valEl.value = proposal.valor || '';
+
+    const client = proposal.clientCpf ? await this._lookupClientByCpf(String(proposal.clientCpf).replace(/\D/g, '')) : null;
+    const detailEl = document.getElementById('managePropClientDetail');
+    if (detailEl) {
+      detailEl.style.display = '';
+      detailEl.innerHTML = '<strong style="display:block;margin-bottom:8px;">Dados cadastrais do cliente</strong>' +
+        this._renderManageClientDetail(client, proposal, !viewOnly);
+    }
+
+    const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
+    let clientInfo = `
+      <strong>Cliente:</strong> ${proposal.clientName} (CPF: ${proposal.clientCpf})<br>
+      <strong>Vendedor:</strong> ${canPickVendor ? '<span id="managePropVendorName">' + (proposal.vendorName || '—') + '</span>' : (proposal.vendorName || '—')}<br>
+      <strong>Produto:</strong> ${proposal.product || '—'} / ${proposal.convenio || '—'} / ${proposal.entidade || '—'}<br>
+      <strong>Nº Proposta:</strong> ${proposal.numero || '—'} &nbsp;|&nbsp;
+      <strong>Valor Bruto:</strong> ${fmtR(proposal.valor)} &nbsp;|&nbsp;
+      <strong>Tabela:</strong> ${proposal.tabela
+        ? `<span style="background:#3b82f620;color:#3b82f6;padding:1px 7px;border-radius:99px;font-weight:700;">${this._tabelaLabel(proposal.tabela)}</span>`
+        : `<span style="background:#f59e0b20;color:#f59e0b;padding:1px 7px;border-radius:99px;font-weight:700;">⏳ Aguardando análise</span>`}
+      &nbsp;|&nbsp;
+      <strong>Valor Final:</strong> <span style="color:var(--color-success);font-weight:700;">${proposal.tabela ? fmtR(proposal.valorFinal) : '—'}</span><br>
+      ${proposal.matricula ? `<strong>Matrícula:</strong> ${proposal.matricula} &nbsp;|&nbsp; <strong>Senha Contracheque:</strong> ${proposal.senhaContracheque || '—'} &nbsp;|&nbsp; <strong>Senha Consignação:</strong> ${proposal.senhaConsignacao || '—'}<br>` : ''}
+      ${proposal.protocolo ? `<strong>Nº Protocolo:</strong> ${proposal.protocolo}<br>` : ''}
+      ${proposal.bancoComprado ? `<strong>Banco comprado:</strong> ${proposal.bancoComprado}<br>` : ''}
+      ${proposal.bancoDigitado ? `<strong>Banco digitado:</strong> ${proposal.bancoDigitado}<br>` : ''}
+      ${this._vendorStage(proposal) ? `<strong>Situação (vendedor):</strong> ${this._labelEtapaVendedor(this._vendorStage(proposal))}<br>` : ''}
+      <strong>Obs:</strong> ${proposal.obs || '—'}
+    `;
+    const infoEl = document.getElementById('managePropClientInfo');
+    if (infoEl) infoEl.innerHTML = clientInfo;
+
+    // Seção Tabela/Financeiro
+    const fmtRaw = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '';
+    const brutoEl = document.getElementById('managePropValorBruto');
+    if (brutoEl) brutoEl.value = fmtRaw(proposal.valor);
+    this._fillTabelaSelect('managePropTabela', proposal.tabela || '');
+    // dispara cálculo visual
+    setTimeout(() => this.calcAdminValorFinal(), 50);
+
+    sv('managePropDivida', proposal.compraDivida);
+    this._initBankSelects({
+      bancoComprado: proposal.bancoComprado,
+      bancoDigitado: proposal.bancoDigitado,
+    });
+    sv('managePropBoleto', proposal.solicitouBoleto || proposal.solicitacaoBoleto);
+    sv('managePropValor', proposal.valor);
+    sv('managePropProtocolo', proposal.protocolo);
+    sv('managePropDataSol', proposal.dataSolicitacao);
+    sv('managePropBacen', proposal.bacen);
+    sv('managePropProtBacen', proposal.protocoloBacen);
+    sv('managePropDataBacen', proposal.dataSolicitacaoBacen);
+    sv('managePropAssinou', proposal.assinou);
+    sv('managePropStatusOp', proposal.statusOp || proposal.status);
+    sv('managePropPosVenda', proposal.posVenda);
+    sv('managePropNuvidio', proposal.nuvidio);
+    sv('managePropFases', proposal.fases);
+    sv('managePropStatus', proposal.status);
+    sv('managePropHistoryNote', '');
+
+    let histHtml = '';
+    if (proposal.history) {
+      proposal.history.forEach(h => {
+        histHtml += `
+          <div class="card" style="padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--color-primary);">
+            <div style="display:flex; justify-content:space-between; margin-bottom: 4px; font-size: 13px;">
+              <strong>${h.actorName}</strong>
+              <span style="color:var(--color-text-muted)">${new Date(h.date).toLocaleString()}</span>
+            </div>
+            <div style="font-size:14px;"><strong>${h.action}</strong></div>
+            ${h.note ? `<div style="margin-top: 6px; font-size:14px; background: var(--color-surface-2); padding: 8px; border-radius: 4px;">${h.note}</div>` : ''}
+          </div>
+        `;
+      });
+    }
+    document.getElementById('managePropHistoryList').innerHTML = histHtml;
+
+    this._adminEditCache[id] = { ...proposal };
+    const adminUploadSec = document.getElementById('managePropAnexosUpload');
+    if (adminUploadSec) adminUploadSec.style.display = viewOnly ? 'none' : '';
+    if (!viewOnly) {
+      this._setFolderContext('managePropAnexosFolders', 'manageProp');
+      this.resetAnexoFolders();
+    }
+    this._applyManageModalMode(viewOnly);
+    modal?.classList.add('open');
+    if (typeof hideLoading === 'function') hideLoading();
+
+    this._loadProposalAttachments(id, proposal, attEl, this._adminEditCache[id]);
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
+      modal?.classList.remove('open');
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  },
+
+  adminSave: async function() {
+    const user = Auth.getSession();
+    const gv = id => document.getElementById(id)?.value || '';
+    const id = gv('managePropId');
+    let proposal = this._adminEditCache[id] ? { ...this._adminEditCache[id] } : await DB.getProposal(id);
+    if (!proposal) return;
+    proposal = this._normProposal(proposal) || proposal;
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
+      const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
+      if (!belongs) {
+        const msg = 'Propostas internas SOU+BLU são somente leitura para a rede parceira.';
+        if (typeof showToast === 'function') showToast(msg, 'warning');
+        else alert(msg);
+        return;
+      }
+    }
+    if (!proposal.attachments) {
+      const attRow = await DB.getProposalAttachments(id);
+      if (attRow?.attachments != null) proposal.attachments = attRow.attachments;
+    }
+
+    const role = user?.role || '';
+
+    // Vendedor responsável (supervisor+)
+    if (this._canPickVendor(role)) {
+      const vendorSel = document.getElementById('managePropVendor');
+      if (vendorSel && vendorSel.value) {
+        proposal.vendorId = vendorSel.value;
+        proposal.vendor_id = vendorSel.value;
+        proposal.employee_id = vendorSel.value;
+        const opt = vendorSel.options[vendorSel.selectedIndex];
+        if (opt) {
+          proposal.vendorName = opt.textContent.trim();
+          proposal.vendor_name = opt.textContent.trim();
+        }
+      }
+    }
+
+    // ── Nº e Valor editados por supervisor+ ──────────────────────────
+    if (this._canEditNumeroValor(role)) {
+      const novoNumero = gv('managePropNumeroEdit');
+      const novoValor  = document.getElementById('managePropValorEdit')?.value;
+      if (novoNumero) proposal.numero = novoNumero;
+      if (novoValor !== '' && novoValor != null && !isNaN(parseFloat(novoValor))) {
+        proposal.valor = parseFloat(novoValor);
+        if (!proposal.tabela) proposal.valorFinal = proposal.valor;
+      }
+    }
+
+    // ── Tabela / Valor Final (definido pelo Financeiro) ──────────────
+    const novaTabela = gv('managePropTabela');
+    if (novaTabela) {
+      const pct = this._tabelaPct[novaTabela] ?? 1;
+      proposal.tabela     = novaTabela;
+      proposal.valorFinal = parseFloat(((proposal.valor||0) * pct).toFixed(2));
+      proposal.desconto   = parseFloat(((proposal.valor||0) - proposal.valorFinal).toFixed(2));
+    }
+
+    proposal.compraDivida    = gv('managePropDivida');
+    proposal.bancoComprado   = gv('managePropBanco');
+    proposal.bancoDigitado   = gv('managePropBancoDigitado');
+    proposal.solicitouBoleto = gv('managePropBoleto');
+    proposal.protocolo       = gv('managePropProtocolo');
+    proposal.dataSolicitacao = gv('managePropDataSol');
+    proposal.bacen           = gv('managePropBacen');
+    proposal.protocoloBacen  = gv('managePropProtBacen');
+    proposal.dataSolicitacaoBacen = gv('managePropDataBacen');
+    proposal.assinou         = gv('managePropAssinou');
+    const newStatusOp = gv('managePropStatusOp');
+    const oldStatus = proposal.status;
+    const newStatus = gv('managePropStatus') || proposal.status;
+    proposal.status = newStatus;
+    if (newStatusOp) {
+      proposal.statusOp = newStatusOp;
+    } else if (newStatus !== oldStatus) {
+      proposal.statusOp = newStatus;
+    } else {
+      proposal.statusOp = proposal.statusOp || proposal.status;
+    }
+    proposal.status_op = proposal.statusOp;
+    proposal.posVenda        = gv('managePropPosVenda');
+    proposal.nuvidio         = gv('managePropNuvidio');
+    proposal.fases           = gv('managePropFases');
+
+    const note = gv('managePropHistoryNote');
+
+    if (newStatus !== oldStatus || note || novaTabela) {
+       proposal.history = proposal.history || [];
+       let action = 'Atualização operacional';
+       if (newStatus !== oldStatus) action = `Status: [${oldStatus}] → [${newStatus}]`;
+       if (novaTabela && novaTabela !== (proposal._prevTabela || '')) {
+         const pctLabel = Math.round((this._tabelaPct[novaTabela]??1)*100);
+         action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
+       }
+       proposal.history.push({
+         date: new Date().toISOString(),
+         actorName: user.name,
+         action,
+         note: note
+       });
+    }
+
+    this._setFolderContext('managePropAnexosFolders', 'manageProp');
+    try {
+      const att = this._parseAttachments(proposal.attachments);
+      const uploaded = await this._collectAttachments(id);
+      Object.assign(att, uploaded);
+      proposal.attachments = att;
+    } catch (e) {
+      console.error('[adminSave] anexo', e);
+      alert('Erro ao processar anexo: ' + (e.message || 'tente de novo. Arquivos muito grandes podem falhar no modo local.'));
+      return;
+    }
+
+    if (typeof showLoading === 'function') showLoading('Salvando…');
+    try {
+      const becamePaid = String(oldStatus || '').toUpperCase() !== 'PAGO' && String(newStatus || '').toUpperCase() === 'PAGO';
+      if (becamePaid && typeof DB.awardRouletteOnProposalPaid === 'function') {
+        await DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null);
+      }
+      await this._saveProposalClientData(proposal, 'manage');
+      await DB.saveProposal(proposal);
+      if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
+      delete this._adminEditCache[id];
+      if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
+      else alert('Proposta atualizada!');
+      const modal = document.getElementById('manageProposalModal');
+      if (modal) modal.classList.remove('open');
+      this._adminList.page = 1;
+      await this.renderAdminList();
+    } catch (e) {
+      console.error('[adminSave]', e);
+      this._proposalSaveErrorNotify(e);
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  },
+
+  masterDeleteFromModal: function() {
+    const id = document.getElementById('managePropId')?.value;
+    if (!id) return;
+    this.masterDeleteProposal(id, document.getElementById('managePropNumeroEdit')?.value || id, true);
+  },
+
+  masterDeleteProposal: async function(id, label, fromModal) {
+    if (!this._canDeleteProposal()) {
+      alert('Sem permissão para excluir propostas.');
+      return;
+    }
+    const nome = label || id;
+    if (!confirm(`Excluir a proposta "${nome}" permanentemente?\n\nEsta ação não pode ser desfeita.`)) return;
+
+    if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
+    try {
+      await DB.deleteProposal(id);
+      delete this._adminEditCache[id];
+      delete this._employeeEditCache[id];
+      if (fromModal) closeModal('manageProposalModal');
+      if (typeof showToast === 'function') showToast('Proposta excluída.', 'success');
+      await this.renderAdminList();
+    } catch (e) {
+      console.error('[masterDeleteProposal]', e);
+      alert('Erro ao excluir proposta: ' + (e.message || 'tente novamente'));
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  }
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (window.Proposals) {
+    Proposals._initAnexoFolderDelegation();
+    Proposals._initStaticProposalSelects();
+    if (document.getElementById('propAnexosFolders')) {
+      Proposals._setFolderContext('propAnexosFolders', 'prop');
+      Proposals.initAnexoFolders();
+      Proposals._applyVendedorFormRules();
+    }
+  }
+});
