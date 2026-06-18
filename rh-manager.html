@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="../css/layout.css"/>
   <link rel="stylesheet" href="../css/store.css"/>
   <link rel="stylesheet" href="../css/withdrawal.css"/>
-  <link rel="stylesheet" href="../css/painel-sonhos.css?v=13"/>
+  <link rel="stylesheet" href="../css/painel-sonhos.css?v=19"/>
   <link rel="stylesheet" href="../css/folha-pagamento.css?v=3"/>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
   <style>
@@ -480,42 +480,60 @@
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span> Minha Conta
         </a>
 
-        <div class="nav-section-label">RH / Gestão de Pessoas</div>
-        
-        <a class="nav-item" data-tab="kanban" onclick="switchTab('kanban')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span> Esteira Contestação
+        <div class="nav-section-label juridico-section-label" style="display:none;">Jurídico</div>
+        <a class="nav-item juridico-nav" data-tab="contestacao" onclick="openJuridicoContestacao()" style="display:none;">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 10h14"/><path d="M5 14h14"/></svg></span> Esteira Contestação
         </a>
-        <a class="nav-item" data-tab="empresa" onclick="switchTab('empresa')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path><path d="M12 6h.01"></path><path d="M12 10h.01"></path><path d="M12 14h.01"></path><path d="M16 10h.01"></path><path d="M16 14h.01"></path><path d="M8 10h.01"></path><path d="M8 14h.01"></path></svg></span> Cadastrar Empresa
-        </a>
-        <a class="nav-item" data-tab="curriculo" onclick="switchTab('curriculo')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span> Cadastrar Currículo
-        </a>
-        <a class="nav-item" data-tab="cargo" onclick="switchTab('cargo')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg></span> Cadastrar Cargo
-        </a>
-        <a class="nav-item" data-tab="funcionario" onclick="switchTab('funcionario')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span> Cadastrar Funcionário
-        </a>
-        <a class="nav-item" data-tab="feedback" onclick="switchTab('feedback')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span> Feedbacks
-        </a>
-        <a class="nav-item" data-tab="justificativa" onclick="switchTab('justificativa')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Justificativa de Falta
-        </a>
-        <a class="nav-item" data-tab="punicao" onclick="switchTab('punicao')">
+        <a class="nav-item juridico-nav" data-tab="punicao" onclick="switchTab('punicao')" style="display:none;">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> Registro Punição
         </a>
-        <a class="nav-item" data-tab="demissao" onclick="switchTab('demissao')">
+        <a class="nav-item juridico-nav" data-tab="demissao" onclick="switchTab('demissao')" style="display:none;">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="17" y1="11" x2="22" y2="11"></line></svg></span> Demissão
         </a>
-        <a class="nav-item juridico-only" data-tab="chamados" onclick="openJuridicoChamados()" style="display:none;">
+        <a class="nav-item juridico-nav" data-tab="chamados" onclick="openJuridicoChamados()" style="display:none;">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span> Esteira Chamados
         </a>
-        <a class="nav-item" data-tab="relatorios" onclick="switchTab('relatorios')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span> Relatórios
+
+        <div class="nav-section-label rh-mgmt-label">RH</div>
+        <a class="nav-item rh-mgmt-only" data-tab="curriculo" onclick="switchTab('curriculo')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span> Cadastrar Currículo
         </a>
-        <a class="nav-item" data-tab="parceiro" onclick="switchTab('parceiro')">
+        <a class="nav-item rh-mgmt-only" data-tab="cargo" onclick="switchTab('cargo')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg></span> Cadastrar Cargo
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="funcionario" onclick="switchTab('funcionario')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span> Cadastrar Funcionário
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="justificativa" onclick="switchTab('justificativa')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Justificativa de Falta
+        </a>
+        <a class="nav-item rh-mgmt-only" onclick="openRhFolhaTab()">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span> Gerar Folha de Pagamento
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="punicao" onclick="switchTab('punicao')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> Registro Punição
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="demissao" onclick="switchTab('demissao')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><line x1="17" y1="11" x2="22" y2="11"></line></svg></span> Demissão
+        </a>
+
+        <div class="nav-section-label rh-mgmt-label">Gestão de Pessoas</div>
+        <a class="nav-item rh-mgmt-only" data-tab="kanban" onclick="switchTab('kanban')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg></span> Esteira Seletiva
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="empresa" onclick="switchTab('empresa')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path><path d="M12 6h.01"></path><path d="M12 10h.01"></path><path d="M12 14h.01"></path><path d="M16 10h.01"></path><path d="M16 14h.01"></path><path d="M8 10h.01"></path><path d="M8 14h.01"></path></svg></span> Cadastrar Empresa
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="feedback" onclick="switchTab('feedback')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span> Feedbacks
+        </a>
+        <a class="nav-item rh-mgmt-only" onclick="openRhRankingTab()">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg></span> Ranking Vendas
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="relatorios" onclick="switchTab('relatorios')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> Relatórios
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="parceiro" onclick="switchTab('parceiro')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span> Cadastrar Parceiro
         </a>
 
@@ -2241,7 +2259,7 @@
   <script charset="UTF-8" src="../js/config.js?v=14"></script>
   <script charset="UTF-8" src="../js/db.js?v=43"></script>
   <script charset="UTF-8" src="../js/fontedata.js?v=2"></script>
-  <script charset="UTF-8" src="../js/auth.js?v=5"></script>
+  <script charset="UTF-8" src="../js/auth.js?v=7"></script>
   <script charset="UTF-8" src="../js/ui.js?v=6"></script>
   <script charset="UTF-8" src="../js/partners-ui.js?v=5"></script>
   <script charset="UTF-8" src="../js/partners.js?v=2"></script>
@@ -2249,12 +2267,12 @@
   <script charset="UTF-8" src="../js/sales-ranking.js?v=2"></script>
   <script charset="UTF-8" src="../js/folha-pagamento.js?v=12"></script>
   <script charset="UTF-8" src="../js/rh-relatorios.js?v=10"></script>
-  <script charset="UTF-8" src="../js/painel-sonhos.js?v=13"></script>
+  <script charset="UTF-8" src="../js/painel-sonhos.js?v=19"></script>
   <script charset="UTF-8" src="../js/withdrawal-rules.js"></script>
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2"></script>
   <script charset="UTF-8" src="../js/profile.js?v=4"></script>
   <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
-  <script charset="UTF-8" src="../js/rh-manager.js?v=33"></script>
+  <script charset="UTF-8" src="../js/rh-manager.js?v=34"></script>
   <script charset="UTF-8" src="../js/rh-ops.js?v=12"></script>
 </body>
 </html>

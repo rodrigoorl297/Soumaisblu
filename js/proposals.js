@@ -38,7 +38,7 @@ window.Proposals = {
       titulo: '📋 Contracheque',
       folderIdSuffix: 'CC',
       grupoPrefix: 'contracheque_',
-      viewSeed: [{ key: 'contracheque_1', legado: ['paystub'] }],
+      viewSeed: [{ key: 'contracheque_1', legado: ['paystub', 'contracheque'] }],
     },
     {
       key: 'boleto',
@@ -46,8 +46,8 @@ window.Proposals = {
       folderIdSuffix: 'Bol',
       grupoPrefix: 'boleto_',
       viewSeed: [
-        { key: 'boleto_1', legado: ['boleto1'] },
-        { key: 'boleto_2', legado: ['boleto2'] },
+        { key: 'boleto_1', legado: ['boleto1', 'boleto_quitacao', 'boleto_quitacao_1'] },
+        { key: 'boleto_2', legado: ['boleto2', 'boleto_quitacao_2'] },
       ],
     },
     {
@@ -56,8 +56,8 @@ window.Proposals = {
       folderIdSuffix: 'Ext',
       grupoPrefix: 'extrato_',
       viewSeed: [
-        { key: 'extrato_1', legado: ['extrato1'] },
-        { key: 'extrato_2', legado: ['extrato2'] },
+        { key: 'extrato_1', legado: ['extrato1', 'extrato_consignacao', 'extrato_consignacao_1'] },
+        { key: 'extrato_2', legado: ['extrato2', 'extrato_consignacao_2'] },
       ],
     },
     {
@@ -462,7 +462,7 @@ window.Proposals = {
   _matchesVendorIdFilter: function(p, vendorId) {
     const want = String(vendorId || '').trim();
     if (!want) return true;
-    const primary = String(p.vendorId || p.vendor_id || p.employee_id || '').trim();
+    const primary = String(this._proposalVendorId(p) || '').trim();
     return primary === want;
   },
 
@@ -683,10 +683,51 @@ window.Proposals = {
     this._renderAnexoFolders();
   },
 
-  resetAnexoFolders: function() {
+  resetAnexoFolders: function(att) {
     this._customFolders = [];
     this._initDynamicFolderSlots();
+    if (att) this._syncAnexoSlotsFromAttachments(att);
     this._renderAnexoFolders();
+  },
+
+  /** Expande slots de upload conforme anexos já salvos (ex.: 3 contracheques). */
+  _syncAnexoSlotsFromAttachments: function(att) {
+    const parsed = this._parseAttachments(att);
+    if (!this._hasProposalAttachments(parsed)) return;
+
+    this._getFolderDefs().forEach((def) => {
+      const slots = this._folderDynamicSlots[def.key];
+      if (!slots) return;
+      const grupoSet = new Set(slots.map((s) => s.grupo));
+      const prefix = def.grupoPrefix;
+      const esc = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const numbered = [];
+
+      Object.keys(parsed).forEach((k) => {
+        if (k.endsWith('_nome') || k.endsWith('_pasta')) return;
+        const m = k.match(new RegExp('^' + esc + '(\\d+)$'));
+        if (m) numbered.push(parseInt(m[1], 10));
+      });
+
+      if (!numbered.length) return;
+      const maxN = Math.max(...numbered, slots.length);
+      while (slots.length < maxN) {
+        const n = slots.length + 1;
+        let slot;
+        if (def.initialSlots && n <= def.initialSlots.length) {
+          slot = { ...def.initialSlots[n - 1] };
+        } else {
+          slot = {
+            id: def.idPrefix + n,
+            grupo: prefix + n,
+          };
+        }
+        if (!grupoSet.has(slot.grupo)) {
+          slots.push(slot);
+          grupoSet.add(slot.grupo);
+        }
+      }
+    });
   },
 
   addFolderSlot: function(folderKey) {
@@ -898,6 +939,26 @@ window.Proposals = {
     }
   },
 
+  _isFinanceiroGestao: function() {
+    return !!(typeof window !== 'undefined' && window.SOUBLU_FINANCEIRO_PAGE
+      && document.getElementById('secManageProposals'));
+  },
+
+  _adminListColspan: function() {
+    return this._isFinanceiroGestao() ? 12 : 11;
+  },
+
+  _finGestaoActionBtns: function(id) {
+    const safeId = this._escAttr(id);
+    return `<button type="button" class="client-actions__btn" title="Baixa comissão" aria-label="Baixa comissão" onclick="FinPropostas.openProposalDrawer('${safeId}','comissao')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></button>`
+      + `<button type="button" class="client-actions__btn" title="Emitir prejuízo" aria-label="Emitir prejuízo" onclick="FinPropostas.openProposalDrawer('${safeId}','prejuizo')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></button>`
+      + `<button type="button" class="client-actions__btn" title="Debitar parceiro" aria-label="Debitar parceiro" onclick="FinPropostas.openProposalDrawer('${safeId}','debito')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg></button>`;
+  },
+
+  _finComissaoActionBtn: function(id) {
+    return this._finGestaoActionBtns(id);
+  },
+
   _escHtml: function(s) {
     return String(s ?? '')
       .replace(/&/g, '&amp;')
@@ -954,11 +1015,15 @@ window.Proposals = {
   },
 
   _parseAttachments: function(att) {
+    if (typeof DB !== 'undefined' && DB._parseProposalAttachments) {
+      return DB._parseProposalAttachments(att);
+    }
     if (!att) return {};
     if (typeof att === 'string') {
       try { return JSON.parse(att) || {}; } catch { return {}; }
     }
-    return att;
+    if (Array.isArray(att)) return {};
+    return att && typeof att === 'object' ? att : {};
   },
 
   _proposalSaveErrorMsg: function(err) {
@@ -995,6 +1060,7 @@ window.Proposals = {
 
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,
+  _attachmentLoadPromises: {},
 
   _normalizeAttachmentUrl: function(val) {
     if (val == null || val === '') return '';
@@ -1048,27 +1114,113 @@ window.Proposals = {
       this._renderProposalAttachments(p, attEl);
     };
 
-    const initial = this._parseAttachments(proposal?.attachments);
-    if (this._hasProposalAttachments(initial)) {
-      proposal.attachments = initial;
-      render(proposal);
-    } else if (attEl) {
-      attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Carregando anexos...</p>';
-    }
+    const job = (async () => {
+      const initial = this._parseAttachments(proposal?.attachments);
+      if (this._hasProposalAttachments(initial)) {
+        proposal.attachments = initial;
+        render(proposal);
+      } else if (attEl) {
+        attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Carregando anexos...</p>';
+      }
 
-    try {
-      const attRow = await DB.getProposalAttachments(id);
-      if (attRow?.attachments != null) {
-        proposal.attachments = this._parseAttachments(attRow.attachments);
-        if (cacheObj) cacheObj.attachments = proposal.attachments;
+      try {
+        const attRow = await DB.getProposalAttachments(id);
+        if (attRow?.attachments != null) {
+          proposal.attachments = this._parseAttachments(attRow.attachments);
+          if (cacheObj) cacheObj.attachments = proposal.attachments;
+        }
+        render(proposal);
+        const uploadWrap = document.getElementById(this._folderRootId)?.closest('[id$="AnexosUpload"]');
+        if (uploadWrap && uploadWrap.style.display !== 'none') {
+          this._syncAnexoSlotsFromAttachments(proposal.attachments);
+          this._renderAnexoFolders();
+        }
+        this._markSavedAttachmentsOnUploadForm(proposal.attachments);
+      } catch (err) {
+        console.warn('[Proposals] anexos:', err);
+        if (!this._hasProposalAttachments(proposal?.attachments) && attEl) {
+          attEl.innerHTML = '<p style="color:var(--color-danger);font-size:13px;">Erro ao carregar anexos.</p>';
+        }
       }
-      render(proposal);
-    } catch (err) {
-      console.warn('[Proposals] anexos:', err);
-      if (!this._hasProposalAttachments(proposal?.attachments) && attEl) {
-        attEl.innerHTML = '<p style="color:var(--color-danger);font-size:13px;">Erro ao carregar anexos.</p>';
+    })();
+
+    this._attachmentLoadPromises[id] = job;
+    try {
+      await job;
+    } finally {
+      delete this._attachmentLoadPromises[id];
+    }
+  },
+
+  _findSavedAttachmentForGrupo: function(att, grupo) {
+    const parsed = this._parseAttachments(att);
+    const tryKey = (k) => {
+      if (parsed[k] == null || parsed[k] === '') return null;
+      const url = this._normalizeAttachmentUrl(parsed[k]);
+      if (!this._isValidAttachmentUrl(url)) return null;
+      return { url, nome: parsed[k + '_nome'] || k };
+    };
+    let doc = tryKey(grupo);
+    if (doc) return doc;
+    for (const cat of (this._ANEXO_CATEGORIES || [])) {
+      for (const seed of (cat.viewSeed || [])) {
+        if (seed.key !== grupo && !(seed.legado || []).includes(grupo)) continue;
+        doc = tryKey(seed.key);
+        if (doc) return doc;
+        for (const lk of (seed.legado || [])) {
+          doc = tryKey(lk);
+          if (doc) return doc;
+        }
       }
     }
+    return null;
+  },
+
+  _markSavedAttachmentsOnUploadForm: function(att) {
+    const defs = this._getAllAnexoFieldDefs();
+    defs.forEach(({ id, grupo }) => {
+      const doc = this._findSavedAttachmentForGrupo(att, grupo);
+      const lbl = document.getElementById(id + 'Label');
+      if (!lbl) return;
+      if (!doc?.url) {
+        if (!lbl.textContent || lbl.textContent.trim() === '-' || lbl.textContent.trim() === '') {
+          lbl.innerHTML = '<span style="color:#999;">-</span>';
+        }
+        return;
+      }
+      const name = doc.nome || 'Arquivo salvo';
+      const displayUrl = this._toDisplayUrl(doc.url);
+      lbl.innerHTML =
+        `<span style="color:var(--color-success);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;display:inline-block;vertical-align:middle;" title="${this._escAttr(name)}">✓ ${this._escHtml(name)}</span>` +
+        (this._isValidAttachmentUrl(displayUrl)
+          ? `<a href="${this._escAttr(displayUrl)}" target="_blank" rel="noopener" title="Visualizar salvo" style="margin-left:6px;font-size:18px;text-decoration:none;vertical-align:middle;">👁</a>`
+          : '');
+    });
+  },
+
+  _prepareAttachmentsForSave: async function(proposalId, proposal) {
+    if (this._attachmentLoadPromises[proposalId]) {
+      try { await this._attachmentLoadPromises[proposalId]; } catch { /* ignore */ }
+    }
+    let base = this._parseAttachments(proposal.attachments);
+    if (!this._hasProposalAttachments(base)) {
+      try {
+        const attRow = await DB.getProposalAttachments(proposalId);
+        if (attRow?.attachments != null) {
+          base = this._parseAttachments(attRow.attachments);
+        }
+      } catch (e) {
+        console.warn('[Proposals] anexos save:', e);
+      }
+    }
+    if (!this._hasProposalAttachments(base)) {
+      try {
+        const full = await DB.getProposal(proposalId);
+        if (full?.attachments) base = this._parseAttachments(full.attachments);
+      } catch (_) { /* noop */ }
+    }
+    const uploaded = await this._collectAttachments(proposalId);
+    return { ...base, ...uploaded };
   },
 
   _dataUrlToBlobUrl: function(dataUrl) {
@@ -1231,6 +1383,12 @@ window.Proposals = {
     return (list || []).slice().sort((a, b) => this._proposalSortAt(b) - this._proposalSortAt(a));
   },
 
+  _cleanProposalDate: function(val) {
+    const s = String(val || '').trim();
+    if (!s || /^0000-00-00/.test(s)) return '';
+    return s.length >= 10 ? s.slice(0, 10) : s;
+  },
+
   _obsLineValue: function(obs, label) {
     const lines = String(obs || '').split(/\r?\n/);
     const prefix = String(label || '').trim() + ':';
@@ -1276,6 +1434,9 @@ window.Proposals = {
   },
 
   _proposalVendorId: function(p) {
+    if (typeof DB !== 'undefined' && typeof DB.proposalVendorId === 'function') {
+      return DB.proposalVendorId(p);
+    }
     return p?.vendorId || p?.vendor_id || p?.employee_id || '';
   },
 
@@ -1422,7 +1583,7 @@ window.Proposals = {
     const row = (label, val) => val ? `<div><strong>${label}:</strong> ${this._escHtml(val)}</div>` : '';
     if (client._fromProposalOnly) {
       return [
-        `<p style="color:var(--color-text-muted);margin:0 0 8px;font-size:13px;">Dados informados na proposta (cadastro completo não localizado).</p>`,
+        `<p style="color:var(--color-warning);margin:0 0 8px;font-size:13px;font-weight:600;">Cliente não está no cadastro — preencha telefone, e-mail e endereço abaixo e salve a proposta.</p>`,
         row('Nome completo', client.name),
         row('CPF', client.cpf),
       ].filter(Boolean).join('');
@@ -1471,9 +1632,15 @@ window.Proposals = {
     ).join('');
     const p = prefix;
 
+    const fromProposalOnly = !!client._fromProposalOnly;
+    const proposalHint = fromProposalOnly
+      ? '<p style="color:var(--color-warning);margin:0 0 8px;font-size:13px;font-weight:600;">Cliente não está no cadastro — complete telefone, e-mail e endereço e salve a proposta.</p>'
+      : '';
+
     return `
       <input type="hidden" id="${p}ClientOrigCpf" value="${this._escAttr(cpf)}"/>
       <div class="prop-client-edit" style="display:grid;gap:10px;">
+        ${proposalHint}
         <p style="color:var(--color-text-muted);margin:0 0 4px;font-size:13px;">${editable ? 'Altere os dados do cliente abaixo. As mudanças serão salvas na proposta e no cadastro do cliente (quando existir).' : 'Dados cadastrais do cliente.'}</p>
         <div class="form-group" style="margin:0;">
           <label style="font-size:11px;">Nome completo</label>
@@ -2141,9 +2308,11 @@ window.Proposals = {
     const tbody = document.getElementById('manageProposalsTbody');
     if (!tbody) return;
 
-    const emptyMsg = (q) => `<tr><td colspan="11" style="text-align:center;color:var(--color-text-muted);padding:24px;">${q ? 'Nenhuma proposta encontrada para esta busca.' : 'Nenhuma proposta cadastrada.'}</td></tr>`;
+    const colspan = this._adminListColspan();
+    const finGestao = this._isFinanceiroGestao();
+    const emptyMsg = (q) => `<tr><td colspan="${colspan}" style="text-align:center;color:var(--color-text-muted);padding:24px;">${q ? 'Nenhuma proposta encontrada para esta busca.' : 'Nenhuma proposta cadastrada.'}</td></tr>`;
 
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:var(--color-text-muted);padding:24px;">Carregando propostas...</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--color-text-muted);padding:24px;">Carregando propostas...</td></tr>`;
 
     try {
       const { proposals: allFiltered, q, vendorId } = await this._fetchAdminProposalsFiltered();
@@ -2158,6 +2327,18 @@ window.Proposals = {
         tbody.innerHTML = emptyMsg(q || vendorId);
         this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
         return;
+      }
+
+      let baixaMap = {};
+      let prejuizoMap = {};
+      let debitoMap = {};
+      if (finGestao && window.FinPropostas?._loadAllOpsMaps) {
+        const maps = await FinPropostas._loadAllOpsMaps();
+        baixaMap = maps.baixa || {};
+        prejuizoMap = maps.prejuizo || {};
+        debitoMap = maps.debito || {};
+      } else if (finGestao && window.FinPropostas?._loadBaixaOpsMap) {
+        baixaMap = await FinPropostas._loadBaixaOpsMap();
       }
 
       const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
@@ -2186,7 +2367,11 @@ window.Proposals = {
           ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
           : '';
         const canEditRow = !partnerRoot || isPartnerRow;
-        html += `<tr${rowClass ? ` class="${rowClass}"` : ''}>
+        const comissaoCell = finGestao && window.FinPropostas?.operacaoChipsHtml
+          ? `<td class="fin-comissao-col" style="cursor:pointer;" onclick="FinPropostas.openProposalDrawer('${safeId}','dados')" title="Abrir operações financeiras">${FinPropostas.operacaoChipsHtml(p, { baixa: baixaMap[String(p.id)], prejuizo: prejuizoMap[String(p.id)], debito: debitoMap[String(p.id)] })}</td>`
+          : '';
+        const finAction = finGestao ? this._finComissaoActionBtn(p.id) : '';
+        html += `<tr${rowClass ? ` class="${rowClass}"` : ''}${finGestao ? ` style="cursor:pointer;" onclick="if(!event.target.closest('.client-actions,.fin-comissao-col'))FinPropostas.openProposalDrawer('${safeId}','dados')"` : ''}>
             <td>${partnerBadge}<strong>${p.numero || p.id}</strong></td>
             <td>${p.vendorName || '—'}</td>
             <td>${p.clientName || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.clientCpf || ''}</div></td>
@@ -2197,7 +2382,8 @@ window.Proposals = {
             <td><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></td>
             <td>${this._propDateStr(p)}</td>
             <td><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
-            <td class="td-proposal-actions">${this.actionsRowHtml(p.id, {
+            ${comissaoCell}
+            <td class="td-proposal-actions" onclick="event.stopPropagation()">${finAction}${this.actionsRowHtml(p.id, {
               canEdit: canEditRow,
               canDelete: canDelete && canEditRow,
               label: p.numero || p.clientName || p.id,
@@ -2209,7 +2395,7 @@ window.Proposals = {
     } catch (e) {
       console.error('[Proposals] renderAdminList:', e);
       const msg = (e && e.message) ? String(e.message).slice(0, 200) : 'Erro desconhecido';
-      tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:var(--color-danger);padding:24px;">Erro ao carregar propostas.<br><small style="opacity:.85;">${this._escHtml(msg)}</small><br><button type="button" class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="Proposals.renderAdminList()">Tentar novamente</button></td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="${this._adminListColspan()}" style="text-align:center;color:var(--color-danger);padding:24px;">Erro ao carregar propostas.<br><small style="opacity:.85;">${this._escHtml(msg)}</small><br><button type="button" class="btn btn-outline btn-sm" style="margin-top:10px;" onclick="Proposals.renderAdminList()">Tentar novamente</button></td></tr>`;
     }
   },
 
@@ -2427,7 +2613,7 @@ window.Proposals = {
       if (uploadSec) uploadSec.style.display = viewOnly ? 'none' : '';
       if (!viewOnly) {
         this._setFolderContext('empPropAnexosFolders', 'empProp');
-        this.resetAnexoFolders();
+        this.resetAnexoFolders(proposal.attachments);
         this._initStaticProposalSelects();
       }
 
@@ -2437,7 +2623,7 @@ window.Proposals = {
           <div class="card" style="padding:12px;margin-bottom:10px;border-left:4px solid var(--color-primary);">
             <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:13px;">
               <strong>${this._escHtml(h.actorName)}</strong>
-              <span style="color:var(--color-text-muted)">${new Date(h.date).toLocaleString()}</span>
+              <span style="color:var(--color-text-muted)">${typeof formatDateTime === 'function' ? formatDateTime(h.date) : new Date(h.date).toLocaleString('pt-BR')}</span>
             </div>
             <div style="font-size:14px;"><strong>${this._escHtml(h.action)}</strong></div>
             ${h.note ? `<div style="margin-top:6px;font-size:14px;background:var(--color-surface-2);padding:8px;border-radius:4px;">${this._escHtml(h.note)}</div>` : ''}
@@ -2449,7 +2635,7 @@ window.Proposals = {
 
       if (typeof hideLoading === 'function') hideLoading();
 
-      this._loadProposalAttachments(id, proposal, attEl, this._employeeEditCache[id]);
+      await this._loadProposalAttachments(id, proposal, attEl, this._employeeEditCache[id]);
     } catch (e) {
       console.error(e);
       alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
@@ -2465,7 +2651,7 @@ window.Proposals = {
     const id = gv('empPropId');
     let proposal = this._employeeEditCache[id] ? { ...this._employeeEditCache[id] } : await DB.getProposal(id);
     if (!proposal) return;
-    if (!proposal.attachments) {
+    if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
       const attRow = await DB.getProposalAttachments(id);
       if (attRow?.attachments != null) proposal.attachments = attRow.attachments;
     }
@@ -2499,11 +2685,8 @@ window.Proposals = {
     }
 
     this._setFolderContext('empPropAnexosFolders', 'empProp');
-    const att = this._parseAttachments(proposal.attachments);
     try {
-      const uploaded = await this._collectAttachments(id);
-      Object.assign(att, uploaded);
-      proposal.attachments = att;
+      proposal.attachments = await this._prepareAttachmentsForSave(id, proposal);
     } catch (e) {
       console.error('[employeeSave] anexo', e);
       alert('Erro ao processar anexo: ' + (e.message || 'tente de novo. Arquivos muito grandes podem falhar no modo local.'));
@@ -2682,10 +2865,10 @@ window.Proposals = {
     sv('managePropBoleto', proposal.solicitouBoleto || proposal.solicitacaoBoleto);
     sv('managePropValor', proposal.valor);
     sv('managePropProtocolo', proposal.protocolo);
-    sv('managePropDataSol', proposal.dataSolicitacao);
+    sv('managePropDataSol', this._cleanProposalDate(proposal.dataSolicitacao));
     sv('managePropBacen', proposal.bacen);
     sv('managePropProtBacen', proposal.protocoloBacen);
-    sv('managePropDataBacen', proposal.dataSolicitacaoBacen);
+    sv('managePropDataBacen', this._cleanProposalDate(proposal.dataSolicitacaoBacen));
     sv('managePropAssinou', proposal.assinou);
     sv('managePropStatusOp', proposal.statusOp || proposal.status);
     sv('managePropPosVenda', proposal.posVenda);
@@ -2701,7 +2884,7 @@ window.Proposals = {
           <div class="card" style="padding: 12px; margin-bottom: 10px; border-left: 4px solid var(--color-primary);">
             <div style="display:flex; justify-content:space-between; margin-bottom: 4px; font-size: 13px;">
               <strong>${h.actorName}</strong>
-              <span style="color:var(--color-text-muted)">${new Date(h.date).toLocaleString()}</span>
+              <span style="color:var(--color-text-muted)">${typeof formatDateTime === 'function' ? formatDateTime(h.date) : new Date(h.date).toLocaleString('pt-BR')}</span>
             </div>
             <div style="font-size:14px;"><strong>${h.action}</strong></div>
             ${h.note ? `<div style="margin-top: 6px; font-size:14px; background: var(--color-surface-2); padding: 8px; border-radius: 4px;">${h.note}</div>` : ''}
@@ -2716,13 +2899,13 @@ window.Proposals = {
     if (adminUploadSec) adminUploadSec.style.display = viewOnly ? 'none' : '';
     if (!viewOnly) {
       this._setFolderContext('managePropAnexosFolders', 'manageProp');
-      this.resetAnexoFolders();
+      this.resetAnexoFolders(proposal.attachments);
     }
     this._applyManageModalMode(viewOnly);
     modal?.classList.add('open');
     if (typeof hideLoading === 'function') hideLoading();
 
-    this._loadProposalAttachments(id, proposal, attEl, this._adminEditCache[id]);
+    await this._loadProposalAttachments(id, proposal, attEl, this._adminEditCache[id]);
     } catch (e) {
       console.error(e);
       alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
@@ -2747,7 +2930,7 @@ window.Proposals = {
         return;
       }
     }
-    if (!proposal.attachments) {
+    if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
       const attRow = await DB.getProposalAttachments(id);
       if (attRow?.attachments != null) proposal.attachments = attRow.attachments;
     }
@@ -2835,10 +3018,7 @@ window.Proposals = {
 
     this._setFolderContext('managePropAnexosFolders', 'manageProp');
     try {
-      const att = this._parseAttachments(proposal.attachments);
-      const uploaded = await this._collectAttachments(id);
-      Object.assign(att, uploaded);
-      proposal.attachments = att;
+      proposal.attachments = await this._prepareAttachmentsForSave(id, proposal);
     } catch (e) {
       console.error('[adminSave] anexo', e);
       alert('Erro ao processar anexo: ' + (e.message || 'tente de novo. Arquivos muito grandes podem falhar no modo local.'));

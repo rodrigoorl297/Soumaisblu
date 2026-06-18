@@ -80,7 +80,9 @@ function _rhNormProposal(p) {
     product: p.product || p.produto || '—',
     convenio: p.convenio || '—',
     status: p.status || '—',
-    valor: p.valor_final ?? p.valorFinal ?? p.valor ?? 0,
+    valor: (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function')
+      ? DB.proposalAmount(p)
+      : (p.valorFinal ?? p.valor_final ?? p.valor ?? 0),
     created_at: p.created_at || p.createdAt || p.updated_at || '',
   };
 }

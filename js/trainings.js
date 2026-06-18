@@ -204,8 +204,15 @@
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'nav-item trainings-nav';
-        btn.dataset.section = 'secTrainings';
         btn.innerHTML = `${navIconHtml('book')}<span class="nav-label">Treinamentos</span><span class="nav-badge trainings-badge" id="trainingsBadge" style="display:none;">0</span>`;
+        btn.onclick = () => {
+          const href = typeof Auth !== 'undefined' && Auth.treinamentosPageHrefFresh
+            ? Auth.treinamentosPageHrefFresh()
+            : (typeof Auth !== 'undefined' && Auth.treinamentosPageHref
+              ? Auth.treinamentosPageHref()
+              : 'pages/treinamentos.html');
+          window.location.href = href;
+        };
         profBtn.parentNode.insertBefore(btn, profBtn);
         const navCfg = window.__ADMIN_NAV_CFG__;
         if (navCfg && navCfg.canTreinamentos === false) btn.style.display = 'none';

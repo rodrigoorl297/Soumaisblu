@@ -1,117 +1,55 @@
 /* ═══════════════════════════════════════════════════════════════
-   SOU+BLU — Painel dos Sonhos · Premium Dream Board UI
-   Glassmorphism · deep blue / purple / soft gold
+   SOU+BLU — Painel dos Sonhos · Corporate clean UI
+   Navy / slate / white — alinhado à marca SOU+BLU
    ═══════════════════════════════════════════════════════════════ */
 
 .painel-sonhos-wrap {
-  --ps-blue-deep: #0b1224;
-  --ps-blue: #1e3a8a;
-  --ps-indigo: #4338ca;
-  --ps-purple: #6d28d9;
-  --ps-violet: #7c3aed;
-  --ps-gold: #f5c451;
-  --ps-gold-soft: #fde68a;
-  --ps-glass: rgba(255, 255, 255, 0.08);
-  --ps-glass-strong: rgba(255, 255, 255, 0.14);
-  --ps-glass-border: rgba(255, 255, 255, 0.22);
-  --ps-text: #f8fafc;
-  --ps-text-muted: rgba(248, 250, 252, 0.72);
-  --ps-shadow: 0 24px 48px rgba(8, 12, 28, 0.35);
-  --ps-radius: 20px;
-  --ps-radius-sm: 14px;
+  --ps-navy: #1e3a5f;
+  --ps-blue: #2563eb;
+  --ps-blue-soft: #dbeafe;
+  --ps-slate: #334155;
+  --ps-muted: #64748b;
+  --ps-border: #e2e8f0;
+  --ps-surface: #ffffff;
+  --ps-bg: #f8fafc;
+  --ps-gold: #d97706;
+  --ps-gold-soft: #f59e0b;
+  --ps-text: #0f172a;
+  --ps-text-muted: #64748b;
+  --ps-shadow: 0 1px 3px rgba(15, 23, 42, 0.08), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --ps-radius: 16px;
+  --ps-radius-sm: 12px;
   position: relative;
-  isolation: isolate;
   font-family: 'Barlow', var(--font-body, system-ui, sans-serif);
   color: var(--ps-text);
-  border-radius: calc(var(--ps-radius) + 4px);
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 120% 80% at 10% -10%, rgba(124, 58, 237, 0.45), transparent 50%),
-    radial-gradient(ellipse 90% 70% at 95% 5%, rgba(37, 99, 235, 0.4), transparent 45%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(245, 196, 81, 0.18), transparent 55%),
-    linear-gradient(145deg, #0f172a 0%, #1e1b4b 38%, #312e81 68%, #1e3a8a 100%);
-  box-shadow: var(--ps-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  padding: 28px 24px 32px;
+  border-radius: var(--ps-radius);
+  background: var(--ps-bg);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+  padding: 20px;
   margin: 0 0 8px;
 }
 
 .painel-sonhos-wrap::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px),
-    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px);
-  background-size: 48px 48px, 64px 64px;
-  pointer-events: none;
-  opacity: 0.6;
+  display: none;
 }
 
 /* ── Hero ── */
 .painel-sonhos-hero {
   position: relative;
-  margin-bottom: 28px;
-  padding: 28px 28px 24px;
+  margin-bottom: 20px;
+  padding: 24px 28px;
   border-radius: var(--ps-radius);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.04));
-  border: 1px solid var(--ps-glass-border);
-  backdrop-filter: blur(20px) saturate(160%);
-  -webkit-backdrop-filter: blur(20px) saturate(160%);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  border: none;
+  box-shadow: 0 4px 16px rgba(30, 58, 95, 0.2);
   overflow: hidden;
+  color: #fff;
 }
 
-.painel-sonhos-hero__orbs {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  overflow: hidden;
-}
-
-.painel-sonhos-hero__orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(40px);
-  opacity: 0.55;
-  animation: psOrbFloat 12s ease-in-out infinite;
-}
-
-.painel-sonhos-hero__orb--1 {
-  width: 180px; height: 180px;
-  top: -40px; right: 8%;
-  background: rgba(124, 58, 237, 0.5);
-}
-
-.painel-sonhos-hero__orb--2 {
-  width: 120px; height: 120px;
-  bottom: -20px; left: 12%;
-  background: rgba(245, 196, 81, 0.35);
-  animation-delay: -4s;
-}
-
-.painel-sonhos-hero__orb--3 {
-  width: 90px; height: 90px;
-  top: 40%; right: 35%;
-  background: rgba(59, 130, 246, 0.4);
-  animation-delay: -8s;
-}
-
-@keyframes psOrbFloat {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(8px, -12px) scale(1.05); }
-}
-
+.painel-sonhos-hero__orbs,
 .painel-sonhos-hero__stars {
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(1.5px 1.5px at 15% 25%, rgba(255, 255, 255, 0.9), transparent),
-    radial-gradient(1px 1px at 45% 15%, rgba(255, 255, 255, 0.7), transparent),
-    radial-gradient(1.5px 1.5px at 75% 35%, rgba(245, 196, 81, 0.9), transparent),
-    radial-gradient(1px 1px at 88% 70%, rgba(255, 255, 255, 0.6), transparent),
-    radial-gradient(1px 1px at 30% 80%, rgba(255, 255, 255, 0.5), transparent);
-  opacity: 0.8;
-  pointer-events: none;
+  display: none;
 }
 
 .painel-sonhos-hero__content {
@@ -138,15 +76,10 @@
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  background: linear-gradient(135deg, rgba(245, 196, 81, 0.25), rgba(245, 196, 81, 0.08));
-  border: 1px solid rgba(245, 196, 81, 0.45);
-  color: var(--ps-gold-soft);
-  box-shadow: 0 4px 16px rgba(245, 196, 81, 0.15);
-}
-
-.painel-sonhos-hero__badge-icon {
-  font-size: 14px;
-  line-height: 1;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  box-shadow: none;
 }
 
 .painel-sonhos-hero__eyebrow {
@@ -155,8 +88,8 @@
   font-weight: 700;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--ps-gold);
-  opacity: 0.95;
+  color: rgba(255, 255, 255, 0.85);
+  opacity: 1;
 }
 
 .painel-sonhos-hero__greeting {
@@ -166,10 +99,10 @@
   font-size: clamp(1.75rem, 4vw, 2.35rem);
   line-height: 1.15;
   letter-spacing: -0.02em;
-  background: linear-gradient(135deg, #fff 0%, #e0e7ff 45%, var(--ps-gold-soft) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #fff;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
 }
 
 .painel-sonhos-hero__sub {
@@ -177,20 +110,21 @@
   max-width: 52ch;
   font-size: 15px;
   line-height: 1.55;
-  color: var(--ps-text-muted);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .painel-sonhos-hero__sub:first-of-type {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: #fff;
   margin-bottom: 8px;
 }
 
 .painel-sonhos-hero__sub--muted {
   font-size: 14px;
-  opacity: 0.88;
+  opacity: 0.85;
   margin-bottom: 20px;
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .painel-sonhos-hero__kpis {
@@ -203,17 +137,15 @@
 .painel-sonhos-kpi {
   padding: 14px 16px;
   border-radius: var(--ps-radius-sm);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: transform 0.2s, border-color 0.2s;
 }
 
 .painel-sonhos-kpi:hover {
   transform: translateY(-2px);
-  border-color: rgba(245, 196, 81, 0.35);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  border-color: rgba(255, 255, 255, 0.35);
+  box-shadow: none;
 }
 
 .painel-sonhos-kpi strong {
@@ -232,14 +164,14 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--ps-text-muted);
+  color: rgba(255, 255, 255, 0.8);
 }
 
 .painel-sonhos-kpi--gold strong {
-  background: linear-gradient(135deg, var(--ps-gold-soft), var(--ps-gold));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: #fde68a;
+  background: none;
+  -webkit-background-clip: unset;
+  background-clip: unset;
 }
 
 .painel-sonhos-hero__meta {
@@ -254,27 +186,22 @@
 
 .painel-sonhos-hero__dot { opacity: 0.5; }
 
-/* ── Layout grid ── */
-.painel-sonhos-grid {
-  display: grid;
-  grid-template-columns: 1fr minmax(280px, 340px);
-  gap: 20px;
+/* ── Layout: mural full width ── */
+.painel-sonhos-board-wrap {
   position: relative;
   z-index: 1;
 }
 
-@media (max-width: 960px) {
-  .painel-sonhos-grid { grid-template-columns: 1fr; }
+.painel-sonhos-grid {
+  display: block;
 }
 
 /* ── Glass panels (override .card inside wrap) ── */
 .painel-sonhos-wrap .card {
-  background: linear-gradient(160deg, rgba(255, 255, 255, 0.11), rgba(255, 255, 255, 0.05)) !important;
-  border: 1px solid var(--ps-glass-border) !important;
+  background: var(--ps-surface) !important;
+  border: 1px solid var(--ps-border) !important;
   border-radius: var(--ps-radius) !important;
-  backdrop-filter: blur(18px) saturate(150%);
-  -webkit-backdrop-filter: blur(18px) saturate(150%);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) !important;
   color: var(--ps-text);
 }
 
@@ -296,7 +223,7 @@
   font-family: 'Nunito', sans-serif;
   font-weight: 800;
   font-size: 1.25rem;
-  color: #fff;
+  color: var(--ps-navy);
 }
 
 .painel-sonhos-board__sub {
@@ -315,8 +242,8 @@
 .painel-sonhos-filter {
   padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--ps-border);
+  background: var(--ps-surface);
   color: var(--ps-text-muted);
   font-size: 12px;
   font-weight: 700;
@@ -325,15 +252,16 @@
 }
 
 .painel-sonhos-filter:hover {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
+  background: var(--ps-bg);
+  color: var(--ps-navy);
+  border-color: #cbd5e1;
 }
 
 .painel-sonhos-filter.active {
-  background: linear-gradient(135deg, rgba(124, 58, 237, 0.5), rgba(59, 130, 246, 0.4));
-  border-color: rgba(255, 255, 255, 0.3);
+  background: var(--ps-navy);
+  border-color: var(--ps-navy);
   color: #fff;
-  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.35);
+  box-shadow: none;
 }
 
 /* ── Vision grid (achievement cards) ── */
@@ -347,21 +275,21 @@
   position: relative;
   border-radius: var(--ps-radius-sm);
   overflow: hidden;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
-  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s;
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s;
 }
 
 .painel-sonho-vision-card:hover {
-  transform: translateY(-4px) scale(1.01);
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(245, 196, 81, 0.2);
-  border-color: rgba(255, 255, 255, 0.22);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.1);
+  border-color: #cbd5e1;
 }
 
 .painel-sonho-vision-card.is-done {
-  border-color: rgba(245, 196, 81, 0.45);
-  box-shadow: 0 12px 32px rgba(245, 196, 81, 0.12);
+  border-color: #fcd34d;
+  box-shadow: 0 4px 16px rgba(217, 119, 6, 0.1);
 }
 
 .painel-sonho-vision-card__media {
@@ -381,13 +309,24 @@
   transition: transform 0.4s ease;
 }
 
-.painel-sonho-vision-card__media.is-broken {
-  cursor: default;
-  background: linear-gradient(145deg, rgba(67, 56, 202, 0.25), rgba(30, 58, 138, 0.2));
+.painel-sonho-vision-card__media.has-photo {
+  background: #f1f5f9;
 }
 
-.painel-sonho-vision-card__media.is-broken .painel-sonho-vision-card__shine {
-  display: none;
+.painel-sonho-vision-card__media.has-photo .painel-sonho-vision-card__placeholder {
+  display: none !important;
+}
+
+.painel-sonho-vision-card__media.is-broken .painel-sonho-vision-card__placeholder {
+  display: flex !important;
+}
+
+.painel-sonho-vision-card__shine {
+  display: none !important;
+}
+
+.painel-sonho-vision-card.has-photo:not(.is-broken) .painel-sonho-vision-card__placeholder {
+  display: none !important;
 }
 
 .painel-sonho-vision-card__placeholder {
@@ -400,9 +339,11 @@
   gap: 8px;
   padding: 20px;
   text-align: center;
-  background: linear-gradient(145deg, rgba(15, 23, 42, 0.55), rgba(30, 27, 75, 0.65));
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: linear-gradient(145deg, #f1f5f9, #e2e8f0);
+}
+
+.painel-sonho-vision-card__placeholder[hidden] {
+  display: none !important;
 }
 
 .painel-sonho-photo-btn {
@@ -457,26 +398,27 @@
 }
 
 .painel-sonhos-cadastrar-btn {
+  margin-left: auto;
   padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid rgba(245, 196, 81, 0.45);
-  background: rgba(245, 196, 81, 0.12);
-  color: var(--ps-gold-soft);
+  border-radius: 8px;
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s, border-color 0.2s, transform 0.2s;
+  border-color: var(--ps-navy) !important;
+  color: var(--ps-navy) !important;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 
 .painel-sonhos-cadastrar-btn:hover {
-  background: rgba(245, 196, 81, 0.22);
-  border-color: var(--ps-gold);
-  transform: translateY(-1px);
+  background: var(--ps-navy) !important;
+  color: #fff !important;
+  border-color: var(--ps-navy) !important;
+  transform: none;
 }
 
 .painel-sonhos-form-card.is-highlight {
   animation: psFormPulse 1.2s ease 2;
-  box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.55), 0 16px 40px rgba(245, 196, 81, 0.15);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35), 0 8px 24px rgba(30, 58, 95, 0.1);
 }
 
 .painel-sonhos-form-card__edit-hint {
@@ -486,35 +428,302 @@
 }
 
 .painel-sonhos-form-card__edit-hint strong {
-  color: #fff;
+  color: var(--ps-navy);
 }
 
 .painel-sonhos-form__actions {
+  display: none;
+}
+
+/* ── Modal Novo sonho (SOU+BLU corporate) ── */
+#painelSonhosModal {
+  --ps-navy: #1e3a5f;
+  --ps-navy-hover: #163052;
+  --ps-blue: #2563eb;
+  --ps-blue-soft: #dbeafe;
+  --ps-border: #e2e8f0;
+  --ps-surface: #ffffff;
+  --ps-bg: #f8fafc;
+  --ps-text: #0f172a;
+  --ps-text-muted: #64748b;
+  --ps-label: #475569;
+}
+
+#painelSonhosModal .painel-sonhos-modal {
+  max-width: 520px;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow:
+    0 24px 48px rgba(15, 23, 42, 0.16),
+    0 8px 16px rgba(15, 23, 42, 0.06);
+}
+
+#painelSonhosModal .modal-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e8edf3;
+  background: var(--ps-surface);
+}
+
+#painelSonhosModal .modal-header h3 {
+  margin: 0;
+  font-family: 'Nunito', var(--font-display, sans-serif);
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: var(--ps-navy);
+  letter-spacing: -0.01em;
+}
+
+#painelSonhosModal .modal-close {
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid transparent;
+}
+
+#painelSonhosModal .modal-close:hover {
+  background: #e2e8f0;
+  color: var(--ps-navy);
+  border-color: #cbd5e1;
+}
+
+#painelSonhosModal .modal-body {
+  padding: 20px 24px;
+  max-height: 70vh;
+  overflow-y: auto;
+  background: var(--ps-surface);
+}
+
+#painelSonhosModal .modal-footer {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  padding: 16px 24px 20px;
+  border-top: 1px solid #e8edf3;
+  background: #fafbfc;
+}
+
+#painelSonhosModal .painel-sonhos-form-card__edit-hint {
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ps-text-muted);
+  background: var(--ps-bg);
+  border-radius: 8px;
+  border-left: 3px solid var(--ps-blue);
+}
+
+#painelSonhosModal .painel-sonhos-form-card__edit-hint strong {
+  color: var(--ps-navy);
+}
+
+#painelSonhosModal .form-group {
+  margin-bottom: 0;
+  gap: 8px;
+}
+
+#painelSonhosModal .form-group + .form-group {
+  margin-top: 18px;
+}
+
+#painelSonhosModal .form-group label,
+#painelSonhosModal .painel-sonhos-form-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ps-label);
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+
+#painelSonhosModal .painel-sonhos-optional {
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+#painelSonhosModal .form-control {
+  padding: 11px 14px;
+  border: 1px solid var(--ps-border);
+  border-radius: 8px;
+  font-size: 15px;
+  color: var(--ps-text);
+  background: var(--ps-surface);
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#painelSonhosModal .form-control::placeholder {
+  color: #94a3b8;
+}
+
+#painelSonhosModal .form-control:focus {
+  border-color: var(--ps-navy);
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.12);
+  outline: none;
+}
+
+#painelSonhosModal .painel-sonhos-date-wrap {
+  position: relative;
+}
+
+#painelSonhosModal .painel-sonhos-date-input {
+  width: 100%;
+  color-scheme: light;
+}
+
+/* Vazio: esconde placeholder nativo (Chrome/Edge); ícone do calendário permanece */
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input {
+  color: transparent;
+}
+
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input::-webkit-datetime-edit,
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input::-webkit-datetime-edit-fields-wrapper,
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input::-webkit-datetime-edit-text,
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input::-webkit-datetime-edit-month-field,
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input::-webkit-datetime-edit-day-field,
+#painelSonhosModal .painel-sonhos-date-wrap:not(.has-value):not(.is-focused) .painel-sonhos-date-input::-webkit-datetime-edit-year-field {
+  opacity: 0;
+}
+
+#painelSonhosModal .painel-sonhos-date-wrap.has-value .painel-sonhos-date-input,
+#painelSonhosModal .painel-sonhos-date-wrap.is-focused .painel-sonhos-date-input {
+  color: var(--ps-text);
+}
+
+#painelSonhosModal .painel-sonhos-dropzone {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 148px;
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 28px 20px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--ps-bg);
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+#painelSonhosModal .painel-sonhos-dropzone:hover,
+#painelSonhosModal .painel-sonhos-dropzone.is-dragover {
+  border-color: var(--ps-navy);
+  background: var(--ps-blue-soft);
+  box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.06);
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__placeholder {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--ps-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__placeholder strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ps-navy);
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 4px;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--ps-navy);
+  box-shadow: 0 2px 8px rgba(30, 58, 95, 0.1);
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__icon svg {
+  width: 26px;
+  height: 26px;
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__hint {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__preview {
+  width: 100%;
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__preview img {
+  display: block;
+  max-height: 180px;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+  border-radius: 10px;
+  object-fit: contain;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1);
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__clear {
+  display: inline-block;
+  margin: 14px auto 0;
+  padding: 7px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+#painelSonhosModal .painel-sonhos-dropzone__clear:hover {
+  background: #fecaca;
+}
+
+#painelSonhosModal .btn-outline {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1.5px solid #cbd5e1;
+  color: #475569;
+  font-weight: 600;
+  background: transparent;
+}
+
+#painelSonhosModal .btn-outline:hover:not(:disabled) {
+  border-color: var(--ps-navy);
+  color: var(--ps-navy);
+  background: #f8fafc;
+}
+
+#painelSonhosModal .btn-primary {
+  padding: 10px 22px;
+  border-radius: 8px;
+  background: var(--ps-navy);
+  border-color: var(--ps-navy);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(30, 58, 95, 0.2);
+}
+
+#painelSonhosModal .btn-primary:hover:not(:disabled) {
+  background: var(--ps-navy-hover);
+  border-color: var(--ps-navy-hover);
+  box-shadow: 0 4px 10px rgba(30, 58, 95, 0.28);
 }
 
 @keyframes psFormPulse {
-  0%, 100% { box-shadow: 0 0 0 2px rgba(245, 196, 81, 0.35); }
-  50% { box-shadow: 0 0 0 4px rgba(245, 196, 81, 0.65), 0 16px 40px rgba(245, 196, 81, 0.2); }
+  0%, 100% { box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.25); }
+  50% { box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.45), 0 8px 24px rgba(30, 58, 95, 0.12); }
 }
 
-.painel-sonho-vision-card:hover .painel-sonho-vision-card__media img {
-  transform: scale(1.06);
+.painel-sonho-vision-card__media.is-broken {
+  cursor: default;
+  background: linear-gradient(145deg, #e2e8f0, #f1f5f9);
 }
 
-.painel-sonho-vision-card__shine {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(125deg, transparent 40%, rgba(255, 255, 255, 0.15) 50%, transparent 60%);
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
-}
-
-.painel-sonho-vision-card:hover .painel-sonho-vision-card__shine {
-  opacity: 1;
+.painel-sonho-vision-card:hover .painel-sonho-vision-card__media.has-photo img {
+  transform: scale(1.03);
 }
 
 .painel-sonho-vision-card__badge {
@@ -543,18 +752,18 @@
   padding: 20px;
   cursor: pointer;
   border: none;
-  background: linear-gradient(145deg, rgba(67, 56, 202, 0.25), rgba(30, 58, 138, 0.2));
-  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+  background: linear-gradient(145deg, #f1f5f9, #e2e8f0);
+  border-bottom: 1px dashed var(--ps-border);
   text-align: center;
   font-size: 13px;
   color: var(--ps-text-muted);
-  transition: background 0.2s, color 0.2s, transform 0.2s;
+  transition: background 0.2s, color 0.2s;
   font-family: inherit;
 }
 
 .painel-sonho-vision-card__upload:hover {
-  background: linear-gradient(145deg, rgba(124, 58, 237, 0.35), rgba(59, 130, 246, 0.25));
-  color: #fff;
+  background: var(--ps-blue-soft);
+  color: var(--ps-navy);
 }
 
 .painel-sonho-vision-card__upload-icon { font-size: 28px; }
@@ -577,7 +786,7 @@
   font-weight: 800;
   font-size: 15px;
   line-height: 1.3;
-  color: #fff;
+  color: var(--ps-navy);
 }
 
 .painel-sonho-vision-card__desc {
@@ -589,9 +798,12 @@
 
 .painel-sonho-vision-card__date {
   display: inline-block;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  color: var(--ps-gold-soft);
+  color: #92400e;
+  background: #fef3c7;
+  padding: 3px 8px;
+  border-radius: 6px;
   margin-bottom: 10px;
 }
 
@@ -600,7 +812,7 @@
   width: 28px; height: 28px;
   border: none;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--ps-bg);
   color: var(--ps-text-muted);
   cursor: pointer;
   font-size: 12px;
@@ -608,8 +820,8 @@
 }
 
 .painel-sonho-vision-card__remove:hover {
-  background: rgba(239, 68, 68, 0.25);
-  color: #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 /* ── Progress (gamified) ── */
@@ -618,15 +830,15 @@
 .painel-sonho-progress__track {
   height: 6px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--ps-border);
   overflow: hidden;
 }
 
 .painel-sonho-progress__fill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--ps-indigo), var(--ps-violet), var(--ps-gold));
-  box-shadow: 0 0 12px rgba(124, 58, 237, 0.5);
+  background: linear-gradient(90deg, var(--ps-navy), var(--ps-blue));
+  box-shadow: none;
   transition: width 0.5s ease;
 }
 
@@ -638,11 +850,11 @@
 .painel-sonho-progress__label {
   display: block;
   margin-top: 6px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--ps-text-muted);
+  color: #475569;
 }
 
 /* ── Compact list cards ── */
@@ -656,7 +868,7 @@
 .painel-sonhos-list--after-grid {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid var(--ps-border);
 }
 
 .painel-sonho-card {
@@ -666,13 +878,13 @@
   align-items: center;
   padding: 14px 16px;
   border-radius: var(--ps-radius-sm);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--ps-surface);
+  border: 1px solid var(--ps-border);
   transition: border-color 0.2s, transform 0.2s;
 }
 
 .painel-sonho-card:hover {
-  border-color: rgba(255, 255, 255, 0.2);
+  border-color: #cbd5e1;
   transform: translateX(4px);
 }
 
@@ -688,7 +900,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
-  background: rgba(67, 56, 202, 0.3);
+  background: rgba(30, 58, 138, 0.3);
 }
 
 .painel-sonho-card__thumb img {
@@ -708,7 +920,7 @@
   margin: 0 0 4px;
   font-weight: 700;
   font-size: 14px;
-  color: #fff;
+  color: var(--ps-navy);
 }
 
 .painel-sonho-card__desc,
@@ -716,6 +928,11 @@
   margin: 0;
   font-size: 12px;
   color: var(--ps-text-muted);
+}
+
+.painel-sonho-card__meta {
+  font-weight: 700;
+  color: var(--ps-slate);
 }
 
 .painel-sonho-card__check {
@@ -737,8 +954,8 @@
 .painel-sonho-check-wrap__box {
   width: 22px; height: 22px;
   border-radius: 7px;
-  border: 2px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid var(--ps-border);
+  background: var(--ps-surface);
   transition: all 0.2s;
 }
 
@@ -764,8 +981,8 @@
   text-align: center;
   padding: 48px 24px;
   border-radius: var(--ps-radius-sm);
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px dashed rgba(255, 255, 255, 0.15);
+  background: var(--ps-bg);
+  border: 1px dashed var(--ps-border);
 }
 
 .painel-sonhos-empty__icon {
@@ -782,83 +999,52 @@
   font-family: 'Nunito', sans-serif;
   font-weight: 800;
   font-size: 1.1rem;
-  color: #fff;
+  color: var(--ps-navy);
 }
 
 .painel-sonhos-stats {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 20px;
-}
-
-.painel-sonhos-stat {
-  text-align: center;
-  padding: 14px 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.painel-sonhos-stat strong {
-  display: block;
-  font-family: 'Nunito', sans-serif;
-  font-weight: 900;
-  font-size: 1.5rem;
-  color: #fff;
-}
-
-.painel-sonhos-stat span {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ps-text-muted);
-}
-
-.painel-sonhos-stat--done strong {
-  color: var(--ps-gold-soft);
+  display: none;
 }
 
 .painel-sonhos-wrap .form-group label {
-  color: var(--ps-text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  color: var(--ps-slate);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
 }
 
 .painel-sonhos-wrap .form-control {
-  background: rgba(15, 23, 42, 0.5) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  border-radius: 12px !important;
-  color: #fff !important;
+  background: var(--ps-surface) !important;
+  border: 1px solid var(--ps-border) !important;
+  border-radius: 10px !important;
+  color: var(--ps-text) !important;
 }
 
 .painel-sonhos-wrap .form-control:focus {
-  border-color: rgba(124, 58, 237, 0.6) !important;
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.2) !important;
+  border-color: var(--ps-blue) !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
 }
 
 .painel-sonhos-wrap .form-control::placeholder {
-  color: rgba(248, 250, 252, 0.35);
+  color: #94a3b8;
 }
 
 /* ── Dropzone ── */
 .painel-sonhos-dropzone {
-  border: 2px dashed rgba(255, 255, 255, 0.2);
+  border: 2px dashed var(--ps-border);
   border-radius: var(--ps-radius-sm);
   padding: 24px 16px;
   text-align: center;
   cursor: pointer;
-  background: rgba(67, 56, 202, 0.12);
+  background: var(--ps-bg);
   transition: all 0.2s;
 }
 
 .painel-sonhos-dropzone:hover,
 .painel-sonhos-dropzone.is-dragover {
-  border-color: var(--ps-gold);
-  background: rgba(124, 58, 237, 0.2);
+  border-color: var(--ps-blue);
+  background: var(--ps-blue-soft);
 }
 
 .painel-sonhos-dropzone__placeholder {
@@ -870,48 +1056,21 @@
   font-size: 13px;
 }
 
-.painel-sonhos-dropzone__icon { font-size: 32px; }
-
-.painel-sonhos-dropzone__hint {
-  font-size: 11px;
-  opacity: 0.7;
-}
-
-.painel-sonhos-dropzone__preview img {
-  max-width: 100%;
-  max-height: 160px;
-  border-radius: 12px;
-  object-fit: cover;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-}
-
 .painel-sonhos-dropzone__clear {
   display: block;
   margin: 12px auto 0;
   padding: 6px 14px;
   border: none;
   border-radius: 8px;
-  background: rgba(239, 68, 68, 0.2);
-  color: #fecaca;
+  background: #fee2e2;
+  color: #b91c1c;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
 
 .painel-sonhos-submit {
-  margin-top: 8px;
-  border: none !important;
-  border-radius: 14px !important;
-  padding: 14px !important;
-  font-weight: 800 !important;
-  background: linear-gradient(135deg, var(--ps-violet), var(--ps-blue), #2563eb) !important;
-  box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4) !important;
-  transition: transform 0.2s, box-shadow 0.2s !important;
-}
-
-.painel-sonhos-submit:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 32px rgba(124, 58, 237, 0.5) !important;
+  display: none;
 }
 
 /* ── Lightbox ── */
@@ -977,7 +1136,7 @@
 /* ── Profile teaser ── */
 .painel-sonhos-teaser {
   background: linear-gradient(135deg, #1e1b4b, #312e81) !important;
-  border: 1px solid rgba(124, 58, 237, 0.35) !important;
+  border: 1px solid rgba(37, 99, 235, 0.35) !important;
   color: #fff;
 }
 
@@ -1028,47 +1187,31 @@
    ═══════════════════════════════════════════════════════════════ */
 
 .minha-conta-wrap {
-  --ps-blue-deep: #0b1224;
-  --ps-blue: #1e3a8a;
-  --ps-indigo: #4338ca;
-  --ps-purple: #6d28d9;
-  --ps-violet: #7c3aed;
-  --ps-gold: #f5c451;
-  --ps-gold-soft: #fde68a;
-  --ps-glass: rgba(255, 255, 255, 0.08);
-  --ps-glass-strong: rgba(255, 255, 255, 0.14);
-  --ps-glass-border: rgba(255, 255, 255, 0.22);
-  --ps-text: #f8fafc;
-  --ps-text-muted: rgba(248, 250, 252, 0.72);
-  --ps-shadow: 0 24px 48px rgba(8, 12, 28, 0.35);
-  --ps-radius: 20px;
-  --ps-radius-sm: 14px;
+  --ps-navy: #1e3a5f;
+  --ps-blue: #2563eb;
+  --ps-gold: #d97706;
+  --ps-gold-soft: #f59e0b;
+  --ps-text: #0f172a;
+  --ps-text-muted: #64748b;
+  --ps-border: #e2e8f0;
+  --ps-surface: #ffffff;
+  --ps-bg: #f8fafc;
+  --ps-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --ps-radius: 16px;
+  --ps-radius-sm: 12px;
   position: relative;
-  isolation: isolate;
   font-family: 'Barlow', var(--font-body, system-ui, sans-serif);
   color: var(--ps-text);
-  border-radius: calc(var(--ps-radius) + 4px);
-  overflow: hidden;
-  background:
-    radial-gradient(ellipse 120% 80% at 10% -10%, rgba(124, 58, 237, 0.45), transparent 50%),
-    radial-gradient(ellipse 90% 70% at 95% 5%, rgba(37, 99, 235, 0.4), transparent 45%),
-    radial-gradient(ellipse 70% 60% at 50% 110%, rgba(245, 196, 81, 0.18), transparent 55%),
-    linear-gradient(145deg, #0f172a 0%, #1e1b4b 38%, #312e81 68%, #1e3a8a 100%);
-  box-shadow: var(--ps-shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  padding: 28px 24px 32px;
+  border-radius: var(--ps-radius);
+  background: var(--ps-bg);
+  border: 1px solid var(--ps-border);
+  box-shadow: var(--ps-shadow);
+  padding: 24px;
   margin: 0 0 8px;
 }
 
 .minha-conta-wrap::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image:
-    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px),
-    radial-gradient(circle at 70% 60%, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px);
-  background-size: 48px 48px, 64px 64px;
-  pointer-events: none;
-  opacity: 0.6;
+  display: none;
 }
 
 .minha-conta-back {
@@ -1129,7 +1272,7 @@
 .minha-conta-hero__orb--1 {
   width: 160px; height: 160px;
   top: -30px; right: 10%;
-  background: rgba(124, 58, 237, 0.5);
+  background: rgba(37, 99, 235, 0.5);
 }
 
 .minha-conta-hero__orb--2 {
@@ -1174,7 +1317,7 @@
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--ps-violet), var(--ps-indigo));
+  background: linear-gradient(135deg, var(--ps-navy), var(--ps-blue));
   display: flex;
   align-items: center;
   justify-content: center;

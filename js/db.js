@@ -21,6 +21,9 @@
       marketplace_orders:'soublu_marketplace_orders',
       finance_suppliers:'soublu_finance_suppliers',
       finance_expenses:'soublu_finance_expenses',
+      finance_adiantamento:'soublu_finance_adiantamento',
+      finance_reembolso:'soublu_finance_reembolso',
+      finance_proposta_ops:'soublu_finance_proposta_ops',
       rh_companies:'soublu_rh_companies',
       rh_resumes:'soublu_rh_resumes',
       rh_jobs:'soublu_rh_jobs',
@@ -88,6 +91,9 @@
         this._lset(this.LK.marketplace_orders, []);
         this._lset(this.LK.finance_suppliers, []);
         this._lset(this.LK.finance_expenses, []);
+        this._lset(this.LK.finance_adiantamento, []);
+        this._lset(this.LK.finance_reembolso, []);
+        this._lset(this.LK.finance_proposta_ops, []);
         this._lset(this.LK.rh_companies, []);
         this._lset(this.LK.rh_resumes, []);
         this._lset(this.LK.rh_jobs, []);
@@ -1627,6 +1633,8 @@
         ['createdAt', 'created_at'],
         ['updatedAt', 'updated_at'],
         ['lastUpdatedBy', 'last_updated_by'],
+        ['creditoRetorno', 'credito_retorno'],
+        ['creditoEsteira', 'credito_esteira'],
       ],
     },
 
@@ -1820,6 +1828,34 @@
       return Number.isFinite(v) ? v : 0;
     },
 
+    /** Vendedor responsável (vendorId → vendor_id → employee_id). */
+    proposalVendorId(p) {
+      return String(p?.vendorId ?? p?.vendor_id ?? p?.employee_id ?? '').trim();
+    },
+
+    /** Data para filtros de faturamento por período (criação → última alteração). */
+    proposalBillingDate(p) {
+      const raw = p?.createdAt ?? p?.created_at;
+      if (raw) {
+        const d = new Date(raw);
+        if (!Number.isNaN(d.getTime())) return d;
+      }
+      return this.proposalDate(p);
+    },
+
+    proposalInDateRange(p, from, to) {
+      const d = this.proposalBillingDate(p);
+      return d >= from && d < to;
+    },
+
+    /** Resolve vendedor por ID ou nome (totais por equipe/ranking). */
+    resolveProposalVendorId(p, usersByName) {
+      const vid = this.proposalVendorId(p);
+      if (vid) return vid;
+      const vn = this._normVendorName(p?.vendorName || p?.vendor_name);
+      return (vn && usersByName?.[vn]) || '';
+    },
+
     /** Timestamp para ordenar listas (última alteração → topo). */
     proposalSortTime(p) {
       const dates = [];
@@ -1861,11 +1897,19 @@
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     },
 
+    /** Todos os IDs de vendedor distintos (legado: múltiplas colunas no banco). */
     _proposalVendorIds(p) {
       const o = p || {};
-      return [o.employee_id, o.vendorId, o.vendor_id]
-        .map(v => String(v || '').trim())
-        .filter(Boolean);
+      const seen = new Set();
+      const out = [];
+      for (const v of [o.vendorId, o.vendor_id, o.employee_id]) {
+        const s = String(v || '').trim();
+        if (s && !seen.has(s)) {
+          seen.add(s);
+          out.push(s);
+        }
+      }
+      return out;
     },
   
     _matchProposalToVendor(p, user) {
@@ -1990,6 +2034,8 @@
         'comissaoElegivel', 'comissao_elegivel', 'comissaoRecebida', 'comissao_recebida',
         'valorComissaoRecebida', 'valor_comissao_recebida',
         'attachments', 'history', 'email_contato',
+        'creditoRetorno', 'credito_retorno', 'creditoEsteira', 'credito_esteira',
+        'meta', 'credito',
         'createdAt', 'created_at', 'updatedAt', 'updated_at',
         'lastUpdatedBy', 'last_updated_by',
       ]);
@@ -2097,16 +2143,16 @@
     /** PATCH limpo — evita enviar campos inválidos que quebram status/histórico. */
     async saveProposal(proposal) {
       if (!proposal?.id) throw new Error('ID da proposta é obrigatório.');
-      const now = this._dbNow();
-      let payload = this._sanitizeProposalForApi(this._normalizeProposalForDb(proposal, { isNew: false }));
+      const merged = await this._hydrateProposalForSave(proposal);
+      let payload = this._sanitizeProposalForApi(this._normalizeProposalForDb(merged, { isNew: false }));
       if (this.online) {
         payload = this._compactProposalPayloadForApi(payload);
         _cacheDel('proposals');
-        let r = await supaReq('PATCH', 'proposals', payload, `?id=eq.${encodeURIComponent(proposal.id)}`);
+        let r = await supaReq('PATCH', 'proposals', payload, `?id=eq.${encodeURIComponent(merged.id)}`);
         if (!r || (Array.isArray(r) && r.length === 0)) {
           const created = this._compactProposalPayloadForApi(this._sanitizeProposalForApi(
             this._normalizeProposalForDb(
-              { ...proposal, id: proposal.id },
+              { ...merged, id: merged.id },
               { isNew: true }
             )
           ));
@@ -2117,9 +2163,9 @@
         return saved;
       }
       const list = this._lget(this.LK.proposals);
-      const idx = list.findIndex(x => x.id === proposal.id);
+      const idx = list.findIndex(x => x.id === merged.id);
       if (idx === -1) return null;
-      list[idx] = { ...list[idx], ...proposal, ...payload };
+      list[idx] = { ...list[idx], ...merged, ...payload };
       this._lset(this.LK.proposals, list);
       return list[idx];
     },
@@ -2144,6 +2190,114 @@
         return out;
       }
       return att && typeof att === 'object' ? att : {};
+    },
+
+    _mergeProposalAttachments(existing, incoming) {
+      const ex = this._parseProposalAttachments(existing);
+      const inc = incoming === undefined ? {} : this._parseProposalAttachments(incoming);
+      return { ...ex, ...inc };
+    },
+
+    _parseProposalJsonField(val) {
+      if (!val) return {};
+      if (typeof val === 'string') {
+        try { return JSON.parse(val) || {}; } catch { return {}; }
+      }
+      return val && typeof val === 'object' && !Array.isArray(val) ? val : {};
+    },
+
+    _mergeProposalCreditoField(existing, incoming) {
+      const ex = this._parseProposalJsonField(existing);
+      const inc = this._parseProposalJsonField(incoming);
+      const merged = { ...ex, ...inc };
+      if (ex.attachments || inc.attachments) {
+        merged.attachments = this._mergeProposalAttachments(ex.attachments, inc.attachments);
+      }
+      return merged;
+    },
+
+    /** Espelha anexos de retorno/esteira em proposals.attachments (chaves retorno_*). */
+    _syncRetornoAttachmentsToTopLevel(attachments, retornoAtt) {
+      const out = { ...this._parseProposalAttachments(attachments) };
+      const ret = retornoAtt && typeof retornoAtt === 'object' ? retornoAtt : {};
+      Object.keys(ret).forEach((k) => {
+        if (ret[k] == null || ret[k] === '') return;
+        const topKey = k.startsWith('retorno_') ? k : `retorno_${k}`;
+        out[topKey] = ret[k];
+      });
+      return out;
+    },
+
+    _extractRetornoAttachmentsFromTopLevel(attachments) {
+      const att = this._parseProposalAttachments(attachments);
+      const out = {};
+      Object.keys(att).forEach((k) => {
+        if (!k.startsWith('retorno_')) return;
+        const short = k.slice('retorno_'.length);
+        if (short) out[short] = att[k];
+      });
+      return out;
+    },
+
+    /** Mescla proposta com registro existente — preserva anexos e dados de crédito. */
+    async _hydrateProposalForSave(proposal) {
+      if (!proposal?.id) return proposal;
+      let existing = null;
+      try {
+        existing = await this.getProposal(proposal.id);
+      } catch (e) {
+        console.warn('[DB] hydrateProposalForSave:', e.message);
+      }
+      if (!existing) {
+        const cr = proposal.creditoRetorno || proposal.credito_retorno;
+        if (cr) {
+          const mergedCr = this._mergeProposalCreditoField(null, cr);
+          proposal.attachments = this._syncRetornoAttachmentsToTopLevel(proposal.attachments, mergedCr.attachments);
+          proposal.creditoRetorno = mergedCr;
+          proposal.credito_retorno = mergedCr;
+        }
+        return proposal;
+      }
+
+      const out = { ...existing, ...proposal };
+      if (proposal.history) out.history = proposal.history;
+
+      out.attachments = this._mergeProposalAttachments(existing.attachments, proposal.attachments);
+
+      const exCr = existing.creditoRetorno || existing.credito_retorno;
+      const inCr = proposal.creditoRetorno || proposal.credito_retorno;
+      if (exCr || inCr) {
+        let mergedCr = this._mergeProposalCreditoField(exCr, inCr);
+        const fromTop = this._extractRetornoAttachmentsFromTopLevel(out.attachments);
+        mergedCr.attachments = this._mergeProposalAttachments(mergedCr.attachments, fromTop);
+        out.creditoRetorno = mergedCr;
+        out.credito_retorno = mergedCr;
+        out.attachments = this._syncRetornoAttachmentsToTopLevel(out.attachments, mergedCr.attachments);
+      } else {
+        const fromTop = this._extractRetornoAttachmentsFromTopLevel(out.attachments);
+        if (Object.keys(fromTop).length) {
+          out.attachments = this._syncRetornoAttachmentsToTopLevel(out.attachments, fromTop);
+        }
+      }
+
+      const exCe = existing.creditoEsteira || existing.credito_esteira;
+      const inCe = proposal.creditoEsteira || proposal.credito_esteira;
+      if (exCe || inCe) {
+        const mergedCe = this._mergeProposalCreditoField(exCe, inCe);
+        out.creditoEsteira = mergedCe;
+        out.credito_esteira = mergedCe;
+      }
+
+      if (existing.meta || proposal.meta) {
+        out.meta = {
+          ...this._parseProposalJsonField(existing.meta),
+          ...this._parseProposalJsonField(proposal.meta),
+        };
+      }
+      if (proposal.credito !== undefined) out.credito = proposal.credito;
+      else if (existing.credito !== undefined) out.credito = existing.credito;
+
+      return out;
     },
 
     /** Uma proposta completa (select=*) — lista parcial não traz attachments/history. */
@@ -3235,6 +3389,51 @@
       return list[idx];
     },
 
+    async getFinancePropostaOps(type = null) {
+      let all;
+      if (this.online) {
+        try {
+          let q = '?select=*&order=created_at.desc&limit=500';
+          if (type) q += `&type=eq.${encodeURIComponent(type)}`;
+          all = await supaReq('GET', 'finance_proposta_ops', null, q);
+        } catch {
+          all = this._lget(this.LK.finance_proposta_ops) || [];
+        }
+      } else {
+        all = this._lget(this.LK.finance_proposta_ops) || [];
+      }
+      return type ? (all || []).filter(r => r.type === type) : (all || []);
+    },
+
+    async saveFinancePropostaOp(record) {
+      const row = {
+        id: record.id || this._genId('fpo'),
+        ...record,
+        updated_at: new Date().toISOString(),
+      };
+      if (!row.created_at) row.created_at = row.updated_at;
+      if (this.online) {
+        try {
+          _cacheDel('finance_proposta_ops');
+          const existing = await supaReq('GET', 'finance_proposta_ops', null, `?id=eq.${encodeURIComponent(row.id)}&select=id&limit=1`);
+          if (existing?.length) {
+            const r = await supaReq('PATCH', 'finance_proposta_ops', row, `?id=eq.${encodeURIComponent(row.id)}`);
+            return r[0] || row;
+          }
+          const r = await supaReq('POST', 'finance_proposta_ops', row);
+          return r[0] || row;
+        } catch (e) {
+          console.warn('[DB] saveFinancePropostaOp online fallback:', e.message);
+        }
+      }
+      const list = this._lget(this.LK.finance_proposta_ops) || [];
+      const idx = list.findIndex(x => x.id === row.id);
+      if (idx >= 0) list[idx] = row;
+      else list.unshift(row);
+      this._lset(this.LK.finance_proposta_ops, list.slice(0, 500));
+      return row;
+    },
+
     async buildContaCorrenteStatement(empId, limit = 120) {
       const emp = await this.getUser(empId);
       if (!emp) return { balance: 0, lines: [], user: null, money: false };
@@ -3315,6 +3514,171 @@
         return { ok: true, balance: nb };
       }
       return { ok: false, msg: 'Tipo de movimentação inválido.' };
+    },
+
+    _normFinanceAdiantamento(row) {
+      if (!row || typeof row !== 'object') return row;
+      let att = row.attachments;
+      if (typeof att === 'string') { try { att = JSON.parse(att); } catch { att = {}; } }
+      return {
+        ...row,
+        cpf: String(row.cpf || '').replace(/\D/g, ''),
+        valor: this._moneyAmt(row.valor),
+        attachments: att && typeof att === 'object' ? att : {},
+      };
+    },
+
+    _monthKeyFromDate(iso) {
+      const d = iso ? new Date(iso) : new Date();
+      if (Number.isNaN(d.getTime())) return '';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    },
+
+    async getFinanceAdiantamentos() {
+      if (this.online) {
+        try {
+          const rows = await supaReq('GET', 'finance_adiantamento', null, '?select=*&order=created_at.desc&limit=500');
+          return (rows || []).map(r => this._normFinanceAdiantamento(r));
+        } catch (e) {
+          console.warn('[DB] getFinanceAdiantamentos:', e?.message || e);
+        }
+      }
+      return (this._lget(this.LK.finance_adiantamento) || [])
+        .map(r => this._normFinanceAdiantamento(r))
+        .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+    },
+
+    async hasFinanceAdiantamentoThisMonth(cpf, excludeId = null) {
+      const digits = String(cpf || '').replace(/\D/g, '');
+      if (!digits) return false;
+      const monthKey = this._monthKeyFromDate();
+      const all = await this.getFinanceAdiantamentos();
+      return all.some((r) => {
+        if (excludeId && String(r.id) === String(excludeId)) return false;
+        if (String(r.cpf || '').replace(/\D/g, '') !== digits) return false;
+        const st = String(r.status || '').toLowerCase();
+        if (st === 'recusado') return false;
+        const mk = r.month_key || this._monthKeyFromDate(r.created_at);
+        return mk === monthKey;
+      });
+    },
+
+    async saveFinanceAdiantamento(data) {
+      const now = new Date().toISOString();
+      const row = this._normFinanceAdiantamento({
+        id: data.id || this._genId('adv'),
+        cpf: String(data.cpf || '').replace(/\D/g, ''),
+        employee_id: data.employee_id || null,
+        employee_name: String(data.employee_name || '').trim(),
+        valor: data.valor,
+        status: String(data.status || 'pendente').toLowerCase(),
+        month_key: data.month_key || this._monthKeyFromDate(),
+        notes: String(data.notes || '').trim(),
+        decided_by: data.decided_by || null,
+        decided_by_name: data.decided_by_name || null,
+        decided_at: data.decided_at || null,
+        attachments: data.attachments || {},
+        created_at: data.created_at || now,
+        updated_at: now,
+      });
+      if (!row.cpf || !Number.isFinite(row.valor) || row.valor <= 0) return null;
+      if (this.online) {
+        try {
+          _cacheDel('finance_adiantamento');
+          if (data.id) {
+            const r = await supaReq('PATCH', 'finance_adiantamento', row, `?id=eq.${encodeURIComponent(row.id)}`);
+            return this._normFinanceAdiantamento(r[0]) || row;
+          }
+          const r = await supaReq('POST', 'finance_adiantamento', row);
+          return this._normFinanceAdiantamento(r[0]) || row;
+        } catch (e) {
+          console.warn('[DB] saveFinanceAdiantamento online fallback:', e?.message || e);
+        }
+      }
+      const list = this._lget(this.LK.finance_adiantamento) || [];
+      const idx = list.findIndex(x => x.id === row.id);
+      if (idx === -1) list.push(row);
+      else list[idx] = { ...list[idx], ...row };
+      this._lset(this.LK.finance_adiantamento, list);
+      return row;
+    },
+
+    _normFinanceReembolso(row) {
+      if (!row || typeof row !== 'object') return row;
+      let att = row.attachments;
+      if (typeof att === 'string') { try { att = JSON.parse(att); } catch { att = {}; } }
+      return {
+        ...row,
+        cnpj: String(row.cnpj || '').replace(/\D/g, ''),
+        valor: this._moneyAmt(row.valor),
+        valor_liquido_sem_bebida: row.valor_liquido_sem_bebida != null
+          ? this._moneyAmt(row.valor_liquido_sem_bebida)
+          : null,
+        attachments: att && typeof att === 'object' ? att : {},
+      };
+    },
+
+    async getFinanceReembolsos() {
+      if (this.online) {
+        try {
+          const rows = await supaReq('GET', 'finance_reembolso', null, '?select=*&order=created_at.desc&limit=500');
+          return (rows || []).map(r => this._normFinanceReembolso(r));
+        } catch (e) {
+          console.warn('[DB] getFinanceReembolsos:', e?.message || e);
+        }
+      }
+      return (this._lget(this.LK.finance_reembolso) || [])
+        .map(r => this._normFinanceReembolso(r))
+        .sort((a, b) => new Date(b.created_at || b.submitted_at || 0) - new Date(a.created_at || a.submitted_at || 0));
+    },
+
+    async saveFinanceReembolso(data) {
+      const now = new Date().toISOString();
+      const isUpdate = Boolean(data.id);
+      const row = this._normFinanceReembolso({
+        id: data.id || this._genId('reemb'),
+        motivo: String(data.motivo || '').trim(),
+        motivo_label: String(data.motivo_label || data.motivo || '').trim(),
+        cnpj: String(data.cnpj || '').replace(/\D/g, ''),
+        estabelecimento_nome: String(data.estabelecimento_nome || '').trim(),
+        valor: data.valor,
+        km_inicial: data.km_inicial || null,
+        km_final: data.km_final || null,
+        bebida_alcoolica: data.bebida_alcoolica || null,
+        valor_liquido_sem_bebida: data.valor_liquido_sem_bebida ?? null,
+        solicitante_id: data.solicitante_id || null,
+        solicitante_nome: String(data.solicitante_nome || '').trim(),
+        solicitante_login: data.solicitante_login || null,
+        status: String(data.status || 'em_analise').toLowerCase(),
+        submitted_at: data.submitted_at || now,
+        attachments: data.attachments || {},
+        notes: String(data.notes || '').trim(),
+        decided_by: data.decided_by || null,
+        decided_by_name: data.decided_by_name || null,
+        decided_at: data.decided_at || null,
+        created_at: data.created_at || now,
+        updated_at: now,
+      });
+      if (!row.motivo || !row.cnpj || !Number.isFinite(row.valor) || row.valor <= 0) return null;
+      if (this.online) {
+        try {
+          _cacheDel('finance_reembolso');
+          if (isUpdate) {
+            const r = await supaReq('PATCH', 'finance_reembolso', row, `?id=eq.${encodeURIComponent(row.id)}`);
+            return this._normFinanceReembolso(r[0]) || row;
+          }
+          const r = await supaReq('POST', 'finance_reembolso', row);
+          return this._normFinanceReembolso(r[0]) || row;
+        } catch (e) {
+          console.warn('[DB] saveFinanceReembolso online fallback:', e?.message || e);
+        }
+      }
+      const list = this._lget(this.LK.finance_reembolso) || [];
+      const idx = list.findIndex(x => x.id === row.id);
+      if (idx === -1) list.push(row);
+      else list[idx] = { ...list[idx], ...row };
+      this._lset(this.LK.finance_reembolso, list);
+      return row;
     },
 
     /* ══ TICKETS ══ */
@@ -3602,9 +3966,14 @@
         }
 
         if (collection === 'proposals') {
-          const row = this._sanitizeProposalForApi(
-            this._normalizeProposalForDb(data, { isNew: !existing })
+          let merged = data;
+          if (existing) {
+            merged = await this._hydrateProposalForSave({ ...existing, ...data, id: data.id });
+          }
+          let row = this._sanitizeProposalForApi(
+            this._normalizeProposalForDb(merged, { isNew: !existing })
           );
+          if (this.online) row = this._compactProposalPayloadForApi(row);
           if (existing) {
             const r = await supaReq('PATCH', 'proposals', row, `?id=eq.${encodeURIComponent(data.id)}`);
             return r[0] || row;
@@ -3631,8 +4000,12 @@
           this._normalizeClientForDb(data, { isNew: idx < 0 })
         );
       } else if (collection === 'proposals') {
+        let merged = data;
+        if (idx > -1) {
+          merged = await this._hydrateProposalForSave({ ...list[idx], ...data, id: data.id });
+        }
         normalized = this._sanitizeProposalForApi(
-          this._normalizeProposalForDb(data, { isNew: idx < 0 })
+          this._normalizeProposalForDb(merged, { isNew: idx < 0 })
         );
       }
       if (idx > -1) {

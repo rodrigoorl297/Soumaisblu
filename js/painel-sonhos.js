@@ -7,6 +7,9 @@ const PainelSonhos = (() => {
   let _pendingPhotoFile = null;
   let _pendingPhotoPreview = '';
   let _editingDreamId = null;
+  let _cachedUser = null;
+  let _userFetchPromise = null;
+  const _photoSrcCache = new Map();
 
   function localKey(userId) {
     return `soublu_sonhos_${userId}`;
@@ -131,6 +134,10 @@ const PainelSonhos = (() => {
       if (typeof currentUser !== 'undefined' && currentUser?.id === user.id) {
         currentUser = { ...currentUser, sonhos_data: payload.sonhos_data };
       }
+      if (_cachedUser?.id === user.id) {
+        _cachedUser = { ..._cachedUser, sonhos_data: payload.sonhos_data };
+      }
+      _photoSrcCache.clear();
       return true;
     } catch (e) {
       console.warn('[PainelSonhos] save remoto:', e?.message || e);
@@ -138,10 +145,33 @@ const PainelSonhos = (() => {
     }
   }
 
-  async function getUser() {
-    return typeof resolveEmployeeUser === 'function'
-      ? resolveEmployeeUser()
-      : Auth.getCurrentUser();
+  function invalidateUserCache() {
+    _cachedUser = null;
+    _userFetchPromise = null;
+    _photoSrcCache.clear();
+  }
+
+  async function getUser(forceRefresh = false) {
+    if (!forceRefresh) {
+      if (_cachedUser?.id) return _cachedUser;
+      if (typeof currentUser !== 'undefined' && currentUser?.id) {
+        _cachedUser = currentUser;
+        return _cachedUser;
+      }
+    }
+    if (_userFetchPromise && !forceRefresh) return _userFetchPromise;
+    _userFetchPromise = (async () => {
+      try {
+        const u = typeof resolveEmployeeUser === 'function'
+          ? await resolveEmployeeUser()
+          : await Auth.getCurrentUser();
+        if (u) _cachedUser = u;
+        return u;
+      } finally {
+        _userFetchPromise = null;
+      }
+    })();
+    return _userFetchPromise;
   }
 
   function esc(s) {
@@ -189,7 +219,12 @@ const PainelSonhos = (() => {
   }
 
   function photoSrc(dream) {
-    const raw = String(dream?.photoUrl || '').trim();
+    const id = dream?.id;
+    const rawKey = String(dream?.photoUrl || '').trim();
+    if (id && _photoSrcCache.has(id) && _photoSrcCache.get(`${id}:raw`) === rawKey) {
+      return _photoSrcCache.get(id) || '';
+    }
+    const raw = rawKey;
     if (!raw) return '';
     if (/^data:image\//i.test(raw)) return raw;
     if (/^blob:/i.test(raw)) return raw;
@@ -206,7 +241,12 @@ const PainelSonhos = (() => {
       const resolved = resolvePhotoUrl(path) || resolvePhotoUrl(ensureUploadsPath(raw));
       if (resolved) return resolved;
     }
-    return `${apiBaseUrl()}/${path.replace(/^\/+/, '')}`;
+    const src = `${apiBaseUrl()}/${path.replace(/^\/+/, '')}`;
+    if (id) {
+      _photoSrcCache.set(id, src);
+      _photoSrcCache.set(`${id}:raw`, rawKey);
+    }
+    return src;
   }
 
   function onDreamImageError(img, dreamId) {
@@ -215,7 +255,7 @@ const PainelSonhos = (() => {
       img.dataset.psRetry = '1';
       const raw = img.getAttribute('data-photo-ref') || '';
       if (raw) {
-        const retry = photoSrc({ photoUrl: raw });
+        const retry = photoSrc({ id: dreamId, photoUrl: raw });
         const current = img.getAttribute('src') || '';
         if (retry && retry !== current) {
           img.src = /^data:image\//i.test(retry) ? retry : escAttr(retry);
@@ -229,9 +269,31 @@ const PainelSonhos = (() => {
     const ph = media?.querySelector('.painel-sonho-vision-card__placeholder');
     if (ph) ph.hidden = false;
     const card = media?.closest('.painel-sonho-vision-card');
-    if (card) card.classList.add('has-broken-photo');
-    const sideBtn = card?.querySelector('.painel-sonho-vision-card__photo-side-btn');
-    if (sideBtn) sideBtn.style.display = 'inline-flex';
+    if (card) card.classList.remove('has-photo');
+  }
+
+  function openDreamModal() {
+    _renderDreamModal().then(() => {
+      const modal = document.getElementById('painelSonhosModal');
+      if (!modal) return;
+      if (typeof openModal === 'function') openModal('painelSonhosModal');
+      else modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+      setTimeout(() => document.getElementById('sonhoTitulo')?.focus(), 50);
+    });
+  }
+
+  function closeDreamModal() {
+    const modal = document.getElementById('painelSonhosModal');
+    if (modal) {
+      if (typeof closeModal === 'function') closeModal('painelSonhosModal');
+      else modal.classList.remove('open');
+    }
+    const lb = document.getElementById('painelSonhosLightbox');
+    if (!lb || lb.hidden) document.body.style.overflow = '';
+    _editingDreamId = null;
+    _pendingPhotoFile = null;
+    _pendingPhotoPreview = '';
   }
 
   function openDreamPhotoCadastro(dreamId) {
@@ -239,33 +301,18 @@ const PainelSonhos = (() => {
     _editingDreamId = dreamId;
     _pendingPhotoFile = null;
     _pendingPhotoPreview = '';
-    render().then(() => {
-      const card = document.querySelector('.painel-sonhos-form-card');
-      card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      card?.classList.add('is-highlight');
-      setTimeout(() => card?.classList.remove('is-highlight'), 2500);
-      document.getElementById('sonhoTitulo')?.focus();
-    });
+    openDreamModal();
   }
 
   function cancelDreamEdit() {
-    _editingDreamId = null;
-    _pendingPhotoFile = null;
-    _pendingPhotoPreview = '';
-    render();
+    closeDreamModal();
   }
 
   function focusNewDreamForm() {
     _editingDreamId = null;
     _pendingPhotoFile = null;
     _pendingPhotoPreview = '';
-    render().then(() => {
-      const card = document.querySelector('.painel-sonhos-form-card');
-      card?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      card?.classList.add('is-highlight');
-      setTimeout(() => card?.classList.remove('is-highlight'), 2500);
-      document.getElementById('sonhoTitulo')?.focus();
-    });
+    openDreamModal();
   }
 
   function progressPct(dream) {
@@ -311,7 +358,7 @@ const PainelSonhos = (() => {
     }
     if (dream.done) label = 'Sonho realizado!';
     return `
-      <div class="painel-sonho-progress" aria-hidden="true">
+      <div class="painel-sonho-progress">
         <div class="painel-sonho-progress__track">
           <div class="painel-sonho-progress__fill${dream.done ? ' is-complete' : ''}" style="width:${dream.done ? 100 : pct}%"></div>
         </div>
@@ -329,10 +376,10 @@ const PainelSonhos = (() => {
       ? `<p class="painel-sonho-vision-card__desc">${esc(dream.description)}</p>`
       : '';
     const media = src
-      ? `<div class="painel-sonho-vision-card__media" role="button" tabindex="0"
+      ? `<div class="painel-sonho-vision-card__media has-photo" role="button" tabindex="0"
           onclick="if(!this.classList.contains('is-broken'))PainelSonhos.openLightbox('${id}')"
           onkeydown="if(event.key==='Enter'&&!this.classList.contains('is-broken'))PainelSonhos.openLightbox('${id}')">
-          <img src="${imgSrcAttr(src)}" alt="${escAttr(dream.title)}" class="painel-sonho-vision-card__img" loading="lazy"
+          <img src="${imgSrcAttr(src)}" alt="${escAttr(dream.title)}" class="painel-sonho-vision-card__img" loading="lazy" decoding="async"
             data-photo-ref="${escAttr(dream.photoUrl || '')}"
             onerror="PainelSonhos.onDreamImageError(this,'${id}')"/>
           <div class="painel-sonho-vision-card__placeholder" hidden aria-hidden="true">
@@ -342,7 +389,6 @@ const PainelSonhos = (() => {
               <span>Cadastrar foto</span>
             </button>
           </div>
-          <div class="painel-sonho-vision-card__shine"></div>
           ${dream.done ? '<span class="painel-sonho-vision-card__badge">Realizado</span>' : ''}
         </div>`
       : `<button type="button" class="painel-sonho-vision-card__upload"
@@ -362,9 +408,6 @@ const PainelSonhos = (() => {
               <span class="painel-sonho-check-wrap__box"></span>
             </label>
             <h4 class="painel-sonho-vision-card__title">${esc(dream.title)}</h4>
-            ${dream.photoUrl ? `<button type="button" class="painel-sonho-vision-card__photo-side-btn"
-              title="Cadastrar nova foto"
-              onclick="PainelSonhos.openDreamPhotoCadastro('${id}')">📷 Cadastrar foto</button>` : ''}
             <button type="button" class="painel-sonho-vision-card__remove" title="Excluir"
               onclick="PainelSonhos.removeDream('${id}')">✕</button>
           </div>
@@ -411,14 +454,14 @@ const PainelSonhos = (() => {
 
   function renderDreamsSection(dreams) {
     const filtered = sortDreams(filterDreams(dreams));
-    const withPhoto = filtered.filter(d => photoSrc(d));
-    const withoutPhoto = filtered.filter(d => !photoSrc(d));
+    const withPhoto = filtered.filter(d => d.photoUrl);
+    const withoutPhoto = filtered.filter(d => !d.photoUrl);
 
     if (!filtered.length) {
       return `<div class="painel-sonhos-empty">
         <div class="painel-sonhos-empty__icon">🌟</div>
-        <p style="margin:0;font-weight:800;font-size:16px;color:#fff;">Seu mural está pronto para brilhar</p>
-        <p style="margin:10px 0 0;font-size:14px;">Adicione fotos de viagens, carros, bônus ou metas pessoais — visualize o futuro que você está conquistando.</p>
+        <p style="margin:0;font-weight:800;font-size:16px;color:var(--ps-text, #0f172a);">Seu mural está pronto para brilhar</p>
+        <p style="margin:10px 0 0;font-size:14px;color:var(--ps-text-muted, #64748b);">Adicione fotos de viagens, carros, bônus ou metas pessoais — visualize o futuro que você está conquistando.</p>
       </div>`;
     }
 
@@ -445,18 +488,20 @@ const PainelSonhos = (() => {
         <button type="button" class="painel-sonhos-filter${_viewFilter === t.id ? ' active' : ''}"
           role="tab" aria-selected="${_viewFilter === t.id}"
           onclick="PainelSonhos.setFilter('${t.id}')">${t.label}</button>`).join('')}
-      <button type="button" class="painel-sonhos-cadastrar-btn" onclick="PainelSonhos.focusNewDreamForm()">+ Cadastrar</button>
+      <button type="button" class="btn btn-outline btn-sm painel-sonhos-cadastrar-btn" onclick="PainelSonhos.focusNewDreamForm()">+ Novo sonho</button>
     </div>`;
   }
+
+  const DROPZONE_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" stroke="none"/><path d="M21 15l-5-5L5 21"/></svg>`;
 
   function renderPhotoDropzone() {
     const preview = _pendingPhotoPreview
       ? `<div class="painel-sonhos-dropzone__preview">
           <img src="${escAttr(_pendingPhotoPreview)}" alt="Prévia"/>
-          <button type="button" class="painel-sonhos-dropzone__clear" onclick="PainelSonhos.clearPhotoPreview()">Remover foto</button>
+          <button type="button" class="painel-sonhos-dropzone__clear" onclick="event.stopPropagation();PainelSonhos.clearPhotoPreview()">Remover foto</button>
         </div>`
       : `<div class="painel-sonhos-dropzone__placeholder">
-          <span class="painel-sonhos-dropzone__icon">🖼️</span>
+          <span class="painel-sonhos-dropzone__icon">${DROPZONE_ICON_SVG}</span>
           <strong>Visualize seu sonho</strong>
           <span>Clique ou arraste uma foto inspiradora</span>
           <span class="painel-sonhos-dropzone__hint">JPG, PNG ou WebP · até 5 MB</span>
@@ -464,7 +509,7 @@ const PainelSonhos = (() => {
 
     return `
       <div class="form-group">
-        <label>Foto do sonho (opcional)</label>
+        <label class="painel-sonhos-form-label" for="sonhoFoto">Foto do sonho <span class="painel-sonhos-optional">(opcional)</span></label>
         <div class="painel-sonhos-dropzone" id="sonhoDropzone"
           onclick="document.getElementById('sonhoFoto')?.click()">
           ${preview}
@@ -474,11 +519,129 @@ const PainelSonhos = (() => {
       </div>`;
   }
 
-  async function render(rootId = 'painelSonhosRoot') {
+  function buildHeroKpisHtml(open, done, withPhotos, journeyPct) {
+    return `
+      <div class="painel-sonhos-kpi">
+        <strong>${open}</strong>
+        <span>Em andamento</span>
+      </div>
+      <div class="painel-sonhos-kpi painel-sonhos-kpi--gold">
+        <strong>${done}</strong>
+        <span>Realizados</span>
+      </div>
+      <div class="painel-sonhos-kpi">
+        <strong>${withPhotos}</strong>
+        <span>Com visão</span>
+      </div>
+      <div class="painel-sonhos-kpi">
+        <strong>${journeyPct}%</strong>
+        <span>Jornada</span>
+      </div>`;
+  }
+
+  function buildDreamModalHtml(editingDream) {
+    const submitLabel = editingDream ? 'Salvar foto no mural' : 'Adicionar ao mural';
+    const title = editingDream ? 'Cadastrar foto do sonho' : 'Novo sonho';
+    return `
+      <div class="modal-overlay" id="painelSonhosModal" onclick="if(event.target===this)PainelSonhos.closeDreamModal()">
+        <div class="modal painel-sonhos-modal">
+          <div class="modal-header">
+            <h3 id="painelSonhosModalTitle">${title}</h3>
+            <button type="button" class="modal-close" onclick="PainelSonhos.closeDreamModal()" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body">
+            ${editingDream ? `<p class="painel-sonhos-form-card__edit-hint">Atualizando: <strong>${esc(editingDream.title)}</strong></p>` : ''}
+            <form id="form-sonho" class="painel-sonhos-form" onsubmit="PainelSonhos.addDream(event)">
+              ${renderPhotoDropzone()}
+              <div class="form-group">
+                <label class="painel-sonhos-form-label" for="sonhoTitulo">O que você sonha?</label>
+                <input type="text" id="sonhoTitulo" class="form-control" placeholder="Ex.: Comprar minha casa" maxlength="120" required
+                  value="${editingDream ? escAttr(editingDream.title) : ''}"${editingDream ? ' readonly' : ''}/>
+              </div>
+              <div class="form-group">
+                <label class="painel-sonhos-form-label" for="sonhoDescricao">Detalhes <span class="painel-sonhos-optional">(opcional)</span></label>
+                <textarea id="sonhoDescricao" class="form-control" rows="3" placeholder="Por que esse sonho é importante para você?" maxlength="500">${editingDream ? esc(editingDream.description || '') : ''}</textarea>
+              </div>
+              <div class="form-group">
+                <label class="painel-sonhos-form-label" for="sonhoDataMeta">Data meta <span class="painel-sonhos-optional">(opcional)</span></label>
+                <div class="painel-sonhos-date-wrap${editingDream?.targetDate ? ' has-value' : ''}">
+                  <input type="date" id="sonhoDataMeta" class="form-control painel-sonhos-date-input"
+                    value="${editingDream?.targetDate ? escAttr(editingDream.targetDate) : ''}"/>
+                </div>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline" onclick="PainelSonhos.closeDreamModal()">Cancelar</button>
+            <button type="submit" form="form-sonho" class="btn btn-primary">${submitLabel}</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  async function _renderDreamModal() {
+    let root = document.getElementById('painelSonhosModalRoot');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'painelSonhosModalRoot';
+      document.body.appendChild(root);
+    }
+    const user = await getUser();
+    if (!user) return;
+    const dreams = parseList(user);
+    const editingDream = _editingDreamId
+      ? dreams.find(d => d.id === _editingDreamId)
+      : null;
+    if (_editingDreamId && !editingDream) _editingDreamId = null;
+    root.innerHTML = buildDreamModalHtml(editingDream);
+    _bindDropzone();
+    _bindDateField();
+  }
+
+  function _updateFilterTabs() {
+    document.querySelectorAll('.painel-sonhos-filter').forEach((btn) => {
+      const match = btn.getAttribute('onclick')?.match(/setFilter\('([^']+)'\)/);
+      const id = match ? match[1] : '';
+      const active = id === _viewFilter;
+      btn.classList.toggle('active', active);
+      btn.setAttribute('aria-selected', active ? 'true' : 'false');
+    });
+  }
+
+  function _refreshDropzoneOnly() {
+    const zone = document.getElementById('sonhoDropzone');
+    if (!zone) return false;
+    const group = zone.closest('.form-group');
+    if (!group) return false;
+    group.outerHTML = renderPhotoDropzone();
+    _bindDropzone();
+    return true;
+  }
+
+  function _updateBoardSection(dreams) {
+    const body = document.getElementById('painelSonhosBoardBody');
+    if (!body) return false;
+    body.innerHTML = renderDreamsSection(dreams);
+    _updateFilterTabs();
+    return true;
+  }
+
+  function _updateHeroKpis(dreams) {
+    const el = document.getElementById('painelSonhosHeroKpis');
+    if (!el) return;
+    const done = dreams.filter(d => d.done).length;
+    const open = dreams.length - done;
+    const withPhotos = dreams.filter(d => d.photoUrl).length;
+    const journeyPct = dreams.length ? Math.round((done / dreams.length) * 100) : 0;
+    el.innerHTML = buildHeroKpisHtml(open, done, withPhotos, journeyPct);
+  }
+
+  async function render(rootId = 'painelSonhosRoot', opts = {}) {
+    const { forceUser = false } = opts;
     const root = document.getElementById(rootId);
     if (!root) return;
 
-    const user = await getUser();
+    const user = await getUser(forceUser);
     if (!user) {
       root.innerHTML = '<div class="card card-padded text-muted text-center">Faça login para ver seu painel.</div>';
       return;
@@ -491,7 +654,7 @@ const PainelSonhos = (() => {
     const dreams = parseList(user);
     const done = dreams.filter(d => d.done).length;
     const open = dreams.length - done;
-    const withPhotos = dreams.filter(d => photoSrc(d)).length;
+    const withPhotos = dreams.filter(d => d.photoUrl).length;
     const level = Math.min(99, Math.max(1, 1 + Math.floor(done * 1.5) + Math.floor(withPhotos / 3)));
     const journeyPct = dreams.length ? Math.round((done / dreams.length) * 100) : 0;
     const editingDream = _editingDreamId
@@ -499,15 +662,20 @@ const PainelSonhos = (() => {
       : null;
     if (_editingDreamId && !editingDream) _editingDreamId = null;
 
+    const shellExists = !!root.querySelector('.painel-sonhos-wrap');
+    if (shellExists && opts.boardOnly) {
+      _updateBoardSection(dreams);
+      _updateHeroKpis(dreams);
+      return;
+    }
+    if (shellExists && opts.formOnly) {
+      await _renderDreamModal();
+      return;
+    }
+
     root.innerHTML = `
       <div class="painel-sonhos-wrap">
         <div class="painel-sonhos-hero">
-          <div class="painel-sonhos-hero__orbs" aria-hidden="true">
-            <span class="painel-sonhos-hero__orb painel-sonhos-hero__orb--1"></span>
-            <span class="painel-sonhos-hero__orb painel-sonhos-hero__orb--2"></span>
-            <span class="painel-sonhos-hero__orb painel-sonhos-hero__orb--3"></span>
-          </div>
-          <div class="painel-sonhos-hero__stars" aria-hidden="true"></div>
           <div class="painel-sonhos-hero__content">
             <div class="painel-sonhos-hero__top">
               <div>
@@ -521,23 +689,8 @@ const PainelSonhos = (() => {
             </div>
             <p class="painel-sonhos-hero__sub">${esc(motivationalPhrase())}</p>
             <p class="painel-sonhos-hero__sub painel-sonhos-hero__sub--muted">Visualize suas metas com imagens inspiradoras — viagens, conquistas e o estilo de vida que você está construindo.</p>
-            <div class="painel-sonhos-hero__kpis">
-              <div class="painel-sonhos-kpi">
-                <strong>${open}</strong>
-                <span>Em andamento</span>
-              </div>
-              <div class="painel-sonhos-kpi painel-sonhos-kpi--gold">
-                <strong>${done}</strong>
-                <span>Realizados</span>
-              </div>
-              <div class="painel-sonhos-kpi">
-                <strong>${withPhotos}</strong>
-                <span>Com visão</span>
-              </div>
-              <div class="painel-sonhos-kpi">
-                <strong>${journeyPct}%</strong>
-                <span>Jornada</span>
-              </div>
+            <div class="painel-sonhos-hero__kpis" id="painelSonhosHeroKpis">
+              ${buildHeroKpisHtml(open, done, withPhotos, journeyPct)}
             </div>
             <div class="painel-sonhos-hero__meta">
               <span>${esc(formatLongDate())}</span>
@@ -545,7 +698,7 @@ const PainelSonhos = (() => {
           </div>
         </div>
 
-        <div class="painel-sonhos-grid">
+        <div class="painel-sonhos-board-wrap">
           <div class="card card-padded painel-sonhos-board">
             <div class="painel-sonhos-board__head">
               <div>
@@ -554,51 +707,33 @@ const PainelSonhos = (() => {
               </div>
               ${renderFilterTabs()}
             </div>
-            ${renderDreamsSection(dreams)}
-          </div>
-
-          <div class="card card-padded painel-sonhos-form-card${editingDream ? ' is-editing' : ''}">
-            <h3 class="painel-sonhos-form-card__title">${editingDream ? '📷 Cadastrar foto do sonho' : '✨ Novo sonho'}</h3>
-            ${editingDream ? `<p class="painel-sonhos-form-card__edit-hint">Atualizando: <strong>${esc(editingDream.title)}</strong></p>` : ''}
-            <div class="painel-sonhos-stats">
-              <div class="painel-sonhos-stat"><strong>${open}</strong><span>Em andamento</span></div>
-              <div class="painel-sonhos-stat painel-sonhos-stat--done"><strong>${done}</strong><span>Realizados</span></div>
-            </div>
-            <form class="painel-sonhos-form" onsubmit="PainelSonhos.addDream(event)">
-              ${renderPhotoDropzone()}
-              <div class="form-group">
-                <label for="sonhoTitulo">O que você sonha?</label>
-                <input type="text" id="sonhoTitulo" class="form-control" placeholder="Ex.: Comprar minha casa" maxlength="120" required
-                  value="${editingDream ? escAttr(editingDream.title) : ''}"${editingDream ? ' readonly' : ''}/>
-              </div>
-              <div class="form-group">
-                <label for="sonhoDescricao">Detalhes (opcional)</label>
-                <textarea id="sonhoDescricao" class="form-control" rows="3" placeholder="Por que esse sonho é importante para você?" maxlength="500">${editingDream ? esc(editingDream.description || '') : ''}</textarea>
-              </div>
-              <div class="form-group">
-                <label for="sonhoDataMeta">Data meta (opcional)</label>
-                <input type="date" id="sonhoDataMeta" class="form-control" value="${editingDream?.targetDate ? escAttr(editingDream.targetDate) : ''}"/>
-              </div>
-              <div class="painel-sonhos-form__actions">
-                ${editingDream ? '<button type="button" class="btn btn-ghost btn-sm" onclick="PainelSonhos.cancelDreamEdit()">Cancelar</button>' : ''}
-                <button type="submit" class="btn btn-primary btn-full painel-sonhos-submit">
-                  <span>${editingDream ? 'Salvar foto no mural' : '✨ Adicionar ao mural'}</span>
-                </button>
-              </div>
-            </form>
+            <div id="painelSonhosBoardBody">${renderDreamsSection(dreams)}</div>
           </div>
         </div>
       </div>
 
+      <div id="painelSonhosModalRoot"></div>
+
       <div class="painel-sonhos-lightbox" id="painelSonhosLightbox" hidden onclick="PainelSonhos.closeLightbox(event)">
         <div class="painel-sonhos-lightbox__inner" onclick="event.stopPropagation()">
           <button type="button" class="painel-sonhos-lightbox__close" onclick="PainelSonhos.closeLightbox()">✕</button>
-          <img id="painelSonhosLightboxImg" alt=""/>
+          <img id="painelSonhosLightboxImg" alt="" loading="lazy" decoding="async"/>
           <p id="painelSonhosLightboxCaption"></p>
         </div>
       </div>`;
 
-    _bindDropzone();
+  }
+
+  function _bindDateField() {
+    const input = document.getElementById('sonhoDataMeta');
+    const wrap = input?.closest('.painel-sonhos-date-wrap');
+    if (!input || !wrap) return;
+    const sync = () => wrap.classList.toggle('has-value', !!input.value);
+    input.addEventListener('input', sync);
+    input.addEventListener('change', sync);
+    input.addEventListener('focus', () => wrap.classList.add('is-focused'));
+    input.addEventListener('blur', () => wrap.classList.remove('is-focused'));
+    sync();
   }
 
   function _bindDropzone() {
@@ -644,7 +779,15 @@ const PainelSonhos = (() => {
     } catch (_) {
       _pendingPhotoPreview = '';
     }
-    await render();
+    if (_refreshDropzoneOnly()) return;
+    const modal = document.getElementById('painelSonhosModal');
+    if (modal?.classList.contains('open')) {
+      await _renderDreamModal();
+      if (typeof openModal === 'function') openModal('painelSonhosModal');
+      else document.getElementById('painelSonhosModal')?.classList.add('open');
+      return;
+    }
+    await render(undefined, { formOnly: true });
   }
 
   function onPhotoPick(input) {
@@ -652,12 +795,20 @@ const PainelSonhos = (() => {
     if (file) _setPendingPhoto(file);
   }
 
-  function clearPhotoPreview() {
+  async function clearPhotoPreview() {
     _pendingPhotoFile = null;
     _pendingPhotoPreview = '';
     const input = document.getElementById('sonhoFoto');
     if (input) input.value = '';
-    render();
+    if (_refreshDropzoneOnly()) return;
+    const modal = document.getElementById('painelSonhosModal');
+    if (modal?.classList.contains('open')) {
+      await _renderDreamModal();
+      if (typeof openModal === 'function') openModal('painelSonhosModal');
+      else document.getElementById('painelSonhosModal')?.classList.add('open');
+      return;
+    }
+    render(undefined, { formOnly: true });
   }
 
   function _storePhotoRef(url) {
@@ -734,7 +885,10 @@ const PainelSonhos = (() => {
       showLoading('Salvando...');
       try {
         await saveList(user, updated);
-        await render();
+        closeDreamModal();
+        const fresh = parseList(_cachedUser || user);
+        if (!_updateBoardSection(fresh)) await render();
+        else _updateHeroKpis(fresh);
         showToast('Foto cadastrada no mural!', 'success');
         _celebrate();
       } catch (e) {
@@ -761,7 +915,11 @@ const PainelSonhos = (() => {
     showLoading('Salvando...');
     try {
       await saveList(user, list);
-      await render();
+      _editingDreamId = null;
+      closeDreamModal();
+      const fresh = parseList(_cachedUser || user);
+      if (!_updateBoardSection(fresh)) await render();
+      else _updateHeroKpis(fresh);
       showToast(photoUrl ? 'Sonho adicionado ao mural!' : 'Sonho adicionado!', 'success');
       _celebrate();
     } catch (e) {
@@ -789,7 +947,11 @@ const PainelSonhos = (() => {
       if (!photoUrl) throw new Error('upload');
       const list = parseList(user).map(d => (d.id === id ? { ...d, photoUrl } : d));
       await saveList(user, list);
-      await render();
+      if (_updateBoardSection(parseList(_cachedUser || user))) {
+        _updateHeroKpis(parseList(_cachedUser || user));
+      } else {
+        await render();
+      }
       showToast('Foto adicionada ao sonho!', 'success');
     } catch (e) {
       showToast('Não foi possível enviar a foto.', 'error');
@@ -811,7 +973,11 @@ const PainelSonhos = (() => {
     if (!user?.id) return;
     const list = parseList(user).map(d => (d.id === id ? { ...d, done: !!checked } : d));
     await saveList(user, list);
-    await render();
+    if (_updateBoardSection(parseList(_cachedUser || user))) {
+      _updateHeroKpis(parseList(_cachedUser || user));
+    } else {
+      await render();
+    }
     if (checked) {
       showToast('Parabéns! Sonho realizado! 🎉', 'success', 4000);
       _celebrate();
@@ -825,17 +991,23 @@ const PainelSonhos = (() => {
     if (!user?.id) return;
     const list = parseList(user).filter(d => d.id !== id);
     await saveList(user, list);
-    await render();
+    if (_updateBoardSection(parseList(_cachedUser || user))) {
+      _updateHeroKpis(parseList(_cachedUser || user));
+    } else {
+      await render();
+    }
     showToast('Sonho removido.', 'info');
   }
 
   function setFilter(filter) {
     _viewFilter = filter || 'all';
+    const user = _cachedUser || (typeof currentUser !== 'undefined' ? currentUser : null);
+    if (user && _updateBoardSection(parseList(user))) return;
     render();
   }
 
   async function openLightbox(dreamId) {
-    const user = await getUser();
+    const user = _cachedUser || (typeof currentUser !== 'undefined' ? currentUser : await getUser());
     const dream = parseList(user).find(d => d.id === dreamId);
     const src = photoSrc(dream);
     if (!src) return;
@@ -862,6 +1034,9 @@ const PainelSonhos = (() => {
     document.querySelectorAll('.nav-inicio, .nav-item[data-section="secInicio"]').forEach(el => {
       el.style.display = show ? '' : 'none';
     });
+    document.querySelectorAll('.nav-inicio-label, .sidebar-section-label.nav-inicio-label').forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
     const sec = document.getElementById('secInicio');
     if (sec) {
       if (!show) {
@@ -871,10 +1046,18 @@ const PainelSonhos = (() => {
         sec.style.display = '';
       }
     }
-    if (!show && typeof navigateTo === 'function') {
-      const storeBtn = document.querySelector('.nav-item[data-section="secStore"]');
-      if (storeBtn && storeBtn.style.display !== 'none') navigateTo('secStore');
-    }
+  }
+
+  function applyAdminNav(role) {
+    const show = eligible(role);
+    document.querySelectorAll('.nav-inicio, .nav-item[data-section="secInicio"]').forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
+    document.querySelectorAll('.nav-inicio-label, .sidebar-section-label.nav-inicio-label').forEach(el => {
+      el.style.display = show ? '' : 'none';
+    });
+    const sec = document.getElementById('secInicio');
+    if (sec) sec.style.display = show ? '' : 'none';
   }
 
   function shouldLandOnInicio(role, opts = {}) {
@@ -947,10 +1130,13 @@ const PainelSonhos = (() => {
     openLightbox,
     closeLightbox,
     onDreamImageError,
+    openDreamModal,
+    closeDreamModal,
     openDreamPhotoCadastro,
     cancelDreamEdit,
     focusNewDreamForm,
     applyEmployeeNav,
+    applyAdminNav,
     shouldLandOnInicio,
   };
 })();

@@ -23,15 +23,16 @@ const _RH_ALLOWED_ROLES = [
 const _RH_TAB_TITLES = {
   sonhos: 'Painel dos Sonhos',
   conta: 'Minha Conta',
-  kanban: 'Esteira Contestação',
+  kanban: 'Esteira Seletiva',
   empresa: 'Empresas Parceiras',
   curriculo: 'Currículos / Candidatos',
   cargo: 'Cargos',
-  funcionario: 'Funcionários',
+  funcionario: 'Cadastrar Funcionário',
   feedback: 'Feedbacks',
   justificativa: 'Justificativa de Falta',
   punicao: 'Registro Punição',
   demissao: 'Demissão',
+  folha: 'Gerar Folha de Pagamento',
   relatorios: 'Relatórios',
   ranking: 'Ranking Vendas',
   parceiro: 'Cadastrar Parceiros',
@@ -198,6 +199,12 @@ function _applyRhChrome(role) {
   const isJuridico = r === 'juridico';
   const showSonhos = typeof PainelSonhos !== 'undefined' && PainelSonhos.eligible(r);
 
+  document.querySelectorAll('.juridico-section-label, .juridico-nav').forEach((el) => {
+    el.style.display = isJuridico ? '' : 'none';
+  });
+  document.querySelectorAll('.rh-mgmt-label, .rh-mgmt-only').forEach((el) => {
+    el.style.display = isJuridico ? 'none' : '';
+  });
   document.querySelectorAll('.juridico-only').forEach((el) => {
     el.style.display = isJuridico ? '' : 'none';
   });
@@ -208,7 +215,7 @@ function _applyRhChrome(role) {
 
   document.querySelectorAll('.sidebar-nav .nav-section-label').forEach((lbl) => {
     if (lbl.textContent.trim().toLowerCase() === 'início') {
-      lbl.style.display = showSonhos ? '' : 'none';
+      lbl.style.display = (showSonhos || isJuridico) ? '' : 'none';
     }
   });
 
@@ -332,9 +339,20 @@ function switchTab(tabId) {
   const titleEl = document.getElementById('pageTitle');
   if (titleEl) titleEl.textContent = _RH_TAB_TITLES[tabId] || tabId;
 
+  if (tabId === 'curriculo') renderResumeList();
+  if (tabId === 'cargo') renderJobList();
   if (tabId === 'funcionario') {
     _updateRhFuncionarioGreeting();
     renderEmployeeList();
+  }
+  if (tabId === 'justificativa' && typeof renderJustificativaList === 'function') {
+    renderJustificativaList();
+  }
+  if (tabId === 'punicao' && typeof renderPunicaoList === 'function') {
+    renderPunicaoList();
+  }
+  if (tabId === 'demissao' && typeof renderDemissaoList === 'function') {
+    renderDemissaoList();
   }
   if (tabId === 'sonhos' && typeof PainelSonhos !== 'undefined') {
     PainelSonhos.render('painelSonhosRoot');
@@ -363,6 +381,13 @@ function openRhRankingTab() {
   if (typeof switchRhRelatorio === 'function') switchRhRelatorio('ranking');
   const titleEl = document.getElementById('pageTitle');
   if (titleEl) titleEl.textContent = _RH_TAB_TITLES.ranking || 'Ranking Vendas';
+}
+
+function openRhFolhaTab() {
+  switchTab('relatorios');
+  if (typeof switchRhRelatorio === 'function') switchRhRelatorio('folha');
+  const titleEl = document.getElementById('pageTitle');
+  if (titleEl) titleEl.textContent = _RH_TAB_TITLES.folha || 'Gerar Folha de Pagamento';
 }
 
 function _adminPanelHrefFresh(hash) {
@@ -400,6 +425,10 @@ function navigateBack() {
 
 function openJuridicoChamados() {
   window.location.replace(_adminPanelHrefFresh('secManageTickets'));
+}
+
+function openJuridicoContestacao() {
+  window.location.replace(_adminPanelHrefFresh('secContestacao'));
 }
 
 /* ══ RENDER LISTAS ══ */
@@ -1095,8 +1124,14 @@ async function _initRhManager() {
   const editParam = params.get('edit');
 
   const landSonhos = typeof PainelSonhos !== 'undefined' && PainelSonhos.eligible(role);
-  const initialTab = tabParam || _rhDefaultTab(role);
+  const folhaDeepLink = tabParam === 'folha';
+  const initialTab = folhaDeepLink ? 'relatorios' : (tabParam || _rhDefaultTab(role));
   switchTab(initialTab);
+  if (folhaDeepLink && typeof switchRhRelatorio === 'function') {
+    switchRhRelatorio('folha');
+    const titleEl = document.getElementById('pageTitle');
+    if (titleEl) titleEl.textContent = _RH_TAB_TITLES.folha || 'Gerar Folha de Pagamento';
+  }
 
   reloadAllData({ silent: true }).then(async () => {
     if (editParam) {
@@ -1121,11 +1156,13 @@ window._applyRhChrome = _applyRhChrome;
 
 window.switchTab = switchTab;
 window.openRhRankingTab = openRhRankingTab;
+window.openRhFolhaTab = openRhFolhaTab;
 window.reloadAllData = reloadAllData;
 window.navigateBack = navigateBack;
 window.closeModalRH = closeModalRH;
 window.openModalRH = openModalRH;
 window.openJuridicoChamados = openJuridicoChamados;
+window.openJuridicoContestacao = openJuridicoContestacao;
 
 window.openEmpresaModal = openEmpresaModal;
 window.salvarEmpresa = salvarEmpresa;

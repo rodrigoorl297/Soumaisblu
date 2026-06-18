@@ -133,6 +133,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         banner.innerHTML = `<svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16"><path d="M11 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0z"/><path d="M2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2H2z"/></svg> Meu Perfil &nbsp;&nbsp;<a href="${Auth.resolveHref('admin.html')}" style="color:#fff;text-decoration:underline;">← Voltar ao painel</a>`;
         document.body.prepend(banner);
         document.body.style.paddingTop = '36px';
+      } else if (typeof Auth.isFinanceiroOnly === 'function' && Auth.isFinanceiroOnly()) {
+        window.location.replace(
+          typeof Auth.financeiroPageHrefFresh === 'function'
+            ? Auth.financeiroPageHrefFresh()
+            : Auth.financeiroPageHref()
+        );
+        return;
       } else {
         // Sem preview/loja: redirecionar para admin
         window.location.replace(Auth.resolveHref('admin.html'));
@@ -236,6 +243,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.Trainings && typeof Trainings.init === 'function') Trainings.init();
     if (window.MarketplaceBlu && typeof MarketplaceBlu.init === 'function') MarketplaceBlu.init();
     if (window.ContaCorrente && typeof ContaCorrente.init === 'function') ContaCorrente.init();
+    if (window.PropostaCredito) {
+      PropostaCredito.init();
+      if (typeof PropostaCredito.applyEmployeeNavVisibility === 'function') {
+        await PropostaCredito.applyEmployeeNavVisibility(currentUser);
+      }
+    }
     if (window.Trainings) {
       try { await Trainings.updateBadge(); } catch (_) { /* noop */ }
       try { await Trainings.checkPendingOnLogin(); } catch (_) { /* noop */ }
@@ -270,6 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (s==='secOrders')   await renderOrders();
         if (s==='secStore')    { await renderBalance(); await renderProducts(); }
         if (s==='secProposals') { if(window.Proposals) await Proposals.renderEmployeeList(); }
+        if (s==='secPropostaCredito' && window.PropostaCredito) PropostaCredito.renderEmployee();
         if (s==='secSimulacao') { if (window.SimulacaoTroco) SimulacaoTroco.init(); }
         if (s==='secClients')   { if(window.Clients) await Clients.renderEmployeeList(); }
         if (s==='secTickets')   { if(window.Tickets) await Tickets.renderEmployeeList(); }

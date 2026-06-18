@@ -17,6 +17,64 @@ function updateFileLabel(inputId, labelId) {
 window.Clients = {
   _cpfLookupTimer: null,
   _cpfLookupBound: false,
+  _searchDebounce: null,
+  _partnerSearchDebounce: null,
+  _employeeListCache: null,
+
+  _getSearchQuery: function(inputId) {
+    const el = document.getElementById(inputId || 'clientSearch');
+    return (el?.value || '').trim();
+  },
+
+  _normalizeDigits: function(s) {
+    return String(s || '').replace(/\D/g, '');
+  },
+
+  matchesClientSearch: function(client, query, opts) {
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return true;
+    const qDigits = this._normalizeDigits(q);
+    const supervisorName = String(opts?.supervisorName || '').toLowerCase();
+    const fields = [
+      client.name,
+      client.email,
+      client.cpf,
+      client.phone1,
+      client.phone2,
+      supervisorName,
+    ];
+    const hay = fields.join(' ').toLowerCase();
+    if (hay.includes(q)) return true;
+    if (!qDigits) return false;
+    const cpf = this._normalizeDigits(client.cpf);
+    const phone1 = this._normalizeDigits(client.phone1);
+    const phone2 = this._normalizeDigits(client.phone2);
+    return cpf.includes(qDigits) || phone1.includes(qDigits) || phone2.includes(qDigits);
+  },
+
+  _onSearchInput: function() {
+    clearTimeout(this._searchDebounce);
+    this._searchDebounce = setTimeout(() => {
+      if (typeof _repaintClientsTableFromCache === 'function') {
+        _repaintClientsTableFromCache();
+      } else {
+        this._repaintEmployeeList();
+      }
+    }, 200);
+  },
+
+  _onPartnerSearchInput: function() {
+    clearTimeout(this._partnerSearchDebounce);
+    this._partnerSearchDebounce = setTimeout(() => {
+      if (window.PartnerOps?.renderClientsTable) PartnerOps.renderClientsTable();
+    }, 200);
+  },
+
+  _repaintEmployeeList: function() {
+    const listEl = document.getElementById('clientsList');
+    if (!listEl || !this._employeeListCache) return;
+    this._paintEmployeeList(listEl, this._employeeListCache);
+  },
 
   init: function() {
     this._bindCpfLookup();
@@ -528,27 +586,22 @@ window.Clients = {
     }
   },
 
-  renderEmployeeList: async function() {
-    try {
-      const listEl = document.getElementById('clientsList');
-      if (!listEl) return;
+  _paintEmployeeList: function(listEl, clients) {
+    const q = this._getSearchQuery('employeeClientSearch');
+    const rows = (clients || []).filter(c => this.matchesClientSearch(c, q));
 
-      const user = typeof Auth !== 'undefined' ? await Auth.getCurrentUser() : null;
-      const clients = await DB.getClients({
-        supervisorId: user?.id,
-        pageSize: 500,
-      }) || [];
-      
-      if (clients.length === 0) {
-        listEl.innerHTML = '<p>Nenhum cliente cadastrado.</p>';
-        return;
-      }
+    if (!rows.length) {
+      listEl.innerHTML = clients.length
+        ? '<p style="text-align:center;color:var(--color-text-muted);padding:20px;">Nenhum cliente encontrado para a busca.</p>'
+        : '<p>Nenhum cliente cadastrado.</p>';
+      return;
+    }
 
-      const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-      let html = '';
-      clients.forEach(c => {
-        const cpfKey = this._escCpf(c.cpf || c.id);
-        html += `
+    const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    let html = '';
+    rows.forEach(c => {
+      const cpfKey = this._escCpf(c.cpf || c.id);
+      html += `
             <div class="card" style="padding: 16px; margin-bottom: 12px; display:flex; gap: 16px; align-items:center;">
                ${typeof avatarHtml === 'function' ? avatarHtml(c.name, 'avatar-md') : ''}
                <div style="flex:1;min-width:0;">
@@ -561,8 +614,23 @@ window.Clients = {
                </div>
             </div>
           `;
-      });
-      listEl.innerHTML = html;
+    });
+    listEl.innerHTML = html;
+  },
+
+  renderEmployeeList: async function() {
+    try {
+      const listEl = document.getElementById('clientsList');
+      if (!listEl) return;
+
+      const user = typeof Auth !== 'undefined' ? await Auth.getCurrentUser() : null;
+      const clients = await DB.getClients({
+        supervisorId: user?.id,
+        pageSize: 500,
+      }) || [];
+
+      this._employeeListCache = clients;
+      this._paintEmployeeList(listEl, clients);
     } catch (e) {
       console.error("Erro ao listar clientes", e);
     }

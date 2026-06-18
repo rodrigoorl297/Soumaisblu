@@ -138,7 +138,7 @@ window.Tickets = {
                 <span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span>
              </div>
              <div><strong>Assunto:</strong> ${t.subject}</div>
-             <div style="font-size: 13px; margin-top: 8px;"><em>Última atualização: ${new Date(t.updatedAt).toLocaleString()}</em></div>
+             <div style="font-size: 13px; margin-top: 8px;"><em>Última atualização: ${formatDateTime(t.updatedAt)}</em></div>
              <div style="margin-top: 10px;">
                <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Ver Detalhes/Responder</button>
              </div>
@@ -178,7 +178,7 @@ window.Tickets = {
             <td>${t.id}</td>
             <td>${t.openedByName} (${t.openedByDept || 'N/A'})</td>
             <td>${t.targetDept} - ${t.subject}</td>
-            <td>${new Date(t.createdAt).toLocaleDateString()}</td>
+            <td>${formatDate(t.createdAt)}</td>
             <td><span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span></td>
             <td>
                <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Tratar</button>
@@ -199,7 +199,7 @@ window.Tickets = {
       <strong>De:</strong> ${ticket.openedByName} (${ticket.openedByDept})<br>
       <strong>Para (Depto):</strong> ${ticket.targetDept}<br>
       <strong>Assunto:</strong> ${ticket.subject}<br>
-      <strong>Criado em:</strong> ${new Date(ticket.createdAt).toLocaleString()}
+      <strong>Criado em:</strong> ${formatDateTime(ticket.createdAt)}
     `;
     document.getElementById('manageTicketInfo').innerHTML = infoHtml;
     
@@ -220,7 +220,7 @@ window.Tickets = {
           
           threadHtml += `
             <div style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 5px; border-radius: 4px; ${align}">
-               <div style="font-size: 12px; color: var(--color-text-muted);"><strong>${msg.senderName}</strong> em ${new Date(msg.date).toLocaleString()}</div>
+               <div style="font-size: 12px; color: var(--color-text-muted);"><strong>${msg.senderName}</strong> em ${formatDateTime(msg.date)}</div>
                <div style="margin-top: 5px;">${msg.message}</div>
                ${attHtml}
             </div>

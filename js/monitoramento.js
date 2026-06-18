@@ -21,6 +21,9 @@ const Monitoramento = (() => {
   }
 
   function proposalDate(p) {
+    if (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function') {
+      return DB.proposalBillingDate(p);
+    }
     const raw = p?.created_at || p?.createdAt || p?.updated_at;
     const d = raw ? new Date(raw) : new Date(0);
     return Number.isNaN(d.getTime()) ? new Date(0) : d;
@@ -34,7 +37,10 @@ const Monitoramento = (() => {
   }
 
   function vendorId(p) {
-    return String(p?.vendor_id || p?.vendorId || p?.employee_id || '').trim();
+    if (typeof DB !== 'undefined' && typeof DB.proposalVendorId === 'function') {
+      return DB.proposalVendorId(p);
+    }
+    return String(p?.vendorId || p?.vendor_id || p?.employee_id || '').trim();
   }
 
   function isPaid(p) {

@@ -65,6 +65,8 @@ const Auth = {
   leadsEmployeePageHref() { return this.pageHref('leads-employee.html'); },
   rhManagerPageHref() { return this.pageHref('rh-manager.html'); },
   rhManagerPageHrefFresh() { return this.pageHrefFresh('rh-manager.html'); },
+  juridicoManagerPageHref() { return this.rhManagerPageHref(); },
+  juridicoManagerPageHrefFresh() { return this.rhManagerPageHrefFresh(); },
   monitoriaAtendimentoPageHref() { return this.pageHref('monitoria-atendimento.html'); },
   monitoriaAtendimentoPageHrefFresh() { return this.pageHrefFresh('monitoria-atendimento.html'); },
   monitoramentoPageHref() { return this.monitoriaAtendimentoPageHref(); },
@@ -77,6 +79,14 @@ const Auth = {
     const r = String(s.role || '').toLowerCase();
     return ['master', 'fundador', 'desenvolvedor', 'gerente', 'supervisor', 'backoffice',
       'operacional', 'sup_backoffice', 'rh', 'ouvidoria', 'admin', 'diretoria'].includes(r);
+  },
+
+  /** Hub Jurídico (rh-manager com chrome jurídico). */
+  canAccessJuridicoHub() {
+    const s = this.getSession();
+    if (!s || window.PARTNER_ROOT_ID) return false;
+    const r = String(s.role || '').toLowerCase();
+    return ['juridico', 'master', 'fundador', 'rh', 'gerencia'].includes(r);
   },
   folhaPagamentoPageHref() { return this.pageHref('folha-pagamento.html'); },
   treinamentosPageHref() { return this.pageHref('treinamentos.html'); },
@@ -113,7 +123,9 @@ const Auth = {
   defaultAppHref() {
     const s = this.getSession();
     if (!s) return this.loginPageHref();
+    const role = String(s.role || '').toLowerCase();
     if (this.isFinanceiroOnly()) return this.financeiroPageHref();
+    if (role === 'juridico') return this.juridicoManagerPageHref();
     return this.usesAdminPanel(s.role) ? this.adminPageHref() : this.employeePageHref();
   },
 

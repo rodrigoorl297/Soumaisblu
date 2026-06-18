@@ -232,6 +232,9 @@
         if (app) app.style.display = 'flex';
 
         if (window.FinanceiroBoot) await FinanceiroBoot.init();
+        if (window.FinanceiroBoot?.ensureFinanceiroSidebarVisible) {
+          FinanceiroBoot.ensureFinanceiroSidebarVisible();
+        }
 
         updateSidebarUser(session, user);
 
@@ -240,8 +243,7 @@
         if (urlSec) {
           await FinanceiroPage.openSection(urlSec, urlTab || '');
         } else {
-          if (window.FinanceiroBoot) FinanceiroBoot.showInicioPanel();
-          await renderDashboard();
+          await FinanceiroPage.openSection('');
         }
       } catch (e) {
         console.error('[FinanceiroPage]', e);

@@ -73,6 +73,15 @@ window.SalesRanking = {
     return { month: 'Este mês', last_month: 'Mês anterior', all: 'Todo o período' }[periodKey] || 'Período';
   },
 
+  _proposalBillingDate(p) {
+    if (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function') {
+      return DB.proposalBillingDate(p);
+    }
+    const raw = p.createdAt || p.created_at;
+    const d = raw ? new Date(raw) : new Date(0);
+    return Number.isNaN(d.getTime()) ? new Date(0) : d;
+  },
+
   _proposalDate(p) {
     if (typeof DB !== 'undefined' && typeof DB.proposalDate === 'function') {
       return DB.proposalDate(p);
@@ -90,6 +99,9 @@ window.SalesRanking = {
   },
 
   _vendorId(p) {
+    if (typeof DB !== 'undefined' && typeof DB.proposalVendorId === 'function') {
+      return DB.proposalVendorId(p);
+    }
     return String(p.vendorId || p.vendor_id || p.employee_id || '').trim();
   },
 
@@ -155,7 +167,7 @@ window.SalesRanking = {
     const faseWant = this._filters.fase;
 
     return (proposals || []).filter(p => {
-      const d = this._proposalDate(p);
+      const d = this._proposalBillingDate(p);
       if (start && d < start) return false;
       if (end && d >= end) return false;
 

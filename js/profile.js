@@ -471,13 +471,19 @@ async function _renderPropDashboard(proposals) {
   const mesAtual = now.getMonth();
   const anoAtual = now.getFullYear();
 
+  const propAmt = (p) => (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function'
+    ? DB.proposalAmount(p)
+    : (parseFloat(p?.valorFinal ?? p?.valor_final ?? p?.valor) || 0));
+
   const doMes = proposals.filter(p => {
-    const d = new Date(p.createdAt || p.created_at || 0);
+    const d = typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function'
+      ? DB.proposalBillingDate(p)
+      : new Date(p.createdAt || p.created_at || 0);
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
   });
 
-  const totalFinalMes = doMes.reduce((s, p) => s + (parseFloat(p.valorFinal || p.valor) || 0), 0);
-  const totalGeral = proposals.reduce((s, p) => s + (parseFloat(p.valorFinal || p.valor) || 0), 0);
+  const totalFinalMes = doMes.reduce((s, p) => s + propAmt(p), 0);
+  const totalGeral = proposals.reduce((s, p) => s + propAmt(p), 0);
 
   const meRef = currentUser || await resolveEmployeeUser();
   const meUser = meRef || (Auth.getSession()?.id ? await DB.getUser(Auth.getSession().id).catch(() => null) : null);
@@ -571,7 +577,7 @@ async function _renderPropDashboard(proposals) {
         <div style="font-size:12px;color:var(--color-text-muted);">${p.clientName || '—'} · ${p.product || '—'} / ${p.convenio || '—'}</div>
       </div>
       <div style="text-align:right;flex-shrink:0;">
-        <div style="font-size:13px;font-weight:800;color:var(--color-success);">${fmtR(p.valorFinal || p.valor)}</div>
+        <div style="font-size:13px;font-weight:800;color:var(--color-success);">${fmtR(typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0)}</div>
         <div style="font-size:11px;color:var(--color-text-muted);">${fmtR(p.valor)} ${parseFloat(p.desconto || 0) > 0 ? '- desc.' : ''}</div>
       </div>
       <div style="background:${statusCor}18;color:${statusCor};padding:3px 9px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap;">${p.statusOp || p.status || '—'}</div>

@@ -185,9 +185,15 @@
     adminTab: 'catalogo',
 
     ensureUi() {
-      const nav = document.querySelector('.sidebar-nav');
+      const finNav = document.getElementById('finSidebarNav');
+      const nav = finNav || document.querySelector('.sidebar-nav');
       const main = document.querySelector('.page-content');
-      if (!nav || !main) return;
+      if (!main) return;
+      if (window.SOUBLU_FINANCEIRO_PAGE || finNav) {
+        this.ensureModals();
+        return;
+      }
+      if (!nav) return;
 
       if (!document.getElementById('navMarketplaceBlu') && canAccess()) {
         const btn = document.createElement('button');
@@ -263,6 +269,7 @@
     },
 
     applyNavVisibility(cfg) {
+      if (window.SOUBLU_FINANCEIRO_PAGE || document.getElementById('finSidebarNav')) return;
       const show = cfg?.canMarketplaceBlu !== false && canAccess();
       document.querySelectorAll('.marketplace-blu-nav').forEach(el => {
         el.style.display = show ? '' : 'none';

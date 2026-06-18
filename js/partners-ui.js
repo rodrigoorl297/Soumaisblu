@@ -43,6 +43,11 @@
   }
 
   function _proposalInPartnerOrg(p, ids) {
+    const primary = typeof DB.proposalVendorId === 'function'
+      ? DB.proposalVendorId(p)
+      : String(p?.vendorId || p?.vendor_id || p?.employee_id || '').trim();
+    if (primary && ids.has(String(primary))) return true;
+    if (primary) return false;
     const vidList = typeof DB._proposalVendorIds === 'function'
       ? DB._proposalVendorIds(p)
       : [p.vendorId, p.vendor_id, p.employee_id];
@@ -60,11 +65,21 @@
     const clis = (clients || []).filter((c) => _clientInPartnerOrg(c, ids));
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const propsMonth = props.filter((p) => {
-      const d = new Date(p.createdAt || p.created_at || 0);
-      return d >= monthStart;
-    });
-    const fmtSum = (arr) => arr.reduce((s, p) => s + (parseFloat(p.valorFinal || p.valor) || 0), 0);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const inMonth = (p) => (typeof DB.proposalInDateRange === 'function'
+      ? DB.proposalInDateRange(p, monthStart, monthEnd)
+      : (() => {
+        const d = typeof DB.proposalBillingDate === 'function'
+          ? DB.proposalBillingDate(p)
+          : new Date(p.createdAt || p.created_at || 0);
+        return d >= monthStart && d < monthEnd;
+      })());
+    const propsMonth = props.filter(inMonth);
+    const propAmt = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
+    const propVid = (p) => (typeof DB.proposalVendorId === 'function'
+      ? DB.proposalVendorId(p)
+      : String(p?.vendorId || p?.vendor_id || p?.employee_id || '').trim());
+    const fmtSum = (arr) => arr.reduce((s, p) => s + propAmt(p), 0);
     const byStatus = {};
     props.forEach((p) => {
       const st = p.status || '—';
@@ -72,12 +87,18 @@
     });
     const byVendor = {};
     propsMonth.forEach((p) => {
-      const vid = p.vendorId || p.vendor_id || p.employee_id || '—';
-      if (!byVendor[vid]) {
-        byVendor[vid] = { id: vid, name: p.vendorName || p.vendor_name || '—', count: 0, total: 0 };
+      const vid = propVid(p);
+      const key = vid || '__sem_vendedor__';
+      if (!byVendor[key]) {
+        byVendor[key] = {
+          id: key,
+          name: vid ? (p.vendorName || p.vendor_name || '—') : 'Sem vendedor',
+          count: 0,
+          total: 0,
+        };
       }
-      byVendor[vid].count += 1;
-      byVendor[vid].total += parseFloat(p.valorFinal || p.valor) || 0;
+      byVendor[key].count += 1;
+      byVendor[key].total += propAmt(p);
     });
     const activeTeam = (team || []).filter((e) => e.active !== false);
     return {
@@ -127,7 +148,7 @@
           <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">${esc(pr.numero || pr.id)} · ${esc(pr.clientName || '—')}</div>
           <div style="font-size:11px;color:var(--color-text-muted);">${esc(pr.vendorName || '—')} · ${String(pr.createdAt || pr.created_at || '').slice(0, 10)}</div></div>
           <span class="badge ${badge}" style="font-size:10px;">${esc(st)}</span>
-          <strong style="font-size:12px;color:var(--color-success);white-space:nowrap;">${fmtR(pr.valorFinal || pr.valor)}</strong></div>`;
+          <strong style="font-size:12px;color:var(--color-success);white-space:nowrap;">${fmtR(typeof DB.proposalAmount === 'function' ? DB.proposalAmount(pr) : 0)}</strong></div>`;
       }).join('')
       : '<div class="text-muted text-center" style="padding:16px;font-size:13px;">Nenhuma proposta desta organização.</div>';
     const stat = typeof statCardHtml === 'function' ? statCardHtml : () => '';

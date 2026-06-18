@@ -29,7 +29,7 @@
     const s = Auth.getSession();
     if (!s) return false;
     if (!window.PARTNER_ROOT_ID) {
-      return ['master', 'fundador', 'gerente', 'backoffice', 'operacional', 'sup_backoffice', 'supervisor'].includes(s.role);
+      return ['master', 'fundador', 'gerente', 'backoffice', 'operacional', 'sup_backoffice', 'supervisor', 'juridico'].includes(s.role);
     }
     return false;
   }
@@ -38,7 +38,7 @@
     const s = Auth.getSession();
     if (!s) return false;
     if (!window.PARTNER_ROOT_ID) {
-      return ['master', 'fundador', 'gerente', 'backoffice', 'operacional', 'sup_backoffice'].includes(s.role);
+      return ['master', 'fundador', 'gerente', 'backoffice', 'operacional', 'sup_backoffice', 'juridico'].includes(s.role);
     }
     return false;
   }
@@ -86,13 +86,13 @@
       const main = document.querySelector('.page-content');
       if (!nav || !main) return;
 
-      if (!document.getElementById('navContestacao') && canRespond()) {
+      if (!document.getElementById('navContestacao') && (canRespond() || canManage())) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'nav-item contestacao-nav';
         btn.id = 'navContestacao';
         btn.dataset.section = 'secContestacao';
-        btn.innerHTML = `${navIconHtml('scale')}<span class="nav-label">Contestação</span>`;
+        btn.innerHTML = `${navIconHtml('scale')}<span class="nav-label">${canManage() && !canRespond() ? 'Esteira Contestação' : 'Contestação'}</span>`;
         const anchor = document.getElementById('navTimEsteira') || document.getElementById('navManageProposals');
         if (anchor?.nextSibling) anchor.parentNode.insertBefore(btn, anchor.nextSibling);
         else nav.appendChild(btn);
@@ -109,7 +109,7 @@
     },
 
     applyNavVisibility(cfg) {
-      const show = cfg?.canContestacao !== false && canRespond();
+      const show = cfg?.canContestacao !== false && (canRespond() || canManage());
       document.querySelectorAll('.contestacao-nav').forEach(el => { el.style.display = show ? '' : 'none'; });
     },
 

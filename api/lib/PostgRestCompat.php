@@ -25,7 +25,7 @@ final class PostgRestCompat
         'training_attempts' => ['answers'],
         'training_mural' => ['audience_roles'],
         'partners' => ['permissions', 'meta'],
-        'proposals' => ['attachments', 'history'],
+        'proposals' => ['attachments', 'history', 'meta', 'credito_retorno', 'credito_esteira'],
         'clients' => ['documents'],
         'orders' => ['items'],
         'withdrawals' => ['bank_account'],

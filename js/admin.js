@@ -180,6 +180,7 @@ function _wireLeadsManagerNav() {
 
 function _applyAdminNavVisibility(cfg) {
   if (!cfg) return;
+  if (window.SOUBLU_FINANCEIRO_PAGE) return;
   document.querySelectorAll('.master-only').forEach(el => {
     el.style.display = cfg.canMasterPanel ? '' : 'none';
   });
@@ -273,13 +274,13 @@ function _applyAdminNavVisibility(cfg) {
   });
   document.getElementById('secPartners')?.remove();
 
-  /* Ranking, Feedbacks e Relatório só no RH — Reuniões permanece no admin. */
+  /* Ranking e Relatório só no RH — Reuniões, Feedback e Chamados ficam em Administrativo. */
   document.querySelectorAll(
-    '.ranking-nav, [data-section="secRanking"], [data-section="secFeedback"], [data-section="secReport"]'
+    '.ranking-nav, [data-section="secRanking"], [data-section="secReport"]'
   ).forEach((el) => {
     if (!el.closest('#finSidebarNav')) el.remove();
   });
-  ['secRanking', 'secFeedback', 'secReport'].forEach((id) => {
+  ['secRanking', 'secReport'].forEach((id) => {
     document.getElementById(id)?.remove();
   });
 
@@ -426,6 +427,35 @@ function _applyAdminNavVisibility(cfg) {
     btn.style.display = canMon ? '' : 'none';
   })();
 
+  /* ── JURÍDICO (hub rh-manager — contestação, punição, demissão, chamados) ── */
+  (function _injectJuridicoHubNav() {
+    const canJur = cfg.canJuridicoHub;
+    let btn = document.getElementById('navJuridicoHub');
+    if (!btn) {
+      btn = document.createElement('button');
+      btn.id = 'navJuridicoHub';
+      btn.type = 'button';
+      btn.className = 'nav-item';
+      btn.innerHTML = `<span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18"/><path d="M5 10h14"/><path d="M5 14h14"/></svg></span><span class="nav-label">Jurídico</span>`;
+      btn.onclick = () => {
+        const href = typeof Auth !== 'undefined' && Auth.juridicoManagerPageHrefFresh
+          ? Auth.juridicoManagerPageHrefFresh()
+          : (typeof Auth !== 'undefined' && Auth.juridicoManagerPageHref
+            ? Auth.juridicoManagerPageHref()
+            : 'pages/rh-manager.html');
+        _navigateToHub(href);
+      };
+      const sidebarNav = document.querySelector('.sidebar-nav');
+      const refBtn = document.getElementById('navMonitoriaAtendimento') || document.getElementById('navRHManager');
+      if (refBtn && refBtn.nextSibling && sidebarNav) {
+        sidebarNav.insertBefore(btn, refBtn.nextSibling);
+      } else if (sidebarNav) {
+        sidebarNav.appendChild(btn);
+      }
+    }
+    btn.style.display = canJur ? '' : 'none';
+  })();
+
   if (window.Tim && typeof Tim.applyNavVisibility === 'function') Tim.applyNavVisibility(cfg);
   document.querySelectorAll('.tim-indicacao-nav, .tim-esteira-nav, #navTimIndicacao, #navTimEsteira').forEach(el => {
     el.style.display = 'none';
@@ -457,17 +487,25 @@ function _applyAdminNavVisibility(cfg) {
   }
 
   const showReportsSection = Array.from(document.querySelectorAll(
-    '.sidebar-nav button[data-section="secMeetings"]'
+    '.sidebar-nav .ranking-nav, .sidebar-nav button[data-section="secReport"]'
   )).some(el => el.style.display !== 'none');
   document.querySelectorAll('.reports-section').forEach(el => {
     el.style.display = showReportsSection ? '' : 'none';
   });
+  const administrativoBtns = document.querySelectorAll(
+    '.sidebar-nav .administrativo-nav, .sidebar-nav .meetings-nav, .sidebar-nav #navManageTickets'
+  );
+  const hasAdministrativo = Array.from(administrativoBtns).some(el => el.style.display !== 'none');
+  document.querySelectorAll('.sidebar-nav .administrativo-section-label, .sidebar-nav .administrativo-section-divider').forEach(el => {
+    el.style.display = hasAdministrativo ? '' : 'none';
+  });
   const gestaoBtns = document.querySelectorAll(
-    '.sidebar-nav .leads-manager-nav, .sidebar-nav .nav-item[data-section="secEmployees"], .sidebar-nav .nav-item[data-section="secBalance"], .sidebar-nav .nav-item[data-section="secProducts"], .sidebar-nav .nav-item[data-section="secOrders"], .sidebar-nav .store-shop-nav, .sidebar-nav .nav-item[data-section="secWithdrawals"], .sidebar-nav #navClients, .sidebar-nav #navManageProposals, .sidebar-nav #navPartnerOps, .sidebar-nav #navSimulacao, .sidebar-nav #navManageTickets, .sidebar-nav #navFinanceiroHub, .sidebar-nav #navMonitoriaAtendimento'
+    '.sidebar-nav .leads-manager-nav, .sidebar-nav .nav-item[data-section="secEmployees"], .sidebar-nav .nav-item[data-section="secBalance"], .sidebar-nav .nav-item[data-section="secProducts"], .sidebar-nav .nav-item[data-section="secOrders"], .sidebar-nav .store-shop-nav, .sidebar-nav .nav-item[data-section="secWithdrawals"], .sidebar-nav #navClients, .sidebar-nav #navManageProposals, .sidebar-nav #navPartnerOps, .sidebar-nav #navSimulacao, .sidebar-nav #navFinanceiroHub, .sidebar-nav #navMonitoriaAtendimento'
   );
   const hasGestao = Array.from(gestaoBtns).some(el => el.style.display !== 'none');
   document.querySelectorAll('.sidebar-nav .sidebar-section-label').forEach(lbl => {
-    if (lbl.textContent.trim().toUpperCase() === 'GESTÃO') {
+    const t = lbl.textContent.trim().toUpperCase();
+    if (t === 'GESTÃO') {
       lbl.style.display = hasGestao ? '' : 'none';
     }
   });
@@ -758,7 +796,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (window.SOUBLU_FINANCEIRO_PAGE || window.SOUBLU_TREINAMENTOS_PAGE) return;
   _stripNavCacheBustParam();
   showLoading('Carregando painel...');
-  let landingSection = 'secDashboard';
+  let landingSection = 'secInicio';
   let _explicitLanding = false;
   const _urlOpen = new URLSearchParams(window.location.search).get('open');
   if (_urlOpen === 'loja') { landingSection = 'secStore'; _explicitLanding = true; }
@@ -882,18 +920,44 @@ document.addEventListener('DOMContentLoaded', async () => {
       : (!_inPartnerOrg && (IS_MASTER || IS_FUNDA || IS_FINANCIAL));
     const canMonitoriaAtendimento = p.canMonitoriaAtendimento !== undefined ? !!p.canMonitoriaAtendimento
       : (!_inPartnerOrg && typeof Auth.canAccessMonitoriaAtendimento === 'function' && Auth.canAccessMonitoriaAtendimento());
+    const canJuridicoHub = p.canJuridicoHub !== undefined ? !!p.canJuridicoHub
+      : (!_inPartnerOrg && typeof Auth.canAccessJuridicoHub === 'function' && Auth.canAccessJuridicoHub());
     const _adminNavCfg = {
       canMasterPanel, canSaques, canCadFunc, canProposta, canClientes, _inPartnerOrg,
       canPartnerOpsHub, canRanking, canLoja, canSimulacao, canChamados, canSupervisorPanel,
       canPartnerDashboard, canLeadsManager, canTreinamentos, canTimIndicacao, canTimEsteira,
       canContestacao, canFiscalParceiro, canMarketplaceBlu, canFornecedorFinanceiro, canContaCorrente,
-      canFinanceiroHub, canMonitoriaAtendimento,
+      canFinanceiroHub, canMonitoriaAtendimento, canJuridicoHub,
     };
     window.__ADMIN_NAV_CFG__ = _adminNavCfg;
     _applyAdminNavVisibility(_adminNavCfg);
+    if (window.PainelSonhos && typeof PainelSonhos.applyAdminNav === 'function') {
+      PainelSonhos.applyAdminNav(s.role);
+    }
 
     if (employeesManagedInRhHub() && landingSection === 'secEmployees') {
       goToRhFuncionarios();
+      return;
+    }
+
+    if (IS_JURIDICO && !window.SOUBLU_SKIP_JURIDICO_REDIRECT) {
+      const hash = String(window.location.hash || '').replace(/^#/, '');
+      const stayOnAdmin = ['secContestacao', 'secManageTickets', 'secMeetings', 'secMyProfile'];
+      if (!hash || !stayOnAdmin.includes(hash)) {
+        const jurHref = typeof Auth !== 'undefined' && Auth.juridicoManagerPageHrefFresh
+          ? Auth.juridicoManagerPageHrefFresh()
+          : 'pages/rh-manager.html';
+        window.location.replace(jurHref);
+        return;
+      }
+    }
+
+    if (typeof Auth !== 'undefined' && typeof Auth.isFinanceiroOnly === 'function'
+      && Auth.isFinanceiroOnly() && !window.SOUBLU_SKIP_FINANCEIRO_REDIRECT) {
+      const finHref = typeof Auth.financeiroPageHrefFresh === 'function'
+        ? Auth.financeiroPageHrefFresh()
+        : Auth.financeiroPageHref();
+      window.location.replace(finHref);
       return;
     }
 
@@ -963,7 +1027,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       await _bootSettle(bootTasks);
 
-    } else if (IS_SUPERVISOR || IS_JURIDICO || IS_OUVIDORIA) {
+    } else if (IS_SUPERVISOR || IS_OUVIDORIA) {
       landingSection = IS_SUPERVISOR && !IS_SUP_BACKOFFICE ? 'secManageProposals' : 'secMeetings';
       const bootTasks = [typeof renderMeetingsAdmin === 'function' ? renderMeetingsAdmin() : Promise.resolve()];
       if (CAN_EMPLOYEES_PANEL) bootTasks.unshift(renderEmployeesTable());
@@ -1021,7 +1085,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             await renderTeamBillingChart();
           }
         }
-        if (sec==='secRanking' || sec==='secFeedback' || sec==='secReport') return;
+        if (sec==='secRanking' || sec==='secReport') return;
+        if (sec==='secFeedback') { await renderFeedbackSection(); }
         if (sec==='secBalance')     { await populateBalanceSelect(); await renderBalanceHistory(); }
         if (sec==='secMaster')      await renderMasterPanel();
         if (sec==='secPartners') return;
@@ -1169,6 +1234,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       navigateTo(landingSection);
       if (landingSection === 'secInicio' && window.PainelSonhos) {
         try { await PainelSonhos.render('painelSonhosRoot'); } catch (e) { console.warn('[inicio boot]', e); }
+      }
+      if (landingSection === 'secContestacao' && window.Contestacao) {
+        try { await Contestacao.render(); } catch (e) { console.warn('[contestacao boot]', e); }
+      }
+      if (landingSection === 'secManageTickets' && window.Tickets) {
+        try { await Tickets.renderAdminList(); } catch (e) { console.warn('[tickets boot]', e); }
       }
     }
     hideLoading();
@@ -1414,7 +1485,7 @@ async function _renderDashboardBody() {
   }
 
   const fmtR = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-  const propAmtDash = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : parseFloat(p?.valorFinal || p?.valor_final || p?.valor || 0) || 0);
+  const propAmtDash = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
   const propBillingTotal = (allProps || []).reduce((s, p) => s + propAmtDash(p), 0);
   const propsWithValue = (allProps || []).filter(p => propAmtDash(p) > 0).length;
 
@@ -1525,6 +1596,9 @@ function _buildUsersByVendorName(users) {
 }
 
 function _resolveProposalVendorId(p, usersByName) {
+  if (typeof DB !== 'undefined' && typeof DB.resolveProposalVendorId === 'function') {
+    return DB.resolveProposalVendorId(p, usersByName);
+  }
   const vid = String(p?.vendorId || p?.vendor_id || p?.employee_id || '').trim();
   if (vid) return vid;
   const vn = _normVendorName(p?.vendorName || p?.vendor_name);
@@ -1669,8 +1743,10 @@ async function renderTeamBillingChart() {
   }
 
   // ── Filtrar propostas pelo período ───────────────────────────────────
-  const propAmt = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : parseFloat(p.valorFinal || p.valor_final || p.valor || 0) || 0);
-  const propDate = (p) => (typeof DB.proposalDate === 'function' ? DB.proposalDate(p) : new Date(p.createdAt || p.created_at || 0));
+  const propAmt = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
+  const propDate = (p) => (typeof DB.proposalBillingDate === 'function'
+    ? DB.proposalBillingDate(p)
+    : (typeof DB.proposalDate === 'function' ? DB.proposalDate(p) : new Date(p.createdAt || p.created_at || 0)));
 
   let inRange = proposals.filter(p => {
     const d = propDate(p);
@@ -2771,6 +2847,11 @@ function _partnerOrgIds(rootId, team) {
 }
 
 function _proposalInPartnerOrg(p, ids) {
+  const primary = typeof DB.proposalVendorId === 'function'
+    ? DB.proposalVendorId(p)
+    : String(p?.vendorId || p?.vendor_id || p?.employee_id || '').trim();
+  if (primary && ids.has(String(primary))) return true;
+  if (primary) return false;
   const vidList = typeof DB._proposalVendorIds === 'function'
     ? DB._proposalVendorIds(p)
     : [p.vendorId, p.vendor_id, p.employee_id];
@@ -2790,14 +2871,22 @@ function _partnerOrgStats(rootId, team, proposals, clients) {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  const propsMonth = props.filter(p => {
-    const d = new Date(p.createdAt || p.created_at || 0);
-    return d >= monthStart && d < monthEnd;
-  });
+  const inMonth = (p) => (typeof DB.proposalInDateRange === 'function'
+    ? DB.proposalInDateRange(p, monthStart, monthEnd)
+    : (() => {
+      const d = typeof DB.proposalBillingDate === 'function'
+        ? DB.proposalBillingDate(p)
+        : new Date(p.createdAt || p.created_at || 0);
+      return d >= monthStart && d < monthEnd;
+    })());
+  const propsMonth = props.filter(inMonth);
 
   const propAmt = (p) => (typeof DB !== 'undefined' && DB.proposalAmount
     ? DB.proposalAmount(p)
-    : (parseFloat(p?.valorFinal ?? p?.valor_final ?? p?.valor) || 0));
+    : 0);
+  const propVid = (p) => (typeof DB.proposalVendorId === 'function'
+    ? DB.proposalVendorId(p)
+    : String(p?.vendorId || p?.vendor_id || p?.employee_id || '').trim());
   const fmtSum = arr => arr.reduce((s, p) => s + propAmt(p), 0);
   const byStatus = {};
   props.forEach(p => {
@@ -2807,12 +2896,18 @@ function _partnerOrgStats(rootId, team, proposals, clients) {
 
   const byVendor = {};
   propsMonth.forEach(p => {
-    const vid = p.vendorId || p.vendor_id || p.employee_id || '—';
-    if (!byVendor[vid]) {
-      byVendor[vid] = { id: vid, name: p.vendorName || p.vendor_name || '—', count: 0, total: 0 };
+    const vid = propVid(p);
+    const key = vid || '__sem_vendedor__';
+    if (!byVendor[key]) {
+      byVendor[key] = {
+        id: key,
+        name: vid ? (p.vendorName || p.vendor_name || '—') : 'Sem vendedor',
+        count: 0,
+        total: 0,
+      };
     }
-    byVendor[vid].count += 1;
-    byVendor[vid].total += propAmt(p);
+    byVendor[key].count += 1;
+    byVendor[key].total += propAmt(p);
   });
 
   const activeTeam = (team || []).filter(e => e.active !== false);
@@ -2858,7 +2953,7 @@ function _renderPartnerDashboardBlock(p, u, stats) {
     ? stats.recent.map(pr => {
         const st = pr.status || '—';
         const badge = st === 'Pago' ? 'badge-success' : st === 'Cancelado' ? 'badge-danger' : 'badge-warning';
-        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-border);"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">${pr.numero || pr.id} · ${pr.clientName || '—'}</div><div style="font-size:11px;color:var(--color-text-muted);">${pr.vendorName || '—'} · ${(pr.createdAt || pr.created_at || '').slice(0, 10)}</div></div><span class="badge ${badge}" style="font-size:10px;">${st}</span><strong style="font-size:12px;color:var(--color-success);white-space:nowrap;">${fmtR(pr.valorFinal || pr.valor)}</strong></div>`;
+        return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--color-border);"><div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">${pr.numero || pr.id} · ${pr.clientName || '—'}</div><div style="font-size:11px;color:var(--color-text-muted);">${pr.vendorName || '—'} · ${(pr.createdAt || pr.created_at || '').slice(0, 10)}</div></div><span class="badge ${badge}" style="font-size:10px;">${st}</span><strong style="font-size:12px;color:var(--color-success);white-space:nowrap;">${fmtR(typeof DB.proposalAmount === 'function' ? DB.proposalAmount(pr) : 0)}</strong></div>`;
       }).join('')
     : '<div class="text-muted text-center" style="padding:16px;font-size:13px;">Nenhuma proposta desta organização.</div>';
 
@@ -4943,13 +5038,35 @@ async function _renderClientsTableBody(force = false) {
   }
 }
 
+function _repaintClientsTableFromCache() {
+  const tbody = document.getElementById('clientsTbody');
+  if (!tbody || !_clientsListCache) return;
+  _paintClientsTable(tbody, _clientsListCache.rows, _clientsListCache.nameMap);
+}
+window._repaintClientsTableFromCache = _repaintClientsTableFromCache;
+
 function _paintClientsTable(tbody, clients, nameMap) {
-  if (!clients.length) {
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;">Nenhum cliente cadastrado</td></tr>';
+  const q = (window.Clients && typeof Clients._getSearchQuery === 'function')
+    ? Clients._getSearchQuery('clientSearch')
+    : (document.getElementById('clientSearch')?.value || '').trim();
+  let rows = clients;
+  if (q && window.Clients && typeof Clients.matchesClientSearch === 'function') {
+    rows = clients.filter(client => {
+      const sid = String(client.supervisorId || client.supervisor_id || '');
+      const supervisorName = nameMap.get(sid) || '';
+      return Clients.matchesClientSearch(client, q, { supervisorName });
+    });
+  }
+
+  if (!rows.length) {
+    const msg = clients.length
+      ? 'Nenhum cliente encontrado para a busca'
+      : 'Nenhum cliente cadastrado';
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;">${msg}</td></tr>`;
     return;
   }
   const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
-  tbody.innerHTML = clients.map(client => {
+  tbody.innerHTML = rows.map(client => {
     const sid = String(client.supervisorId || client.supervisor_id || '');
     const supervisorName = nameMap.get(sid) || '—';
     const cpf = esc(client.cpf);

@@ -258,9 +258,17 @@ const PartnerOps = {
     ]);
 
     let clients = await this.filterPartnerClients(allClients, this._selectedPartnerId);
-    const q = (document.getElementById('partnerOpsClientSearch')?.value || '').toLowerCase();
-    if (q) {
-      clients = clients.filter(c => [c.name, c.cpf, c.email, c.phone1].join(' ').toLowerCase().includes(q));
+    const q = (window.Clients && typeof Clients._getSearchQuery === 'function')
+      ? Clients._getSearchQuery('partnerOpsClientSearch')
+      : (document.getElementById('partnerOpsClientSearch')?.value || '').trim();
+    if (q && window.Clients && typeof Clients.matchesClientSearch === 'function') {
+      clients = clients.filter(c => {
+        const sup = users.find(e => e.id === (c.supervisorId || c.supervisor_id));
+        return Clients.matchesClientSearch(c, q, { supervisorName: sup?.name || '' });
+      });
+    } else if (q) {
+      const ql = q.toLowerCase();
+      clients = clients.filter(c => [c.name, c.cpf, c.email, c.phone1].join(' ').toLowerCase().includes(ql));
     }
 
     if (!clients.length) {

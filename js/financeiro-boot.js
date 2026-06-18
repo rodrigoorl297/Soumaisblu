@@ -1,23 +1,31 @@
 /* SOU+BLU — Boot do módulo Financeiro */
 (function () {
   const SECTION_LABELS = {
-    secMarketplaceManage: 'Catálogo marketplace',
-    secMarketplaceOrders: 'Solicitações marketplace',
     secContaCorrenteGestao: 'Gestão de conta',
     secWithdrawals: 'Saque PIX',
-    secBalance: 'Gerenciar Pontos',
+    secBalance: 'Gerenciador de pontos',
     secFornecedorFinanceiro: 'Fornecedor',
-    secPrestadorServicos: 'Prestadores (terceirizados)',
+    secPrestadorServicos: 'Cadastro prestador serviço',
     secFiscalParceiro: 'Fiscal parceiro',
     secContaCorrente: 'Conta corrente administrar',
     secEsteiraCredito: 'Esteira proposta crédito',
+    secRetornoPropostas: 'Retorno de propostas',
+    secAdiantamentoSalarial: 'Adiantamento salarial',
+    secSolicitarReembolso: 'Solicitar reembolso',
     secManageProposals: 'Gestão de Propostas',
+    secFinPropostas: 'Operações de proposta',
+  };
+
+  const FIN_PROP_NAV_TITLES = {
+    baixa: 'Baixa comissões',
+    prejuizo: 'Emitir prejuízo colaborador',
+    debitar: 'Emitir prejuízo parceiro',
   };
 
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'financeiro-sections.html?v=5'
-      : 'pages/financeiro-sections.html?v=5';
+      ? 'financeiro-sections.html?v=11'
+      : 'pages/financeiro-sections.html?v=11';
     return typeof Auth !== 'undefined' && Auth.resolveHref
       ? Auth.resolveHref(rel)
       : rel;
@@ -125,18 +133,72 @@
     if (window.ContaCorrente?.init) ContaCorrente.init();
     if (window.FiscalParceiro?.init) FiscalParceiro.init();
     if (window.EsteiraCredito?.init) EsteiraCredito.init();
+    if (window.PropostaCredito?.init) PropostaCredito.init();
+    if (window.FinanceiroCredito?.init) FinanceiroCredito.init();
+    if (window.FinanceiroReembolso?.init) FinanceiroReembolso.init();
+    if (window.FinPropostas?.init) FinPropostas.init();
     if (window.Proposals?.init) Proposals.init();
   }
 
   function hideInjectedAdminNav() {
-    document.querySelectorAll(
-      '#finSidebarNav .conta-corrente-nav, #finSidebarNav .conta-corrente-gestao-nav, ' +
-      '#finSidebarNav .fornecedor-financeiro-nav, #finSidebarNav .fiscal-parceiro-nav, ' +
-      '#finSidebarNav .esteira-credito-nav, #finSidebarNav .marketplace-blu-nav, ' +
-      '#finSidebarNav .marketplace-manage-nav, #finSidebarNav .marketplace-orders-nav, ' +
-      '#finSidebarNav [id^="navMarketplace"], #finSidebarNav [id^="navConta"], ' +
-      '#finSidebarNav [id^="navFornecedor"], #finSidebarNav [id^="navFiscal"], #finSidebarNav [id^="navEsteira"]'
+    const nav = document.getElementById('finSidebarNav');
+    if (!nav) return;
+    nav.querySelectorAll(
+      '.conta-corrente-nav, .conta-corrente-gestao-nav, ' +
+      '.fornecedor-financeiro-nav, .fiscal-parceiro-nav, ' +
+      '.esteira-credito-nav, .marketplace-blu-nav, .marketplace-manage-nav, .marketplace-orders-nav, ' +
+      '.store-shop-nav, .store-nav, .trainings-nav, .trainings-manage-nav, .trainings-rh-nav, .trainings-collab-nav'
     ).forEach(el => { el.style.display = 'none'; });
+    nav.querySelectorAll(
+      '[id^="navMarketplace"], [id^="navContaCorrente"], [id^="navFornecedorFinanceiro"], ' +
+      '[id^="navFiscalParceiro"], [id^="navEsteiraCredito"]'
+    ).forEach(el => { el.style.display = 'none'; });
+  }
+
+  function isFinInjectedAdminNav(el) {
+    if (!el || el.nodeType !== 1) return false;
+    const injectedCls = [
+      'marketplace-blu-nav', 'marketplace-manage-nav', 'marketplace-orders-nav',
+      'conta-corrente-nav', 'conta-corrente-gestao-nav', 'fornecedor-financeiro-nav',
+      'fiscal-parceiro-nav', 'esteira-credito-nav', 'store-shop-nav', 'store-nav',
+      'trainings-nav', 'trainings-manage-nav', 'trainings-rh-nav', 'trainings-collab-nav',
+    ];
+    if (injectedCls.some((c) => el.classList.contains(c))) return true;
+    const id = el.id || '';
+    if (/^(navMarketplace|navContaCorrente|navFornecedorFinanceiro|navFiscalParceiro|navEsteiraCredito)/.test(id)) {
+      return true;
+    }
+    const sec = el.dataset.section || '';
+    return ['secProducts', 'secOrders', 'secStore', 'secMarketplaceBlu', 'secMarketplaceManage', 'secMarketplaceOrders'].includes(sec);
+  }
+
+  function isFinCoreNavChild(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (isFinInjectedAdminNav(el)) return false;
+    if (el.dataset.tab === 'inicio') return true;
+    if (el.dataset.section) return true;
+    if (el.id === 'navFinVoltar') return true;
+    if (el.getAttribute('onclick')?.includes('Auth.logout')) return true;
+    if (el.classList.contains('fin-nav-black-bar') && el.getAttribute('role') === 'presentation') return true;
+    if (el.classList.contains('nav-section-label')) return true;
+    return false;
+  }
+
+  /** Garante menu financeiro nativo visível — bloqueia itens de admin/loja injetados por engano. */
+  function ensureFinanceiroSidebarVisible() {
+    const nav = document.getElementById('finSidebarNav');
+    if (!nav) return;
+    hideInjectedAdminNav();
+    Array.from(nav.children).forEach((el) => {
+      if (isFinCoreNavChild(el)) {
+        el.style.display = '';
+        el.classList.add('fin-core-nav');
+      } else if (!el.classList.contains('fin-store-nav')) {
+        el.style.display = 'none';
+      }
+    });
+    const blackBars = nav.querySelectorAll('a.fin-nav-black-bar[data-section]');
+    blackBars.forEach((el) => { el.style.display = ''; });
   }
 
   function folhaPagamentoHref() {
@@ -207,6 +269,9 @@
     if (typeof syncFinanceiroRoleGlobals === 'function') syncFinanceiroRoleGlobals();
     if (tab && window.FornecedorFinanceiro) FornecedorFinanceiro.tab = tab;
     if (tab && window.EsteiraCredito) EsteiraCredito.tab = tab;
+    if (tab && window.FinPropostas && ['prejuizo', 'debitar'].includes(tab)) {
+      FinPropostas.tab = tab;
+    }
 
     const renders = {
       secWithdrawals: () => (typeof renderWithdrawalsTable === 'function' ? renderWithdrawalsTable() : Promise.resolve()),
@@ -214,7 +279,13 @@
         if (typeof populateBalanceSelect === 'function') await populateBalanceSelect();
         if (typeof renderBalanceHistory === 'function') await renderBalanceHistory();
       },
-      secManageProposals: () => (window.Proposals?.renderAdminList ? window.Proposals.renderAdminList() : Promise.resolve()),
+      secManageProposals: async () => {
+        if (window.FinPropostas) {
+          FinPropostas._injectGestaoComissaoColumn?.();
+          FinPropostas._injectGestaoBanner?.();
+        }
+        if (window.Proposals?.renderAdminList) await Proposals.renderAdminList();
+      },
       secMarketplaceManage: () => window.MarketplaceBlu?.renderCatalogAdmin?.(),
       secMarketplaceOrders: () => window.MarketplaceBlu?.renderOrdersAdmin?.(),
       secFornecedorFinanceiro: () => window.FornecedorFinanceiro?.render?.(),
@@ -223,6 +294,10 @@
       secContaCorrente: () => window.ContaCorrente?.render?.(),
       secContaCorrenteGestao: () => window.ContaCorrente?.renderGestao?.(),
       secEsteiraCredito: () => window.EsteiraCredito?.render?.(),
+      secRetornoPropostas: () => window.FinanceiroCredito?.renderRetorno?.(),
+      secAdiantamentoSalarial: () => window.FinanceiroCredito?.renderAdiantamento?.(),
+      secSolicitarReembolso: () => window.FinanceiroReembolso?.render?.(),
+      secFinPropostas: () => window.FinPropostas?.render?.(),
     };
 
     const fn = renders[sectionId];
@@ -231,6 +306,9 @@
     if (sectionId === 'secEsteiraCredito' && tab === 'ccb') {
       const adminSec = document.getElementById('cprAdminSection');
       if (adminSec) adminSec.style.display = '';
+    }
+    if (sectionId === 'secEsteiraCredito' && tab === 'solicitar' && window.EsteiraCredito) {
+      EsteiraCredito.tab = 'solicitar';
     }
   }
 
@@ -241,14 +319,25 @@
     if (modulos) { modulos.classList.add('active'); modulos.style.display = 'block'; }
     finNavigateTo(sectionId);
     const title = document.getElementById('pageTitle');
-    if (title) title.textContent = SECTION_LABELS[sectionId] || 'Financeiro';
+    if (title) {
+      if (window._finNavIntent && FIN_PROP_NAV_TITLES[window._finNavIntent.tab]) {
+        title.textContent = FIN_PROP_NAV_TITLES[window._finNavIntent.tab];
+      } else if (sectionId === 'secFornecedorFinanceiro' && window._finLastTab === 'despesas') {
+        title.textContent = 'Emitir cobranças';
+      } else {
+        title.textContent = SECTION_LABELS[sectionId] || 'Financeiro';
+      }
+    }
     document.querySelectorAll('#finSidebarNav .nav-item[data-section]').forEach(n => {
-      const match = n.dataset.section === sectionId
-        && (!n.dataset.tabParam || n.dataset.tabParam === (window._finLastTab || ''));
+      let match = false;
+      if (window._finNavIntent) {
+        match = n.dataset.section === window._finNavIntent.section
+          && (n.dataset.tabParam || '') === window._finNavIntent.tab;
+      } else {
+        match = n.dataset.section === sectionId
+          && (!n.dataset.tabParam || n.dataset.tabParam === (window._finLastTab || ''));
+      }
       n.classList.toggle('active', match);
-    });
-    document.querySelectorAll('#finSidebarNav .nav-item[data-tab="inicio"], #navFinInicio').forEach(n => {
-      n.classList.remove('active');
     });
   }
 
@@ -262,8 +351,12 @@
       n.classList.add('active');
     });
     const title = document.getElementById('pageTitle');
-    if (title) title.textContent = 'Financeiro';
+    if (title) title.textContent = 'Painel dos Sonhos';
+    if (window.PainelSonhos) {
+      PainelSonhos.render('painelSonhosRoot').catch((e) => console.warn('[fin inicio]', e));
+    }
     window._finLastTab = '';
+    window._finNavIntent = null;
   }
 
   const FinanceiroBoot = {
@@ -271,24 +364,43 @@
       await initRoleGlobals();
       await loadSectionsHtml();
       initModules();
-      hideInjectedAdminNav();
+      ensureFinanceiroSidebarVisible();
       wireBalanceForm();
       wireSidebar();
     },
 
     async openSection(sectionId, opts) {
       const tab = typeof opts === 'string' ? opts : (opts?.tab || '');
-      window._finLastTab = tab;
+      const proposalId = typeof opts === 'object' ? opts?.proposalId : '';
+
+      if (sectionId === 'secFinPropostas') {
+        const tabMap = { baixa: 'comissao', prejuizo: 'prejuizo', debitar: 'debito' };
+        window._finNavIntent = { section: 'secFinPropostas', tab };
+        sectionId = 'secManageProposals';
+        window._finPendingDrawer = { id: proposalId, tab: tabMap[tab] || 'dados' };
+        window._finLastTab = '';
+      } else {
+        window._finNavIntent = null;
+        window._finLastTab = tab;
+      }
+
       if (!sectionId) {
         showInicioPanel();
         return;
       }
       showModulePanel(sectionId);
       await renderSection(sectionId, tab);
+
+      if (window._finPendingDrawer && sectionId === 'secManageProposals' && window.FinPropostas?.openProposalDrawer) {
+        const pending = window._finPendingDrawer;
+        window._finPendingDrawer = null;
+        if (pending.id) await FinPropostas.openProposalDrawer(pending.id, pending.tab || 'comissao');
+      }
     },
 
     showInicioPanel,
     SECTION_LABELS,
+    ensureFinanceiroSidebarVisible,
   };
 
   window.FinanceiroBoot = FinanceiroBoot;
