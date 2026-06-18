@@ -16,6 +16,15 @@ final class PostgRestCompat
         'rh_cbo', 'monitoria_atendimento',
     ];
 
+    /** Nome na API (snake_case) → coluna física no MySQL quando não há coluna duplicada. */
+    private const COLUMN_ALIASES = [
+        'proposals' => [
+            'comissao_elegivel' => 'comissaoElegivel',
+            'comissao_recebida' => 'comissaoRecebida',
+            'valor_comissao_recebida' => 'valorComissaoRecebida',
+        ],
+    ];
+
     private const JSON_COLUMNS = [
         'users' => ['attendance_data', 'login_days', 'payment_saved', 'vendor_tier_data'],
         'transactions' => ['meta'],
@@ -129,14 +138,14 @@ final class PostgRestCompat
 
     private function select(string $table, array $params): array
     {
-        $cols = $params['select'] === '*' ? '*' : $this->quoteSelect($params['select']);
+        $cols = $params['select'] === '*' ? '*' : $this->quoteSelect($table, $params['select']);
         $sql = "SELECT {$cols} FROM `{$table}`";
-        [$where, $bind] = $this->buildWhere($params);
+        [$where, $bind] = $this->buildWhere($table, $params);
         if ($where !== '') {
             $sql .= ' WHERE ' . $where;
         }
         if ($params['order']) {
-            $sql .= ' ORDER BY ' . $this->parseOrder($params['order']);
+            $sql .= ' ORDER BY ' . $this->parseOrder($table, $params['order']);
         }
         if ($params['limit']) {
             $sql .= ' LIMIT ' . max(1, (int) $params['limit']);
@@ -209,7 +218,7 @@ final class PostgRestCompat
             $sets[] = "`{$c}` = :{$c}";
         }
         $sql = "UPDATE `{$table}` SET " . implode(', ', $sets);
-        [$where, $bind] = $this->buildWhere($params);
+        [$where, $bind] = $this->buildWhere($table, $params);
         if ($where === '') {
             throw new RuntimeException('PATCH sem filtro não permitido.', 400);
         }
@@ -222,7 +231,7 @@ final class PostgRestCompat
     private function delete(string $table, array $params): void
     {
         $sql = "DELETE FROM `{$table}`";
-        [$where, $bind] = $this->buildWhere($params);
+        [$where, $bind] = $this->buildWhere($table, $params);
         if ($where === '') {
             throw new RuntimeException('DELETE sem filtro não permitido.', 400);
         }
@@ -231,13 +240,13 @@ final class PostgRestCompat
         $stmt->execute($bind);
     }
 
-    private function buildWhere(array $params): array
+    private function buildWhere(string $table, array $params): array
     {
         $parts = [];
         $bind = [];
         $i = 0;
         foreach ($params['filters'] as $f) {
-            $col = $this->safeCol($f['col']);
+            $col = $this->resolveCol($table, $f['col']);
             $key = 'p' . $i++;
             if ($f['op'] === 'eq') {
                 if ($f['val'] === 'null') {
@@ -267,7 +276,7 @@ final class PostgRestCompat
         if ($params['or']) {
             $orParts = [];
             foreach ($params['or'] as $f) {
-                $col = $this->safeCol($f['col']);
+                $col = $this->resolveCol($table, $f['col']);
                 $key = 'p' . $i++;
                 if ($f['op'] === 'eq') {
                     $orParts[] = "`{$col}` = :{$key}";
@@ -294,22 +303,40 @@ final class PostgRestCompat
         return rawurldecode($v);
     }
 
-    private function parseOrder(string $order): string
+    private function parseOrder(string $table, string $order): string
     {
         $bits = [];
         foreach (explode(',', $order) as $part) {
             $p = trim($part);
             if (preg_match('/^([a-zA-Z0-9_]+)\.(asc|desc)$/i', $p, $m)) {
-                $bits[] = '`' . $this->safeCol($m[1]) . '` ' . strtoupper($m[2]);
+                $bits[] = '`' . $this->resolveCol($table, $m[1]) . '` ' . strtoupper($m[2]);
             }
         }
         return $bits ? implode(', ', $bits) : '`created_at` DESC';
     }
 
-    private function quoteSelect(string $select): string
+    private function quoteSelect(string $table, string $select): string
     {
-        $cols = array_map(fn ($c) => '`' . $this->safeCol(trim($c)) . '`', explode(',', $select));
-        return implode(',', $cols);
+        $seen = [];
+        $parts = [];
+        foreach (explode(',', $select) as $raw) {
+            $col = trim($raw);
+            if ($col === '') {
+                continue;
+            }
+            $this->safeCol($col);
+            $physical = $this->resolveCol($table, $col);
+            if (isset($seen[$physical])) {
+                continue;
+            }
+            $seen[$physical] = true;
+            if ($physical !== $col) {
+                $parts[] = '`' . $physical . '` AS `' . $col . '`';
+            } else {
+                $parts[] = '`' . $physical . '`';
+            }
+        }
+        return $parts ? implode(',', $parts) : '*';
     }
 
     private function safeCol(string $col): string
@@ -320,6 +347,12 @@ final class PostgRestCompat
         return $col;
     }
 
+    private function resolveCol(string $table, string $col): string
+    {
+        $this->safeCol($col);
+        return self::COLUMN_ALIASES[$table][$col] ?? $col;
+    }
+
     private function prepareRow(string $table, array $item): array
     {
         $jsonCols = self::JSON_COLUMNS[$table] ?? [];
@@ -328,12 +361,13 @@ final class PostgRestCompat
             if (!preg_match('/^[a-zA-Z0-9_]+$/', (string) $k)) {
                 continue;
             }
-            if (in_array($k, $jsonCols, true)) {
-                $row[$k] = $v === null ? null : json_encode($v, JSON_UNESCAPED_UNICODE);
+            $physical = $this->resolveCol($table, (string) $k);
+            if (in_array($physical, $jsonCols, true)) {
+                $row[$physical] = $v === null ? null : json_encode($v, JSON_UNESCAPED_UNICODE);
             } elseif (is_bool($v)) {
-                $row[$k] = $v ? 1 : 0;
+                $row[$physical] = $v ? 1 : 0;
             } else {
-                $row[$k] = $v;
+                $row[$physical] = $v;
             }
         }
         return $row;

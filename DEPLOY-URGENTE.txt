@@ -1,0 +1,17 @@
+﻿DEPLOY URGENTE — WebFTP (soumaisblu.com.br)
+============================================
+
+Subir NESTA ORDEM (mínimo para corrigir erro comissao_elegivel):
+
+1. api/lib/PostgRestCompat.php
+
+Caminho no servidor: public_html/api/lib/PostgRestCompat.php
+(ou equivalente na raiz do site na Locaweb)
+
+Depois do upload:
+- Recarregar o painel (Ctrl+F5) e testar Propostas / Financeiro.
+- Opcional: https://soumaisblu.com.br/check_proposals_deploy.php
+
+NÃO é necessário subir migrate-proposals-comissao.php se as colunas
+comissaoElegivel / comissaoRecebida / valorComissaoRecebida já existem
+(auditoria em 18/06/2026: OK no MySQL).
