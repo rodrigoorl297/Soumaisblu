@@ -4372,14 +4372,21 @@ async function renderWithdrawalsTable(){
   try {
     const allUsers = await DB.getUsers();
     (allUsers || []).forEach(u => { if (u?.id) empCache[u.id] = u; });
+    if (typeof DB.getFinanceSuppliers === 'function') {
+      const allSup = await DB.getFinanceSuppliers().catch(()=>[]);
+      allSup.forEach(s => { if (s?.id) empCache[s.id] = { id: s.id, name: s.name, role: 'fornecedor' }; });
+    }
   } catch (e) {
-    console.warn('[renderWithdrawalsTable] usuários:', e.message);
+    console.warn('[renderWithdrawalsTable] usuários/fornecedores:', e.message);
   }
   const partnerCache = {};
   let rowsHtml = '';
   for (const w of wds) {
     try {
-    const emp = empCache[w.employee_id] || null;
+    let wdMeta = {};
+    try { wdMeta = typeof w.notes === 'string' && w.notes.startsWith('{') ? JSON.parse(w.notes) : {}; } catch (_) { wdMeta = {}; }
+    const actualEmployeeId = wdMeta.supplier_id || w.employee_id;
+    const emp = empCache[actualEmployeeId] || null;
     const mOk = w.approved_by_master;
     const fOk = w.approved_by_financial;
 
@@ -4459,8 +4466,6 @@ async function renderWithdrawalsTable(){
 
     const pixBankCell = `${typeof pixWdStatusBadge === 'function' ? pixWdStatusBadge(w) : '—'}${refreshPixBtn}${retryPixBtn}`;
 
-    let wdMeta = {};
-    try { wdMeta = typeof w.notes === 'string' && w.notes.startsWith('{') ? JSON.parse(w.notes) : {}; } catch (_) { wdMeta = {}; }
     const irpfTax = Number(wdMeta.irpf_tax || 0);
     const payType = String(w.method || wdMeta.payment_method || 'pix').toLowerCase();
     const typeLbl = payType.includes('conta') ? 'CONTA CORRENTE' : String(w.pix_key_type || 'pix').toUpperCase();

@@ -1335,14 +1335,26 @@
                 </div>
               </div>
 
-              <div class="form-grid mt-md">
+              <div class="form-grid three-cols mt-md">
                 <div class="form-group">
                   <label for="emp_data_admissao">Data Admissão</label>
                   <input type="date" class="form-control" id="emp_data_admissao" />
                 </div>
                 <div class="form-group">
                   <label for="emp_departamento">Departamento</label>
-                  <input type="text" class="form-control" id="emp_departamento" placeholder="Ex: Vendas" />
+                  <select class="form-control" id="emp_departamento" required>
+                    <option value="">Selecione...</option>
+                    <option value="COMERCIAL">COMERCIAL</option>
+                    <option value="ADMINISTRATIVO">ADMINISTRATIVO</option>
+                    <option value="OPERACIONAL">OPERACIONAL</option>
+                    <option value="MARKETING">MARKETING</option>
+                    <option value="TI">TI</option>
+                    <option value="GOVERNANÇA">GOVERNANÇA</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label for="emp_marcas">Marcas / Categorias</label>
+                  <input type="text" class="form-control" id="emp_marcas" placeholder="Ex: TIM, Claro..." />
                 </div>
               </div>
 
@@ -1373,15 +1385,21 @@
               <div class="form-grid three-cols mt-md">
                 <div class="form-group">
                   <label for="emp_supervisor">Supervisor do Colaborador</label>
-                  <input type="text" class="form-control" id="emp_supervisor" placeholder="Nome do Supervisor" />
+                  <select class="form-control" id="emp_supervisor">
+                    <option value="">Sem vínculo</option>
+                  </select>
                 </div>
                 <div class="form-group">
                   <label for="emp_responsavel_dpto">Responsável pelo Dpto</label>
-                  <input type="text" class="form-control" id="emp_responsavel_dpto" placeholder="Nome do Líder" />
+                  <select class="form-control" id="emp_responsavel_dpto">
+                    <option value="">Sem vínculo</option>
+                  </select>
                 </div>
                 <div class="form-group">
                   <label for="emp_diretor_dpto">Diretor Dpto</label>
-                  <input type="text" class="form-control" id="emp_diretor_dpto" placeholder="Nome do Diretor" />
+                  <select class="form-control" id="emp_diretor_dpto">
+                    <option value="">Sem vínculo</option>
+                  </select>
                 </div>
               </div>
 
@@ -1448,7 +1466,7 @@
                 </div>
                 <div class="form-group">
                   <label for="emp_role">Perfil / Função do Usuário</label>
-                  <select class="form-control" id="emp_role" required>
+                  <select class="form-control" id="emp_role" required onchange="if(typeof onEmpRoleChange === 'function') onEmpRoleChange()">
                     <option value="vendedor">Vendedor</option>
                     <option value="backoffice">Backoffice</option>
                     <option value="supervisor">Supervisor</option>
@@ -1485,6 +1503,11 @@
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canMarketplaceBlu" /> Marketplace BLU</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canFornecedorFinanceiro" /> Fornecedores Financeiros</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canContaCorrente" /> Conta Corrente</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRHMonitoria" /> Monitoria de Atendimento</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRHGestao" /> Gestão de RH (Punições/Faltas)</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRHFolha" /> Gerar Folha de Pagamento</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canPainelSonhos" /> Painel de Sonhos</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canMeuExtrato" /> Acessar Meu Saldo/Extrato</label>
                 </div>
               </div>
 
@@ -1924,12 +1947,15 @@
               <input type="text" class="form-control" id="punicao_monitoria" placeholder="Responsável pela monitoria"/>
             </div>
             <div class="form-group">
-              <label style="opacity:0;display:block;">Notificar</label>
-              <label class="flex items-center" style="gap:8px;font-size:13px;height:38px;cursor:pointer;margin:0;">
-                <input type="checkbox" id="punicao_notificar_supervisor" checked/>
-                Automático notificar supervisor
-              </label>
+              <label for="punicao_supervisor_nome">Supervisor</label>
+              <input type="text" class="form-control" id="punicao_supervisor_nome" placeholder="Nenhum" readonly style="background:#f3f4f6;"/>
             </div>
+          </div>
+          <div class="form-group mt-sm">
+            <label class="flex items-center" style="gap:8px;font-size:13px;cursor:pointer;margin:0;">
+              <input type="checkbox" id="punicao_notificar_supervisor" checked/>
+              Automático notificar supervisor
+            </label>
           </div>
 
           <div class="form-grid mt-md">
@@ -1940,6 +1966,7 @@
             <div class="form-group">
               <label for="punicao_protocolo">Protocolo</label>
               <input type="text" class="form-control text-center" id="punicao_protocolo" style="font-weight:700;background:#f3f4f6;" readonly/>
+              <input type="hidden" id="punicao_id" />
             </div>
           </div>
           <div class="form-grid mt-md" style="margin-top:-8px;">
@@ -2039,6 +2066,54 @@
             </div>
             <div id="punicao_test2_info" class="punicao-witness-info" hidden></div>
             <input type="hidden" id="punicao_test2_nome"/>
+          </div>
+
+          <div class="rh-dem-anexos-panel" id="punicao_justa_causa_panel" style="display:none;margin-top:12px;">
+            <div class="rh-dem-anexos-panel__title" style="margin-bottom:12px;">Habilitar em justa causa</div>
+            <div class="form-group">
+              <label for="punicao_responsavel_juridico">Responsável jurídico</label>
+              <input type="text" class="form-control" id="punicao_responsavel_juridico" placeholder="Nome do responsável jurídico"/>
+            </div>
+            <div class="form-grid mt-md">
+              <div class="form-group">
+                <label for="punicao_notificacao_extrajudicial">Notificação extra judicial</label>
+                <select class="form-control" id="punicao_notificacao_extrajudicial" onchange="const n=this.value==='sim';const g=document.getElementById('punicao_data_notificacao_group');if(g)g.style.opacity=n?'1':'0.55';">
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </div>
+              <div class="form-group" id="punicao_data_notificacao_group" style="opacity:0.55;">
+                <label for="punicao_data_notificacao">Data notificação</label>
+                <input type="date" class="form-control" id="punicao_data_notificacao"/>
+              </div>
+            </div>
+            <div class="form-group mt-md">
+              <label for="punicao_protocolo_cartorio">Protocolo cartório</label>
+              <input type="text" class="form-control" id="punicao_protocolo_cartorio" placeholder="Nº protocolo no cartório"/>
+            </div>
+            <div class="form-grid mt-md">
+              <div class="form-group">
+                <label for="punicao_boletim_ocorrencia">Boletim de ocorrência</label>
+                <select class="form-control" id="punicao_boletim_ocorrencia" onchange="const b=this.value==='sim';const d=document.getElementById('punicao_num_boletim');const g=document.getElementById('punicao_num_boletim_group');if(g)g.style.opacity=b?'1':'0.55';if(d)d.disabled=!b;">
+                  <option value="nao">Não</option>
+                  <option value="sim">Sim</option>
+                </select>
+              </div>
+              <div class="form-group" id="punicao_num_boletim_group" style="opacity:0.55;">
+                <label for="punicao_num_boletim">Nº boletim de ocorrência</label>
+                <input type="text" class="form-control" id="punicao_num_boletim" placeholder="Número do B.O." disabled/>
+              </div>
+            </div>
+            <div class="form-grid mt-md">
+              <div class="form-group">
+                <label for="punicao_num_processo">Nº processo judicial</label>
+                <input type="text" class="form-control" id="punicao_num_processo" placeholder="Número do processo"/>
+              </div>
+              <div class="form-group">
+                <label for="punicao_tribunal">Tribunal</label>
+                <input type="text" class="form-control" id="punicao_tribunal" placeholder="Ex.: TRT-2, TJSP..."/>
+              </div>
+            </div>
           </div>
 
           <div id="punicao_inativar_panel" style="display:none;margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.2);">

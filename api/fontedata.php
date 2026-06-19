@@ -110,6 +110,43 @@ if ($consultaParam === 'tj-certidao') {
     exit;
 }
 
+$cacheDir = dirname(__DIR__) . '/storage/fontedata_cache';
+if (!is_dir($cacheDir)) {
+    @mkdir($cacheDir, 0755, true);
+}
+
+$cacheKey = '';
+if (($consulta ?? '') === 'tj-certidao') {
+    $cacheKey = 'tj-certidao_' . ($doc ?? '');
+} elseif ($cnpj !== '') {
+    $cacheKey = 'cnpj_' . ($consulta ?? 'consulta-cnpj-receita') . '_' . $cnpj;
+} elseif ($cpf !== '') {
+    $cacheKey = 'cpf_' . ($endpoint ?? 'cadastro-pf-basica') . '_' . $cpf;
+}
+
+if ($cacheKey !== '') {
+    $cacheFile = $cacheDir . '/' . $cacheKey . '.json';
+    if (is_file($cacheFile)) {
+        $cachedData = @file_get_contents($cacheFile);
+        if ($cachedData !== false) {
+            $decoded = json_decode($cachedData, true);
+            if (is_array($decoded) && empty($decoded['error'])) {
+                header('X-FonteData-Cache: HIT');
+                $out = ['ok' => true, 'data' => $decoded, 'consulta' => $consulta ?? $endpoint ?? ''];
+                if (($consulta ?? '') === 'tj-certidao') {
+                    $out['cpf_cnpj'] = $doc ?? null;
+                } elseif ($cnpj !== '') {
+                    $out['cnpj'] = $cnpj;
+                } else {
+                    $out['cpf'] = $cpf;
+                }
+                echo json_encode($out, JSON_UNESCAPED_UNICODE);
+                exit;
+            }
+        }
+    }
+}
+
 $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
@@ -150,6 +187,10 @@ if ($code < 200 || $code >= 300) {
     http_response_code($code ?: 502);
     echo json_encode(['ok' => false, 'error' => 'FonteData HTTP ' . $code], JSON_UNESCAPED_UNICODE);
     exit;
+}
+
+if (isset($cacheFile) && is_array($decoded) && empty($decoded['error'])) {
+    @file_put_contents($cacheFile, json_encode($decoded, JSON_UNESCAPED_UNICODE));
 }
 
 $out = ['ok' => true, 'data' => $decoded, 'consulta' => $consulta ?? $endpoint ?? ''];

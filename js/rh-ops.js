@@ -47,33 +47,42 @@ const _PUNICAO_TIPO = {
 
 const _PUNICAO_MOTIVOS = {
   advertencia_verbal: [
-    { v: 'atraso', l: 'Atraso recorrente' },
-    { v: 'comunicacao', l: 'Falta de comunicação' },
-    { v: 'conduta', l: 'Conduta inadequada' },
-    { v: 'desempenho', l: 'Baixo desempenho' },
-    { v: 'outro', l: 'Outro' },
+    { v: '1', l: '1 - Faltas e atrasos' },
+    { v: '3', l: '3 - Desobediência a superiores' },
+    { v: '7', l: '7 - Negligência ou baixa produtividade' },
   ],
   advertencia: [
-    { v: 'atraso', l: 'Atraso / absenteísmo' },
-    { v: 'desempenho', l: 'Baixo desempenho' },
-    { v: 'conduta', l: 'Conduta inadequada' },
-    { v: 'descumprimento', l: 'Descumprimento de normas' },
-    { v: 'qualidade', l: 'Falha em qualidade / monitoria' },
-    { v: 'outro', l: 'Outro' },
+    { v: '1', l: '1 - Faltas e atrasos' },
+    { v: '2', l: '2 - Descumprimento de normas internas' },
+    { v: '3', l: '3 - Desobediência a superiores' },
+    { v: '4', l: '4 - Comportamento inadequado' },
+    { v: '5', l: '5 - Uso indevido de recursos da empresa' },
+    { v: '6', l: '6 - Atos ilícitos ou antiéticos' },
+    { v: '7', l: '7 - Negligência ou baixa produtividade' },
   ],
   suspensao: [
-    { v: 'reincidencia', l: 'Reincidência disciplinar' },
-    { v: 'grave', l: 'Falta grave' },
-    { v: 'conduta', l: 'Conduta grave' },
-    { v: 'seguranca', l: 'Risco à segurança / integridade' },
-    { v: 'outro', l: 'Outro' },
+    { v: '1', l: '1 - Faltas e atrasos' },
+    { v: '2', l: '2 - Descumprimento de normas internas' },
+    { v: '3', l: '3 - Desobediência a superiores' },
+    { v: '4', l: '4 - Comportamento inadequado' },
+    { v: '5', l: '5 - Uso indevido de recursos da empresa' },
+    { v: '6', l: '6 - Atos ilícitos ou antiéticos' },
+    { v: '7', l: '7 - Negligência ou baixa produtividade' },
   ],
   justa_causa: [
-    { v: 'fraude', l: 'Fraude / má-fé' },
-    { v: 'agressao', l: 'Agressão / violência' },
-    { v: 'subordinacao', l: 'Insubordinação grave' },
-    { v: 'abandono', l: 'Abandono de emprego' },
-    { v: 'outro', l: 'Outro' },
+    { v: '1', l: '1 - Ato de improbidade' },
+    { v: '2', l: '2 - Incontinência de conduta ou mau procedimento' },
+    { v: '3', l: '3 - Negociação habitual sem permissão' },
+    { v: '4', l: '4 - Condenação criminal' },
+    { v: '5', l: '5 - Desídia' },
+    { v: '6', l: '6 - Embriaguez habitual ou em serviço' },
+    { v: '7', l: '7 - Violação de segredo da empresa' },
+    { v: '8', l: '8 - Ato de indisciplina ou insubordinação' },
+    { v: '9', l: '9 - Abandono de emprego' },
+    { v: '10', l: '10 - Ofensas físicas ou lesões à honra' },
+    { v: '11', l: '11 - Prática constante de jogos de azar' },
+    { v: '13', l: '13 - Perda de habilitação ou requisitos legais' },
+    { v: '14', l: '14 - Atos atentatórios à segurança nacional' },
   ],
   observacao: [
     { v: 'orientacao', l: 'Orientação de conduta' },
@@ -571,6 +580,7 @@ function onPunicaoTipoChange() {
   const suspPanel = document.getElementById('punicao_suspensao_fields');
   const testPanel = document.getElementById('punicao_testemunhas_panel');
   const inativPanel = document.getElementById('punicao_inativar_panel');
+  const justaPanel = document.getElementById('punicao_justa_causa_panel');
   const metricaPanel = document.getElementById('punicao_metrica_panel');
   const motivoGroup = document.getElementById('punicao_motivo_group');
   const complemento = document.getElementById('punicao_complemento_group');
@@ -579,11 +589,20 @@ function onPunicaoTipoChange() {
   _fillPunicaoMotivos(tipo);
 
   const disciplinar = ['advertencia_verbal', 'advertencia', 'suspensao', 'justa_causa'].includes(tipo);
-  const precisaTest = ['advertencia', 'suspensao', 'justa_causa'].includes(tipo);
+  const precisaTest = ['advertencia', 'suspensao'].includes(tipo);
 
   if (suspPanel) suspPanel.style.display = tipo === 'suspensao' ? '' : 'none';
   if (testPanel) testPanel.style.display = precisaTest ? '' : 'none';
-  if (inativPanel) inativPanel.style.display = tipo === 'suspensao' ? '' : 'none';
+  if (justaPanel) justaPanel.style.display = tipo === 'justa_causa' ? '' : 'none';
+  if (inativPanel) {
+    inativPanel.style.display = ['suspensao', 'justa_causa'].includes(tipo) ? '' : 'none';
+    const lbl = document.getElementById('punicao_inativar_label');
+    if (lbl) {
+      lbl.innerHTML = tipo === 'suspensao' 
+        ? '<strong>Inativar sistema</strong> com status em aberto de suspensão'
+        : '<strong>Inativar sistema</strong> definitivamente (Desligamento por justa causa)';
+    }
+  }
   if (motivoGroup) motivoGroup.style.display = disciplinar || tipo === 'observacao' || tipo === 'elogio' ? '' : 'none';
   if (complemento) complemento.style.display = disciplinar ? '' : 'none';
 
@@ -599,10 +618,10 @@ function onPunicaoTipoChange() {
         imp.textContent = tipo === 'advertencia_verbal'
           ? '1ª etapa da progressão disciplinar'
           : tipo === 'advertencia'
-            ? `Advertências registradas: ${nAdv}`
+            ? `Advertências registradas: ${nAdv} (-10% dos pontos)`
             : tipo === 'suspensao'
-              ? `Suspensões registradas: ${nSusp}`
-              : 'Medida grave — justa causa';
+              ? `Suspensões registradas: ${nSusp} (-50% dos pontos)`
+              : 'Medida grave — Desligamento por justa causa';
       }
       if (regra) {
         regra.textContent = 'Progressão: verbal → advertência → suspensão → justa causa';
@@ -657,20 +676,44 @@ function openPunicaoModal() {
   _openRhModal('punicaoModal');
 }
 
-function buscarDadosPunicao() {
+async function buscarDadosPunicao() {
   const cpf = document.getElementById('punicao_cpf')?.value;
+  const digits = _digits(cpf);
+  if (digits.length !== 11) { alert('CPF inválido.'); return; }
+
   const emp = _empByCpf(cpf);
   if (!emp) {
-    alert('Funcionário não encontrado para este CPF.');
-    _renderEmpInfoPanel('punicao_emp_info', null);
-    document.getElementById('punicao_employee_id').value = '';
+    if (typeof showLoading === 'function') showLoading('Consultando API...');
+    try {
+      const res = await FonteData.lookupCpf(digits);
+      if (typeof hideLoading === 'function') hideLoading();
+      if (res && res.ok && res.client?.name) {
+        document.getElementById('punicao_employee_id').value = 'external_' + digits;
+        const panel = document.getElementById('punicao_emp_info');
+        if (panel) {
+          panel.hidden = false;
+          panel.innerHTML = `<strong>${_esc(res.client.name)}</strong> — <span class="badge badge-muted">Externa (API)</span>`;
+        }
+        onPunicaoTipoChange();
+        if (typeof showToast === 'function') showToast('Dados carregados da API.', 'success');
+      } else {
+        alert('Funcionário não encontrado no RH nem na API.');
+        _renderEmpInfoPanel('punicao_emp_info', null);
+        document.getElementById('punicao_employee_id').value = '';
+      }
+    } catch(err) {
+      if (typeof hideLoading === 'function') hideLoading();
+      alert('Erro na consulta da API.');
+    }
     return;
   }
+
   if (emp.demitido || emp.status === 'demitido') {
     alert('Este colaborador já está desligado.');
     return;
   }
   document.getElementById('punicao_employee_id').value = emp.id;
+  document.getElementById('punicao_supervisor_nome').value = emp.supervisor || '';
   _renderEmpInfoPanel('punicao_emp_info', emp);
   if (!document.getElementById('punicao_monitoria').value && emp.qualidade_monitoria) {
     document.getElementById('punicao_monitoria').value = emp.qualidade_monitoria;
@@ -679,19 +722,44 @@ function buscarDadosPunicao() {
   if (typeof showToast === 'function') showToast('Dados do colaborador carregados.', 'success');
 }
 
-function buscarTestemunhaPunicao(n) {
+async function buscarTestemunhaPunicao(n) {
   const cpf = document.getElementById(`punicao_test${n}_cpf`)?.value;
+  const digits = _digits(cpf);
+  if (digits.length !== 11) return;
+
   const emp = _empByCpf(cpf);
   const info = document.getElementById(`punicao_test${n}_info`);
   const nomeH = document.getElementById(`punicao_test${n}_nome`);
+
   if (!emp) {
-    if (info) {
-      info.hidden = false;
-      info.innerHTML = '<span style="color:#dc2626;">Testemunha não encontrada no cadastro RH.</span>';
+    if (typeof showLoading === 'function') showLoading('Consultando API...');
+    try {
+      const res = await FonteData.lookupCpf(digits);
+      if (typeof hideLoading === 'function') hideLoading();
+      if (res && res.ok && res.client?.name) {
+        if (nomeH) nomeH.value = res.client.name;
+        if (info) {
+          info.hidden = false;
+          info.innerHTML = `<strong>${_esc(res.client.name)}</strong> — <span class="badge badge-muted">Externa (API)</span>`;
+        }
+        if (typeof showToast === 'function') showToast('Testemunha externa carregada.', 'success');
+      } else {
+        if (info) {
+          info.hidden = false;
+          info.innerHTML = '<span style="color:#dc2626;">Testemunha não encontrada no RH nem na API.</span>';
+        }
+        if (nomeH) nomeH.value = '';
+      }
+    } catch(err) {
+      if (typeof hideLoading === 'function') hideLoading();
+      if (info) {
+        info.hidden = false;
+        info.innerHTML = '<span style="color:#dc2626;">Erro ao consultar API externa.</span>';
+      }
     }
-    if (nomeH) nomeH.value = '';
     return;
   }
+
   if (nomeH) nomeH.value = emp.nome || '';
   if (info) {
     info.hidden = false;
@@ -711,9 +779,23 @@ async function _syncPunicaoUserPoints(emp, pts, titulo) {
 async function salvarPunicao(event) {
   if (event) event.preventDefault();
 
+  const isNew = !document.getElementById('punicao_id')?.value;
   const empId = document.getElementById('punicao_employee_id').value;
-  const emp = _empById(empId);
-  if (!emp) { alert('Busque o CPF do colaborador antes de salvar.'); return; }
+  let emp = _empById(empId);
+  
+  if (!emp) { 
+    if (empId.startsWith('external_')) {
+      const panel = document.getElementById('punicao_emp_info');
+      emp = {
+        id: empId,
+        cpf: _digits(document.getElementById('punicao_cpf').value),
+        nome: panel ? panel.querySelector('strong')?.innerText : 'Desconhecido'
+      };
+    } else {
+      alert('Busque o CPF do colaborador antes de salvar.'); 
+      return; 
+    }
+  }
 
   const tipo = document.getElementById('punicao_tipo').value;
   const motivoCod = document.getElementById('punicao_motivo').value;
@@ -731,9 +813,21 @@ async function salvarPunicao(event) {
   }
 
   const titulo = _punicaoMotivoLabel(tipo, motivoCod);
-  const descontoPontos = tipo === 'advertencia' ? 100 : 0;
+  
+  // Calculate dynamic point deduction (10% or 50% of current balance)
+  let descontoPontos = 0;
+  const u = await _findUserForEmployee(emp);
+  if (u && u.id && typeof DB.getUser === 'function' && (tipo === 'advertencia' || tipo === 'suspensao')) {
+    const uData = await DB.getUser(u.id);
+    const balance = parseInt(uData.balance, 10) || 0;
+    if (balance > 0) {
+      if (tipo === 'advertencia') descontoPontos = Math.floor(balance * 0.10);
+      else if (tipo === 'suspensao') descontoPontos = Math.floor(balance * 0.50);
+    }
+  }
 
   const row = {
+    id: document.getElementById('punicao_id')?.value || undefined,
     protocolo: document.getElementById('punicao_protocolo').value || _gerarProtocoloPunicao(),
     employee_id: emp.id,
     employee_cpf: emp.cpf,
@@ -750,26 +844,47 @@ async function salvarPunicao(event) {
     registrado_por: document.getElementById('punicao_responsavel').value || _rhAuthor(),
     origem: JSON.stringify({
       monitoria: document.getElementById('punicao_monitoria').value.trim(),
+      supervisor: document.getElementById('punicao_supervisor_nome')?.value.trim() || '',
       notificar_supervisor: document.getElementById('punicao_notificar_supervisor')?.checked !== false,
       testemunha1_cpf: document.getElementById('punicao_test1_cpf')?.value || '',
       testemunha1_nome: document.getElementById('punicao_test1_nome')?.value || '',
       testemunha2_cpf: document.getElementById('punicao_test2_cpf')?.value || '',
       testemunha2_nome: document.getElementById('punicao_test2_nome')?.value || '',
       inativar_sistema: document.getElementById('punicao_inativar_sistema')?.checked !== false,
+      responsavel_juridico: document.getElementById('punicao_responsavel_juridico')?.value.trim() || '',
+      notificacao_extrajudicial: document.getElementById('punicao_notificacao_extrajudicial')?.value || 'nao',
+      data_notificacao: document.getElementById('punicao_data_notificacao')?.value || null,
+      protocolo_cartorio: document.getElementById('punicao_protocolo_cartorio')?.value.trim() || '',
+      boletim_ocorrencia: document.getElementById('punicao_boletim_ocorrencia')?.value || 'nao',
+      num_boletim: document.getElementById('punicao_num_boletim')?.value.trim() || '',
+      num_processo: document.getElementById('punicao_num_processo')?.value.trim() || '',
+      tribunal: document.getElementById('punicao_tribunal')?.value.trim() || ''
     }),
   };
 
   await DB.saveRhPunishment(row);
 
-  if (tipo === 'advertencia' || tipo === 'advertencia_verbal') {
-    emp.advertencias = (parseInt(emp.advertencias, 10) || 0) + 1;
-    await DB.saveRhEmployee(emp);
-    if (tipo === 'advertencia') await _syncPunicaoUserPoints(emp, descontoPontos, titulo);
-  } else if (tipo === 'suspensao') {
-    emp.suspensoes = (parseInt(emp.suspensoes, 10) || 0) + 1;
-    await DB.saveRhEmployee(emp);
-    if (document.getElementById('punicao_inativar_sistema')?.checked) {
-      await _setUserActive(emp, false);
+  if (isNew) {
+    if (tipo === 'advertencia' || tipo === 'advertencia_verbal') {
+      emp.advertencias = (parseInt(emp.advertencias, 10) || 0) + 1;
+      await DB.saveRhEmployee(emp);
+      if (tipo === 'advertencia') await _syncPunicaoUserPoints(emp, descontoPontos, titulo);
+    } else if (tipo === 'suspensao') {
+      emp.suspensoes = (parseInt(emp.suspensoes, 10) || 0) + 1;
+      await DB.saveRhEmployee(emp);
+      await _syncPunicaoUserPoints(emp, descontoPontos, titulo);
+      if (document.getElementById('punicao_inativar_sistema')?.checked) {
+        await _setUserActive(emp, false);
+      }
+    } else if (tipo === 'justa_causa') {
+      emp.status = 'demitido';
+      emp.tipo_demissao = 'justa_causa';
+      emp.motivo_demissao = descricao;
+      emp.data_demissao = dataOcorrencia;
+      await DB.saveRhEmployee(emp);
+      if (document.getElementById('punicao_inativar_sistema')?.checked) {
+        await _setUserActive(emp, false);
+      }
     }
   }
 
@@ -796,10 +911,99 @@ function renderPunicaoList() {
         <td>${_fmtDate(r.data_ocorrencia)}</td>
         <td><span class="badge ${tc.cls}">${tc.label}</span></td>
         <td><span class="badge badge-muted">${_esc(r.status || 'registrada')}</span></td>
-        <td><span class="text-muted" style="font-size:12px;">${_esc(r.titulo || r.motivo_codigo || '')}</span></td>
+        <td>
+          <button type="button" class="btn btn-xs btn-outline" onclick="viewPunicao('${_esc(r.id)}')">Ver/Editar</button>
+          <button type="button" class="btn btn-xs btn-danger" onclick="excluirPunicao('${_esc(r.id)}')">Apagar</button>
+        </td>
       </tr>
     `;
   }).join('');
+}
+
+async function excluirPunicao(id) {
+  if (!confirm('Deseja realmente apagar este registro de punição? Esta ação não pode ser desfeita.')) return;
+  const p = _allPunicoes.find(x => String(x.id) === String(id));
+  if (p) {
+     const emp = _empById(p.employee_id) || _empByCpf(p.employee_cpf);
+     if (emp) {
+        if (p.tipo === 'advertencia' || p.tipo === 'advertencia_verbal') {
+           emp.advertencias = Math.max(0, (parseInt(emp.advertencias, 10) || 0) - 1);
+        } else if (p.tipo === 'suspensao') {
+           emp.suspensoes = Math.max(0, (parseInt(emp.suspensoes, 10) || 0) - 1);
+        }
+        await DB.saveRhEmployee(emp);
+        if (p.desconto_pontos > 0) {
+           const u = await _findUserForEmployee(emp);
+           if (u && typeof DB.addBalance === 'function') {
+              const sess = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+              await DB.addBalance(u.id, p.desconto_pontos, `Estorno: ${p.titulo || 'Punição cancelada'}`, sess?.id || 'rh');
+           }
+        }
+     }
+  }
+  await DB.deleteRhPunishment(id);
+  await reloadRhOpsData();
+  if (typeof showToast === 'function') showToast('Punição apagada.', 'success');
+}
+
+function viewPunicao(id) {
+  const p = _allPunicoes.find(r => String(r.id) === String(id));
+  if (!p) return;
+  const form = document.getElementById('form-punicao');
+  if (form) form.reset();
+  
+  if (document.getElementById('punicao_id')) document.getElementById('punicao_id').value = p.id;
+  document.getElementById('punicao_employee_id').value = p.employee_id;
+  document.getElementById('punicao_cpf').value = p.employee_cpf || '';
+  document.getElementById('punicao_protocolo').value = p.protocolo || '';
+  document.getElementById('punicao_responsavel').value = p.registrado_por || '';
+  document.getElementById('punicao_tipo').value = p.tipo || 'advertencia_verbal';
+  document.getElementById('punicao_data').value = p.data_ocorrencia ? p.data_ocorrencia.slice(0, 10) : '';
+  
+  onPunicaoTipoChange();
+  
+  document.getElementById('punicao_motivo').value = p.motivo_codigo || '';
+  document.getElementById('punicao_sub_motivo').value = p.sub_motivo || '';
+  document.getElementById('punicao_descricao').value = p.descricao || '';
+  document.getElementById('punicao_dias').value = p.dias_suspensao || 1;
+  
+  let o = {};
+  try { o = JSON.parse(p.origem || '{}'); } catch(e){}
+  document.getElementById('punicao_monitoria').value = o.monitoria || '';
+  document.getElementById('punicao_supervisor_nome').value = o.supervisor || '';
+  const chkSuper = document.getElementById('punicao_notificar_supervisor');
+  if (chkSuper) chkSuper.checked = o.notificar_supervisor !== false;
+  
+  document.getElementById('punicao_test1_cpf').value = o.testemunha1_cpf || '';
+  document.getElementById('punicao_test1_nome').value = o.testemunha1_nome || '';
+  if (o.testemunha1_cpf) buscarTestemunhaPunicao(1);
+  else { const i = document.getElementById('punicao_test1_info'); if (i) i.hidden = true; }
+  
+  document.getElementById('punicao_test2_cpf').value = o.testemunha2_cpf || '';
+  document.getElementById('punicao_test2_nome').value = o.testemunha2_nome || '';
+  if (o.testemunha2_cpf) buscarTestemunhaPunicao(2);
+  else { const i = document.getElementById('punicao_test2_info'); if (i) i.hidden = true; }
+  
+  const chkInat = document.getElementById('punicao_inativar_sistema');
+  if (chkInat) chkInat.checked = o.inativar_sistema !== false;
+  
+  document.getElementById('punicao_responsavel_juridico').value = o.responsavel_juridico || '';
+  document.getElementById('punicao_notificacao_extrajudicial').value = o.notificacao_extrajudicial || 'nao';
+  document.getElementById('punicao_data_notificacao').value = o.data_notificacao || '';
+  document.getElementById('punicao_protocolo_cartorio').value = o.protocolo_cartorio || '';
+  document.getElementById('punicao_boletim_ocorrencia').value = o.boletim_ocorrencia || 'nao';
+  document.getElementById('punicao_num_boletim').value = o.num_boletim || '';
+  document.getElementById('punicao_num_processo').value = o.num_processo || '';
+  document.getElementById('punicao_tribunal').value = o.tribunal || '';
+
+  onPunicaoMotivoChange();
+  
+  const emp = _empById(p.employee_id) || _empByCpf(p.employee_cpf);
+  if (emp) _renderEmpInfoPanel('punicao_emp_info', emp);
+  else _renderEmpInfoPanel('punicao_emp_info', null);
+  
+  document.getElementById('punicaoModalTitle').textContent = 'Editar Registro de Punição';
+  _openRhModal('punicaoModal');
 }
 
 /* ── Demissão ── */
@@ -1038,6 +1242,8 @@ const _rhOpsExports = {
   onPunicaoMotivoChange,
   salvarPunicao,
   renderPunicaoList,
+  viewPunicao,
+  excluirPunicao,
   openDemissaoModal,
   buscarDadosDemissao,
   onDemissaoAvisoChange,

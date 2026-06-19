@@ -5356,6 +5356,21 @@
       row.updated_at = new Date().toISOString();
       return await this._rhLocalSave(this.LK.rh_punishments, row, r => r.id === row.id);
     },
+    async deleteRhPunishment(id) {
+      if (!id) return false;
+      if (this.online) {
+        try {
+          await supaReq('DELETE', 'rh_punishments', null, `?id=eq.${encodeURIComponent(id)}`);
+          return true;
+        } catch (e) {
+          console.error('[DB] deleteRhPunishment:', e);
+          return false;
+        }
+      }
+      const all = this._lget(this.LK.rh_punishments) || [];
+      this._lset(this.LK.rh_punishments, all.filter(r => String(r.id) !== String(id)));
+      return true;
+    },
 
     async getRhDismissals() {
       if (this.online) return await this._rhOnlineList('rh_dismissals');

@@ -342,11 +342,6 @@
               ${finGridRow('FORMA DE PAGAMENTO', `<select id="ecFormaPagamento" class="form-control">
                 <option value="">Selecione...</option>
                 <option value="PIX">PIX</option>
-                <option value="TED">TED</option>
-                <option value="DOC">DOC</option>
-                <option value="CRÉDITO EM CONTA">Crédito em conta</option>
-                <option value="PIX AUTOMÁTICO">PIX AUTOMÁTICO</option>
-                <option value="BOLETO">BOLETO</option>
               </select>`)}
               ${finGridRow('VALOR PARCELA', `<input type="number" id="ecValorParcela" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
               ${finGridRow('VALOR FINAL', `<input type="number" id="ecValorFinal" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}

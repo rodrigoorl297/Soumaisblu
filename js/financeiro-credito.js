@@ -203,8 +203,7 @@
                 ${finGridRow('VALOR LIBERADO', `<input type="number" id="retornoValorLiberado2" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
                 ${finGridRow('PAGAMENTO', `<select id="retornoPagamento" class="form-control">
                   <option value="">Selecione...</option>
-                  <option value="PIX AUTOMÁTICO">PIX AUTOMÁTICO</option>
-                  <option value="BOLETO">BOLETO</option>
+                  <option value="PIX">PIX</option>
                 </select>`)}
               </tbody>
             </table>

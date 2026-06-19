@@ -313,6 +313,12 @@ const MonitoriaAtendimento = (() => {
                 <div id="monEvidenceList" class="mon-evidence-list"></div>
               </div>
             </div>
+            <div class="form-group mt-md">
+              <label class="flex items-center" style="gap:8px;font-size:13px;cursor:pointer;margin:0;">
+                <input type="checkbox" id="monNotificaMural"/>
+                Notifica mural
+              </label>
+            </div>
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-ghost" onclick="closeModal('monFormModal')">Cancelar</button>
@@ -365,6 +371,7 @@ const MonitoriaAtendimento = (() => {
     document.getElementById('monOrigem').value = row?.origem || '';
     document.getElementById('monProtocoloMon').value = row?.protocolo_monitoria || '';
     document.getElementById('monObservacoes').value = row?.observacoes || '';
+    if (document.getElementById('monNotificaMural')) document.getElementById('monNotificaMural').checked = !!row?.notifica_mural;
     populateColaboradoresSelect(row?.colaborador_id || '');
     _pendingEvidence = [...(row?.evidence_attachments || [])];
     paintEvidenceList();
@@ -428,6 +435,7 @@ const MonitoriaAtendimento = (() => {
         colaborador_nome: opt?.dataset?.name || opt?.textContent || '',
         colaborador_cpf: opt?.dataset?.cpf || '',
         observacoes: document.getElementById('monObservacoes')?.value?.trim() || '',
+        notifica_mural: document.getElementById('monNotificaMural')?.checked || false,
         evidence_attachments: _pendingEvidence,
         created_by: session?.id,
         created_by_name: session?.name,

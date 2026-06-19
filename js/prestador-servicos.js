@@ -168,6 +168,27 @@
   }
 
   const PrestadorServicos = {
+    updateSubcategories() {
+      const area = document.getElementById('prestador_area').value;
+      const cat = document.getElementById('prestador_categoria');
+      const ops = {
+        'MARKETING': ['INFLUENCIADOR', 'AGÊNCIA DE MKT', 'DIVULGAÇÃO MKT'],
+        'JURÍDICO': ['ASSESSORIA JURÍDICA', 'ASSESSORIA JURÍDICA O.S.J'],
+        'TI': ['ASSISTÊNCIA TÉCNICA', 'DESENVOLVEDOR', 'ALUGUEL EQUIPAMENTOS'],
+        'SERVIÇOS': ['DIARISTA LIMPEZA', 'SERVIÇOS MANUTENÇÃO']
+      };
+      
+      cat.innerHTML = '<option value="">Selecione...</option>';
+      if (ops[area]) {
+        ops[area].forEach(op => {
+          const el = document.createElement('option');
+          el.value = op;
+          el.textContent = op;
+          cat.appendChild(el);
+        });
+      }
+    },
+
     ensureUi() {
       const host = document.getElementById('finPageContent') || document.querySelector('.page-content');
       if (!host || !canManage()) return;
@@ -236,17 +257,29 @@
         </div>
         <div class="form-grid mt-md">
           <div class="form-group">
-            <label for="prestador_categoria">Categoria</label>
-            <input type="text" class="form-control" id="prestador_categoria" placeholder="Ex: Limpeza, TI, Marketing"/>
-          </div>
-          <div class="form-group">
-            <label for="prestador_situacao">Situação cadastro</label>
-            <select class="form-control" id="prestador_situacao" required>
-              <option value="ativo">Ativo</option>
-              <option value="ativo_restrito">Ativo restrito</option>
-              <option value="inativo">Inativo</option>
+            <label for="prestador_area">Área</label>
+            <select class="form-control" id="prestador_area" onchange="PrestadorServicos.updateSubcategories()">
+              <option value="">Selecione...</option>
+              <option value="MARKETING">Marketing</option>
+              <option value="JURÍDICO">Jurídico</option>
+              <option value="TI">TI</option>
+              <option value="SERVIÇOS">Serviços</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="prestador_categoria">Serviço / Finalidade</label>
+            <select class="form-control" id="prestador_categoria">
+              <option value="">Selecione a área primeiro</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group mt-md">
+          <label for="prestador_situacao">Situação cadastro</label>
+          <select class="form-control" id="prestador_situacao" required>
+            <option value="ativo">Ativo</option>
+            <option value="ativo_restrito">Ativo restrito</option>
+            <option value="inativo">Inativo</option>
+          </select>
         </div>
         <div class="form-grid three-cols mt-md">
           <div class="form-group">
@@ -307,7 +340,7 @@
       const root = document.getElementById('prestadorServicosRoot');
       if (!root || !canManage()) return;
 
-      const list = await DB.getFinanceServiceProviders();
+      const list = await DB.getFinanceSuppliers();
 
       root.innerHTML = `
         <div class="section-header" style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
@@ -359,7 +392,7 @@
       _resetAnexos();
 
       if (id) {
-        const row = await DB.getFinanceServiceProvider(id);
+        const row = await DB.getFinanceSupplier(id);
         if (!row) {
           if (typeof showToast === 'function') showToast('Registro não encontrado.', 'error');
           return;
@@ -370,7 +403,23 @@
         document.getElementById('prestador_nome').value = row.name || '';
         document.getElementById('prestador_pix_type').value = row.pix_type || 'cpf';
         document.getElementById('prestador_pix').value = row.pix_key || '';
-        document.getElementById('prestador_categoria').value = row.category || '';
+        
+        const areaEl = document.getElementById('prestador_area');
+        const catEl = document.getElementById('prestador_categoria');
+        areaEl.value = '';
+        catEl.innerHTML = '<option value="">Selecione a área primeiro</option>';
+        if (row.category) {
+          const parts = row.category.split(' - ');
+          if (parts.length >= 2) {
+            areaEl.value = parts[0];
+            PrestadorServicos.updateSubcategories();
+            catEl.value = parts.slice(1).join(' - ');
+          } else {
+            catEl.innerHTML = `<option value="${row.category}">${row.category}</option>`;
+            catEl.value = row.category;
+          }
+        }
+        
         document.getElementById('prestador_situacao').value = row.situacao || 'ativo';
         document.getElementById('prestador_valor').value = row.valor_pago || '';
         document.getElementById('prestador_data_pagamento').value = (row.data_pagamento || '').slice(0, 10);
@@ -413,8 +462,10 @@
           name,
           pix_key: pix,
           pix_type: document.getElementById('prestador_pix_type').value,
-          category: document.getElementById('prestador_categoria').value.trim() || 'Terceirizado',
-          valor_pago: parseFloat(document.getElementById('prestador_valor').value) || 0,
+          category: (document.getElementById('prestador_area').value && document.getElementById('prestador_categoria').value) 
+                    ? `${document.getElementById('prestador_area').value} - ${document.getElementById('prestador_categoria').value}` 
+                    : (document.getElementById('prestador_categoria').value || 'Terceirizado'),
+          valor_pago: (typeof DB !== 'undefined' && DB._moneyAmt) ? DB._moneyAmt(document.getElementById('prestador_valor').value) : (parseFloat(String(document.getElementById('prestador_valor').value).replace(/[^\d.,]/g,'').replace(',','.')) || 0),
           data_pagamento: document.getElementById('prestador_data_pagamento').value || null,
           vigencia: document.getElementById('prestador_vigencia').value.trim(),
           recorrencia_mensal: document.getElementById('prestador_recorrencia').checked,
@@ -423,13 +474,16 @@
           created_by: _author(),
         };
 
-        const saved = await DB.saveFinanceServiceProvider(row);
+        const saved = await DB.saveFinanceSupplier(row);
         if (!saved) throw new Error('Não foi possível salvar.');
 
         await _maybeCreditRecorrencia(saved, isNew);
 
         closeModal('prestadorServicosModal');
         await this.render();
+        if (typeof this.processAutomations === 'function') {
+          await this.processAutomations();
+        }
         if (typeof showToast === 'function') {
           showToast(isNew ? 'Prestador cadastrado!' : 'Prestador atualizado!', 'success');
         }
@@ -440,6 +494,118 @@
         if (btn) { btn.disabled = false; btn.textContent = 'Salvar'; }
       }
     },
+  };
+
+  PrestadorServicos.processAutomations = async function() {
+    try {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const list = await DB.getFinanceSuppliers().catch(() => []);
+      const hoje = new Date();
+      hoje.setHours(0,0,0,0);
+
+      let gerouAlgum = false;
+
+      const allWd = typeof DB.getWithdrawals === 'function' ? await DB.getWithdrawals().catch(() => []) : [];
+      
+      // Auto-correção de saques gerados com status errado
+      for (const w of allWd) {
+        if (String(w.employee_id).startsWith('fs-') && String(w.status).toLowerCase() === 'pendente') {
+          if (typeof DB._patchWd === 'function') await DB._patchWd(w.id, { status: 'solicitado' }).catch(()=>null);
+          w.status = 'solicitado';
+        }
+      }
+
+      for (const row of list) {
+        if (row.situacao !== 'ativo' || !row.data_pagamento || !row.valor_pago) continue;
+        
+        const dataPag = new Date(row.data_pagamento + 'T00:00:00');
+        if (hoje >= dataPag) {
+          const supplierWds = allWd.filter(w => {
+            if (w.employee_id === row.id) return true;
+            try {
+              if (typeof w.notes === 'string' && w.notes.startsWith('{')) {
+                const meta = JSON.parse(w.notes);
+                if (meta.supplier_id === row.id) return true;
+              }
+            } catch (_) {}
+            return false;
+          });
+          const jaTemHoje = supplierWds.some(w => (w.created_at || w.createdAt || '').startsWith(todayStr));
+          if (jaTemHoje) {
+            if (row.recorrencia_mensal) {
+              dataPag.setMonth(dataPag.getMonth() + 1);
+              row.data_pagamento = dataPag.toISOString().slice(0, 10);
+            } else {
+              row.situacao = 'inativo';
+            }
+            await DB.saveFinanceSupplier(row).catch(()=>null);
+            continue;
+          }
+
+          const session = typeof Auth !== 'undefined' && typeof Auth.getSession === 'function' ? Auth.getSession() : null;
+          const creatorId = session?.id || 'sys_finance';
+
+          const wdMeta = {
+            supplier_id: row.id,
+            is_supplier: true
+          };
+
+          const wd = {
+            id: DB._genId('wd'),
+            employee_id: creatorId,
+            notes: JSON.stringify(wdMeta),
+            amount: (typeof DB !== 'undefined' && DB._moneyAmt) ? DB._moneyAmt(row.valor_pago) : parseFloat(row.valor_pago),
+            net_amount: (typeof DB !== 'undefined' && DB._moneyAmt) ? DB._moneyAmt(row.valor_pago) : parseFloat(row.valor_pago),
+            irpf_tax: 0,
+            status: 'solicitado',
+            type: 'pix',
+            pix_key_type: String(row.pix_type || 'cpf').toLowerCase(),
+            pix_key: String(row.pix_key || '').trim(),
+            holder_name: String(row.name || '').trim(),
+            bank_name: '',
+            admin_note: `Pagamento Prestador: ${row.category || 'Serviço'}`,
+            approved_by_master: false,
+            approved_by_financial: false,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          
+          let success = false;
+          if (typeof DB._insertWithdrawal === 'function') {
+            try {
+              if (typeof _cacheDel === 'function') _cacheDel('withdrawals');
+              if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem('supa_cache_withdrawals');
+              
+              await DB._insertWithdrawal(wd);
+              
+              if (typeof _cacheDel === 'function') _cacheDel('withdrawals');
+              if (typeof window !== 'undefined' && window.sessionStorage) window.sessionStorage.removeItem('supa_cache_withdrawals');
+              success = true;
+              gerouAlgum = true;
+            } catch (e) {
+              console.warn('Falha ao gerar saque para fornecedor:', e);
+              if (typeof showToast === 'function') showToast('Erro ao gerar saque do prestador ' + (row.name || '') + ': ' + e.message, 'error');
+            }
+          }
+
+          if (success) {
+            if (row.recorrencia_mensal) {
+              dataPag.setMonth(dataPag.getMonth() + 1);
+              row.data_pagamento = dataPag.toISOString().slice(0, 10);
+            } else {
+              row.situacao = 'inativo';
+            }
+            await DB.saveFinanceSupplier(row).catch(()=>null);
+          }
+        }
+      }
+
+      if (gerouAlgum && typeof showToast === 'function') {
+        showToast('Saques de prestadores de serviço gerados automaticamente hoje.', 'info');
+      }
+    } catch (err) {
+      console.warn('[PrestadorAutomations]', err);
+    }
   };
 
   window.PrestadorServicos = PrestadorServicos;

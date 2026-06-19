@@ -291,6 +291,11 @@ async function _syncRhUserFromEmployee(emp, password) {
     role: emp.role || emp.system_role || 'vendedor',
     permissions: emp.permissions || _collectPermissoesFromForm(),
   };
+  if (emp.supervisor_id) {
+    userData.admin_id = emp.supervisor_id;
+  } else if (typeof ADMIN_ID !== 'undefined') {
+    userData.admin_id = ADMIN_ID;
+  }
 
   if (password) userData.password = password;
 
@@ -441,6 +446,47 @@ function _fillJobSelects() {
     if (el) el.innerHTML = opts;
   });
 }
+
+async function _fillLeadersSelects() {
+  try {
+    if (!window._allSystemUsersCache) {
+      window._allSystemUsersCache = await DB.getUsers();
+    }
+    // Apenas líderes (iguais ao master)
+    const leaders = (window._allSystemUsersCache || []).filter(u =>
+      ['supervisor', 'parceiro', 'sup_backoffice', 'diretoria', 'gerente'].includes(u.role) && u.active !== false
+    );
+    
+    leaders.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+    const roleTag = (r) => ({
+      parceiro: 'Parceiro',
+      sup_backoffice: 'Sup. Backoffice',
+      supervisor: 'Supervisor',
+      diretoria: 'Diretoria',
+      gerente: 'Gerente'
+    }[r] || '');
+
+    const opts = '<option value="">— Sem vínculo —</option>' + leaders.map(s => {
+      const tag = roleTag(s.role);
+      // Salva o ID para vincular no admin_id, mas guarda o nome no data-name
+      return `<option value="${_esc(s.id)}" data-name="${_esc(s.name || s.email)}">${tag ? tag + ' — ' : ''}${_esc(s.name || s.email)} (${_esc(s.department || '—')})</option>`;
+    }).join('');
+
+    ['emp_supervisor', 'emp_responsavel_dpto', 'emp_diretor_dpto'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) {
+        // Guarda o valor atual pra não perder ao repopular
+        const currentVal = el.value;
+        el.innerHTML = opts;
+        if (currentVal) el.value = currentVal;
+      }
+    });
+  } catch(e) {
+    console.error('Error filling leaders:', e);
+  }
+}
+
 
 function _fillCompanySelect() {
   const el = document.getElementById('emp_cnpj_registro');
@@ -818,10 +864,11 @@ function limparFormFuncionario() {
   document.getElementById('funcModalTitle').textContent = 'Novo Funcionário';
 }
 
-function openFuncionarioModal(row) {
+async function openFuncionarioModal(row) {
   limparFormFuncionario();
   _fillJobSelects();
   _fillCompanySelect();
+  await _fillLeadersSelects();
 
   if (row) {
     _set('emp_id', row.id);
@@ -839,9 +886,21 @@ function openFuncionarioModal(row) {
     _set('emp_cargo', row.cargo_id || row.cargo || '');
     _set('emp_cbo_cod', row.cbo_cod || '');
     _set('emp_cbo_descricao', row.cbo_descricao || '');
-    _set('emp_supervisor', row.supervisor || '');
-    _set('emp_responsavel_dpto', row.responsavel_dpto || '');
-    _set('emp_diretor_dpto', row.diretor_dpto || '');
+
+    const setLeader = (idEl, valId, valName) => {
+      if (valId) { _set(idEl, valId); return; }
+      if (valName) {
+        const el = document.getElementById(idEl);
+        if (el) {
+          const opt = Array.from(el.options).find(o => o.dataset.name === valName);
+          if (opt) el.value = opt.value;
+        }
+      }
+    };
+    setLeader('emp_supervisor', row.supervisor_id, row.supervisor);
+    setLeader('emp_responsavel_dpto', row.responsavel_dpto_id, row.responsavel_dpto);
+    setLeader('emp_diretor_dpto', row.diretor_dpto_id, row.diretor_dpto);
+
     _set('emp_cargo_confianca', row.cargo_confianca || 'NÃO');
     _set('emp_qualidade_monitoria', row.qualidade_monitoria || 'BAIXA');
     _set('emp_advertencia', String(row.advertencias || row.advertencia || 0));
@@ -985,6 +1044,53 @@ async function buscarCnpjFuncionario() {
   }
 }
 
+function onEmpRoleChange() {
+  const role = document.getElementById('emp_role')?.value || 'vendedor';
+  const checkboxes = document.querySelectorAll('input[type="checkbox"][id^="perm_can"]');
+  
+  // Limpar todas primeiro
+  checkboxes.forEach(cb => cb.checked = false);
+
+  const baseVendedor = [
+    'perm_canProposta', 'perm_canClientes', 'perm_canRanking', 'perm_canLoja',
+    'perm_canSimulacao', 'perm_canChamados', 'perm_canLeadsManager', 
+    'perm_canTreinamentos', 'perm_canPainelSonhos', 'perm_canMeuExtrato'
+  ];
+
+  const presets = {
+    'vendedor': baseVendedor,
+    'backoffice': [...baseVendedor, 'perm_canTimEsteira', 'perm_canContestacao'],
+    'supervisor': [...baseVendedor, 'perm_canSupervisorPanel', 'perm_canRHMonitoria'],
+    'rh': [
+      'perm_canRHMonitoria', 'perm_canRHGestao', 'perm_canRHFolha', 
+      'perm_canCadFunc', 'perm_canTreinamentos', 'perm_canChamados', 'perm_canMeuExtrato'
+    ],
+    'financeiro': [
+      'perm_canSaques', 'perm_canFiscalParceiro', 'perm_canFornecedorFinanceiro', 
+      'perm_canContaCorrente', 'perm_canChamados', 'perm_canMeuExtrato'
+    ]
+  };
+
+  let toCheck = [];
+  if (role === 'diretoria' || role === 'desenvolvedor') {
+    // Marca tudo
+    checkboxes.forEach(cb => cb.checked = true);
+    return;
+  } else if (role === 'gerente') {
+    // Gerente tem quase tudo (Supervisor + RH + Financeiro + Marketplace)
+    toCheck = [
+      ...presets['supervisor'], ...presets['rh'], ...presets['financeiro'], 'perm_canMarketplaceBlu'
+    ];
+  } else {
+    toCheck = presets[role] || [];
+  }
+
+  toCheck.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.checked = true;
+  });
+}
+
 async function salvarFuncionario(event) {
   if (event) event.preventDefault();
 
@@ -1012,6 +1118,10 @@ async function salvarFuncionario(event) {
   const permissions = _collectPermissoesFromForm();
   const auditNote = _val('emp_audit_note').trim();
 
+  const elSup = document.getElementById('emp_supervisor');
+  const elResp = document.getElementById('emp_responsavel_dpto');
+  const elDir = document.getElementById('emp_diretor_dpto');
+
   const row = {
     id: id || undefined,
     cpf,
@@ -1029,9 +1139,12 @@ async function salvarFuncionario(event) {
     cargo: cargoId,
     cbo_cod: _val('emp_cbo_cod').trim() || job?.cbo_cod || '',
     cbo_descricao: _val('emp_cbo_descricao').trim() || job?.cbo_descricao || '',
-    supervisor: _val('emp_supervisor').trim(),
-    responsavel_dpto: _val('emp_responsavel_dpto').trim(),
-    diretor_dpto: _val('emp_diretor_dpto').trim(),
+    supervisor: elSup.options[elSup.selectedIndex]?.dataset?.name || '',
+    supervisor_id: elSup.value || null,
+    responsavel_dpto: elResp.options[elResp.selectedIndex]?.dataset?.name || '',
+    responsavel_dpto_id: elResp.value || null,
+    diretor_dpto: elDir.options[elDir.selectedIndex]?.dataset?.name || '',
+    diretor_dpto_id: elDir.value || null,
     cargo_confianca: _val('emp_cargo_confianca'),
     qualidade_monitoria: _val('emp_qualidade_monitoria'),
     advertencias: parseInt(_val('emp_advertencia'), 10) || 0,
@@ -1186,6 +1299,7 @@ window.limparFormFuncionario = limparFormFuncionario;
 window.buscarCpfFuncionario = buscarCpfFuncionario;
 window.buscarCnpjFuncionario = buscarCnpjFuncionario;
 window.editFuncionario = editFuncionario;
+window.onEmpRoleChange = onEmpRoleChange;
 
 document.addEventListener('DOMContentLoaded', () => {
   try {

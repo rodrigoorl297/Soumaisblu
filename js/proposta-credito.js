@@ -85,9 +85,6 @@
           ${finGridRow('FORMA DE PAGAMENTO', `<select class="form-control" id="pc_forma_pagamento" required>
             <option value="">Selecione...</option>
             <option value="PIX">PIX</option>
-            <option value="TED">TED</option>
-            <option value="DOC">DOC</option>
-            <option value="CRÉDITO EM CONTA">Crédito em conta</option>
           </select>`)}
           ${finGridRow('BANCO', `<select class="form-control" id="pc_banco" required>
             <option value="">Selecione o banco...</option>
@@ -105,8 +102,6 @@
           <div id="pc_avalista_info" hidden class="pc-info-box"></div>
           <input type="hidden" id="pc_avalista_nome"/>`)}
           ${finGridRow('TELEFONE AVALISTA', `<input type="text" class="form-control mask-phone" id="pc_avalista_tel" placeholder="(00) 00000-0000"/>`)}
-          ${finGridRow('BEM EM GARANTIA?', simNaoSelect('pc_bem_garantia', true))}
-          ${finGridRow('QUITADO?', simNaoSelect('pc_quitado', true))}
           <tr class="pc-footer-row"><td colspan="2">${esc(TAXA_LABEL)}</td></tr>
         </tbody>
       </table>
@@ -165,7 +160,7 @@
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
-      ['pc_conta_santander', 'pc_forma_pagamento', 'pc_banco', 'pc_bem_garantia', 'pc_quitado'].forEach(id => {
+      ['pc_conta_santander', 'pc_forma_pagamento', 'pc_banco'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
@@ -351,8 +346,6 @@
         avalista_cpf: digits(gv('pc_avalista_cpf')),
         avalista_nome: gv('pc_avalista_nome'),
         avalista_telefone: gv('pc_avalista_tel'),
-        bem_garantia: gv('pc_bem_garantia'),
-        quitado: gv('pc_quitado'),
         taxa_mensal: '3,5%',
         prazo_analise_dias: 7,
       };
@@ -399,7 +392,6 @@
         `Santander: ${meta.conta_santander}`,
         `Pagamento: ${meta.forma_pagamento} · ${meta.banco} Ag ${meta.agencia} Cc ${meta.conta_corrente}`,
         meta.avalista_cpf ? `Avalista: ${meta.avalista_nome || '—'} (${meta.avalista_cpf})` : '',
-        `Garantia: ${meta.bem_garantia} · Quitado: ${meta.quitado}`,
         TAXA_LABEL,
       ].filter(Boolean);
 

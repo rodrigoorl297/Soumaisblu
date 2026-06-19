@@ -141,11 +141,16 @@
     if (pixPending.length) {
       const rows = pixPending.slice(0, 6);
       const empCache = {};
-      await Promise.all(rows.map(async (w) => {
-        if (!empCache[w.employee_id]) {
-          empCache[w.employee_id] = await DB.getUser(w.employee_id).catch(() => null);
-        }
-      }));
+      try {
+        const [allUsers, allSup] = await Promise.all([
+          DB.getUsers().catch(() => []),
+          typeof DB.getFinanceSuppliers === 'function' ? DB.getFinanceSuppliers().catch(() => []) : Promise.resolve([])
+        ]);
+        allUsers.forEach(u => { if (u?.id) empCache[u.id] = u; });
+        allSup.forEach(s => { if (s?.id) empCache[s.id] = { id: s.id, name: s.name, role: 'fornecedor' }; });
+      } catch (e) {
+        console.warn('Erro ao popular cache de usuários no financeiro:', e);
+      }
       alerts.innerHTML = `<div class="card card-padded" style="margin-bottom:16px;border-left:4px solid #f59e0b;">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:14px;">
           <div>

@@ -397,6 +397,9 @@
       await initRoleGlobals();
       await loadSectionsHtml();
       initModules();
+      if (window.PrestadorServicos?.processAutomations) {
+        PrestadorServicos.processAutomations();
+      }
       ensureFinanceiroSidebarVisible();
       applyFinanceiroPartnerNavVisibility();
       wireBalanceForm();
