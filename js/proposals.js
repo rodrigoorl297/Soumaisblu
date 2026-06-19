@@ -80,7 +80,99 @@ window.Proposals = {
   _CONVENIO_ENTIDADES: {
     FEDERAL: ['SIAPE'],
     ESTADUAL: [
-      'GOV SP', 'GOV RJ', 'GOV MG', 'GOV PI', 'GOV ES', 'GOV PB', 'GOV PR', 'GOV PA', 'GOV TO',
+      // GO
+      'GOVERNO DE GOIÁS',
+      // AL
+      'GOVERNO DE ALAGOAS',
+      'TRIBUNAL DE JUSTIÇA DE ALAGOAS',
+      // BA
+      'PREFEITURA DE ALAGOINHAS - BA',
+      // CE
+      'PREFEITURA DE JUAZEIRO DO NORTE - CE',
+      'PREFEITURA DE SOBRAL - CE',
+      // MA
+      'GOVERNO DO MARANHÃO',
+      'PREFEITURA DE AÇAILÂNDIA - MA',
+      'PREFEITURA DE IMPERATRIZ - MA',
+      'PREFEITURA DE PAÇO DO LUMIAR - MA',
+      'PREFEITURA DE SÃO LUIS - MA',
+      // MS
+      'PREFEITURA DE CAMPO GRANDE - MS',
+      'SAPE - MS',
+      // PB
+      'GOVERNO DA PARAÍBA - PBPREV',
+      'GOVERNO DA PARAÍBA - UEPB',
+      'PREFEITURA DE JOÃO PESSOA - PB',
+      'PREFEITURA DE SANTA RITA - PB',
+      'PREF DE CAMPINA GRANDE - IPSEM - PB',
+      // PE
+      'GOVERNO DE PERNAMBUCO',
+      'PREFEITURA DE RECIFE - PE',
+      // PI
+      'GOVERNO DO PIAUÍ',
+      'PREFEITURA DE PICOS - PI',
+      // RN
+      'GOVERNO DO RIO GRANDE DO NORTE',
+      'PREFEITURA DE NATAL - RN',
+      // SE
+      'PREFEITURA DE ARACAJU - SE',
+      // PA
+      'PREFEITURA DE ANANINDEUA - PA',
+      // RO
+      'PREFEITURA DE PORTO VELHO - IPAM - RO',
+      // TO
+      'GOVERNO DO TOCANTINS',
+      'PREFEITURA DE ARAGUAÍNA - TO',
+      'PREFEITURA DE PALMAS - TO',
+      'PREV PALMAS - TO',
+      // ES
+      'GOVERNO DO ESPÍRITO SANTO',
+      // MG
+      'GOVERNO DE MINAS GERAIS - CBMMG',
+      'GOVERNO DE MINAS GERAIS - IPSEMG',
+      'GOVERNO DE MINAS GERAIS - IPSM',
+      'GOVERNO DE MINAS GERAIS - PMMG',
+      'GOVERNO DE MINAS GERAIS - SEPLAG',
+      'PREFEITURA DE BELO HORIZONTE - MG',
+      'PREFEITURA DE CONTAGEM - MG',
+      'PREFEITURA DE CONTAGEM - FUNEC - MG',
+      'PREFEITURA DE CONTAGEM - PREVICOR - MG',
+      'PREFEITURA DE CONTAGEM - TRANSCO - MG',
+      'PREFEITURA DE JUIZ DE FORA - MG',
+      'PREFEITURA DE UBERABA - MG',
+      // RJ
+      'PREFEITURA DE DUQUE DE CAXIAS - RJ',
+      'PREFEITURA DE DUQUE DE CAXIAS - IMPI - RJ',
+      'PREFEITURA DE MACAÉ - RJ',
+      'PREFEITURA DE SÃO GONÇALO - RJ',
+      'PREFEITURA DO RIO DE JANEIRO - RJ',
+      // SP
+      'GOVERNO DE SÃO PAULO',
+      'GOVERNO DE SÃO PAULO - SPPREV',
+      'PREFEITURA DE BAURU - SP',
+      'PREFEITURA DE CAJAMAR - SP',
+      'PREFEITURA DE CAMPINAS - SP',
+      'PREFEITURA DE GUARULHOS - SP',
+      'PREFEITURA DE ITU - SP',
+      'PREFEITURA DE RIBEIRÃO PRETO - SP',
+      'PREFEITURA DE SANTOS - SP',
+      'PREFEITURA DE SÃO JOSE DO RIO PRETO - SP',
+      'PREFEITURA DE SÃO PAULO - SP',
+      'PREFEITURA DE SÃO PAULO - IPREM - SP',
+      'PREFEITURA DE TAUBATÉ - SP',
+      // PR
+      'GOVERNO DO PARANÁ',
+      'PREFEITURA DE ARAPONGAS - PR',
+      // RS
+      'PREFEITURA DE GRAVATAÍ - RS',
+      'PREFEITURA DE SANTA MARIA - RS',
+      'PREFEITURA DE SAPUCAIA - RS',
+      // SC
+      'GOVERNO DE SANTA CATARINA',
+      // GO extra
+      'PREF DE ÁGUAS LINDAS DE GOIÁS - GO',
+      'PREF DE PLANALTINA - GO',
+      'PREF DE PLANALTINA - PREVPLAN - GO',
     ],
     MUNICIPAL: [
       'PREF SP', 'PREF RJ', 'PREF BH', 'PREF SÃO LUIS', 'PREF CAMPO GRANDE',
@@ -452,11 +544,24 @@ window.Proposals = {
   async _proposalBelongsToSessionPartnerOrg(proposal) {
     const rootId = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
     if (!rootId) return true;
-    if (typeof PartnerOps === 'undefined') return false;
-    const index = await PartnerOps._getIndex().catch(() => []);
-    const entry = index.find(e => e.rootId === rootId);
-    if (!entry) return false;
-    return PartnerOps._proposalBelongsToIndex(proposal, entry);
+    const pr = proposal.partner_root_id || proposal.partnerRootId;
+    if (pr && String(pr) === String(rootId)) return true;
+    if (typeof DB.getPartnerTeamIds !== 'function') return false;
+    const teamIds = await DB.getPartnerTeamIds(rootId);
+    const vids = typeof DB._proposalVendorIds === 'function'
+      ? DB._proposalVendorIds(proposal)
+      : [proposal.vendorId, proposal.vendor_id, proposal.employee_id];
+    return vids.some(id => id && teamIds.has(String(id)));
+  },
+
+  _canPartnerManageProposals: function() {
+    if (typeof window === 'undefined' || !window.PARTNER_ROOT_ID) return true;
+    if (typeof partnerOrgCan !== 'function') return false;
+    const r = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
+    if (r === 'parceiro') return partnerOrgCan('cadastrar_proposta');
+    const roles = ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'];
+    if (!roles.includes(r)) return false;
+    return partnerOrgCan('cadastrar_proposta');
   },
 
   _matchesVendorIdFilter: function(p, vendorId) {
@@ -1062,31 +1167,65 @@ window.Proposals = {
   _lastAttachmentBlobUrl: null,
   _attachmentLoadPromises: {},
 
+  _siteBaseUrl: function() {
+    const cfg = typeof window !== 'undefined' ? (window.SOUBLU_CONFIG || {}) : {};
+    return String(cfg.SITE_URL || cfg.API_BASE_URL || (typeof location !== 'undefined' ? location.origin : ''))
+      .replace(/\/+$/, '');
+  },
+
+  _mapSupabaseStorageToLocalUpload: function(url) {
+    const m = String(url || '').match(/\/storage\/v1\/object\/public\/([^/?#]+)\/(.+)$/i);
+    if (!m) return '';
+    const base = this._siteBaseUrl();
+    return base ? `${base}/uploads/${m[1]}/${m[2]}` : '';
+  },
+
   _normalizeAttachmentUrl: function(val) {
     if (val == null || val === '') return '';
-    if (typeof val === 'string') {
-      const s = val.trim();
-      if (!s) return '';
-      if (/^(https?:\/\/|data:|blob:)/i.test(s)) return s;
-      const base = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL)
-        ? String(SUPABASE_URL).replace(/\/$/, '')
-        : (typeof window !== 'undefined' && window.SOUBLU_CONFIG?.SUPABASE_URL)
-          ? String(window.SOUBLU_CONFIG.SUPABASE_URL).replace(/\/$/, '')
-          : '';
-      if (base) {
-        if (s.startsWith('/storage/')) return base + s;
-        if (s.startsWith('storage/v1/')) return base + '/' + s;
-      }
-      if (/^[A-Za-z0-9+/=\s-]+$/.test(s.replace(/\s/g, '')) && s.length > 80) {
-        return 'data:application/octet-stream;base64,' + s.replace(/\s/g, '');
-      }
-      return '';
-    }
     if (typeof val === 'object') {
       const nested = val.url || val.path || val.src || val.href || val.publicUrl || val.public_url || val.signedUrl || val.signed_url;
       if (nested) return this._normalizeAttachmentUrl(nested);
+      return '';
+    }
+    const s = String(val).trim();
+    if (!s) return '';
+    if (/^(data:|blob:)/i.test(s)) return s;
+    if (/^https?:\/\//i.test(s)) {
+      if (/supabase\.co\/storage/i.test(s)) return s;
+      const up = s.match(/^(https?:\/\/[^/]+)(\/uploads\/.+)$/i);
+      if (up) {
+        const base = this._siteBaseUrl();
+        if (base) return base + up[2];
+      }
+      return s;
+    }
+    const base = this._siteBaseUrl();
+    if (s.startsWith('/uploads/') || /^uploads\//i.test(s)) {
+      return base ? `${base}/${s.replace(/^\//, '')}` : s;
+    }
+    const supaBase = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL)
+      ? String(SUPABASE_URL).replace(/\/$/, '')
+      : String((typeof window !== 'undefined' && window.SOUBLU_CONFIG?.STORAGE_URL) || '').replace(/\/$/, '');
+    if (supaBase) {
+      if (s.startsWith('/storage/')) return supaBase + s;
+      if (s.startsWith('storage/v1/')) return supaBase + '/' + s;
+    }
+    if (/^[A-Za-z0-9+/=\s-]+$/.test(s.replace(/\s/g, '')) && s.length > 80) {
+      return 'data:application/octet-stream;base64,' + s.replace(/\s/g, '');
     }
     return '';
+  },
+
+  _attachmentOpenUrls: function(url) {
+    const primary = this._normalizeAttachmentUrl(url);
+    const list = [];
+    if (primary) list.push(primary);
+    const raw = String(url || '').trim();
+    if (/supabase\.co\/storage/i.test(raw)) {
+      const local = this._mapSupabaseStorageToLocalUpload(raw);
+      if (local && !list.includes(local)) list.push(local);
+    }
+    return list;
   },
 
   _isValidAttachmentUrl: function(url) {
@@ -1198,6 +1337,32 @@ window.Proposals = {
     });
   },
 
+  _uploadPendingDataAttachments: async function(proposalId, att) {
+    const out = { ...att };
+    const jobs = [];
+    Object.keys(out).forEach((k) => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta')) return;
+      const v = out[k];
+      if (typeof v !== 'string' || !/^data:/i.test(v)) return;
+      jobs.push((async () => {
+        try {
+          const res = await fetch(v);
+          const blob = await res.blob();
+          const nome = out[k + '_nome'] || `${k}.pdf`;
+          const file = new File([blob], nome, { type: blob.type || 'application/pdf' });
+          const uploaded = await (window.DB || DB).uploadProposalFile(file, proposalId, k);
+          if (uploaded && !String(uploaded).startsWith('data:')) {
+            out[k] = uploaded;
+          }
+        } catch (e) {
+          console.warn('[Proposals] upload pending attachment', k, e);
+        }
+      })());
+    });
+    await Promise.all(jobs);
+    return out;
+  },
+
   _prepareAttachmentsForSave: async function(proposalId, proposal) {
     if (this._attachmentLoadPromises[proposalId]) {
       try { await this._attachmentLoadPromises[proposalId]; } catch { /* ignore */ }
@@ -1219,6 +1384,7 @@ window.Proposals = {
         if (full?.attachments) base = this._parseAttachments(full.attachments);
       } catch (_) { /* noop */ }
     }
+    base = await this._uploadPendingDataAttachments(proposalId, base);
     const uploaded = await this._collectAttachments(proposalId);
     return { ...base, ...uploaded };
   },
@@ -1253,7 +1419,7 @@ window.Proposals = {
   },
 
   openAttachment: function(cacheIdxOrUrl, nome) {
-    let url = '';
+    let urls = [];
     let name = nome || 'Anexo';
 
     if (typeof cacheIdxOrUrl === 'number') {
@@ -1262,13 +1428,15 @@ window.Proposals = {
         alert('Anexo indisponível.');
         return;
       }
-      url = item.url;
+      urls = item.urls || this._attachmentOpenUrls(item.rawUrl || item.url);
       name = item.nome || name;
     } else {
-      url = this._normalizeAttachmentUrl(cacheIdxOrUrl);
+      urls = this._attachmentOpenUrls(cacheIdxOrUrl);
+      name = nome || name;
     }
 
-    if (!this._isValidAttachmentUrl(url)) {
+    const url = urls.find((u) => this._isValidAttachmentUrl(u)) || '';
+    if (!url) {
       alert('Anexo indisponível ou inválido.');
       return;
     }
@@ -1293,7 +1461,8 @@ window.Proposals = {
     if (titleEl) titleEl.textContent = name;
     if (openExtEl) {
       openExtEl.onclick = () => {
-        const w = window.open(displayUrl, '_blank', 'noopener,noreferrer');
+        const extUrl = urls.find((u) => this._isValidAttachmentUrl(u)) || displayUrl;
+        const w = window.open(this._toDisplayUrl(extUrl), '_blank', 'noopener,noreferrer');
         if (!w) alert('Não foi possível abrir em nova aba.');
       };
     }
@@ -1355,9 +1524,9 @@ window.Proposals = {
       </div>`;
     }
     if (this._isPdfUrl(url, nome)) {
-      return `<div ${click} style="${box}position:relative;" title="${safeNome} — clique para abrir">
-        <embed src="${safePreview}#toolbar=0&navpanes=0" type="application/pdf" style="width:100%;height:100%;pointer-events:none;border:0;"/>
-        <span style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,.65);color:#fff;font-size:9px;padding:4px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;">📄 ${safeNome}</span>
+      return `<div ${click} style="${box}display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-primary);padding:8px;text-align:center;" title="${safeNome} — clique para abrir">
+        <span style="font-size:32px;margin-bottom:6px;">📄</span>
+        <span style="font-size:10px;line-height:1.2;word-break:break-word;max-height:48px;overflow:hidden;">${safeNome}</span>
       </div>`;
     }
     return `<div ${click} style="${box}display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-primary);padding:8px;text-align:center;" title="${safeNome}">
@@ -1486,10 +1655,19 @@ window.Proposals = {
     return typeof Auth !== 'undefined' && Auth.isMaster();
   },
 
-  /** Master, gerente e sup. backoffice podem excluir propostas (supervisor de vendas não). */
+  /** Master/gerente; na rede parceira: gestor, sup. backoffice e backoffice. */
   _canDeleteProposal: function() {
     if (this._isMaster()) return true;
     const role = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
+      if (role === 'parceiro') {
+        return typeof partnerOrgCan === 'function' && partnerOrgCan('cadastrar_proposta');
+      }
+      if (['sup_backoffice', 'backoffice'].includes(role)) {
+        return typeof partnerOrgCan === 'function' && partnerOrgCan('cadastrar_proposta');
+      }
+      return false;
+    }
     return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
   },
 
@@ -1634,7 +1812,7 @@ window.Proposals = {
 
     const fromProposalOnly = !!client._fromProposalOnly;
     const proposalHint = fromProposalOnly
-      ? '<p style="color:var(--color-warning);margin:0 0 8px;font-size:13px;font-weight:600;">Cliente não está no cadastro — complete telefone, e-mail e endereço e salve a proposta.</p>'
+      ? '<p style="color:var(--color-warning);margin:0 0 8px;font-size:13px;font-weight:600;">Cliente não está no cadastro — use <strong>Editar</strong> (ícone lápis), complete telefone, e-mail e endereço e clique em <strong>Salvar alterações</strong>.</p>'
       : '';
 
     return `
@@ -1743,9 +1921,52 @@ window.Proposals = {
     };
   },
 
+  _proposalVendorSupervisorId: function(proposal) {
+    return String(proposal?.vendorId || proposal?.vendor_id || proposal?.employee_id || '').trim();
+  },
+
+  _ensureClientRecordForProposal: async function(proposal, prefix) {
+    const form = prefix ? this._readProposalClientForm(prefix) : {};
+    const cpf = String(form.cpf || form.origCpf || proposal?.clientCpf || proposal?.client_cpf || '').replace(/\D/g, '');
+    const name = String(form.name || proposal?.clientName || proposal?.client_name || '').trim();
+    if (!cpf && !name) return null;
+
+    let client = cpf ? await this._lookupClientByCpf(cpf) : null;
+    const supervisorId = this._proposalVendorSupervisorId(proposal)
+      || String(client?.supervisorId || client?.supervisor_id || '').trim();
+
+    const updated = {
+      ...(client || {}),
+      id: client?.id || cpf,
+      cpf: cpf || client?.cpf || '',
+      name: name || client?.name || '',
+      rg: form.rg || client?.rg || '',
+      phone1: form.phone1 || client?.phone1 || '',
+      phone2: form.phone2 || client?.phone2 || '',
+      email: form.email || client?.email || '',
+      civilState: form.civilState || client?.civilState || client?.civil_state || '',
+      motherName: form.motherName || client?.motherName || client?.mother_name || '',
+      fatherName: form.fatherName || client?.fatherName || client?.father_name || '',
+      address: form.address || client?.address || '',
+      updatedAt: new Date().toISOString(),
+    };
+    if (supervisorId) {
+      updated.supervisorId = supervisorId;
+      updated.supervisor_id = supervisorId;
+    }
+    if (!updated.name && !updated.cpf) return null;
+
+    const saved = await DB.save('clients', updated);
+    if (typeof invalidateClientsListCache === 'function') invalidateClientsListCache();
+    return saved;
+  },
+
   _saveProposalClientData: async function(proposal, prefix) {
     const form = this._readProposalClientForm(prefix);
-    if (!form.name && !form.cpf) return;
+    if (!form.name && !form.cpf) {
+      await this._ensureClientRecordForProposal(proposal, prefix);
+      return;
+    }
 
     proposal.clientName = form.name || proposal.clientName;
     proposal.client_name = form.name || proposal.client_name;
@@ -1754,33 +1975,7 @@ window.Proposals = {
       proposal.client_cpf = form.cpf;
     }
 
-    const lookupCpf = form.cpf || form.origCpf;
-    if (!lookupCpf) return;
-
-    let client = await this._lookupClientByCpf(lookupCpf);
-    if (!client && form.origCpf && form.origCpf !== form.cpf) {
-      client = await this._lookupClientByCpf(form.origCpf);
-    }
-
-    const updated = {
-      ...(client || {}),
-      id: client?.id || form.cpf || lookupCpf,
-      cpf: form.cpf || client?.cpf || lookupCpf,
-      name: form.name || client?.name || proposal.clientName,
-      rg: form.rg,
-      phone1: form.phone1,
-      phone2: form.phone2,
-      email: form.email,
-      civilState: form.civilState,
-      motherName: form.motherName,
-      fatherName: form.fatherName,
-      address: form.address,
-      updatedAt: new Date().toISOString(),
-    };
-
-    if (!updated.name && !updated.cpf) return;
-    await DB.save('clients', updated);
-    if (typeof invalidateClientsListCache === 'function') invalidateClientsListCache();
+    await this._ensureClientRecordForProposal(proposal, prefix);
   },
 
   _saveManageClientAddress: async function(proposal) {
@@ -2061,6 +2256,11 @@ window.Proposals = {
       if (typeof showLoading === 'function') showLoading('Enviando proposta…');
       try {
         await DB.save('proposals', proposal);
+        try {
+          await this._ensureClientRecordForProposal(proposal, null);
+        } catch (syncErr) {
+          console.warn('[Proposals] sync client on create:', syncErr);
+        }
       } finally {
         if (typeof hideLoading === 'function') hideLoading();
       }
@@ -2366,7 +2566,7 @@ window.Proposals = {
         const partnerBadge = isPartnerRow
           ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
           : '';
-        const canEditRow = !partnerRoot || isPartnerRow;
+        const canEditRow = partnerRoot ? this._canPartnerManageProposals() : true;
         const comissaoCell = finGestao && window.FinPropostas?.operacaoChipsHtml
           ? `<td class="fin-comissao-col" style="cursor:pointer;" onclick="FinPropostas.openProposalDrawer('${safeId}','dados')" title="Abrir operações financeiras">${FinPropostas.operacaoChipsHtml(p, { baixa: baixaMap[String(p.id)], prejuizo: prejuizoMap[String(p.id)], debito: debitoMap[String(p.id)] })}</td>`
           : '';
@@ -2421,9 +2621,11 @@ window.Proposals = {
     const _resolve = (item) => {
       const tryKey = (k) => {
         if (att[k] == null || att[k] === '') return null;
-        const url = this._normalizeAttachmentUrl(att[k]);
-        if (!this._isValidAttachmentUrl(url)) return null;
-        return { url, nome: att[k + '_nome'] || item.label || item.key || k };
+        const raw = att[k];
+        const urls = this._attachmentOpenUrls(raw);
+        const url = urls.find((u) => this._isValidAttachmentUrl(u)) || '';
+        if (!url) return null;
+        return { url, rawUrl: raw, urls, nome: att[k + '_nome'] || item.label || item.key || k };
       };
       let doc = tryKey(item.key);
       if (doc) return doc;
@@ -2448,7 +2650,7 @@ window.Proposals = {
         usedKeys.add(item.key);
         (item.legado || []).forEach((lk) => usedKeys.add(lk));
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, nome: doc.nome });
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome });
         html += this._renderAttachmentPreview(doc, cacheIdx);
       });
       if (!algum) html += `<span style="font-size:12px;color:var(--color-text-muted);align-self:center;">Nenhum arquivo</span>`;
@@ -2475,7 +2677,7 @@ window.Proposals = {
         if (!doc) return;
         algumCustom = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, nome: doc.nome });
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome });
         html += this._renderAttachmentPreview(doc, cacheIdx);
       });
       if (!algumCustom) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
@@ -2495,7 +2697,7 @@ window.Proposals = {
         if (!doc) return;
         algumMisc = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, nome: doc.nome });
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome });
         html += this._renderAttachmentPreview(doc, cacheIdx);
       });
       if (!algumMisc) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
@@ -2777,6 +2979,7 @@ window.Proposals = {
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
       if (!belongs) viewOnly = true;
+      else if (!this._canPartnerManageProposals()) viewOnly = true;
     }
 
     const sv = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
@@ -2929,6 +3132,12 @@ window.Proposals = {
         else alert(msg);
         return;
       }
+      if (!this._canPartnerManageProposals()) {
+        const msg = 'Sem permissão para editar propostas nesta rede parceira.';
+        if (typeof showToast === 'function') showToast(msg, 'warning');
+        else alert(msg);
+        return;
+      }
     }
     if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
       const attRow = await DB.getProposalAttachments(id);
@@ -3031,7 +3240,15 @@ window.Proposals = {
       if (becamePaid && typeof DB.awardRouletteOnProposalPaid === 'function') {
         await DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null);
       }
-      await this._saveProposalClientData(proposal, 'manage');
+      try {
+        await this._saveProposalClientData(proposal, 'manage');
+      } catch (clientErr) {
+        console.error('[adminSave] cliente', clientErr);
+        const cm = String(clientErr?.message || clientErr || '');
+        if (typeof showToast === 'function') {
+          showToast('Proposta salva parcialmente — falha ao gravar cadastro do cliente: ' + cm, 'warning', 8000);
+        }
+      }
       await DB.saveProposal(proposal);
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._adminEditCache[id];
@@ -3065,6 +3282,17 @@ window.Proposals = {
 
     if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
     try {
+      if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
+        const raw = await DB.getProposal(id);
+        const proposal = this._normProposal(raw);
+        if (proposal) {
+          const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
+          if (!belongs) {
+            alert('Sem permissão para excluir propostas de outra rede.');
+            return;
+          }
+        }
+      }
       await DB.deleteProposal(id);
       delete this._adminEditCache[id];
       delete this._employeeEditCache[id];

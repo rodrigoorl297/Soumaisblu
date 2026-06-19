@@ -152,6 +152,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!currentUser) { Auth.logout(); return; }
     if (currentUser.role) currentUser.role = String(currentUser.role).trim().toLowerCase();
 
+    const partnerRootId = await DB.getPartnerRootForUser(currentUser.id).catch(() => null);
+    if (partnerRootId) {
+      window.PARTNER_ROOT_ID = partnerRootId;
+      const prt = await DB.getPartnerByUserId(partnerRootId).catch(() => null);
+      if (prt && typeof PartnerPerms !== 'undefined') {
+        let row = prt;
+        if (typeof PartnerPerms.ensureTeamSacarForFundedMember === 'function') {
+          row = await PartnerPerms.ensureTeamSacarForFundedMember(currentUser, prt);
+        }
+        window._PARTNER_PERMS = PartnerPerms.merge(row?.permissions);
+      }
+    }
+
     const _inPartnerOrg = typeof isUserInPartnerOrg === 'function'
       ? await isUserInPartnerOrg(currentUser)
       : false;
@@ -242,6 +255,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (window.Trainings && typeof Trainings.init === 'function') Trainings.init();
     if (window.MarketplaceBlu && typeof MarketplaceBlu.init === 'function') MarketplaceBlu.init();
+    if (window.MarketplaceBlu && typeof MarketplaceBlu.applyNavVisibility === 'function') {
+      MarketplaceBlu.applyNavVisibility(window.__ADMIN_NAV_CFG__ || { canMarketplaceBlu: true });
+    }
     if (window.ContaCorrente && typeof ContaCorrente.init === 'function') ContaCorrente.init();
     if (window.PropostaCredito) {
       PropostaCredito.init();

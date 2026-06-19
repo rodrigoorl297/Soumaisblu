@@ -139,6 +139,13 @@ window.masterProposalManager = {
       };
 
       await DB.save('proposals', proposal);
+      try {
+        if (window.Proposals?._ensureClientRecordForProposal) {
+          await Proposals._ensureClientRecordForProposal(proposal, null);
+        }
+      } catch (syncErr) {
+        console.warn('[masterProposal] sync client:', syncErr);
+      }
       
       showToast(`Proposta cadastrada! ID: ${proposal.id}`, 'success');
       this.init();

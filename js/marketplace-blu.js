@@ -118,15 +118,30 @@
     return typeof PartnerPerms !== 'undefined' && PartnerPerms.can(window._PARTNER_PERMS, key);
   }
 
+  /** Loja Marketplace BLU — somente rede parceira (gestor/equipe autorizada), nunca vendedor interno. */
   function canAccess() {
     const s = Auth.getSession();
     if (!s) return false;
-    if (s.role === 'parceiro') return true;
-    if (!window.PARTNER_ROOT_ID) {
-      return ['master', 'fundador', 'gerente', 'gerencia', 'backoffice', 'operacional',
-        'sup_backoffice', 'supervisor', 'vendedor', 'employee', 'rh', 'financeiro', 'financial'].includes(s.role);
-    }
+    const role = String(s.role || '').toLowerCase();
+    if (role === 'vendedor' || role === 'employee') return false;
+    if (!window.PARTNER_ROOT_ID) return false;
+    if (role === 'parceiro') return hasPerm('marketplace_blu');
     return hasPerm('marketplace_blu');
+  }
+
+  function guardMarketplaceSection(section) {
+    const checks = {
+      secMarketplaceBlu: () => canAccess(),
+      secMarketplaceManage: () => canManageCatalog(),
+      secMarketplaceOrders: () => canManageOrders(),
+    };
+    if (checks[section]?.()) return true;
+    if (typeof showToast === 'function') showToast('Sem permissão para acessar o Marketplace BLU.', 'warning');
+    const fallback = document.querySelector('.sidebar-nav .nav-item[data-section]:not([style*="display: none"])')?.dataset?.section
+      || document.querySelector('.sidebar-nav .nav-item[data-section]')?.dataset?.section
+      || 'secInicio';
+    if (typeof navigateTo === 'function') navigateTo(fallback);
+    return false;
   }
 
   function canManageCatalog() {
@@ -270,19 +285,20 @@
 
     applyNavVisibility(cfg) {
       if (window.SOUBLU_FINANCEIRO_PAGE || document.getElementById('finSidebarNav')) return;
-      const show = cfg?.canMarketplaceBlu !== false && canAccess();
+      const showShop = cfg?.canMarketplaceBlu !== false && canAccess();
       document.querySelectorAll('.marketplace-blu-nav').forEach(el => {
-        el.style.display = show ? '' : 'none';
+        el.style.display = showShop ? '' : 'none';
       });
       document.querySelectorAll('.marketplace-manage-nav').forEach(el => {
-        el.style.display = (show && canManageCatalog()) ? '' : 'none';
+        el.style.display = canManageCatalog() ? '' : 'none';
       });
       document.querySelectorAll('.marketplace-orders-nav').forEach(el => {
-        el.style.display = (show && canManageOrders()) ? '' : 'none';
+        el.style.display = canManageOrders() ? '' : 'none';
       });
     },
 
     async renderShop() {
+      if (!guardMarketplaceSection('secMarketplaceBlu')) return;
       this.ensureUi();
       const root = document.getElementById('marketplaceBluRoot');
       if (!root) return;
@@ -495,6 +511,7 @@
     },
 
     async renderCatalogAdmin() {
+      if (!guardMarketplaceSection('secMarketplaceManage')) return;
       this.ensureUi();
       const root = document.getElementById('marketplaceManageRoot');
       if (!root || !canManageCatalog()) return;
@@ -528,6 +545,7 @@
     },
 
     async renderOrdersAdmin() {
+      if (!guardMarketplaceSection('secMarketplaceOrders')) return;
       this.ensureUi();
       const root = document.getElementById('marketplaceOrdersRoot');
       if (!root || !canManageOrders()) return;

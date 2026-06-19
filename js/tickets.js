@@ -8,6 +8,9 @@ window.Tickets = {
     'Ouvidoria': ['Sugestão', 'Reclamação'],
     'Desenvolvimento': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Outros']
   },
+  _attachmentViewerCache: [],
+  _lastAttachmentBlobUrl: null,
+
   init: function() {
     this.populateDepts();
   },
@@ -15,16 +18,14 @@ window.Tickets = {
   populateDepts: function() {
     const deptSelect = document.getElementById('ticketDept');
     if (!deptSelect) return;
-    
-    const user = Auth.getSession();
-    
+
     let html = '<option value="">Selecione o Departamento</option>';
     this.departments.forEach(dept => {
-        if (typeof Auth.canOpenTicketTo === 'function' && Auth.canOpenTicketTo(dept)) {
-            html += '<option value="'+dept+'">'+dept+'</option>';
-        } else if (typeof Auth.canOpenTicketTo !== 'function') {
-            html += '<option value="'+dept+'">'+dept+'</option>';
-        }
+      if (typeof Auth.canOpenTicketTo === 'function' && Auth.canOpenTicketTo(dept)) {
+        html += '<option value="'+dept+'">'+dept+'</option>';
+      } else if (typeof Auth.canOpenTicketTo !== 'function') {
+        html += '<option value="'+dept+'">'+dept+'</option>';
+      }
     });
     deptSelect.innerHTML = html;
   },
@@ -33,12 +34,12 @@ window.Tickets = {
     const dept = document.getElementById('ticketDept').value;
     const subjectSelect = document.getElementById('ticketSubject');
     if (!subjectSelect) return;
-    
+
     let html = '<option value="">Selecione o Assunto</option>';
     if (dept && this.subjects[dept]) {
-        this.subjects[dept].forEach(sub => {
-           html += '<option value="'+sub+'">'+sub+'</option>';
-        });
+      this.subjects[dept].forEach(sub => {
+        html += '<option value="'+sub+'">'+sub+'</option>';
+      });
     }
     subjectSelect.innerHTML = html;
   },
@@ -52,98 +53,253 @@ window.Tickets = {
     });
   },
 
+  _parseThread: function(raw) {
+    if (!raw) return [];
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch { return []; }
+    }
+    if (!Array.isArray(raw)) return [];
+    return raw.map((m) => {
+      const att = m.attachment || m.attachment_url || m.file_url || m.url || null;
+      return {
+        ...m,
+        senderName: m.senderName || m.sender_name || '—',
+        senderRole: m.senderRole || m.sender_role,
+        message: m.message || m.text || m.body || '',
+        attachment: att,
+        attachmentName: m.attachmentName || m.attachment_name || m.file_name || '',
+        date: m.date || m.created_at || m.createdAt,
+      };
+    });
+  },
+
+  _normTicket: function(t) {
+    if (!t) return t;
+    return {
+      ...t,
+      openedById: t.openedById || t.opened_by_id || t.employee_id,
+      openedByName: t.openedByName || t.opened_by_name || t.employee_name || '—',
+      openedByDept: t.openedByDept || t.opened_by_dept || t.department || '',
+      targetDept: t.targetDept || t.target_dept || t.department || '',
+      createdAt: t.createdAt || t.created_at,
+      updatedAt: t.updatedAt || t.updated_at,
+      thread: this._parseThread(t.thread || t.messages),
+    };
+  },
+
+  _isValidAttachmentUrl: function(url) {
+    if (!url || typeof url !== 'string') return false;
+    const u = url.trim();
+    if (u.length < 12) return false;
+    if (/^data:(image|application)\//i.test(u)) return u.length > 50;
+    return /^https?:\/\//i.test(u) || u.startsWith('/uploads/');
+  },
+
+  _isImageUrl: function(url, name) {
+    const blob = String(url || '') + ' ' + String(name || '');
+    return /^data:image\//i.test(url) || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(blob);
+  },
+
+  _resolveAttachmentUrl: function(url) {
+    if (!url) return '';
+    const u = String(url).trim();
+    if (/^https?:\/\//i.test(u) || u.startsWith('data:')) return u;
+    if (u.startsWith('/')) {
+      const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+      return base + u;
+    }
+    if (typeof resolvePhotoUrl === 'function') return resolvePhotoUrl(u);
+    return u;
+  },
+
+  _dataUrlToBlobUrl: function(dataUrl) {
+    const parts = String(dataUrl).split(',');
+    if (parts.length < 2) throw new Error('data URL inválida');
+    const mime = (parts[0].match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
+    const bin = atob(parts[1]);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return URL.createObjectURL(new Blob([arr], { type: mime }));
+  },
+
+  _toDisplayUrl: function(url) {
+    if (!url) return '';
+    if (String(url).startsWith('data:')) {
+      try { return this._dataUrlToBlobUrl(url); } catch { return url; }
+    }
+    return this._resolveAttachmentUrl(url);
+  },
+
+  _revokeAttachmentBlobUrl: function() {
+    if (this._lastAttachmentBlobUrl) {
+      try { URL.revokeObjectURL(this._lastAttachmentBlobUrl); } catch { /* noop */ }
+      this._lastAttachmentBlobUrl = null;
+    }
+  },
+
+  _cacheAttachment: function(url, name) {
+    const idx = this._attachmentViewerCache.length;
+    this._attachmentViewerCache.push({ url, name: name || 'Anexo' });
+    return idx;
+  },
+
+  openAttachment: function(cacheIdxOrUrl, nome) {
+    let url = '';
+    let name = nome || 'Anexo';
+    if (typeof cacheIdxOrUrl === 'number') {
+      const item = this._attachmentViewerCache[cacheIdxOrUrl];
+      if (!item) { alert('Anexo indisponível.'); return; }
+      url = item.url;
+      name = item.name || name;
+    } else {
+      url = cacheIdxOrUrl;
+    }
+    if (!this._isValidAttachmentUrl(url)) {
+      alert('Anexo indisponível ou corrompido. Peça ao solicitante para reenviar o arquivo.');
+      return;
+    }
+    const displayUrl = this._toDisplayUrl(url);
+    this._revokeAttachmentBlobUrl();
+    if (displayUrl !== url && String(displayUrl).startsWith('blob:')) {
+      this._lastAttachmentBlobUrl = displayUrl;
+    }
+    const w = window.open(displayUrl, '_blank', 'noopener,noreferrer');
+    if (!w) alert('Não foi possível abrir o anexo. Verifique se pop-ups estão permitidos.');
+  },
+
+  _attachmentHtml: function(url, name) {
+    if (!this._isValidAttachmentUrl(url)) {
+      return '<div style="margin-top:6px;font-size:12px;color:var(--color-danger);">Anexo indisponível (arquivo corrompido ou muito grande). Solicite reenvio.</div>';
+    }
+    const label = name || 'Anexo';
+    const idx = this._cacheAttachment(url, label);
+    const resolved = this._resolveAttachmentUrl(url);
+    const safeResolved = resolved.replace(/"/g, '&quot;');
+    let preview = '';
+    if (this._isImageUrl(url, label)) {
+      preview = `<div style="margin-top:8px;"><img src="${safeResolved}" alt="${label.replace(/"/g, '&quot;')}" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--color-border);cursor:pointer;object-fit:contain;" onclick="Tickets.openAttachment(${idx})" title="Clique para ampliar"/></div>`;
+    }
+    return `${preview}<div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="Tickets.openAttachment(${idx})">Ver anexo</button></div>`;
+  },
+
+  async _uploadTicketAttachment(file, ticketId) {
+    if (typeof uploadImage === 'function') {
+      try {
+        const url = await uploadImage(file, 'ticket-docs', String(ticketId).replace(/[^a-zA-Z0-9_-]/g, '_'));
+        if (url) return { url, name: file.name || 'Anexo' };
+      } catch (e) {
+        console.warn('[Tickets] upload:', e);
+      }
+    }
+    if (file.size <= 800000) {
+      const data = await this.readFileAsBase64(file);
+      return { url: data, name: file.name || 'Anexo' };
+    }
+    throw new Error('Não foi possível enviar o anexo. Tente um arquivo menor (até 5 MB) ou contate o suporte.');
+  },
+
   submit: async function() {
     const user = Auth.getSession();
     const dept = document.getElementById('ticketDept').value;
     const subject = document.getElementById('ticketSubject').value;
     const desc = document.getElementById('ticketDesc').value;
-    
+
     if (!dept || !subject || !desc) {
       alert("Preencha departamento, assunto e descrição.");
       return;
     }
-    
+
+    const ticketId = 'TKT-' + Date.now();
     let attachment = null;
-    const file = document.getElementById('ticketFile').files[0];
+    let attachmentName = '';
+    const file = document.getElementById('ticketFile')?.files?.[0];
     if (file) {
       try {
-         attachment = await this.readFileAsBase64(file);
+        const up = await this._uploadTicketAttachment(file, ticketId);
+        attachment = up.url;
+        attachmentName = up.name;
       } catch(e) {
-         alert("Erro ao anexar arquivo.");
-         return;
+        alert(e.message || "Erro ao anexar arquivo.");
+        return;
       }
     }
 
     const ticket = {
-      id: 'TKT-' + Date.now(),
+      id: ticketId,
       openedById: user.id,
+      opened_by_id: user.id,
+      employee_id: user.id,
       openedByName: user.name,
       openedByDept: user.department,
       targetDept: dept,
+      target_dept: dept,
       subject: subject,
-      status: 'aberto', 
+      status: 'aberto',
       createdAt: new Date().toISOString(),
+      created_at: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
       thread: [
         {
-           senderName: user.name,
-           senderRole: user.role,
-           message: desc,
-           attachment: attachment,
-           date: new Date().toISOString()
+          senderName: user.name,
+          senderRole: user.role,
+          message: desc,
+          attachment: attachment,
+          attachmentName: attachmentName,
+          date: new Date().toISOString()
         }
       ]
     };
 
     await DB.save('tickets', ticket);
     alert("Chamado aberto com sucesso!");
-    
+
     document.getElementById('ticketDept').value = '';
     document.getElementById('ticketSubject').value = '';
     document.getElementById('ticketDesc').value = '';
     document.getElementById('ticketFile').value = '';
-    
+
     this.renderEmployeeList();
   },
 
   renderEmployeeList: async function() {
     const listEl = document.getElementById('ticketsList');
     if (!listEl) return;
-    
+
     const user = Auth.getSession();
-    const tickets = await DB.list('tickets') || [];
-    
-    const myTickets = tickets.filter(t => t.openedById === user.id);
-    
+    const tickets = (await DB.list('tickets') || []).map((t) => this._normTicket(t));
+
+    const myTickets = tickets.filter(t => String(t.openedById) === String(user.id));
+
     if (myTickets.length === 0) {
       listEl.innerHTML = '<p>Nenhum chamado aberto.</p>';
       return;
     }
-    
+
     myTickets.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    
+
     let html = '';
     myTickets.forEach(t => {
-        let statusColor = '#3b82f6';
-        if(t.status === 'em_andamento') statusColor = '#f59e0b';
-        if(t.status === 'resolvido') statusColor = '#10b981';
-        
-        let statusText = t.status === 'em_andamento' ? 'Em Andamento' : 
-                         t.status === 'resolvido' ? 'Resolvido' : 'Aberto';
+      let statusColor = '#3b82f6';
+      if(t.status === 'em_andamento') statusColor = '#f59e0b';
+      if(t.status === 'resolvido') statusColor = '#10b981';
 
-        html += `
-          <div style="border:1px solid var(--color-border); border-radius: var(--radius-md); padding: 15px; margin-bottom: 10px;">
-             <div style="display:flex; justify-content: space-between; margin-bottom: 10px;">
-                <strong>${t.id} - Para: ${t.targetDept}</strong>
-                <span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span>
-             </div>
-             <div><strong>Assunto:</strong> ${t.subject}</div>
-             <div style="font-size: 13px; margin-top: 8px;"><em>Última atualização: ${formatDateTime(t.updatedAt)}</em></div>
-             <div style="margin-top: 10px;">
-               <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Ver Detalhes/Responder</button>
-             </div>
-          </div>
-        `;
+      let statusText = t.status === 'em_andamento' ? 'Em Andamento' :
+        t.status === 'resolvido' ? 'Resolvido' : 'Aberto';
+
+      html += `
+        <div style="border:1px solid var(--color-border); border-radius: var(--radius-md); padding: 15px; margin-bottom: 10px;">
+           <div style="display:flex; justify-content: space-between; margin-bottom: 10px;">
+              <strong>${t.id} - Para: ${t.targetDept}</strong>
+              <span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span>
+           </div>
+           <div><strong>Assunto:</strong> ${t.subject}</div>
+           <div style="font-size: 13px; margin-top: 8px;"><em>Última atualização: ${formatDateTime(t.updatedAt)}</em></div>
+           <div style="margin-top: 10px;">
+             <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Ver Detalhes/Responder</button>
+           </div>
+        </div>
+      `;
     });
     listEl.innerHTML = html;
   },
@@ -151,50 +307,52 @@ window.Tickets = {
   renderAdminList: async function() {
     const tbody = document.getElementById('manageTicketsTbody');
     if (!tbody) return;
-    
-    const user = Auth.getSession();
-    const tickets = await DB.list('tickets') || [];
-    
+
+    const tickets = (await DB.list('tickets') || []).map((t) => this._normTicket(t));
+
     let filteredTickets = tickets.filter(t => {
-       if (typeof Auth.canReplyToTicket === 'function') {
-           return Auth.canReplyToTicket(t.targetDept);
-       }
-       return true;
+      if (typeof Auth.canReplyToTicket === 'function') {
+        return Auth.canReplyToTicket(t.targetDept);
+      }
+      return true;
     });
-    
+
     filteredTickets.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-    
+
     let html = '';
     filteredTickets.forEach(t => {
-        let statusColor = '#3b82f6';
-        if(t.status === 'em_andamento') statusColor = '#f59e0b';
-        if(t.status === 'resolvido') statusColor = '#10b981';
-        
-        let statusText = t.status === 'em_andamento' ? 'Em Andamento' : 
-                         t.status === 'resolvido' ? 'Resolvido' : 'Aberto';
+      let statusColor = '#3b82f6';
+      if(t.status === 'em_andamento') statusColor = '#f59e0b';
+      if(t.status === 'resolvido') statusColor = '#10b981';
 
-        html += `
-          <tr>
-            <td>${t.id}</td>
-            <td>${t.openedByName} (${t.openedByDept || 'N/A'})</td>
-            <td>${t.targetDept} - ${t.subject}</td>
-            <td>${formatDate(t.createdAt)}</td>
-            <td><span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span></td>
-            <td>
-               <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Tratar</button>
-            </td>
-          </tr>
-        `;
+      let statusText = t.status === 'em_andamento' ? 'Em Andamento' :
+        t.status === 'resolvido' ? 'Resolvido' : 'Aberto';
+
+      html += `
+        <tr>
+          <td>${t.id}</td>
+          <td>${t.openedByName} (${t.openedByDept || 'N/A'})</td>
+          <td>${t.targetDept} - ${t.subject}</td>
+          <td>${formatDate(t.createdAt)}</td>
+          <td><span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span></td>
+          <td>
+             <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Tratar</button>
+          </td>
+        </tr>
+      `;
     });
     tbody.innerHTML = html;
   },
 
   openModal: async function(id) {
-    const ticket = await DB.get('tickets', id);
+    const raw = await DB.get('tickets', id);
+    const ticket = this._normTicket(raw);
     if (!ticket) return;
 
+    this._attachmentViewerCache = [];
+
     document.getElementById('manageTicketId').value = ticket.id;
-    
+
     let infoHtml = `
       <strong>De:</strong> ${ticket.openedByName} (${ticket.openedByDept})<br>
       <strong>Para (Depto):</strong> ${ticket.targetDept}<br>
@@ -202,30 +360,34 @@ window.Tickets = {
       <strong>Criado em:</strong> ${formatDateTime(ticket.createdAt)}
     `;
     document.getElementById('manageTicketInfo').innerHTML = infoHtml;
-    
+
+    const attBox = document.getElementById('manageTicketAttachment');
+    const firstAtt = ticket.thread?.[0];
+    if (attBox) {
+      attBox.innerHTML = firstAtt?.attachment
+        ? `<strong style="font-size:12px;">Anexo da abertura:</strong>${this._attachmentHtml(firstAtt.attachment, firstAtt.attachmentName)}`
+        : '';
+    }
+
     if (document.getElementById('manageTicketStatus')) {
-        document.getElementById('manageTicketStatus').value = ticket.status;
+      document.getElementById('manageTicketStatus').value = ticket.status;
     }
     document.getElementById('manageTicketReply').value = '';
 
     let threadHtml = '';
-    if (ticket.thread) {
-       ticket.thread.forEach(msg => {
-          let attHtml = '';
-          if (msg.attachment) {
-             attHtml = '<div style="margin-top: 5px;"><a href="'+msg.attachment+'" target="_blank" style="font-size: 12px; color: var(--color-primary); text-decoration: underline;">Ver Anexo</a></div>';
-          }
-          
-          let align = (msg.senderName === ticket.openedByName) ? 'text-align: left;' : 'text-align: right; background: #e0f2fe;';
-          
-          threadHtml += `
-            <div style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 5px; border-radius: 4px; ${align}">
-               <div style="font-size: 12px; color: var(--color-text-muted);"><strong>${msg.senderName}</strong> em ${formatDateTime(msg.date)}</div>
-               <div style="margin-top: 5px;">${msg.message}</div>
-               ${attHtml}
-            </div>
-          `;
-       });
+    if (ticket.thread?.length) {
+      ticket.thread.forEach(msg => {
+        const attHtml = msg.attachment ? this._attachmentHtml(msg.attachment, msg.attachmentName) : '';
+        const align = (msg.senderName === ticket.openedByName) ? 'text-align: left;' : 'text-align: right; background: #e0f2fe;';
+
+        threadHtml += `
+          <div style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 5px; border-radius: 4px; ${align}">
+             <div style="font-size: 12px; color: var(--color-text-muted);"><strong>${msg.senderName}</strong> em ${formatDateTime(msg.date)}</div>
+             <div style="margin-top: 5px; white-space: pre-wrap;">${msg.message}</div>
+             ${attHtml}
+          </div>
+        `;
+      });
     }
     document.getElementById('manageTicketThread').innerHTML = threadHtml;
 
@@ -235,18 +397,18 @@ window.Tickets = {
   reply: async function() {
     const user = Auth.getSession();
     const id = document.getElementById('manageTicketId').value;
-    const ticket = await DB.get('tickets', id);
+    const ticket = this._normTicket(await DB.get('tickets', id));
     if (!ticket) return;
 
     const replyText = document.getElementById('manageTicketReply').value;
     let newStatus = ticket.status;
     if (document.getElementById('manageTicketStatus')) {
-        newStatus = document.getElementById('manageTicketStatus').value;
+      newStatus = document.getElementById('manageTicketStatus').value;
     }
 
     if (!replyText && newStatus === ticket.status) {
-       alert("Digite uma resposta ou altere o status.");
-       return;
+      alert("Digite uma resposta ou altere o status.");
+      return;
     }
 
     const becameResolved = String(ticket.status || '').toLowerCase() !== 'resolvido'
@@ -254,16 +416,17 @@ window.Tickets = {
 
     ticket.status = newStatus;
     ticket.updatedAt = new Date().toISOString();
+    ticket.updated_at = ticket.updatedAt;
 
     if (replyText) {
-       ticket.thread = ticket.thread || [];
-       ticket.thread.push({
-         senderName: user.name,
-         senderRole: user.role,
-         message: replyText,
-         attachment: null,
-         date: new Date().toISOString()
-       });
+      ticket.thread = ticket.thread || [];
+      ticket.thread.push({
+        senderName: user.name,
+        senderRole: user.role,
+        message: replyText,
+        attachment: null,
+        date: new Date().toISOString()
+      });
     }
 
     await DB.save('tickets', ticket);
@@ -275,22 +438,22 @@ window.Tickets = {
     }
     alert('Chamado atualizado!');
     document.getElementById('manageTicketModal').classList.remove('open');
-    
+
     if (document.getElementById('manageTicketsTbody')) {
-       this.renderAdminList();
+      this.renderAdminList();
     }
     if (document.getElementById('ticketsList')) {
-       this.renderEmployeeList();
+      this.renderEmployeeList();
     }
   }
 };
 
 window.addEventListener('DOMContentLoaded', () => {
-    Tickets.init();
-    if (document.getElementById('ticketsList')) {
-        Tickets.renderEmployeeList();
-    }
-    if (document.getElementById('manageTicketsTbody')) {
-        Tickets.renderAdminList();
-    }
+  Tickets.init();
+  if (document.getElementById('ticketsList')) {
+    Tickets.renderEmployeeList();
+  }
+  if (document.getElementById('manageTicketsTbody')) {
+    Tickets.renderAdminList();
+  }
 });

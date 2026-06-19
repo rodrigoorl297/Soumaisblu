@@ -218,7 +218,7 @@ async function openWithdrawalModal() {
     if (!ok) {
       const msg = currentUser?.role === 'parceiro'
         ? 'Saque PIX não liberado para este perfil. Verifique as permissões do parceiro ou contate o administrador.'
-        : 'Saque PIX não disponível para colaboradores da rede parceiro. O gestor parceiro realiza os saques.';
+        : 'Saque PIX não liberado para este parceiro. O gestor SOU+BLU precisa ativar em Gestão de Parceiros → Liberar saque equipe.';
       showToast(msg, 'warning');
       return;
     }
@@ -288,7 +288,11 @@ async function renderProfile() {
       DB.getOrders(currentUser.id).catch(() => []),
       proposalQuery,
     ]);
-    const allProposals = Array.isArray(proposalRows) ? proposalRows : (proposalRows?.items || []);
+    const normProp = (p) => (window.Proposals && typeof Proposals._normProposal === 'function')
+      ? Proposals._normProposal(p)
+      : p;
+    const allProposals = (Array.isArray(proposalRows) ? proposalRows : (proposalRows?.items || []))
+      .map(normProp);
     const myProposals = (allProposals || []).filter(p =>
       typeof DB._matchProposalToVendor === 'function'
         ? DB._matchProposalToVendor(p, currentUser)
@@ -305,10 +309,10 @@ async function renderProfile() {
       ? await userCanSacarPix(currentUser)
       : true;
     let partnerTeamNoSacar = false;
-    if (!canSacar && currentUser.admin_id && typeof DB !== 'undefined') {
+    if (!canSacar && typeof DB !== 'undefined' && typeof DB.getPartnerRootForUser === 'function') {
       try {
-        const sup = await DB.getUser(currentUser.admin_id);
-        partnerTeamNoSacar = sup?.role === 'parceiro' && currentUser.role !== 'parceiro';
+        const rootId = await DB.getPartnerRootForUser(currentUser.id);
+        partnerTeamNoSacar = !!rootId && currentUser.role !== 'parceiro';
       } catch (_) { /* noop */ }
     }
     const walletBal = typeof userWalletBalance === 'function'
@@ -347,7 +351,7 @@ async function renderProfile() {
         ${canSacar ? `<button type="button" class="btn btn-primary btn-sm" onclick="openWithdrawalModal()">Sacar via PIX</button>` : ''}
       </div>
       ${canSacar ? '<p class="profile-wallet-hint">Transferência para sua chave PIX após aprovação Master e Financeiro. O extrato abaixo mostra entradas e saídas da carteira.</p>' : ''}
-      ${partnerTeamNoSacar ? '<p class="profile-wallet-hint">Saques PIX são feitos apenas pelo gestor parceiro da sua rede.</p>' : ''}
+      ${partnerTeamNoSacar ? '<p class="profile-wallet-hint">Saque PIX desta rede ainda não foi liberado pelo gestor SOU+BLU para este parceiro.</p>' : ''}
     </div>`;
 
     let tierEl = document.getElementById('vendorTierProfileCard');
@@ -474,16 +478,22 @@ async function _renderPropDashboard(proposals) {
   const propAmt = (p) => (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function'
     ? DB.proposalAmount(p)
     : (parseFloat(p?.valorFinal ?? p?.valor_final ?? p?.valor) || 0));
+  const isPaid = (p) => (typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+    ? DB.isPaidProposal(p)
+    : String(p?.statusOp || p?.status || '').toUpperCase().includes('PAGO'));
+  const billingDate = (p) => (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function'
+    ? DB.proposalBillingDate(p)
+    : new Date(p.createdAt || p.created_at || 0));
 
   const doMes = proposals.filter(p => {
-    const d = typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function'
-      ? DB.proposalBillingDate(p)
-      : new Date(p.createdAt || p.created_at || 0);
+    const d = billingDate(p);
     return d.getMonth() === mesAtual && d.getFullYear() === anoAtual;
   });
+  const pagasMes = doMes.filter(isPaid);
+  const pagasGeral = proposals.filter(isPaid);
 
-  const totalFinalMes = doMes.reduce((s, p) => s + propAmt(p), 0);
-  const totalGeral = proposals.reduce((s, p) => s + propAmt(p), 0);
+  const totalFinalMes = pagasMes.reduce((s, p) => s + propAmt(p), 0);
+  const totalGeral = pagasGeral.reduce((s, p) => s + propAmt(p), 0);
 
   const meRef = currentUser || await resolveEmployeeUser();
   const meUser = meRef || (Auth.getSession()?.id ? await DB.getUser(Auth.getSession().id).catch(() => null) : null);

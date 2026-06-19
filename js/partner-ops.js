@@ -22,7 +22,9 @@ const PartnerOps = {
       const rootId = p.user_id;
       const u = users.find(x => x.id === rootId);
       const team = users.filter(x => x.admin_id === rootId && roles.includes(x.role));
-      const allIds = new Set([rootId, ...team.map(t => t.id)]);
+      const allIds = typeof DB.expandPartnerOrgIds === 'function'
+        ? DB.expandPartnerOrgIds(rootId, users)
+        : new Set([rootId, ...team.map(t => t.id)]);
       return {
         partner: p,
         rootId,
@@ -101,7 +103,7 @@ const PartnerOps = {
 
     if (!index.length) {
       box.innerHTML = `<div class="card card-padded" style="text-align:center;padding:40px;color:var(--color-text-muted);">
-        Nenhum parceiro cadastrado. O Master pode cadastrar em <strong>RH → Cadastrar Parceiro</strong>.
+        Nenhum parceiro cadastrado. Cadastre em <strong>Financeiro → Cadastrar parceiros</strong>.
       </div>`;
       return;
     }

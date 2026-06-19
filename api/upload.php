@@ -24,8 +24,9 @@ if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
 }
 
 $file = $_FILES['file'];
-if ($file['size'] > 5 * 1024 * 1024) {
-    soublu_json(['ok' => false, 'error' => 'Arquivo maior que 5MB.'], 400);
+$maxMb = in_array($bucket, ['proposal-attachments', 'tim-docs', 'contestacao-docs', 'finance-docs', 'ticket-docs'], true) ? 25 : 5;
+if ($file['size'] > $maxMb * 1024 * 1024) {
+    soublu_json(['ok' => false, 'error' => "Arquivo maior que {$maxMb}MB."], 400);
 }
 
 $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));

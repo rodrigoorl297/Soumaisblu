@@ -24,6 +24,7 @@ const PartnerPerms = {
     visualizar_propostas: true,
     simulador: true,
     sacar_pix: true,
+    equipe_sacar_pix: false,
     conta_credito_proposta: false,
     conta_debito_proposta: false,
     conta_adiantamento_motivo: false,
@@ -50,6 +51,7 @@ const PartnerPerms = {
     visualizar_propostas: 'Visualizar propostas',
     simulador: 'Simulador',
     sacar_pix: 'Gestor parceiro — sacar via PIX',
+    equipe_sacar_pix: 'Equipe — sacar via PIX (vendedor / backoffice)',
     conta_credito_proposta: 'Conta corrente — crédito proposta',
     conta_debito_proposta: 'Conta corrente — débito proposta',
     conta_adiantamento_motivo: 'Conta corrente — adiantamento (motivo)',
@@ -76,7 +78,7 @@ const PartnerPerms = {
     },
     {
       title: 'Propostas e financeiro',
-      keys: ['cadastrar_proposta', 'visualizar_propostas', 'simulador', 'sacar_pix', 'conta_credito_proposta', 'conta_debito_proposta', 'conta_adiantamento_motivo'],
+      keys: ['cadastrar_proposta', 'visualizar_propostas', 'simulador', 'sacar_pix', 'equipe_sacar_pix', 'conta_credito_proposta', 'conta_debito_proposta', 'conta_adiantamento_motivo'],
     },
   ],
 
@@ -90,6 +92,55 @@ const PartnerPerms = {
 
   TEAM_LABELS: {
     sacar_pix: 'Sacar via PIX (colaborador)',
+  },
+
+  /** Cargos da equipe parceira que podem solicitar saque PIX (saldo individual). */
+  PARTNER_TEAM_SACAR_ROLES: ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'],
+
+  _parseJsonField(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) || {}; } catch (_) { return {}; }
+    }
+    return {};
+  },
+
+  teamSacarEnabled(perms, meta) {
+    const p = this.merge(perms);
+    const m = this._parseJsonField(meta);
+    return !!p.equipe_sacar_pix || !!m.equipe_sacar_pix;
+  },
+
+  /** Libera saque da equipe deste parceiro quando colaborador já tem saldo (ex.: após distribuição). */
+  async ensureTeamSacarForFundedMember(user, partnerRow) {
+    if (!user?.id || !partnerRow || typeof DB === 'undefined' || typeof DB.savePartner !== 'function') return partnerRow;
+    const r = String(user.role || '').toLowerCase();
+    if (!this.PARTNER_TEAM_SACAR_ROLES.includes(r)) return partnerRow;
+    const bal = typeof userWalletBalance === 'function'
+      ? userWalletBalance(user)
+      : (parseFloat(user.points ?? user.balance ?? 0) || 0);
+    if (bal <= 0) return partnerRow;
+    const perms = this.merge(partnerRow.permissions);
+    const meta = this._parseJsonField(partnerRow.meta);
+    if (this.teamSacarEnabled(perms, meta)) return partnerRow;
+    const updatedPerms = { ...perms, equipe_sacar_pix: true };
+    const updatedMeta = { ...meta, equipe_sacar_pix: true, equipe_sacar_auto: true };
+    try {
+      const saved = await DB.savePartner({
+        ...partnerRow,
+        permissions: updatedPerms,
+        meta: updatedMeta,
+      });
+      if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID === partnerRow.user_id) {
+        window._PARTNER_PERMS = updatedPerms;
+      }
+      if (typeof PartnerOps !== 'undefined') PartnerOps.invalidate();
+      return saved || { ...partnerRow, permissions: updatedPerms, meta: updatedMeta };
+    } catch (e) {
+      console.warn('[PartnerPerms] ensureTeamSacarForFundedMember:', e);
+      return partnerRow;
+    }
   },
 
   _defaultTeamRolePerms(role) {
@@ -170,12 +221,23 @@ const PartnerPerms = {
   },
 
   /** Equipe do parceiro: exige módulo ativo na organização + permissão do cargo. */
-  canForStaff(perms, role, key) {
+  canForStaff(perms, role, key, meta) {
     const p = this.merge(perms);
-    if (!this.can(p, key)) return false;
     const r = String(role || '').toLowerCase();
     const rolePerms = p.team_perms?.[r] || this._defaultTeamRolePerms(r);
-    if (key === 'cadastrar_cliente') return !!rolePerms.clientes || !!rolePerms.cadastrar_cliente;
+    if (key === 'cadastrar_cliente') {
+      if (!this.can(p, 'clientes') && !this.can(p, 'cadastrar_cliente')) return false;
+      return !!rolePerms.clientes || !!rolePerms.cadastrar_cliente;
+    }
+    if (key === 'sacar_pix') {
+      if (!this.teamSacarEnabled(perms, meta)) return false;
+      return this.PARTNER_TEAM_SACAR_ROLES.includes(r);
+    }
+    if (key === 'cadastrar_proposta') {
+      if (!this.can(p, 'cadastrar_proposta')) return false;
+      if (['backoffice', 'operacional', 'sup_backoffice'].includes(r)) return true;
+    }
+    if (!this.can(p, key)) return false;
     return !!rolePerms[key];
   },
 

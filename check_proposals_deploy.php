@@ -102,6 +102,16 @@ foreach ($list as $p) {
     echo '  - ' . ($p['numero'] ?? $p['id'] ?? '?') . ' | ' . ($p['client_name'] ?? $p['clientName'] ?? '—') . ' | R$ ' . number_format((float)($p['valorFinal'] ?? $p['valor_final'] ?? $p['valor'] ?? 0), 2, ',', '.') . PHP_EOL;
 }
 
+echo PHP_EOL . '--- API REST (simulação listProposals com comissão) ---' . PHP_EOL;
+$listCols = 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissao_elegivel,comissaoRecebida,comissao_recebida,valorComissaoRecebida,valor_comissao_recebida,createdAt,created_at,updatedAt,updated_at,employee_id';
+try {
+    $full = $api->handle('proposals', 'GET', null, 'select=' . $listCols . '&order=updated_at.desc&limit=5');
+    echo 'listProposals (5): ' . count($full) . ' registros — OK' . PHP_EOL;
+} catch (Throwable $e) {
+    echo 'ERRO listProposals: ' . $e->getMessage() . PHP_EOL;
+    exit(3);
+}
+
 echo PHP_EOL . '--- Resultado ---' . PHP_EOL;
 if ($missing) {
     echo 'BLOQUEIO: faltam colunas essenciais: ' . implode(', ', $missing) . PHP_EOL;

@@ -197,7 +197,7 @@ window.SalesRanking = {
       : false;
   },
 
-  /** Master/fundador: filtros + faturamento. Demais: lista global por pagas e propostas. */
+  /** Master/fundador/gerência: filtros + faturamento. Demais: lista global por pagas e propostas. */
   _isMasterRankingMode(viewer) {
     return this._canViewSalesAmount(viewer);
   },
@@ -246,9 +246,12 @@ window.SalesRanking = {
   },
 
   _isPaidProposal(p) {
+    if (typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function') {
+      return DB.isPaidProposal(p);
+    }
     const st = this._norm(this._proposalStatus(p));
     const fase = this._norm(this._proposalFase(p));
-    return st === 'pago' || fase === 'pago';
+    return st === 'pago' || st.includes('pago') || fase === 'pago' || fase.includes('pago');
   },
 
   _fmtSales(v) {

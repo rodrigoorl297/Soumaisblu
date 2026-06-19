@@ -164,12 +164,12 @@
   </style>
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
   <script charset="UTF-8" src="../js/config.js?v=14" defer></script>
-  <script charset="UTF-8" src="../js/db.js?v=47" defer></script>
+  <script charset="UTF-8" src="../js/db.js?v=1781812737588" defer></script>
   <script charset="UTF-8" src="../js/auth.js?v=5" defer></script>
-  <script charset="UTF-8" src="../js/ui.js?v=3" defer></script>
+  <script charset="UTF-8" src="../js/ui.js?v=1781811028320" defer></script>
   <script charset="UTF-8" src="../js/withdrawal-rules.js" defer></script>
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2" defer></script>
-  <script charset="UTF-8" src="../js/marketplace-blu.js?v=2" defer></script>
+  <script charset="UTF-8" src="../js/marketplace-blu.js?v=3" defer></script>
   <script charset="UTF-8" src="../js/fontedata.js" defer></script>
   <script charset="UTF-8" src="../js/fornecedor-financeiro.js" defer></script>
   <script charset="UTF-8" src="../js/prestador-servicos.js?v=1" defer></script>
@@ -181,11 +181,14 @@
   <script charset="UTF-8" src="../js/financeiro-reembolso.js?v=1" defer></script>
   <script charset="UTF-8" src="../js/financeiro-propostas.js?v=6" defer></script>
   <script charset="UTF-8" src="../js/clients.js" defer></script>
-  <script charset="UTF-8" src="../js/proposals.js?v=39" defer></script>
+  <script charset="UTF-8" src="../js/proposals.js?v=43" defer></script>
   <script charset="UTF-8" src="../js/masterProposal.js" defer></script>
-  <script charset="UTF-8" src="../js/admin.js?v=48" defer></script>
+  <script charset="UTF-8" src="../js/partners.js?v=1781814000000" defer></script>
+  <script charset="UTF-8" src="../js/partners-ui.js?v=1781811028320" defer></script>
+  <script charset="UTF-8" src="../js/partner-ops.js?v=3" defer></script>
+  <script charset="UTF-8" src="../js/admin.js?v=1781811028320" defer></script>
   <script charset="UTF-8" src="../js/painel-sonhos.js?v=19" defer></script>
-  <script charset="UTF-8" src="../js/financeiro-boot.js?v=16" defer></script>
+  <script charset="UTF-8" src="../js/financeiro-boot.js?v=18" defer></script>
   <script charset="UTF-8" src="../js/financeiro-page.js?v=16" defer></script>
 </head>
 <body class="leads-app">
@@ -275,7 +278,17 @@
           Emitir prejuízo parceiro
         </a>
 
-        <div class="nav-section-label">Sistema</div>
+        
+        <div class="nav-section-label fin-partner-nav-label">Parceiros</div>
+        <a class="nav-item" href="#" data-section="secPartners" id="navFinPartners">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          Cadastrar parceiros
+        </a>
+        <a class="nav-item" href="#" data-section="secPartnerOps" id="navFinPartnerOps">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg></span>
+          Gestão de Parceiros
+        </a>
+<div class="nav-section-label">Sistema</div>
         <a class="nav-item" href="#" id="navFinVoltar">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span>
           <span id="navFinVoltarLabel">Voltar ao Painel</span>

@@ -220,7 +220,7 @@ function _applyAdminNavVisibility(cfg) {
     el.style.display = (cfg.canCadFunc && !employeesManagedInRhHub()) ? '' : 'none';
   });
   document.querySelectorAll('.ranking-nav').forEach(el => {
-    el.style.display = 'none';
+    el.style.display = ''; // Ranking visível para todos
   });
   const navProp = document.getElementById('navManageProposals');
   if (navProp) navProp.style.display = cfg.canProposta ? '' : 'none';
@@ -268,21 +268,19 @@ function _applyAdminNavVisibility(cfg) {
     });
   }
 
-  /* Parceiros (cadastro/gestão) só no módulo RH. */
-  document.querySelectorAll('.partners-master-only, [data-section="secPartners"]').forEach((el) => {
-    el.remove();
-  });
-  document.getElementById('secPartners')?.remove();
+  /* Parceiros (cadastro/gestão): RH + hub Financeiro — não duplicar no admin. */
+  if (!window.SOUBLU_FINANCEIRO_PAGE) {
+    document.querySelectorAll('.partners-master-only, [data-section="secPartners"]').forEach((el) => {
+      el.remove();
+    });
+    document.getElementById('secPartners')?.remove();
+  }
 
-  /* Ranking e Relatório só no RH — Reuniões, Feedback e Chamados ficam em Administrativo. */
-  document.querySelectorAll(
-    '.ranking-nav, [data-section="secRanking"], [data-section="secReport"]'
-  ).forEach((el) => {
+  /* Relatório só para supervisor+ — Ranking visível para TODOS. */
+  document.querySelectorAll('[data-section="secReport"]').forEach((el) => {
     if (!el.closest('#finSidebarNav')) el.remove();
   });
-  ['secRanking', 'secReport'].forEach((id) => {
-    document.getElementById(id)?.remove();
-  });
+  document.getElementById('secReport')?.remove();
 
   /* Treinamentos (gestão, notas RH, meus treinamentos) só na página treinamentos.html. */
   if (!window.SOUBLU_TREINAMENTOS_PAGE) {
@@ -834,7 +832,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     if (PARTNER_ROOT_ID) {
-      const prt = await DB.getPartnerByUserId(PARTNER_ROOT_ID);
+      let prt = await DB.getPartnerByUserId(PARTNER_ROOT_ID);
+      if (prt && typeof PartnerPerms !== 'undefined' && typeof PartnerPerms.ensureTeamSacarForFundedMember === 'function') {
+        const meFull = me || await DB.getUser(s.id).catch(() => null);
+        if (meFull) prt = await PartnerPerms.ensureTeamSacarForFundedMember(meFull, prt);
+      }
       window._PARTNER_PERMS = typeof PartnerPerms !== 'undefined'
         ? PartnerPerms.merge(prt?.permissions)
         : null;
@@ -909,7 +911,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const canTimEsteira = false;
     const canContestacao = p.canContestacao !== undefined ? !!p.canContestacao : (!_inPartnerOrg || (IS_PARCEIRO && partnerOrgCan('contestacao')) || (_inPartnerOrg && partnerOrgCan('contestacao')));
     const canFiscalParceiro = p.canFiscalParceiro !== undefined ? !!p.canFiscalParceiro : (!_inPartnerOrg ? (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH || IS_GERENTE) : (partnerOrgCan('fechamento_financeiro') || partnerOrgCan('dados_nota_fiscal') || partnerOrgCan('upload_nota_fiscal')));
-    const canMarketplaceBlu = p.canMarketplaceBlu !== undefined ? !!p.canMarketplaceBlu : (!_inPartnerOrg ? (canProposta || IS_VENDEDOR_ADM || IS_BACKOFFICE || IS_OPERACIONAL || IS_SUPERVISOR) : (IS_PARCEIRO || partnerOrgCan('marketplace_blu')));
+    const canMarketplaceBlu = p.canMarketplaceBlu !== undefined ? !!p.canMarketplaceBlu : (
+      _inPartnerOrg
+        ? ((IS_PARCEIRO && partnerOrgCan('marketplace_blu'))
+          || (_partnerStaff && s.role !== 'vendedor' && partnerOrgCan('marketplace_blu')))
+        : false
+    );
     const canFornecedorFinanceiro = p.canFornecedorFinanceiro !== undefined ? !!p.canFornecedorFinanceiro : (!_inPartnerOrg && (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_GERENTE));
     const canContaCorrente = p.canContaCorrente !== undefined ? !!p.canContaCorrente : (!_inPartnerOrg
       ? (canProposta || IS_VENDEDOR_ADM || IS_BACKOFFICE || IS_OPERACIONAL || IS_SUPERVISOR || IS_PARCEIRO || IS_FINANCIAL || IS_RH)
@@ -2999,7 +3006,7 @@ async function renderPartnersPanel() {
   if (document.getElementById('tab-parceiro') && typeof window.renderRhPartnersPanel === 'function') {
     return window.renderRhPartnersPanel();
   }
-  if (!IS_MASTER && !IS_FUNDA) return;
+  if (!_canManagePartnersHub()) return;
   const box = document.getElementById('partnersContent');
   if (!box) return;
 
@@ -3099,8 +3106,18 @@ async function renderPartnersPanel() {
   box.innerHTML = summaryHtml + cardsHtml;
 }
 
+function _canManagePartnersHub() {
+  if (window.SOUBLU_FINANCEIRO_PAGE) {
+    return typeof canViewFinanceiroPartnerNav === 'function'
+      ? canViewFinanceiroPartnerNav()
+      : (IS_MASTER || IS_FUNDA || IS_FINANCIAL) && !PARTNER_ROOT_ID && !IS_PARCEIRO;
+  }
+  if (typeof canManagePartners === 'function') return canManagePartners();
+  return (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH) && !PARTNER_ROOT_ID && !IS_PARCEIRO;
+}
+
 async function openPartnerModal(partnerId) {
-  if (!IS_MASTER && !IS_FUNDA) {
+  if (!_canManagePartnersHub()) {
     showToast('Sem permissão para editar parceiros.', 'warning');
     return;
   }
@@ -3213,7 +3230,7 @@ window.partnerToggleActive = partnerToggleActive;
 window.partnerActivate = partnerActivate;
 
 async function savePartner() {
-  if (!IS_MASTER && !IS_FUNDA) return;
+  if (!_canManagePartnersHub()) return;
   const recordId = document.getElementById('partnerRecordId').value;
   const userId   = document.getElementById('partnerUserId').value;
   const cnpj     = document.getElementById('partnerCnpj').value.trim();
@@ -3341,7 +3358,7 @@ async function savePartner() {
 }
 
 async function partnerActivate(partnerId) {
-  if (!IS_MASTER && !IS_FUNDA) return;
+  if (!_canManagePartnersHub()) return;
   const p = await DB.getPartner(partnerId);
   if (!p) { showToast('Parceiro não encontrado.', 'error'); return; }
   if (!confirm(`Ativar o parceiro "${p.razao_social || p.email}"?\n\nO login do gestor será liberado.`)) return;

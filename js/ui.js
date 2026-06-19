@@ -182,6 +182,21 @@ const PROFILE_SACAR_ROLES = [
   'juridico', 'diretoria', 'ouvidoria',
 ];
 
+/** Na rede parceira, só estes cargos solicitam saque PIX (saldo individual). */
+const PARTNER_TEAM_SACAR_ROLES = ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'];
+
+function _parsePartnerJsonField(raw) {
+  if (typeof PartnerPerms !== 'undefined' && typeof PartnerPerms._parseJsonField === 'function') {
+    return PartnerPerms._parseJsonField(raw);
+  }
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  if (typeof raw === 'string') {
+    try { return JSON.parse(raw) || {}; } catch { return {}; }
+  }
+  return {};
+}
+
 /** Saque PIX sem biometria facial (desativado em produção). */
 function withdrawalSkipsFacialVerification(user) {
   void user;
@@ -195,25 +210,29 @@ async function userCanSacarPix(user) {
 
   if (typeof PartnerPerms === 'undefined' || typeof DB === 'undefined') return true;
 
-  if (u.role === 'parceiro') {
-    const perms = typeof window !== 'undefined' ? window._PARTNER_PERMS : null;
-    return PartnerPerms.can(perms, 'sacar_pix');
-  }
+  if (u.role === 'parceiro') return false;
 
-  if (u.admin_id) {
-    try {
-      const sup = await DB.getUser(u.admin_id);
-      if (sup?.role === 'parceiro') {
-        let perms = typeof window !== 'undefined' ? window._PARTNER_PERMS : null;
-        if (!perms) {
-          const p = await DB.getPartnerByUserId(u.admin_id);
-          perms = p?.permissions;
-        }
-        return PartnerPerms.canForStaff(perms, u.role, 'sacar_pix');
-      }
-      const p = await DB.getPartnerByUserId(u.admin_id);
-      if (p) return false;
-    } catch (_) { /* noop */ }
+  let partnerRootId = null;
+  try {
+    partnerRootId = await DB.getPartnerRootForUser(u.id);
+  } catch (_) { /* noop */ }
+
+  if (partnerRootId) {
+    const r = String(u.role || '').toLowerCase();
+    if (!PARTNER_TEAM_SACAR_ROLES.includes(r)) return false;
+    let prt = await DB.getPartnerByUserId(partnerRootId).catch(() => null);
+    if (prt && typeof PartnerPerms.ensureTeamSacarForFundedMember === 'function') {
+      prt = await PartnerPerms.ensureTeamSacarForFundedMember(u, prt);
+    }
+    const meta = _parsePartnerJsonField(prt?.meta);
+    let perms = typeof window !== 'undefined' ? window._PARTNER_PERMS : null;
+    if (!perms || (window.PARTNER_ROOT_ID && String(window.PARTNER_ROOT_ID) !== String(partnerRootId))) {
+      perms = prt?.permissions;
+    }
+    if (typeof PartnerPerms !== 'undefined') {
+      return PartnerPerms.canForStaff(perms, u.role, 'sacar_pix', meta);
+    }
+    return false;
   }
 
   return true;
@@ -271,6 +290,7 @@ window.parseMoneyAmount = parseMoneyAmount;
 window.userWalletBalance = userWalletBalance;
 window.PROFILE_SACAR_ROLES = PROFILE_SACAR_ROLES;
 window.userCanSacarPix = userCanSacarPix;
+window._parsePartnerJsonField = _parsePartnerJsonField;
 window.withdrawalSkipsFacialVerification = withdrawalSkipsFacialVerification;
 window.isUserInPartnerOrg = isUserInPartnerOrg;
 window.refreshPartnerRootIdsCache = refreshPartnerRootIdsCache;
@@ -448,14 +468,14 @@ window.downloadWithdrawalReceipt=downloadWithdrawalReceipt;
 
 function txTypeIcon(type){return{credit:'📈',debit:'💸',withdrawal:'🏦',purchase:'🛒'}[type]||'';}
 
-/** Valores em R$ no ranking de vendas — apenas master/fundador (não vendedor nem supervisor). */
+/** Valores em R$ no ranking de vendas — master, fundador e gerência (filtros período/status/fase). */
 function canViewRankingSalesValues(user) {
   if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) {
     return true;
   }
   const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
   const r = String(u?.role || '').toLowerCase();
-  return r === 'master' || r === 'fundador';
+  return r === 'master' || r === 'fundador' || r === 'gerente' || r === 'gerencia' || r === 'admin';
 }
 window.canViewRankingSalesValues = canViewRankingSalesValues;
 

@@ -14,6 +14,8 @@
     secSolicitarReembolso: 'Solicitar reembolso',
     secManageProposals: 'Gestão de Propostas',
     secFinPropostas: 'Operações de proposta',
+    secPartners: 'Cadastrar parceiros',
+    secPartnerOps: 'Gestão de Parceiros',
   };
 
   const FIN_PROP_NAV_TITLES = {
@@ -24,8 +26,8 @@
 
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'financeiro-sections.html?v=11'
-      : 'pages/financeiro-sections.html?v=11';
+      ? 'financeiro-sections.html?v=12'
+      : 'pages/financeiro-sections.html?v=12';
     return typeof Auth !== 'undefined' && Auth.resolveHref
       ? Auth.resolveHref(rel)
       : rel;
@@ -58,7 +60,7 @@
     window.ADMIN_ID = s.id;
     window.IS_MASTER = Auth.isMaster();
     window.IS_FUNDA = typeof Auth.isFundador === 'function' ? Auth.isFundador() : s.role === 'fundador';
-    window.IS_FINANCIAL = true;
+    window.IS_FINANCIAL = s.role === 'financeiro' || s.role === 'financial';
     window.IS_RH = s.role === 'rh';
     window.IS_GERENTE = ['gerente', 'gerencia', 'admin'].includes(s.role);
     window.IS_SUPERVISOR = false;
@@ -68,14 +70,30 @@
     window.IS_VENDEDOR_ADM = s.role === 'vendedor';
     window.IS_DIRETORIA = s.role === 'diretoria';
     window.IS_DESENVOLVEDOR = s.role === 'desenvolvedor';
-    window.IS_PARCEIRO = false;
-    window.PARTNER_ROOT_ID = null;
-    window.IS_PARTNER_STAFF = false;
+    window.IS_PARCEIRO = s.role === 'parceiro' || (typeof Auth.isPartner === 'function' && Auth.isPartner());
+    let partnerRoot = null;
+    if (typeof DB !== 'undefined' && typeof DB.getPartnerRootForUser === 'function') {
+      try {
+        partnerRoot = await DB.getPartnerRootForUser(s.id);
+      } catch (_) { /* noop */ }
+    }
+    window.PARTNER_ROOT_ID = partnerRoot || null;
+    window.IS_PARTNER_STAFF = !!partnerRoot && !window.IS_PARCEIRO;
     window._PARTNER_PERMS = null;
     window.CAN_EMPLOYEES_PANEL = window.IS_MASTER || window.IS_FUNDA || window.IS_FINANCIAL || window.IS_RH;
-    window.USER_ADMIN_ID = s.id;
+    window.USER_ADMIN_ID = partnerRoot || s.id;
     window.USER_DEPT = '';
     if (typeof syncFinanceiroRoleGlobals === 'function') syncFinanceiroRoleGlobals();
+  }
+
+  function applyFinanceiroPartnerNavVisibility() {
+    const show = typeof canViewFinanceiroPartnerNav === 'function'
+      ? canViewFinanceiroPartnerNav()
+      : (window.IS_MASTER || window.IS_FUNDA || window.IS_FINANCIAL)
+        && !window.PARTNER_ROOT_ID && !window.IS_PARCEIRO;
+    document.querySelectorAll('.fin-partner-nav-label, #navFinPartners, #navFinPartnerOps').forEach((el) => {
+      el.style.display = show ? '' : 'none';
+    });
   }
 
   function finNavigateTo(sectionId) {
@@ -298,6 +316,21 @@
       secAdiantamentoSalarial: () => window.FinanceiroCredito?.renderAdiantamento?.(),
       secSolicitarReembolso: () => window.FinanceiroReembolso?.render?.(),
       secFinPropostas: () => window.FinPropostas?.render?.(),
+      secPartners: async () => {
+        if (typeof canViewFinanceiroPartnerNav === 'function' && !canViewFinanceiroPartnerNav()) {
+          if (typeof showToast === 'function') showToast('Sem permissão para gerenciar parceiros.', 'warning');
+          return;
+        }
+        if (typeof renderRhPartnersPanel === 'function') await renderRhPartnersPanel();
+        else if (typeof renderPartnersPanel === 'function') await renderPartnersPanel();
+      },
+      secPartnerOps: () => {
+        if (typeof canViewFinanceiroPartnerNav === 'function' && !canViewFinanceiroPartnerNav()) {
+          if (typeof showToast === 'function') showToast('Sem permissão para gestão de parceiros.', 'warning');
+          return Promise.resolve();
+        }
+        return window.PartnerOps?.renderPanel?.();
+      },
     };
 
     const fn = renders[sectionId];
@@ -365,7 +398,9 @@
       await loadSectionsHtml();
       initModules();
       ensureFinanceiroSidebarVisible();
+      applyFinanceiroPartnerNavVisibility();
       wireBalanceForm();
+      if (typeof wirePartnerBalanceForm === 'function') wirePartnerBalanceForm();
       wireSidebar();
     },
 

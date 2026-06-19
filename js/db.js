@@ -678,7 +678,11 @@
       return ids && emp.admin_id && ids.has(String(emp.admin_id));
     },
 
-    /** Saldo da rede parceira: gestor via Distribuir saldo; saque PIX pelo próprio gestor. */
+    /** Saldo da rede parceira: gestor distribui; equipe (vendedor/backoffice) saca o próprio saldo. */
+    _partnerTeamSacarRoles() {
+      return ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'];
+    },
+
     _partnerBalanceMutationAllowed(emp, meta) {
       if (!this._isPartnerWalletUser(emp)) return true;
       const m = meta || {};
@@ -689,7 +693,9 @@
       }
       if (m.screen === 'saque_pix' || m.kind === 'saque_solicitado' || m.kind === 'estorno_saque_falha') {
         if (m.retroactive && m.withdrawal_id) return emp.role === 'parceiro';
-        return emp.role === 'parceiro';
+        const r = String(emp.role || '').toLowerCase();
+        if (r === 'parceiro') return true;
+        return this._partnerTeamSacarRoles().includes(r);
       }
       if (m.screen === 'conta_corrente_gestao') return true;
       return false;
@@ -1123,7 +1129,7 @@
       if (nbAfter == null) {
         return {
           ok: false,
-          msg: 'Não foi possível reservar o saldo para o saque. Se você é parceiro, confirme que está logado como gestor e tente novamente.',
+          msg: 'Não foi possível reservar o saldo para o saque. Verifique o saldo disponível ou contate o suporte.',
         };
       }
 
@@ -1820,11 +1826,25 @@
     },
   
     /* Colunas leves — evita timeout ao buscar attachments/history em massa */
-    _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissao_elegivel,comissaoRecebida,comissao_recebida,valorComissaoRecebida,valor_comissao_recebida,createdAt,created_at,updatedAt,updated_at,employee_id',
+    _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissaoRecebida,valorComissaoRecebida,createdAt,created_at,updatedAt,updated_at,employee_id',
 
-    /** Valor monetário da proposta (valorFinal → valor_final → valor). */
+    /** Proposta considerada paga (status ou fase operacional). */
+    isPaidProposal(p) {
+      const norm = (s) => String(s || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().trim();
+      const st = norm(p?.status || '');
+      const fase = norm(p?.statusOp || p?.status_op || '');
+      return st === 'PAGO' || st.includes('PAGO') || fase === 'PAGO' || fase.includes('PAGO');
+    },
+
+    /** Valor monetário da proposta (valor final com fallback para valor bruto). */
     proposalAmount(p) {
-      const v = parseFloat(p?.valorFinal ?? p?.valor_final ?? p?.valor ?? 0);
+      const vf = parseFloat(p?.valorFinal ?? p?.valor_final);
+      const v = parseFloat(p?.valor ?? 0);
+      if (Number.isFinite(vf) && vf > 0) return vf;
+      if (Number.isFinite(v) && v > 0) return v;
+      if (Number.isFinite(vf)) return vf;
       return Number.isFinite(v) ? v : 0;
     },
 
@@ -2052,20 +2072,22 @@
     _compactProposalPayloadForApi(payload) {
       if (!payload || typeof payload !== 'object') return payload;
       const p = { ...payload };
-      const maxBytes = 850000;
+      const maxBytes = 1500000;
       if (p.attachments && typeof p.attachments === 'object' && !Array.isArray(p.attachments)) {
         const att = { ...p.attachments };
         const stripped = [];
         Object.keys(att).forEach((k) => {
           const v = att[k];
-          if (typeof v === 'string' && /^data:/i.test(v) && v.length > 120000) {
+          if (typeof v === 'string' && /^data:/i.test(v)) {
             stripped.push(k);
             delete att[k];
+            if (att[k + '_nome']) delete att[k + '_nome'];
+            if (att[k + '_pasta']) delete att[k + '_pasta'];
           }
         });
         p.attachments = att;
         if (stripped.length) {
-          console.warn('[DB] Anexos base64 grandes omitidos do save:', stripped);
+          console.warn('[DB] Anexos base64 omitidos do save (envie ao servidor antes):', stripped);
           p._attachments_stripped = stripped;
         }
       }
@@ -2366,20 +2388,27 @@
         }
       }
 
-      if (this.online && typeof SUPABASE_URL !== 'undefined' && typeof SUPABASE_KEY !== 'undefined') {
+      const storageBase = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL)
+        ? String(SUPABASE_URL).replace(/\/$/, '')
+        : String(_cfg.STORAGE_URL || '').replace(/\/$/, '');
+      const storageKey = (typeof SUPABASE_KEY !== 'undefined' && SUPABASE_KEY)
+        ? SUPABASE_KEY
+        : String(_cfg.STORAGE_KEY || '').trim();
+
+      if (this.online && storageBase && storageKey) {
         try {
-          const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+          const res = await fetch(`${storageBase}/storage/v1/object/${bucket}/${path}`, {
             method: 'POST',
             headers: {
-              'apikey': SUPABASE_KEY,
-              'Authorization': `Bearer ${SUPABASE_KEY}`,
+              'apikey': storageKey,
+              'Authorization': `Bearer ${storageKey}`,
               'Content-Type': contentType,
               'x-upsert': 'true',
             },
             body: file,
           });
           if (res.ok) {
-            return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+            return `${storageBase}/storage/v1/object/public/${bucket}/${path}`;
           }
           const txt = await res.text().catch(() => '');
           console.warn('[DB] proposal-attachments storage:', res.status, txt);

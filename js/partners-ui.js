@@ -6,8 +6,26 @@
     return String(typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession()?.role : '').toLowerCase();
   }
 
+  /** Usuário da rede parceira (gestor parceiro ou equipe vinculada). */
+  function _inPartnerOrgContext() {
+    if (window.PARTNER_ROOT_ID) return true;
+    if (typeof Auth !== 'undefined' && typeof Auth.isPartner === 'function' && Auth.isPartner()) return true;
+    const r = _role();
+    if (r === 'parceiro') return true;
+    if (window.IS_PARCEIRO || window.IS_PARTNER_STAFF) return true;
+    return false;
+  }
+
+  /** RH / gestão interna (não rede parceira). */
   function canManagePartners() {
-    return ['master', 'fundador', 'rh', 'gerencia', 'gerente', 'diretoria'].includes(_role());
+    if (_inPartnerOrgContext()) return false;
+    return ['master', 'fundador', 'rh', 'gerencia', 'gerente', 'diretoria', 'financeiro', 'financial'].includes(_role());
+  }
+
+  /** Hub Financeiro SOU+BLU: só Master/Fundador/Financeiro internos — nunca parceiros. */
+  function canViewFinanceiroPartnerNav() {
+    if (_inPartnerOrgContext()) return false;
+    return ['master', 'fundador', 'financeiro', 'financial'].includes(_role());
   }
 
   function esc(s) {
@@ -238,10 +256,14 @@
       const pendingHint = pStatus === 'analise'
         ? '<div style="margin-top:8px;padding:8px 10px;background:#f59e0b18;border-radius:8px;font-size:12px;color:#b45309;">Aguardando ativação — revise documentos e clique em <strong>Ativar parceiro</strong>.</div>'
         : '';
+      const teamSacarOn = typeof PartnerPerms !== 'undefined'
+        ? PartnerPerms.teamSacarEnabled(perms, p.meta)
+        : !!perms.equipe_sacar_pix;
       const actionBtns = pStatus === 'analise'
         ? `<button class="btn btn-primary btn-sm" onclick="partnerActivate('${esc(p.id)}')">Ativar parceiro</button>`
         : `<button class="btn btn-primary btn-sm" onclick="openPartnerBalanceModal('${esc(p.user_id)}')" ${live ? '' : 'disabled'}>Distribuir saldo</button>
-           <button class="btn btn-outline btn-sm" onclick="openPartnerTeamManage('${esc(p.user_id)}')" ${live ? '' : 'disabled'}>Cadastrar equipe</button>`;
+           <button class="btn btn-outline btn-sm" onclick="openPartnerTeamManage('${esc(p.user_id)}')" ${live ? '' : 'disabled'}>Cadastrar equipe</button>
+           <button class="btn ${teamSacarOn ? 'btn-secondary' : 'btn-outline'} btn-sm" onclick="partnerToggleTeamSacar('${esc(p.id)}')" ${live ? '' : 'disabled'} title="Libera saque PIX só para vendedores/backoffice deste parceiro">${teamSacarOn ? 'Saque equipe ativo' : 'Liberar saque equipe'}</button>`;
       const toggleBtn = pStatus === 'analise'
         ? ''
         : `<button class="btn btn-ghost btn-sm" onclick="partnerToggleActive('${esc(p.id)}')">${live ? 'Desativar' : 'Ativar'}</button>`;
@@ -312,6 +334,31 @@
       });
       if (p.user_id) await DB.updateUser(p.user_id, { active: next });
       showToast(next ? 'Parceiro ativado.' : 'Parceiro desativado.', 'info');
+      await renderRhPartnersPanel();
+    } catch (e) {
+      showToast('Erro: ' + (e.message || ''), 'error');
+    } finally { hideLoading(); }
+  }
+
+  /** Liga/desliga saque PIX da equipe (vendedor, backoffice, sup_backoffice) só deste parceiro. */
+  async function partnerToggleTeamSacar(partnerId) {
+    if (!canManagePartners()) return;
+    const p = await DB.getPartner(partnerId);
+    if (!p) { showToast('Parceiro não encontrado.', 'error'); return; }
+    const perms = typeof PartnerPerms !== 'undefined' ? PartnerPerms.merge(p.permissions) : (p.permissions || {});
+    const next = !perms.equipe_sacar_pix;
+    const nome = p.razao_social || p.email || 'parceiro';
+    const msg = next
+      ? `Liberar saque PIX para a equipe (vendedores e backoffice) de "${nome}"?\n\nCada colaborador saca o próprio saldo no perfil. Outros parceiros não são afetados.`
+      : `Desativar saque PIX da equipe de "${nome}"?`;
+    if (!confirm(msg)) return;
+    showLoading();
+    try {
+      const updated = { ...perms, equipe_sacar_pix: next };
+      const meta = { ...(typeof window._parsePartnerJsonField === 'function' ? window._parsePartnerJsonField(p.meta) : (typeof p.meta === 'object' ? (p.meta || {}) : {})), equipe_sacar_pix: next };
+      await DB.savePartner({ ...p, permissions: updated, meta });
+      if (typeof PartnerOps !== 'undefined') PartnerOps.invalidate();
+      showToast(next ? 'Equipe liberada para solicitar saque PIX.' : 'Saque da equipe desativado para este parceiro.', 'success');
       await renderRhPartnersPanel();
     } catch (e) {
       showToast('Erro: ' + (e.message || ''), 'error');
@@ -474,6 +521,7 @@
   document.addEventListener('DOMContentLoaded', () => {
     _wirePartnerBalanceForm();
   });
+  window.wirePartnerBalanceForm = _wirePartnerBalanceForm;
 
   function _val(id) { return document.getElementById(id)?.value ?? ''; }
   function _set(id, v) { const el = document.getElementById(id); if (el) el.value = v ?? ''; }
@@ -605,9 +653,11 @@
   window.savePartner = savePartner;
   window.partnerActivate = partnerActivate;
   window.partnerToggleActive = partnerToggleActive;
+  window.partnerToggleTeamSacar = partnerToggleTeamSacar;
   window.openPartnerTeamManage = openPartnerTeamManage;
   window.openPartnerBalanceModal = openPartnerBalanceModal;
   window.canManagePartners = canManagePartners;
+  window.canViewFinanceiroPartnerNav = canViewFinanceiroPartnerNav;
   window.partnerBuscarCpfSocio = partnerBuscarCpfSocio;
   window.partnerConsultaScore = partnerConsultaScore;
   window.partnerConsultaCertidaoTj = partnerConsultaCertidaoTj;
