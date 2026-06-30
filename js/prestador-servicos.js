@@ -173,7 +173,7 @@
       const cat = document.getElementById('prestador_categoria');
       const ops = {
         'MARKETING': ['INFLUENCIADOR', 'AGÊNCIA DE MKT', 'DIVULGAÇÃO MKT'],
-        'JURÍDICO': ['ASSESSORIA JURÍDICA', 'ASSESSORIA JURÍDICA O.S.J'],
+        'JURÍDICO': ['ASSESSORIA JURÍDICA' /*, 'ASSESSORIA JURÍDICA O.S.J'*/],
         'TI': ['ASSISTÊNCIA TÉCNICA', 'DESENVOLVEDOR', 'ALUGUEL EQUIPAMENTOS'],
         'SERVIÇOS': ['DIARISTA LIMPEZA', 'SERVIÇOS MANUTENÇÃO']
       };

@@ -236,11 +236,11 @@ async function openWithdrawalModal() {
   const balEl = document.getElementById('withdrawBalance');
   if (balEl) balEl.textContent = formatCurrency(bal, currentUser);
   const moneyWallet = typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(currentUser);
+  const partnerWallet = typeof WithdrawalRules !== 'undefined' && WithdrawalRules._partnerWalletUser(currentUser);
   if (typeof WithdrawalRules !== 'undefined') {
     WithdrawalRules.initModalUI();
     const saved = WithdrawalRules.getSavedPayment(currentUser);
     WithdrawalRules.applySavedToForm(saved);
-    WithdrawalRules.configureModalForUser(currentUser);
   } else {
     const saved = JSON.parse(localStorage.getItem('soublu_pix_' + currentUser.id) || '{}');
     if (saved.pix_key_type) {
@@ -256,17 +256,33 @@ async function openWithdrawalModal() {
   }
   const amtEl = document.getElementById('withdrawAmount');
   if (amtEl) {
-    amtEl.value = '';
     if (moneyWallet) {
-      amtEl.min = '50';
-      amtEl.step = '0.01';
-      amtEl.placeholder = 'Mín. R$ 50,00';
+      amtEl.type = 'text';
+      amtEl.inputMode = 'decimal';
+      amtEl.autocomplete = 'off';
+      amtEl.removeAttribute('min');
+      amtEl.removeAttribute('step');
+      if (partnerWallet) {
+        amtEl.placeholder = 'Valor a sacar (taxa R$ 10 descontada)';
+        amtEl.value = bal > 0 ? bal.toFixed(2).replace('.', ',') : '';
+      } else {
+        amtEl.placeholder = 'Mín. R$ 50,00';
+        amtEl.value = '';
+      }
     } else {
+      amtEl.type = 'number';
       amtEl.min = '1';
       amtEl.step = '1';
       amtEl.placeholder = 'Ex: 1000';
+      amtEl.value = '';
     }
   }
+  if (typeof WithdrawalRules !== 'undefined') {
+    WithdrawalRules.configureModalForUser(currentUser);
+  }
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'profile.js:openWithdrawalModal',message:'modal amount prepared',data:{bal,partnerWallet,moneyWallet,rawAmount:amtEl?.value||'',parsedAmount:typeof parseMoneyAmount==='function'?parseMoneyAmount(amtEl?.value):null},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+  // #endregion
   openModal('withdrawalModal');
 }
 
@@ -308,12 +324,18 @@ async function renderProfile() {
     const canSacar = typeof userCanSacarPix === 'function'
       ? await userCanSacarPix(currentUser)
       : true;
-    let partnerTeamNoSacar = false;
-    if (!canSacar && typeof DB !== 'undefined' && typeof DB.getPartnerRootForUser === 'function') {
-      try {
-        const rootId = await DB.getPartnerRootForUser(currentUser.id);
-        partnerTeamNoSacar = !!rootId && currentUser.role !== 'parceiro';
-      } catch (_) { /* noop */ }
+    let partnerSacarBlockedHint = '';
+    if (!canSacar) {
+      if (currentUser.role === 'parceiro') {
+        partnerSacarBlockedHint = 'Saque PIX não está liberado neste cadastro de parceiro. O RH/Master pode ativar em Cadastrar Parceiro → Propostas e financeiro → Gestor parceiro — sacar via PIX.';
+      } else if (typeof DB !== 'undefined' && typeof DB.getPartnerRootForUser === 'function') {
+        try {
+          const rootId = await DB.getPartnerRootForUser(currentUser.id);
+          if (rootId) {
+            partnerSacarBlockedHint = 'Saque PIX desta rede ainda não foi liberado pelo gestor SOU+BLU para este parceiro.';
+          }
+        } catch (_) { /* noop */ }
+      }
     }
     const walletBal = typeof userWalletBalance === 'function'
       ? userWalletBalance(currentUser)
@@ -321,12 +343,17 @@ async function renderProfile() {
     const moneyWallet = typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(currentUser);
     const walletLabel = moneyWallet ? 'saldo disponível (R$)' : 'pontos disponíveis';
     const fmtBal = formatCurrency(walletBal, currentUser);
-    const photo = typeof resolvePhotoUrl === 'function'
-      ? resolvePhotoUrl(currentUser.photo_url || currentUser.photo || '')
-      : (currentUser.photo_url || currentUser.photo || '');
-    const photoHtml = photo
-      ? `<img src="${String(photo).replace(/"/g, '&quot;')}" class="profile-avatar" style="object-fit:cover;cursor:pointer;" onclick="document.getElementById('profilePhotoInput').click()">`
-      : `<div class="profile-avatar" style="cursor:pointer;" onclick="document.getElementById('profilePhotoInput').click()" title="Alterar foto">${getInitials(currentUser.name)}</div>`;
+    const photoClick = "document.getElementById('profilePhotoInput').click()";
+    const photoHtml = typeof profileAvatarHtml === 'function'
+      ? profileAvatarHtml(currentUser.name, currentUser.photo_url || currentUser.photo || '', '', photoClick)
+      : (() => {
+        const photo = typeof resolvePhotoUrl === 'function'
+          ? resolvePhotoUrl(currentUser.photo_url || currentUser.photo || '')
+          : (currentUser.photo_url || currentUser.photo || '');
+        return photo
+          ? `<img src="${String(photo).replace(/"/g, '&quot;')}" class="profile-avatar" style="object-fit:cover;cursor:pointer;" onclick="${photoClick}">`
+          : `<div class="profile-avatar" style="cursor:pointer;" onclick="${photoClick}" title="Alterar foto">${getInitials(currentUser.name)}</div>`;
+      })();
     ensureProfileEditModals();
     const roleLabel = _profileRoleLabel(currentUser.role) || currentUser.department || '';
     const metaLine = [roleLabel || currentUser.department, currentUser.matricula ? `Matrícula ${currentUser.matricula}` : ''].filter(Boolean).join(' · ');
@@ -351,7 +378,7 @@ async function renderProfile() {
         ${canSacar ? `<button type="button" class="btn btn-primary btn-sm" onclick="openWithdrawalModal()">Sacar via PIX</button>` : ''}
       </div>
       ${canSacar ? '<p class="profile-wallet-hint">Transferência para sua chave PIX após aprovação Master e Financeiro. O extrato abaixo mostra entradas e saídas da carteira.</p>' : ''}
-      ${partnerTeamNoSacar ? '<p class="profile-wallet-hint">Saque PIX desta rede ainda não foi liberado pelo gestor SOU+BLU para este parceiro.</p>' : ''}
+      ${partnerSacarBlockedHint ? `<p class="profile-wallet-hint">${partnerSacarBlockedHint}</p>` : ''}
     </div>`;
 
     let tierEl = document.getElementById('vendorTierProfileCard');
@@ -470,6 +497,10 @@ async function renderRoulettePanel() {
 /* spinRouletteNow — definido em js/roulette-ui.js */
 
 async function _renderPropDashboard(proposals) {
+  const propKpisEl = document.getElementById('propKpis');
+  if (propKpisEl) {
+    propKpisEl.innerHTML = '<div class="text-muted text-center" style="padding:12px;grid-column:1/-1;">Carregando propostas…</div>';
+  }
   const fmtR = v => v != null ? 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : 'R$ 0,00';
   const now = new Date();
   const mesAtual = now.getMonth();

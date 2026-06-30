@@ -65,6 +65,7 @@ try {
             `departamento` VARCHAR(255) NULL DEFAULT NULL,
             `cbo_cod` VARCHAR(16) NULL DEFAULT NULL,
             `cbo_descricao` VARCHAR(255) NULL DEFAULT NULL,
+            `trabalho_insalubre` VARCHAR(8) NULL DEFAULT 'NÃO',
             `pop` VARCHAR(255) NULL DEFAULT NULL,
             `created_at` DATETIME NULL DEFAULT NULL,
             `updated_at` DATETIME NULL DEFAULT NULL,
@@ -189,6 +190,49 @@ try {
         if ((int) $stmt->fetchColumn() === 0) {
             $pdo->exec($sql);
             $applied[] = $name;
+        }
+    }
+
+    $columnMigrations = [
+        'rh_jobs' => [
+            'trabalho_insalubre' => 'ALTER TABLE `rh_jobs` ADD COLUMN `trabalho_insalubre` VARCHAR(8) NULL DEFAULT \'NÃO\'',
+        ],
+        'rh_resumes' => [
+            'data_nascimento' => 'ALTER TABLE `rh_resumes` ADD COLUMN `data_nascimento` DATE NULL',
+            'pis' => 'ALTER TABLE `rh_resumes` ADD COLUMN `pis` VARCHAR(20) NULL',
+            'situacao_cadastral' => 'ALTER TABLE `rh_resumes` ADD COLUMN `situacao_cadastral` VARCHAR(64) NULL',
+            'fontedata_meta' => 'ALTER TABLE `rh_resumes` ADD COLUMN `fontedata_meta` JSON NULL',
+        ],
+        'rh_employees' => [
+            'data_nascimento' => 'ALTER TABLE `rh_employees` ADD COLUMN `data_nascimento` DATE NULL',
+            'pis' => 'ALTER TABLE `rh_employees` ADD COLUMN `pis` VARCHAR(20) NULL',
+            'situacao_cadastral' => 'ALTER TABLE `rh_employees` ADD COLUMN `situacao_cadastral` VARCHAR(64) NULL',
+            'fontedata_meta' => 'ALTER TABLE `rh_employees` ADD COLUMN `fontedata_meta` JSON NULL',
+        ],
+    ];
+
+    $colCheck = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
+    );
+
+    foreach ($columnMigrations as $table => $cols) {
+        foreach ($cols as $col => $sql) {
+            $colCheck->execute([$table, $col]);
+            if ((int) $colCheck->fetchColumn() > 0) {
+                continue;
+            }
+            try {
+                $pdo->exec($sql);
+                $applied[] = "{$table}.{$col}";
+            } catch (Throwable $e) {
+                if ($col === 'fontedata_meta') {
+                    $pdo->exec(str_replace(' JSON NULL', ' LONGTEXT NULL', $sql));
+                    $applied[] = "{$table}.{$col}:longtext";
+                } else {
+                    throw $e;
+                }
+            }
         }
     }
 

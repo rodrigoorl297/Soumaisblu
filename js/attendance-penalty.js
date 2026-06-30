@@ -207,6 +207,7 @@ const AttendancePenalty = (() => {
    * @returns {{ deducted: number, days: number, balance: number|null }}
    */
   async function processLogin(user) {
+    return { penalties: 0, days: 0 };
     if (!user?.id || !appliesTo(user)) {
       return { deducted: 0, days: 0, balance: null };
     }
@@ -272,6 +273,7 @@ const AttendancePenalty = (() => {
   }
 
   async function onLogin(user) {
+    return;
     if (!user?.id || typeof DB === 'undefined') return null;
     try { await runOneTimeCleanup(); } catch (e) { console.warn('[Attendance] cleanup:', e); }
     const today = brTodayYmd();

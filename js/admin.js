@@ -220,8 +220,13 @@ function _applyAdminNavVisibility(cfg) {
     el.style.display = (cfg.canCadFunc && !employeesManagedInRhHub()) ? '' : 'none';
   });
   document.querySelectorAll('.ranking-nav').forEach(el => {
-    el.style.display = ''; // Ranking visível para todos
+    el.style.display = cfg.canRanking ? '' : 'none';
   });
+  const secRank = document.getElementById('secRanking');
+  if (secRank) {
+    secRank.style.display = cfg.canRanking ? '' : 'none';
+    if (!cfg.canRanking) secRank.classList.remove('active');
+  }
   const navProp = document.getElementById('navManageProposals');
   if (navProp) navProp.style.display = cfg.canProposta ? '' : 'none';
   document.querySelectorAll('.partner-ops-nav').forEach(el => {
@@ -238,11 +243,23 @@ function _applyAdminNavVisibility(cfg) {
   document.querySelectorAll('.store-nav').forEach(el => {
     el.style.display = cfg.canMasterPanel ? '' : 'none';
   });
-  document.querySelectorAll('.view-as-employee-only').forEach(el => {
+  document.querySelectorAll('.minha-conta-topbar').forEach(el => {
     el.style.display = (IS_PARCEIRO || cfg._inPartnerOrg) ? 'none' : '';
   });
   const navTkt = document.getElementById('navManageTickets');
   if (navTkt) navTkt.style.display = cfg.canChamados ? '' : 'none';
+  const navWa = document.getElementById('navWhatsApp');
+  if (navWa) {
+    navWa.style.display = cfg.canWhatsApp ? '' : 'none';
+    if (navWa.dataset.waNavWired !== '1') {
+      navWa.dataset.waNavWired = '1';
+      navWa.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.location.href = 'pages/whatsapp.html';
+      });
+    }
+  }
   
   document.querySelectorAll('.leads-manager-nav').forEach(el => {
     el.style.display = cfg.canLeadsManager ? 'flex' : 'none';
@@ -261,11 +278,16 @@ function _applyAdminNavVisibility(cfg) {
     el.style.display = showTreinamentos ? '' : 'none';
   });
 
-  /* Itens financeiros (conta corrente, fiscal, fornecedor) só no hub Financeiro — não duplicar no admin. */
+  /* Itens financeiros (conta corrente, fiscal, fornecedor) só no hub Financeiro — exceto fiscal/comissões para rede parceira. */
   if (!window.SOUBLU_FINANCEIRO_PAGE) {
-    ['navContaCorrente', 'navContaCorrenteGestao', 'navFiscalParceiro', 'navFornecedorFinanceiro'].forEach((id) => {
-      document.getElementById(id)?.remove();
-    });
+    const partnerFiscal = cfg._inPartnerOrg && cfg.canFiscalParceiro;
+    if (partnerFiscal && window.FiscalParceiro && typeof FiscalParceiro.ensureUi === 'function') {
+      try { FiscalParceiro.ensureUi(); } catch (e) { console.warn('[admin] FiscalParceiro.ensureUi', e); }
+    } else {
+      ['navContaCorrente', 'navContaCorrenteGestao', 'navFiscalParceiro', 'navFornecedorFinanceiro'].forEach((id) => {
+        document.getElementById(id)?.remove();
+      });
+    }
   }
 
   /* Parceiros (cadastro/gestão): RH + hub Financeiro — não duplicar no admin. */
@@ -276,7 +298,7 @@ function _applyAdminNavVisibility(cfg) {
     document.getElementById('secPartners')?.remove();
   }
 
-  /* Relatório só para supervisor+ — Ranking visível para TODOS. */
+  /* Relatório só para supervisor+ — Ranking só equipe interna (não parceiros). */
   document.querySelectorAll('[data-section="secReport"]').forEach((el) => {
     if (!el.closest('#finSidebarNav')) el.remove();
   });
@@ -463,6 +485,7 @@ function _applyAdminNavVisibility(cfg) {
   });
   if (window.Contestacao && typeof Contestacao.applyNavVisibility === 'function') Contestacao.applyNavVisibility(cfg);
   if (window.FiscalParceiro && typeof FiscalParceiro.applyNavVisibility === 'function') FiscalParceiro.applyNavVisibility(cfg);
+  if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') BolaoCopa.applyNavVisibility();
   if (window.Trainings && typeof Trainings.applyNavVisibility === 'function') Trainings.applyNavVisibility(cfg);
   if (window.MarketplaceBlu && typeof MarketplaceBlu.applyNavVisibility === 'function') MarketplaceBlu.applyNavVisibility(cfg);
   if (window.FornecedorFinanceiro && typeof FornecedorFinanceiro.applyNavVisibility === 'function') FornecedorFinanceiro.applyNavVisibility(cfg);
@@ -720,11 +743,16 @@ window.openPartnerBalanceModal = openPartnerBalanceModal;
 window.prefillPartnerBalanceRecipient = prefillPartnerBalanceRecipient;
 
 let _adminPollTimer = null;
+let _adminKeepaliveTimer = null;
 
 function _stopAdminLiveRefresh() {
   if (_adminPollTimer) {
     clearInterval(_adminPollTimer);
     _adminPollTimer = null;
+  }
+  if (_adminKeepaliveTimer) {
+    clearInterval(_adminKeepaliveTimer);
+    _adminKeepaliveTimer = null;
   }
   window.__SOUBLU_ADMIN_POLL__ = false;
 }
@@ -750,7 +778,6 @@ function _stripNavCacheBustParam() {
 /** Recarrega dados ao restaurar o painel do cache do navegador (bfcache). */
 async function _refreshAdminAfterBfcache() {
   hideLoading();
-  invalidateSouBluCaches();
   window.__SOUBLU_ADMIN_POLL__ = false;
   try {
     await Auth.syncSessionFromDb();
@@ -788,6 +815,25 @@ async function _bootSettle(tasks) {
   results.forEach((r, i) => {
     if (r.status === 'rejected') console.warn('[admin boot task', i, ']', r.reason);
   });
+}
+
+/** Mostra seção de destino antes de cargas pesadas (evita tela branca). */
+function _bootShowLanding(sectionId) {
+  if (!sectionId || typeof navigateTo !== 'function') return;
+  navigateTo(sectionId);
+  if (sectionId === 'secInicio') {
+    const root = document.getElementById('painelSonhosRoot');
+    if (root && !root.innerHTML.trim()) {
+      root.innerHTML = '<div class="card card-padded text-center text-muted" style="padding:32px;">Carregando painel…</div>';
+    }
+  }
+  if (sectionId === 'secDashboard') {
+    const stats = document.getElementById('dashStats');
+    if (stats && !stats.innerHTML.trim()) {
+      stats.innerHTML = '<div class="text-muted text-center" style="padding:24px;">Carregando dashboard…</div>';
+    }
+  }
+  if (typeof hideLoading === 'function') hideLoading();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -833,6 +879,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (PARTNER_ROOT_ID) {
       let prt = await DB.getPartnerByUserId(PARTNER_ROOT_ID);
+      if (prt) window.PARTNER_RAZAO_SOCIAL = prt.razao_social || prt.razaoSocial || '';
       if (prt && typeof PartnerPerms !== 'undefined' && typeof PartnerPerms.ensureTeamSacarForFundedMember === 'function') {
         const meFull = me || await DB.getUser(s.id).catch(() => null);
         if (meFull) prt = await PartnerPerms.ensureTeamSacarForFundedMember(meFull, prt);
@@ -898,7 +945,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _inPartnerOrg  = !!PARTNER_ROOT_ID;
     const canPartnerOpsHub = p.canPartnerOpsHub !== undefined ? !!p.canPartnerOpsHub : (!_inPartnerOrg && (IS_OPERACIONAL || IS_BACKOFFICE || IS_MASTER || IS_FUNDA || IS_GERENTE || IS_DESENVOLVEDOR || IS_DIRETORIA || IS_FINANCIAL || IS_RH));
     window.CAN_PARTNER_OPS_HUB = canPartnerOpsHub;
-    const canRanking     = p.canRanking !== undefined ? !!p.canRanking : ((canProposta || IS_JURIDICO || IS_OUVIDORIA) && !_inPartnerOrg && !IS_PARCEIRO);
+    const canRanking     = (!_inPartnerOrg && !IS_PARCEIRO)
+      && (p.canRanking !== undefined ? !!p.canRanking : true);
+    window.CAN_RANKING = canRanking;
     const canLoja        = p.canLoja !== undefined ? !!p.canLoja : (canProposta || (PARTNER_ROOT_ID && IS_VENDEDOR_ADM));
     const canSimulacao   = p.canSimulacao !== undefined ? !!p.canSimulacao : (canProposta && (!_inPartnerOrg || partnerOrgCan('simulador')));
     const canChamados    = p.canChamados !== undefined ? !!p.canChamados : (_inPartnerOrg ? (IS_PARCEIRO && partnerOrgCan('gestao_chamados')) || (_partnerStaff && !IS_PARCEIRO && partnerOrgCan('gestao_chamados')) : true);
@@ -910,7 +959,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const canTimIndicacao = false;
     const canTimEsteira = false;
     const canContestacao = p.canContestacao !== undefined ? !!p.canContestacao : (!_inPartnerOrg || (IS_PARCEIRO && partnerOrgCan('contestacao')) || (_inPartnerOrg && partnerOrgCan('contestacao')));
-    const canFiscalParceiro = p.canFiscalParceiro !== undefined ? !!p.canFiscalParceiro : (!_inPartnerOrg ? (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH || IS_GERENTE) : (partnerOrgCan('fechamento_financeiro') || partnerOrgCan('dados_nota_fiscal') || partnerOrgCan('upload_nota_fiscal')));
+    const canFiscalParceiro = p.canFiscalParceiro !== undefined ? !!p.canFiscalParceiro : (!_inPartnerOrg ? (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH || IS_GERENTE) : false);
     const canMarketplaceBlu = p.canMarketplaceBlu !== undefined ? !!p.canMarketplaceBlu : (
       _inPartnerOrg
         ? ((IS_PARCEIRO && partnerOrgCan('marketplace_blu'))
@@ -929,17 +978,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       : (!_inPartnerOrg && typeof Auth.canAccessMonitoriaAtendimento === 'function' && Auth.canAccessMonitoriaAtendimento());
     const canJuridicoHub = p.canJuridicoHub !== undefined ? !!p.canJuridicoHub
       : (!_inPartnerOrg && typeof Auth.canAccessJuridicoHub === 'function' && Auth.canAccessJuridicoHub());
+    const canWhatsApp = p.canWhatsApp !== undefined ? !!p.canWhatsApp : (
+      _inPartnerOrg ? partnerOrgCan('chat_whatsapp') : true
+    );
     const _adminNavCfg = {
       canMasterPanel, canSaques, canCadFunc, canProposta, canClientes, _inPartnerOrg,
       canPartnerOpsHub, canRanking, canLoja, canSimulacao, canChamados, canSupervisorPanel,
       canPartnerDashboard, canLeadsManager, canTreinamentos, canTimIndicacao, canTimEsteira,
       canContestacao, canFiscalParceiro, canMarketplaceBlu, canFornecedorFinanceiro, canContaCorrente,
-      canFinanceiroHub, canMonitoriaAtendimento, canJuridicoHub,
+      canFinanceiroHub, canMonitoriaAtendimento, canJuridicoHub, canWhatsApp,
     };
     window.__ADMIN_NAV_CFG__ = _adminNavCfg;
     _applyAdminNavVisibility(_adminNavCfg);
     if (window.PainelSonhos && typeof PainelSonhos.applyAdminNav === 'function') {
       PainelSonhos.applyAdminNav(s.role);
+    }
+    if (landingSection === 'secRanking' && !canRanking) {
+      landingSection = _inPartnerOrg
+        ? (canPartnerDashboard ? 'secDashboard' : (canProposta ? 'secManageProposals' : 'secMyProfile'))
+        : 'secInicio';
+      _explicitLanding = false;
     }
 
     if (employeesManagedInRhHub() && landingSection === 'secEmployees') {
@@ -985,6 +1043,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (canMasterPanel) {
       landingSection = 'secDashboard';
+      _bootShowLanding(landingSection);
       const tasks = [
         employeesManagedInRhHub() ? Promise.resolve() : renderEmployeesTable(),
         renderAdminRanking(),
@@ -1035,7 +1094,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await _bootSettle(bootTasks);
 
     } else if (IS_SUPERVISOR || IS_OUVIDORIA) {
-      landingSection = IS_SUPERVISOR && !IS_SUP_BACKOFFICE ? 'secManageProposals' : 'secMeetings';
+      landingSection = (IS_SUPERVISOR && !IS_SUP_BACKOFFICE) || (IS_SUP_BACKOFFICE && canProposta) ? 'secManageProposals' : 'secMeetings';
       const bootTasks = [typeof renderMeetingsAdmin === 'function' ? renderMeetingsAdmin() : Promise.resolve()];
       if (CAN_EMPLOYEES_PANEL) bootTasks.unshift(renderEmployeesTable());
       if (landingSection === 'secManageProposals' && window.Proposals) {
@@ -1064,11 +1123,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     if (window.RouletteUI) await RouletteUI.renderRoulettePage().catch(() => {});
+    if (window.BolaoCopa) {
+      try {
+        BolaoCopa.ensureDom();
+        BolaoCopa.applyNavVisibility();
+      } catch (e) { console.warn('[admin boot] BolaoCopa', e); }
+    }
 
     document.querySelectorAll('[data-section]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const sec = btn.dataset.section;
         if (sec==='secInicio' && window.PainelSonhos) await PainelSonhos.render('painelSonhosRoot');
+        if (sec==='secBolaoCopa' && window.BolaoCopa) await BolaoCopa.render();
         if (sec==='secEmployees') {
           if (!CAN_EMPLOYEES_PANEL) return;
           if (employeesManagedInRhHub()) {
@@ -1092,7 +1158,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             await renderTeamBillingChart();
           }
         }
-        if (sec==='secRanking' || sec==='secReport') return;
+        if (sec==='secRanking') {
+          if (!window.__ADMIN_NAV_CFG__?.canRanking) return;
+          if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
+          await renderAdminRanking();
+          return;
+        }
+        if (sec==='secReport') return;
         if (sec==='secFeedback') { await renderFeedbackSection(); }
         if (sec==='secBalance')     { await populateBalanceSelect(); await renderBalanceHistory(); }
         if (sec==='secMaster')      await renderMasterPanel();
@@ -1128,11 +1200,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (window.Tim && typeof Tim.init === 'function') Tim.init();
     if (window.Contestacao && typeof Contestacao.init === 'function') Contestacao.init();
+    if (typeof wireNavButton === 'function') {
+      document.querySelectorAll('[data-section]:not([data-nav-wired-ui])').forEach(wireNavButton);
+    }
     if (window.FiscalParceiro && typeof FiscalParceiro.init === 'function') FiscalParceiro.init();
     if (window.Trainings && typeof Trainings.init === 'function') Trainings.init();
     if (window.MarketplaceBlu && typeof MarketplaceBlu.init === 'function') MarketplaceBlu.init();
     if (window.FornecedorFinanceiro && typeof FornecedorFinanceiro.init === 'function') FornecedorFinanceiro.init();
     if (window.ContaCorrente && typeof ContaCorrente.init === 'function') ContaCorrente.init();
+    if (window.WhatsAppChat && typeof WhatsAppChat.applyNavVisibility === 'function') WhatsAppChat.applyNavVisibility();
     if (window.Trainings) {
       try { await Trainings.updateBadge(); } catch (_) { /* noop */ }
       try { await Trainings.checkPendingOnLogin(); } catch (_) { /* noop */ }
@@ -1232,18 +1308,51 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.__ADMIN_NAV_CFG__) _applyAdminNavVisibility(window.__ADMIN_NAV_CFG__);
     if (Auth.getSession() && typeof navigateTo === 'function') {
       const _sess = Auth.getSession();
+      if (landingSection === 'secRanking' && !window.__ADMIN_NAV_CFG__?.canRanking) {
+        const _cfg = window.__ADMIN_NAV_CFG__ || {};
+        landingSection = _cfg._inPartnerOrg
+          ? (_cfg.canPartnerDashboard ? 'secDashboard' : (_cfg.canProposta ? 'secManageProposals' : 'secMyProfile'))
+          : 'secInicio';
+      }
       if (!_explicitLanding && window.PainelSonhos && PainelSonhos.shouldLandOnInicio(_sess?.role, {
         partnerOrg: !!PARTNER_ROOT_ID,
         partnerLanding: !!PARTNER_ROOT_ID,
+        canMasterPanel: !!window.__ADMIN_NAV_CFG__?.canMasterPanel,
+        canPartnerDashboard: !!window.__ADMIN_NAV_CFG__?.canPartnerDashboard,
       })) {
         landingSection = 'secInicio';
       }
-      navigateTo(landingSection);
-      if (landingSection === 'secInicio' && window.PainelSonhos) {
-        try { await PainelSonhos.render('painelSonhosRoot'); } catch (e) { console.warn('[inicio boot]', e); }
-      }
       if (landingSection === 'secContestacao' && window.Contestacao) {
-        try { await Contestacao.render(); } catch (e) { console.warn('[contestacao boot]', e); }
+        try {
+          Contestacao.ensureUi();
+          await Contestacao.render();
+        } catch (e) { console.warn('[contestacao boot]', e); }
+      }
+      _bootShowLanding(landingSection);
+      if (landingSection === 'secInicio' && window.PainelSonhos) {
+        try {
+          const root = document.getElementById('painelSonhosRoot');
+          if (root && !root.innerHTML.trim()) {
+            root.innerHTML = '<div class="card card-padded text-center text-muted" style="padding:32px;">Carregando painel…</div>';
+          }
+          await Promise.race([
+            PainelSonhos.render('painelSonhosRoot'),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('painel timeout')), 15000)),
+          ]);
+        } catch (e) {
+          console.warn('[inicio boot]', e);
+          const root = document.getElementById('painelSonhosRoot');
+          if (root && !root.querySelector('.painel-sonhos-wrap')) {
+            root.innerHTML = '<div class="card card-padded text-center"><p class="text-muted">Não foi possível carregar o painel agora.</p><button type="button" class="btn btn-primary btn-sm" onclick="PainelSonhos && PainelSonhos.render(\'painelSonhosRoot\')">Tentar novamente</button></div>';
+          }
+        }
+      }
+      if (landingSection === 'secDashboard') {
+        try {
+          const dash = document.getElementById('secDashboard');
+          const stats = document.getElementById('dashStats');
+          if (dash && (!stats || !stats.innerHTML.trim())) await renderDashboard();
+        } catch (e) { console.warn('[dashboard finally]', e); }
       }
       if (landingSection === 'secManageTickets' && window.Tickets) {
         try { await Tickets.renderAdminList(); } catch (e) { console.warn('[tickets boot]', e); }
@@ -1649,6 +1758,11 @@ async function renderAdminPrizeStore() {
 window.renderAdminPrizeStore = renderAdminPrizeStore;
 
 function invalidateSouBluCaches() {
+  // #region agent log
+  if (typeof _dbgSessionLog === 'function') {
+    _dbgSessionLog('admin.js:invalidateSouBluCaches', 'cache cleared', { stack: (new Error()).stack?.split('\n').slice(1, 4).join(' | ') }, 'H-C-invalidate');
+  }
+  // #endregion
   if (typeof _cacheDel === 'function') {
     _cacheDel('users');
     _cacheDel('transactions');
@@ -1657,6 +1771,9 @@ function invalidateSouBluCaches() {
     _cacheDel('meetings');
   }
   _allUsersCache = null;
+  if (typeof DB !== 'undefined' && typeof DB.clearAllUsersCache === 'function') {
+    DB.clearAllUsersCache();
+  }
   if (typeof refreshPartnerRootIdsCache === 'function') {
     refreshPartnerRootIdsCache().catch(() => {});
   }
@@ -1670,24 +1787,7 @@ function _startAdminLiveRefresh() {
     if (document.hidden || pollBusy) return;
     pollBusy = true;
     try {
-    invalidateSouBluCaches();
-    const sec = document.querySelector('.section.active')?.id;
     const jobs = [];
-        if (sec === 'secDashboard' || sec === 'secMaster') {
-      _allProposalsCache = null;
-      jobs.push(renderDashboard(), renderMasterPanel());
-      if (!PARTNER_ROOT_ID) jobs.push(renderTeamBillingChart());
-    }
-    if (sec === 'secPartnerOps' && window.PartnerOps) jobs.push(PartnerOps.renderPanel());
-    if (sec === 'secBalance') {
-      jobs.push(populateBalanceSelect(), renderBalanceHistory());
-    }
-    if (sec === 'secEmployees' && CAN_EMPLOYEES_PANEL) jobs.push(renderEmployeesTable());
-    if (sec === 'secWithdrawals') jobs.push(renderWithdrawalsTable());
-    if (sec === 'secOrders') jobs.push(renderOrdersTable());
-    if (sec === 'secMeetings' && typeof renderMeetingsAdmin === 'function') {
-      jobs.push(renderMeetingsAdmin({ tableOnly: true }));
-    }
     jobs.push(typeof updateMeetingsBadge === 'function' ? updateMeetingsBadge() : Promise.resolve());
     if (window.Trainings && typeof window.Trainings.updateBadge === 'function') {
       jobs.push(window.Trainings.updateBadge());
@@ -1697,8 +1797,22 @@ function _startAdminLiveRefresh() {
       pollBusy = false;
     }
   };
-  _adminPollTimer = setInterval(tick, 20000);
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+  const keepalive = async () => {
+    if (document.hidden) return;
+    try {
+      const base = typeof API_BASE_URL !== 'undefined' ? API_BASE_URL : '';
+      const key = typeof API_KEY !== 'undefined' ? API_KEY : '';
+      await fetch(`${base}/api/rest-ping.php`, { headers: { 'X-API-Key': key } });
+    } catch (e) {
+      if (typeof _dbgSessionLog === 'function') {
+        _dbgSessionLog('admin.js:keepalive', 'ping failed', { msg: String(e?.message || e).slice(0, 80) }, 'H-A-mysql-timeout');
+      }
+    }
+  };
+  _adminPollTimer = setInterval(tick, 120000);
+  _adminKeepaliveTimer = setInterval(keepalive, 180000);
+  keepalive();
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { tick(); keepalive(); } });
 }
 
 window.addEventListener('pagehide', () => { _stopAdminLiveRefresh(); });
@@ -2316,11 +2430,14 @@ function _partnerMetaFromForm() {
   });
   const pixType = document.getElementById('partnerPixType')?.value || 'cnpj';
   const pixKey = document.getElementById('partnerPixKey')?.value?.trim() || '';
+  const irpjPct = parseFloat(String(document.getElementById('partnerRetencaoIrrf')?.value || '0').replace(',', '.')) || 0;
   return {
     simples_nacional: document.getElementById('partnerSimples')?.value === 'sim',
     comercial_id: document.getElementById('partnerComercial')?.value || '',
-    retencao_irrf: parseFloat(document.getElementById('partnerRetencaoIrrf')?.value || '0') || 0,
+    retencao_irpj: irpjPct,
+    retencao_irrf: irpjPct,
     taxa_saque: parseFloat(document.getElementById('partnerTaxaSaque')?.value || '10') || 10,
+    ...(typeof PartnerPerms !== 'undefined' ? PartnerPerms.readCommissionTierMeta() : {}),
     status: document.getElementById('partnerStatus')?.value || 'analise',
     compliance_aprovado: document.getElementById('partnerCompliance')?.value === 'sim',
     credito_habilitado: !!document.getElementById('partnerCredito')?.checked,
@@ -2337,8 +2454,9 @@ function _fillPartnerMetaForm(meta) {
   if (!meta || typeof meta !== 'object') return;
   const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
   set('partnerSimples', meta.simples_nacional ? 'sim' : 'nao');
-  set('partnerRetencaoIrrf', meta.retencao_irrf ?? '');
+  set('partnerRetencaoIrrf', meta.retencao_irpj ?? meta.retencao_irrf ?? '');
   set('partnerTaxaSaque', meta.taxa_saque ?? 10);
+  if (typeof PartnerPerms !== 'undefined') PartnerPerms.fillCommissionTierForm(meta);
   set('partnerFuncLimite', meta.funcionario_limite ?? '');
   set('partnerRepresentante', meta.representante_legal ?? '');
   const cpfRep = meta.cpf_representante || '';
@@ -2917,7 +3035,7 @@ function _partnerOrgStats(rootId, team, proposals, clients) {
     byVendor[key].total += propAmt(p);
   });
 
-  const activeTeam = (team || []).filter(e => e.active !== false);
+  const activeTeam = _sortEmpByName((team || []).filter(e => e.active !== false));
   const rootInTeam = team.find(e => e.id === rootId);
 
   return {
@@ -3082,8 +3200,10 @@ async function renderPartnersPanel() {
       ? ''
       : `<button class="btn btn-ghost btn-sm" onclick="partnerToggleActive('${p.id}')">${live ? ' Desativar' : ' Ativar'}</button>`;
 
+    const tierBadge = typeof PartnerPerms !== 'undefined' ? PartnerPerms.tierBadgeHtml(p) : '';
     return `<div class="card card-padded" style="margin-bottom:var(--space-lg);${pStatus === 'analise' ? 'border-left:4px solid #f59e0b;' : ''}"><div style="display:flex;align-items:flex-start;gap:14px;flex-wrap:wrap;"><div style="flex:1;min-width:220px;"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><span style="font-family:var(--font-display);font-size:17px;font-weight:800;">${p.razao_social || u?.name || 'Parceiro'}</span><span class="badge badge-info"> Parceiro</span>
             ${statusBadge}
+            ${tierBadge}
             ${!live && pStatus !== 'analise' ? '<span class="badge badge-danger">Inativo</span>' : ''}
           </div><div style="font-size:13px;color:var(--color-text-muted);margin-top:6px;line-height:1.5;">
             CNPJ: <strong>${_formatCnpj(p.cnpj) || '—'}</strong><br>
@@ -3152,6 +3272,7 @@ async function openPartnerModal(partnerId) {
     _partnerSetVal('partnerTaxaSaque', '10');
     _partnerSetVal('partnerFuncLimite', '');
     _partnerSetVal('partnerStatus', 'analise');
+    if (typeof PartnerPerms !== 'undefined') PartnerPerms.fillCommissionTierForm({});
     _partnerSetVal('partnerCompliance', 'nao');
     const credEl = document.getElementById('partnerCredito');
     if (credEl) credEl.checked = false;
@@ -3885,6 +4006,14 @@ function _fmtPersonName(name) {
   return typeof fixMojibake === 'function' ? fixMojibake(n) : n;
 }
 
+function _sortEmpByName(rows) {
+  return (rows || []).slice().sort((a, b) =>
+    _fmtPersonName(a?.name || a?.nome || '').localeCompare(
+      _fmtPersonName(b?.name || b?.nome || ''), 'pt-BR', { sensitivity: 'base' }
+    )
+  );
+}
+
 async function renderEmployeesTable() {
   if (!CAN_EMPLOYEES_PANEL || employeesManagedInRhHub()) return;
   const partnerRoot = getEffectivePartnerRootId();
@@ -3919,6 +4048,7 @@ async function renderEmployeesTable() {
   if (!partnerRoot && typeof filterSouBluInternalUsers === 'function') {
     emps = filterSouBluInternalUsers(emps);
   }
+  emps = _sortEmpByName(emps);
   const maxB = Math.max(...emps.map(e => Math.max(0, userPts(e))), 1);
   const tbody = document.getElementById('employeesTbody');
   const canAddTeam = canManagePartnerTeam();
@@ -4467,6 +4597,7 @@ async function renderWithdrawalsTable(){
     const pixBankCell = `${typeof pixWdStatusBadge === 'function' ? pixWdStatusBadge(w) : '—'}${refreshPixBtn}${retryPixBtn}`;
 
     const irpfTax = Number(wdMeta.irpf_tax || 0);
+    const irpjTax = Number(wdMeta.irpj_tax || 0);
     const payType = String(w.method || wdMeta.payment_method || 'pix').toLowerCase();
     const typeLbl = payType.includes('conta') ? 'CONTA CORRENTE' : String(w.pix_key_type || 'pix').toUpperCase();
 
@@ -4476,7 +4607,7 @@ async function renderWithdrawalsTable(){
         ${orgBadge}
       </div></td><td><span class="pts-orange" style="font-family:var(--font-display);font-weight:900;">
         ${formatCurrency(w.amount, emp)}
-      </span>${irpfTax > 0 ? `<div style="font-size:10px;color:var(--color-warning);">IRPF −${formatMoney(irpfTax)}</div>` : ''}</td><td><div style="font-size:12px;"><strong>${typeLbl}</strong></div><div style="font-size:12px;color:var(--color-text-muted);">${w.pix_key}</div><div style="font-size:11px;color:var(--color-text-muted);">${w.holder_name}${w.bank_name?' · '+w.bank_name:''}</div></td><td style="font-size:12px;">${formatDate(w.created_at)}</td><td>${wdStatusBadge(w.status)}</td><td>${pixBankCell}</td><td style="text-align:center;">${receiptBtn}</td><td><input type="text" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border);width:110px;"
+      </span>${irpjTax > 0 ? `<div style="font-size:10px;color:var(--color-warning);">IRPJ −${formatMoney(irpjTax)}</div>` : ''}${irpfTax > 0 ? `<div style="font-size:10px;color:var(--color-warning);">IRPF −${formatMoney(irpfTax)}</div>` : ''}</td><td><div style="font-size:12px;"><strong>${typeLbl}</strong></div><div style="font-size:12px;color:var(--color-text-muted);">${w.pix_key}</div><div style="font-size:11px;color:var(--color-text-muted);">${w.holder_name}${w.bank_name?' · '+w.bank_name:''}</div></td><td style="font-size:12px;">${formatDate(w.created_at)}</td><td>${wdStatusBadge(w.status)}</td><td>${pixBankCell}</td><td style="text-align:center;">${receiptBtn}</td><td><input type="text" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border);width:110px;"
         placeholder="Observação" id="note_${w.id}" value="${w.admin_note||''}"></td><!-- MASTER + FINANCEIRO lado a lado na mesma célula --><td><div style="display:flex;gap:8px;align-items:flex-start;">
         ${cardMaster}
         ${cardFin}
@@ -4689,6 +4820,7 @@ async function _usersForAdminRanking() {
 }
 
 async function renderAdminRanking() {
+  if (window.__ADMIN_NAV_CFG__ && !window.__ADMIN_NAV_CFG__.canRanking) return;
   if (typeof SalesRanking !== 'undefined' && SalesRanking.renderAdmin) {
     return SalesRanking.renderAdmin();
   }
@@ -4722,9 +4854,9 @@ async function _employeesForSupervisorPanel() {
     rows = await DB.getEmployeesByAdmin(ADMIN_ID);
   }
   if (!PARTNER_ROOT_ID && typeof filterSouBluInternalUsers === 'function') {
-    return filterSouBluInternalUsers(rows);
+    rows = filterSouBluInternalUsers(rows);
   }
-  return rows;
+  return _sortEmpByName(rows);
 }
 
 async function openFeedbackModal(empId, empName) {
@@ -4952,26 +5084,11 @@ if (!DB.getOrdersByEmployee) {
   };
 }
 
-/* ============================================================
-   VER COMO FUNCIONÁRIO — abre direto em nova aba (modo demo)
-   ============================================================ */
-async function openViewAsModal() {
-  try {
-    const employees = await DB.getAllEmployees();
-    const ativo = employees.find(e => e.role === 'vendedor' && e.active !== false)
-      || employees.find(e => e.role === 'employee' && e.active !== false);
-    if (!ativo) {
-      alert('Nenhum funcionário cadastrado para visualizar.');
-      return;
-    }
-    window.open(`${Auth.employeePageHref()}?preview=${encodeURIComponent(ativo.id)}`, '_blank');
-  } catch (err) {
-    alert('Erro ao abrir visualização: ' + (err.message || err));
-  }
+async function openMinhaConta() {
+  if (typeof navigateTo === 'function') navigateTo('secMyProfile');
+  showLoading('Carregando perfil…');
+  try { await renderMyProfile(); } finally { hideLoading(); }
 }
-
-// Mantida apenas por compatibilidade com possíveis chamadas antigas
-function doViewAs() { openViewAsModal(); }
 
 let _clientsTableInflight = null;
 let _clientsListCache = null;

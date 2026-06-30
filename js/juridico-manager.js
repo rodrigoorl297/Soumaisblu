@@ -41,7 +41,10 @@ async function _initJuridico() {
   document.getElementById('topbarAvatar').style.display = '';
 
   // Renderiza tabs default
-  switchTab('contestacao');
+  if (window.WhatsAppChat?.applyNavVisibility) WhatsAppChat.applyNavVisibility();
+  const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
+  const tabs = ['contestacao', 'chamados', 'punicao', 'demissao'];
+  switchTab(tabs.includes(hashTab) ? hashTab : 'contestacao');
 }
 
 async function switchTab(tabId) {
@@ -96,6 +99,8 @@ window.reloadAllData = async function() {
   const activeTab = document.querySelector('.nav-item.active')?.dataset.tab;
   if (activeTab) switchTab(activeTab);
 };
+
+window.switchTab = switchTab;
 
 document.addEventListener('DOMContentLoaded', () => {
   _initJuridico().catch(e => {

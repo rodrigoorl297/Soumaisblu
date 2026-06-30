@@ -1,17 +1,116 @@
 window.Tickets = {
-  departments: ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Ouvidoria', 'Desenvolvimento'],
+  departments: ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento'],
   subjects: {
     'Financeiro': ['Alteração dados bancários', 'Representação de pagamentos', 'Contestação pontuação', 'Outros assuntos'],
     'RH': ['Contra cheque', 'Atestado médico', 'Alteração de dados', 'Pedido de demissão', 'Outros assuntos'],
     'Operacional': ['Dúvidas', 'Status proposta', 'Atuação proposta', 'Cancelamento proposta', 'Representação pagamento', 'Solicitação Boleto', 'Averbação proposta', 'Solicitação novo link', 'Solicitação de novo contato', 'Solicitação link chamada vídeo'],
     'Supervisão': ['Solicitação Treinamento', 'Justificativa de Falta', 'Parcial 12:00', 'Fechamento'],
+    'Gerência': ['Solicitação', 'Escalonamento', 'Outros assuntos'],
     'Ouvidoria': ['Sugestão', 'Reclamação'],
     'Desenvolvimento': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Outros']
   },
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,
+  _actionsWired: false,
+
+  _ticketDbgLog(location, message, data, hypothesisId) {
+    const payload = {
+      sessionId: '97c411',
+      location,
+      message,
+      data: data || {},
+      timestamp: Date.now(),
+      hypothesisId: hypothesisId || 'ticket-modal',
+      runId: 'ticket-modal-fix-v2',
+    };
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    const cfg = window.SOUBLU_CONFIG || {};
+    const base = String(cfg.API_BASE_URL || cfg.SITE_URL || location.origin || '').replace(/\/+$/, '');
+    const key = cfg.API_KEY || '';
+    if (!base || !key) return;
+    fetch(`${base}/api/credito_api.php?action=client_log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  },
+
+  _escAttr(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+  },
+
+  _bindTicketActions() {
+    if (this._actionsWired) return;
+    this._actionsWired = true;
+    document.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-ticket-open]');
+      if (!btn) return;
+      ev.preventDefault();
+      const id = btn.getAttribute('data-ticket-open');
+      // #region agent log
+      this._ticketDbgLog('tickets.js:bindClick', 'tratar click', { id, hasOpenModal: typeof this.openTicketDetail === 'function' }, 'H3');
+      // #endregion
+      if (id) this.openTicketDetail(id);
+    }, true);
+  },
 
   init: function() {
+    this.populateDepts();
+    this._bindTicketActions();
+  },
+
+  /** Perfis que podem abrir chamado (não só vendedor/backoffice na área employee). */
+  canOpenTickets: function() {
+    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+    if (!s) return false;
+    const role = String(s.role || '').toLowerCase();
+    return [
+      'vendedor', 'employee', 'backoffice', 'supervisor', 'sup_backoffice',
+      'gerencia', 'gerente', 'master', 'fundador', 'financeiro', 'financial',
+      'rh', 'operacional', 'juridico', 'diretoria', 'ouvidoria', 'desenvolvedor', 'admin',
+    ].includes(role);
+  },
+
+  /** Formulário "Abrir chamado" dentro do admin (supervisores usam admin, não employee). */
+  ensureOpenTicketPanel: function() {
+    const sec = document.getElementById('secManageTickets');
+    if (!sec || !this.canOpenTickets()) return;
+    if (document.getElementById('ticketOpenPanel')) return;
+
+    const panel = document.createElement('div');
+    panel.id = 'ticketOpenPanel';
+    panel.innerHTML = `
+      <div class="card card-padded" style="margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px;">Abrir Novo Chamado</h3>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+          <select id="ticketDept" class="form-control" onchange="Tickets.updateSubjects()">
+            <option value="">Selecione o Departamento</option>
+          </select>
+          <select id="ticketSubject" class="form-control">
+            <option value="">Selecione o Assunto</option>
+          </select>
+        </div>
+        <textarea id="ticketDesc" class="form-control" placeholder="Descreva o problema/solicitação..." style="margin-top:15px;"></textarea>
+        <div style="margin-top:15px;">
+          <label>Anexo (Opcional)</label>
+          <input type="file" id="ticketFile" class="form-control" accept="*/*">
+        </div>
+        <button type="button" class="btn btn-primary" style="margin-top: 20px;" onclick="Tickets.submit()">Abrir Chamado</button>
+      </div>
+      <div class="card card-padded" style="margin-bottom: 20px;">
+        <h3 style="margin-bottom: 15px;">Meus Chamados Abertos</h3>
+        <div id="ticketsList"></div>
+      </div>`;
+    const tableCard = sec.querySelector('.card');
+    if (tableCard) {
+      sec.insertBefore(panel, tableCard);
+    } else {
+      sec.prepend(panel);
+    }
     this.populateDepts();
   },
 
@@ -103,12 +202,11 @@ window.Tickets = {
   _resolveAttachmentUrl: function(url) {
     if (!url) return '';
     const u = String(url).trim();
-    if (/^https?:\/\//i.test(u) || u.startsWith('data:')) return u;
-    if (u.startsWith('/')) {
-      const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
-      return base + u;
-    }
+    if (u.startsWith('data:')) return u;
     if (typeof resolvePhotoUrl === 'function') return resolvePhotoUrl(u);
+    if (/^https?:\/\//i.test(u)) return u;
+    const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
+    if (u.startsWith('/')) return base + u;
     return u;
   },
 
@@ -227,12 +325,10 @@ window.Tickets = {
     const ticket = {
       id: ticketId,
       openedById: user.id,
-      opened_by_id: user.id,
       employee_id: user.id,
       openedByName: user.name,
-      openedByDept: user.department,
+      openedByDept: user.department || '',
       targetDept: dept,
-      target_dept: dept,
       subject: subject,
       status: 'aberto',
       createdAt: new Date().toISOString(),
@@ -251,8 +347,19 @@ window.Tickets = {
       ]
     };
 
-    await DB.save('tickets', ticket);
-    alert("Chamado aberto com sucesso!");
+    try {
+      await DB.save('tickets', ticket);
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'tickets.js:submit',message:'ticket saved',data:{id:ticketId,dept},timestamp:Date.now(),hypothesisId:'B',runId:'chamados-nav-fix'})}).catch(()=>{});
+      // #endregion
+      alert("Chamado aberto com sucesso!");
+    } catch(e) {
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'tickets.js:submit',message:'ticket save failed',data:{err:String(e?.message||e)},timestamp:Date.now(),hypothesisId:'B',runId:'chamados-nav-fix'})}).catch(()=>{});
+      // #endregion
+      alert("Erro ao abrir chamado: " + e.message);
+      return;
+    }
 
     document.getElementById('ticketDept').value = '';
     document.getElementById('ticketSubject').value = '';
@@ -265,6 +372,7 @@ window.Tickets = {
   renderEmployeeList: async function() {
     const listEl = document.getElementById('ticketsList');
     if (!listEl) return;
+    this.populateDepts();
 
     const user = Auth.getSession();
     const tickets = (await DB.list('tickets') || []).map((t) => this._normTicket(t));
@@ -296,7 +404,7 @@ window.Tickets = {
            <div><strong>Assunto:</strong> ${t.subject}</div>
            <div style="font-size: 13px; margin-top: 8px;"><em>Última atualização: ${formatDateTime(t.updatedAt)}</em></div>
            <div style="margin-top: 10px;">
-             <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Ver Detalhes/Responder</button>
+             <button type="button" class="btn btn-outline btn-sm" data-ticket-open="${this._escAttr(t.id)}">Ver Detalhes/Responder</button>
            </div>
         </div>
       `;
@@ -305,6 +413,11 @@ window.Tickets = {
   },
 
   renderAdminList: async function() {
+    this.ensureOpenTicketPanel();
+    if (this.canOpenTickets() && document.getElementById('ticketsList')) {
+      await this.renderEmployeeList();
+    }
+
     const tbody = document.getElementById('manageTicketsTbody');
     if (!tbody) return;
 
@@ -336,7 +449,7 @@ window.Tickets = {
           <td>${formatDate(t.createdAt)}</td>
           <td><span style="background:${statusColor}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${statusText}</span></td>
           <td>
-             <button class="btn btn-outline btn-sm" onclick="Tickets.openModal('${t.id}')">Tratar</button>
+             <button type="button" class="btn btn-outline btn-sm" data-ticket-open="${this._escAttr(t.id)}">Tratar</button>
           </td>
         </tr>
       `;
@@ -344,14 +457,26 @@ window.Tickets = {
     tbody.innerHTML = html;
   },
 
-  openModal: async function(id) {
+    openTicketDetail: async function(id) {
+    // #region agent log
+    this._ticketDbgLog('tickets.js:openTicketDetail', 'open start', { id }, 'ticket-click');
+    // #endregion
+    try {
     const raw = await DB.get('tickets', id);
     const ticket = this._normTicket(raw);
-    if (!ticket) return;
+    if (!ticket) {
+      alert('Chamado não encontrado.');
+      return;
+    }
 
     this._attachmentViewerCache = [];
 
-    document.getElementById('manageTicketId').value = ticket.id;
+    const idEl = document.getElementById('manageTicketId');
+    if (!idEl) {
+      alert('Modal de chamados não disponível nesta página.');
+      return;
+    }
+    idEl.value = ticket.id;
 
     let infoHtml = `
       <strong>De:</strong> ${ticket.openedByName} (${ticket.openedByDept})<br>
@@ -369,29 +494,73 @@ window.Tickets = {
         : '';
     }
 
-    if (document.getElementById('manageTicketStatus')) {
-      document.getElementById('manageTicketStatus').value = ticket.status;
+    const statusEl = document.getElementById('manageTicketStatus');
+    if (statusEl) statusEl.value = ticket.status || 'aberto';
+
+    const replyEl = document.getElementById('manageTicketReply');
+    if (replyEl) replyEl.value = '';
+
+    const infoTop = document.getElementById('manageTicketInfoTop');
+    if (infoTop) {
+      infoTop.textContent = `${ticket.targetDept} • ${String(ticket.status || 'aberto').toUpperCase()}`;
     }
-    document.getElementById('manageTicketReply').value = '';
 
     let threadHtml = '';
+    const user = Auth.getSession() || {};
     if (ticket.thread?.length) {
       ticket.thread.forEach(msg => {
         const attHtml = msg.attachment ? this._attachmentHtml(msg.attachment, msg.attachmentName) : '';
-        const align = (msg.senderName === ticket.openedByName) ? 'text-align: left;' : 'text-align: right; background: #e0f2fe;';
+        const isSelf = (msg.senderName === user.name);
+        const align = isSelf 
+          ? 'align-self: flex-end; background: #d9fdd3; border-radius: 8px 0 8px 8px; margin-left: 20%;' 
+          : 'align-self: flex-start; background: #ffffff; border-radius: 0 8px 8px 8px; margin-right: 20%;';
 
         threadHtml += `
-          <div style="border-bottom: 1px solid #ccc; padding: 10px; margin-bottom: 5px; border-radius: 4px; ${align}">
-             <div style="font-size: 12px; color: var(--color-text-muted);"><strong>${msg.senderName}</strong> em ${formatDateTime(msg.date)}</div>
-             <div style="margin-top: 5px; white-space: pre-wrap;">${msg.message}</div>
+          <div style="padding: 8px 12px; box-shadow: 0 1px 1px rgba(0,0,0,0.05); position: relative; ${align}">
+             <div style="font-size: 11px; font-weight: 600; color: ${isSelf ? '#025c4c' : 'var(--color-primary)'}; margin-bottom: 4px;">
+               ${msg.senderName} ${msg.senderRole && msg.senderRole !== 'null' ? `(${msg.senderRole})` : ''}
+             </div>
+             <div style="font-size: 14px; color: #111; white-space: pre-wrap; line-height: 1.4;">${msg.message}</div>
              ${attHtml}
+             <div style="font-size: 10px; color: #667781; text-align: right; margin-top: 4px; margin-right: -4px;">
+               ${new Date(msg.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+             </div>
           </div>
         `;
       });
     }
-    document.getElementById('manageTicketThread').innerHTML = threadHtml;
+    const threadEl = document.getElementById('manageTicketThread');
+    if (threadEl) threadEl.innerHTML = threadHtml;
+    
+    setTimeout(() => {
+      const w = document.getElementById('manageTicketThreadWrapper') || threadEl;
+      if (w) w.scrollTop = w.scrollHeight;
+    }, 50);
 
-    document.getElementById('manageTicketModal').classList.add('open');
+    const modal = document.getElementById('manageTicketModal');
+    if (!modal) {
+      alert('Modal de chamados não encontrado.');
+      return;
+    }
+    const showUiModal = typeof window.openModal === 'function'
+      ? window.openModal
+      : (typeof openModal === 'function' ? openModal : null);
+    if (showUiModal) showUiModal('manageTicketModal');
+    else modal.classList.add('open');
+    // #region agent log
+    this._ticketDbgLog('tickets.js:openTicketDetail', 'open ok', { id: ticket.id, threadLen: ticket.thread?.length || 0 }, 'ticket-click');
+    // #endregion
+    } catch (err) {
+      console.error('[Tickets.openTicketDetail]', err);
+      // #region agent log
+      this._ticketDbgLog('tickets.js:openTicketDetail', 'open error', { err: String(err?.message || err) }, 'ticket-click');
+      // #endregion
+      alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift+R).');
+    }
+  },
+
+  openModal(id) {
+    return this.openTicketDetail(id);
   },
 
   reply: async function() {
@@ -429,14 +598,20 @@ window.Tickets = {
       });
     }
 
-    await DB.save('tickets', ticket);
-    if (becameResolved && ticket.employee_id && typeof DB.applyRouletteCriteriaReward === 'function') {
-      await DB.applyRouletteCriteriaReward(ticket.employee_id, 'chamado_resolvido', {
-        ticket_id: ticket.id,
-        by_user: user?.id || 'sistema_chamados',
-      }).catch(() => null);
+    try {
+      await DB.save('tickets', ticket);
+      if (becameResolved && ticket.employee_id && typeof DB.applyRouletteCriteriaReward === 'function') {
+        await DB.applyRouletteCriteriaReward(ticket.employee_id, 'chamado_resolvido', {
+          ticket_id: ticket.id,
+          by_user: user?.id || 'sistema_chamados',
+        }).catch(() => null);
+      }
+      alert('Chamado atualizado!');
+    } catch(e) {
+      alert("Erro ao salvar resposta: " + e.message);
+      return;
     }
-    alert('Chamado atualizado!');
+
     document.getElementById('manageTicketModal').classList.remove('open');
 
     if (document.getElementById('manageTicketsTbody')) {
@@ -450,6 +625,7 @@ window.Tickets = {
 
 window.addEventListener('DOMContentLoaded', () => {
   Tickets.init();
+  Tickets._bindTicketActions();
   if (document.getElementById('ticketsList')) {
     Tickets.renderEmployeeList();
   }

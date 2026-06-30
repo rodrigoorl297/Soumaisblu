@@ -19,7 +19,7 @@ const PartnerOps = {
     ]);
     const roles = DB.PARTNER_TEAM_ROLES || ['vendedor', 'backoffice', 'operacional', 'rh', 'financeiro', 'financial', 'employee'];
     const index = (partners || []).map(p => {
-      const rootId = p.user_id;
+      const rootId = p.user_id || p.userId || '';
       const u = users.find(x => x.id === rootId);
       const team = users.filter(x => x.admin_id === rootId && roles.includes(x.role));
       const allIds = typeof DB.expandPartnerOrgIds === 'function'
@@ -91,6 +91,17 @@ const PartnerOps = {
     if (!box) return;
     box.innerHTML = '<div class="card card-padded" style="text-align:center;color:var(--color-text-muted);">Carregando parceiros...</div>';
 
+    try {
+      await this._renderPanelBody(box);
+    } catch (e) {
+      console.error('[PartnerOps] renderPanel:', e);
+      box.innerHTML = `<div class="card card-padded" style="text-align:center;padding:40px;color:#dc2626;">
+        Erro ao carregar parceiros: ${String(e?.message || e).replace(/</g, '&lt;')}
+      </div>`;
+    }
+  },
+
+  async _renderPanelBody(box) {
     const index = await this._getIndex(true);
     const sel = document.getElementById('partnerOpsPartnerFilter');
     if (sel) {
@@ -299,3 +310,8 @@ const PartnerOps = {
     }).join('');
   },
 };
+
+if (typeof window !== 'undefined') window.PartnerOps = PartnerOps;
+// #region agent log
+fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'partner-ops.js:export',message:'PartnerOps exported',data:{hasRenderPanel:typeof PartnerOps.renderPanel==='function',onWindow:!!window.PartnerOps},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+// #endregion

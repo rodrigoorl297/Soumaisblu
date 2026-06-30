@@ -6,9 +6,56 @@ const WithdrawalRules = {
   IRPF_THRESHOLD: 5000,
   IRPF_RATE: 0.035,
   SPLIT_PARTS: 3,
+  PARTNER_FEE_DEFAULT: 10,
 
   _moneyUser(u) {
     return typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(u);
+  },
+
+  _partnerWalletUser(u) {
+    return this._moneyUser(u) && typeof DB !== 'undefined' && typeof DB._isPartnerWalletUser === 'function' && DB._isPartnerWalletUser(u);
+  },
+
+  async _partnerSacFee(emp) {
+    if (!this._partnerWalletUser(emp) || typeof DB === 'undefined') return 0;
+    try {
+      let rootId = emp.role === 'parceiro' ? emp.id : null;
+      if (!rootId && typeof DB.getPartnerRootForUser === 'function') {
+        rootId = await DB.getPartnerRootForUser(emp.id);
+      }
+      if (!rootId) return this.PARTNER_FEE_DEFAULT;
+      const prt = await DB.getPartnerByUserId(rootId);
+      const fee = parseFloat(prt?.meta?.taxa_saque);
+      return Number.isFinite(fee) && fee >= 0 ? fee : this.PARTNER_FEE_DEFAULT;
+    } catch (_) {
+      return this.PARTNER_FEE_DEFAULT;
+    }
+  },
+
+  _parsePartnerMeta(prt) {
+    const raw = prt?.meta;
+    if (raw && typeof raw === 'object') return raw;
+    if (typeof raw === 'string') {
+      try { return JSON.parse(raw) || {}; } catch (_) { return {}; }
+    }
+    return {};
+  },
+
+  async _partnerIrpjRate(emp) {
+    if (!this._partnerWalletUser(emp) || typeof DB === 'undefined') return 0;
+    try {
+      let rootId = emp.role === 'parceiro' ? emp.id : null;
+      if (!rootId && typeof DB.getPartnerRootForUser === 'function') {
+        rootId = await DB.getPartnerRootForUser(emp.id);
+      }
+      if (!rootId) return 0;
+      const prt = await DB.getPartnerByUserId(rootId);
+      const meta = this._parsePartnerMeta(prt);
+      const rate = parseFloat(meta.retencao_irpj ?? meta.retencao_irrf);
+      return Number.isFinite(rate) && rate > 0 ? rate : 0;
+    } catch (_) {
+      return 0;
+    }
   },
 
   _round(n) {
@@ -88,6 +135,50 @@ const WithdrawalRules = {
     }
   },
 
+  _pixTypeAliases: {
+    celular: 'phone', telefone: 'phone', 'e-mail': 'email', mail: 'email',
+    aleatoria: 'random', chave_aleatoria: 'random', evp: 'random',
+  },
+
+  _normalizePixType(type) {
+    const t = String(type || '').trim().toLowerCase();
+    if (!t || t === 'pix') return '';
+    return this._pixTypeAliases[t] || t;
+  },
+
+  /** Valida chave já normalizada (CPF/CNPJ só dígitos, celular +55…). */
+  isValidPixKey(type, key) {
+    const t = this._normalizePixType(type) || 'cpf';
+    const k = String(key || '').trim();
+    if (!k) return false;
+    switch (t) {
+      case 'cpf':
+        return /^\d{11}$/.test(k);
+      case 'cnpj':
+        return /^\d{14}$/.test(k);
+      case 'email':
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(k);
+      case 'phone':
+        return /^\+55\d{10,11}$/.test(k);
+      case 'random':
+        return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k);
+      default:
+        return k.length >= 3;
+    }
+  },
+
+  pixKeyValidationMessage(type) {
+    const labels = {
+      cpf: 'CPF (11 dígitos)',
+      cnpj: 'CNPJ (14 dígitos)',
+      email: 'e-mail válido',
+      phone: 'celular com DDD (+55…)',
+      random: 'chave aleatória (UUID)',
+    };
+    const t = this._normalizePixType(type) || 'cpf';
+    return `Selecione o tipo correto e informe ${labels[t] || 'uma chave PIX válida'}.`;
+  },
+
   readFormPayment() {
     return {
       method: 'pix',
@@ -105,18 +196,15 @@ const WithdrawalRules = {
     const s = saved || { method: 'pix', pix: {}, bank: {} };
     this.setPayMethod();
     const p = s.pix || {};
-    if (p.pix_key_type) {
+    if (p.pix_key_type && typeof window.selectPixType === 'function') {
+      const btn = Array.from(document.querySelectorAll('.pix-key-type-btn')).find((b) => {
+        const oc = b.getAttribute('onclick') || '';
+        return oc.includes("'" + p.pix_key_type + "'") || oc.includes('\\\'' + p.pix_key_type + '\\\'');
+      }) || null;
+      window.selectPixType(p.pix_key_type, btn);
+    } else if (p.pix_key_type) {
       const typeEl = document.getElementById('pixKeyType');
       if (typeEl) typeEl.value = p.pix_key_type;
-      document.querySelectorAll('.pix-key-type-btn').forEach((b) => {
-        b.classList.toggle('active', (b.getAttribute('onclick') || '').includes("'" + p.pix_key_type + "'"));
-      });
-      const labels = { cpf: 'CPF', cnpj: 'CNPJ', email: 'E-mail', phone: 'Celular', random: 'Chave Aleatória' };
-      const ph = { cpf: '000.000.000-00', cnpj: '00.000.000/0001-00', email: 'seu@email.com', phone: '+55 11 99999-9999', random: 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' };
-      const lb = document.getElementById('pixKeyLabel');
-      const pk = document.getElementById('pixKey');
-      if (lb) lb.textContent = labels[p.pix_key_type] || 'Chave PIX';
-      if (pk) pk.placeholder = ph[p.pix_key_type] || '';
     }
     if (p.pix_key) document.getElementById('pixKey').value = p.pix_key;
     if (p.holder_name) document.getElementById('pixHolderName').value = p.holder_name;
@@ -137,7 +225,15 @@ const WithdrawalRules = {
     const p = pay.pix || {};
     if (!p.pix_key) return { ok: false, msg: 'Informe sua chave PIX.' };
     if (!p.holder_name) return { ok: false, msg: 'Informe o nome do titular.' };
-    return { ok: true };
+    if (typeof DB !== 'undefined' && typeof DB.normalizePixPayment === 'function') {
+      const norm = DB.normalizePixPayment(p.pix_key_type, p.pix_key);
+      if (!norm.pix_key || !this.isValidPixKey(norm.pix_key_type, norm.pix_key)) {
+        return { ok: false, msg: this.pixKeyValidationMessage(p.pix_key_type || norm.pix_key_type) };
+      }
+      p.pix_key_type = norm.pix_key_type;
+      p.pix_key = norm.pix_key;
+    }
+    return { ok: true, pix: p };
   },
 
   async evaluate(empId, requestedAmount, emp) {
@@ -149,21 +245,32 @@ const WithdrawalRules = {
     }
 
     const money = this._moneyUser(emp);
+    const partnerWallet = this._partnerWalletUser(emp);
+    const partnerFee = partnerWallet ? await this._partnerSacFee(emp) : 0;
+    const irpjRate = partnerWallet ? await this._partnerIrpjRate(emp) : 0;
+    const irpjTax = partnerWallet && irpjRate > 0 ? this._round(amt * irpjRate / 100) : 0;
     if (!money) {
       if (typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
         const wd = VendorTierPoints.canWithdrawToday(emp);
         if (!wd.ok) return { ok: false, msg: wd.msg };
       }
-      return { ok: true, money: false, netAmount: Math.floor(amt), irpfTax: 0, totalDebit: Math.floor(amt) };
+      return { ok: true, money: false, netAmount: Math.floor(amt), irpfTax: 0, totalDebit: Math.floor(amt), partnerFee: 0 };
     }
 
-    if (amt < this.MIN_BRL) {
-      return { ok: false, msg: `Valor mínimo para saque: R$ ${this.MIN_BRL.toFixed(2).replace('.', ',')}.` };
+    if (!partnerWallet) {
+      if (amt < this.MIN_BRL) {
+        return { ok: false, msg: `Valor mínimo para saque: R$ ${this.MIN_BRL.toFixed(2).replace('.', ',')}.` };
+      }
+    } else if (partnerWallet && (partnerFee + irpjTax) > 0 && amt <= partnerFee + irpjTax) {
+      return {
+        ok: false,
+        msg: `Informe um valor maior que as deduções (taxa + retenção IRPJ).`,
+      };
     }
 
     const allWd = await DB.getWithdrawals(empId);
     const monthList = this._activeWithdrawals(allWd, empId);
-    if (monthList.length >= this.MAX_PER_MONTH) {
+    if (!partnerWallet && monthList.length >= this.MAX_PER_MONTH) {
       return { ok: false, msg: `Limite de ${this.MAX_PER_MONTH} saques por mês atingido.` };
     }
 
@@ -171,15 +278,17 @@ const WithdrawalRules = {
     let irpfReason = '';
     const pendingNext = !!(emp?.withdrawal_irpf_next || emp?.withdrawalIrpfNext);
 
-    if (amt > this.IRPF_THRESHOLD) {
-      irpfTax = this._round(amt * this.IRPF_RATE);
-      irpfReason = 'irpf_acima_5000';
-    } else if (pendingNext) {
-      irpfTax = this._round(amt * this.IRPF_RATE);
-      irpfReason = 'irpf_fracionamento_proximo';
+    if (!partnerWallet) {
+      if (amt > this.IRPF_THRESHOLD) {
+        irpfTax = this._round(amt * this.IRPF_RATE);
+        irpfReason = 'irpf_acima_5000';
+      } else if (pendingNext) {
+        irpfTax = this._round(amt * this.IRPF_RATE);
+        irpfReason = 'irpf_fracionamento_proximo';
+      }
     }
 
-    const willBeThird = monthList.length >= this.MAX_PER_MONTH - 1;
+    const willBeThird = !partnerWallet && monthList.length >= this.MAX_PER_MONTH - 1;
     const allUnderThreshold = monthList.every((w) => Number(w.amount) < this.IRPF_THRESHOLD) && amt < this.IRPF_THRESHOLD;
     const monthSum = monthList.reduce((s, w) => s + Number(w.amount || 0), 0) + amt;
     let flagSplitNext = false;
@@ -187,6 +296,9 @@ const WithdrawalRules = {
       flagSplitNext = true;
     }
 
+    const netAmount = partnerWallet
+      ? this._round(Math.max(0, amt - partnerFee - irpjTax))
+      : amt;
     const totalDebit = this._round(amt + irpfTax);
     const bal = typeof userWalletBalance === 'function' ? userWalletBalance(emp) : Number(emp?.points ?? emp?.balance ?? 0);
     if (totalDebit > bal + 0.001) {
@@ -194,12 +306,17 @@ const WithdrawalRules = {
       return { ok: false, msg: `Saldo insuficiente${extra}. Disponível: ${formatMoney(bal)}.` };
     }
 
-    const remaining = this.MAX_PER_MONTH - monthList.length - 1;
+    const remaining = partnerWallet ? null : this.MAX_PER_MONTH - monthList.length - 1;
 
     return {
       ok: true,
       money: true,
-      netAmount: amt,
+      partnerWallet,
+      partnerFee,
+      irpjRate,
+      irpjTax,
+      requestedAmount: amt,
+      netAmount,
       irpfTax,
       irpfReason,
       totalDebit,
@@ -218,11 +335,28 @@ const WithdrawalRules = {
       return;
     }
     box.style.display = '';
+    const partnerWallet = this._partnerWalletUser(emp);
     const raw = document.getElementById('withdrawAmount')?.value;
     const amt = typeof parseMoneyAmount === 'function' ? parseMoneyAmount(raw) : 0;
+    // #region agent log
+    if (!amt && box.innerHTML && box.innerHTML.includes('Valor solicitado')) {
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'withdrawal-rules.js:updatePreview',message:'stale preview detected',data:{raw,previewSnippet:box.innerHTML.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
+    }
+    // #endregion
     if (!amt) {
+      if (partnerWallet) {
+        this._partnerSacFee(emp).then((fee) => {
+          this._partnerIrpjRate(emp).then((rate) => {
+            const irpjHint = rate > 0
+              ? ` · retenção IRPJ de <strong>${String(rate).replace('.', ',')}%</strong> sobre o valor solicitado`
+              : '';
+            box.innerHTML = `<div style="font-size:12px;color:var(--color-text-muted);line-height:1.5;">Parceiro: sem limite de saques/mês · taxa administrativa de <strong>R$ ${fee.toFixed(2).replace('.', ',')}</strong>${irpjHint} · valor líquido via PIX.</div>`;
+          });
+        }).catch(() => {});
+        return;
+      }
       let hint = `Mín. R$ ${this.MIN_BRL.toFixed(2).replace('.', ',')} · máx. ${this.MAX_PER_MONTH} saques/mês · IRPF 3,5% acima de R$ 5.000,00`;
-      if (typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
+      if (!partnerWallet && typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
         const wd = VendorTierPoints.canWithdrawToday(emp);
         hint = `Saque de pontos: dias ${VendorTierPoints.WITHDRAW_DAY_MIN} a ${VendorTierPoints.WITHDRAW_DAY_MAX} · crédito de faixa todo dia ${VendorTierPoints.CREDIT_DAY}`;
         if (!wd.ok) hint += `<div style="color:var(--color-warning);margin-top:4px;">${wd.msg}</div>`;
@@ -236,12 +370,25 @@ const WithdrawalRules = {
         return;
       }
       let html = `<div style="font-size:12px;line-height:1.55;">
-        <div>Valor do saque: <strong>${formatMoney(r.netAmount)}</strong></div>`;
+        <div>Valor solicitado: <strong>${formatMoney(r.requestedAmount ?? r.netAmount)}</strong></div>`;
+      if (r.partnerFee > 0) {
+        html += `<div style="color:var(--color-warning);">Taxa administrativa: <strong>− ${formatMoney(r.partnerFee)}</strong></div>`;
+      }
+      if (r.irpjTax > 0) {
+        html += `<div style="color:var(--color-warning);">Retenção IRPJ (${String(r.irpjRate || '').replace('.', ',')}%): <strong>− ${formatMoney(r.irpjTax)}</strong></div>`;
+      }
+      if (r.partnerFee > 0 || r.irpjTax > 0) {
+        html += `<div>Valor líquido PIX: <strong>${formatMoney(r.netAmount)}</strong></div>`;
+      } else {
+        html += `<div>Valor do saque: <strong>${formatMoney(r.netAmount)}</strong></div>`;
+      }
       if (r.irpfTax > 0) {
         html += `<div style="color:var(--color-warning);">IRPF (3,5%): <strong>− ${formatMoney(r.irpfTax)}</strong></div>`;
       }
-      html += `<div>Total debitado do saldo: <strong>${formatMoney(r.totalDebit)}</strong></div>
-        <div style="color:var(--color-text-muted);margin-top:4px;">${r.remainingThisMonth} saque(s) restante(s) neste mês.</div>`;
+      html += `<div>Total debitado do saldo: <strong>${formatMoney(r.totalDebit)}</strong></div>`;
+      if (r.remainingThisMonth != null) {
+        html += `<div style="color:var(--color-text-muted);margin-top:4px;">${r.remainingThisMonth} saque(s) restante(s) neste mês.</div>`;
+      }
       if (emp?.withdrawal_irpf_next && r.irpfReason === 'irpf_fracionamento_proximo') {
         html += `<div style="color:var(--color-warning);margin-top:4px;">Imposto aplicado por fracionamento em saques anteriores.</div>`;
       }
@@ -301,8 +448,21 @@ const WithdrawalRules = {
 
   configureModalForUser(emp) {
     const money = this._moneyUser(emp);
+    const partnerWallet = this._partnerWalletUser(emp);
     const hint = document.getElementById('wdRulesHint');
-    if (hint) hint.style.display = money ? '' : 'none';
+    if (hint) {
+      hint.style.display = money ? '' : 'none';
+      if (partnerWallet) {
+        this._partnerSacFee(emp).then((fee) => {
+          this._partnerIrpjRate(emp).then((rate) => {
+            const irpjHint = rate > 0
+              ? ` Retenção IRPJ de <strong>${String(rate).replace('.', ',')}%</strong> sobre o valor solicitado.`
+              : '';
+            hint.innerHTML = `<strong>Parceiro:</strong> sem limite de valor mínimo nem de saques por mês. Taxa administrativa de <strong>R$ ${fee.toFixed(2).replace('.', ',')}</strong>.${irpjHint} O PIX credita o valor líquido após as deduções.`;
+          });
+        }).catch(() => {});
+      }
+    }
     const amtLbl = document.getElementById('withdrawAmountLabel');
     if (amtLbl) amtLbl.textContent = money ? 'Valor a sacar (R$)' : 'Pontos a resgatar';
     const preview = document.getElementById('wdRulesPreview');

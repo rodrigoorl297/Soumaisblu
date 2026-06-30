@@ -7,14 +7,31 @@ let _faceHashCapturado = '';
 
 /* ── PIX key selector ── */
 function selectPixType(type, btn) {
-  document.querySelectorAll('.pix-key-type-btn').forEach(b=>b.classList.remove('active'));
-  btn.classList.add('active');
-  document.getElementById('pixKeyType').value = type;
+  document.querySelectorAll('.pix-key-type-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  else {
+    document.querySelectorAll('.pix-key-type-btn').forEach((b) => {
+      const oc = b.getAttribute('onclick') || '';
+      if (oc.includes("'" + type + "'") || oc.includes('\\\'' + type + '\\\'')) b.classList.add('active');
+    });
+  }
+  const typeEl = document.getElementById('pixKeyType');
+  if (typeEl) typeEl.value = type;
   const labels       = {cpf:'CPF',cnpj:'CNPJ',email:'E-mail',phone:'Celular',random:'Chave Aleatória'};
-  const placeholders = {cpf:'000.000.000-00',cnpj:'00.000.000/0001-00',email:'seu@email.com',phone:'+55 11 99999-9999',random:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'};
-  document.getElementById('pixKeyLabel').textContent = labels[type];
-  document.getElementById('pixKey').placeholder = placeholders[type];
+  const placeholders = {cpf:'000.000.000-00',cnpj:'00.000.000/0001-00',email:'seu@email.com',phone:'(11) 99999-9999 ou +5511999999999',random:'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx'};
+  const labelEl = document.getElementById('pixKeyLabel');
+  const keyEl = document.getElementById('pixKey');
+  if (labelEl) labelEl.textContent = labels[type] || 'Chave PIX';
+  if (keyEl) {
+    keyEl.placeholder = placeholders[type] || '';
+    keyEl.inputMode = type === 'email' ? 'email' : ((type === 'cpf' || type === 'cnpj' || type === 'phone') ? 'tel' : 'text');
+    keyEl.autocomplete = type === 'email' ? 'email' : 'off';
+    keyEl.removeAttribute('maxlength');
+    if (type === 'cpf') keyEl.setAttribute('maxlength', '14');
+    if (type === 'cnpj') keyEl.setAttribute('maxlength', '18');
+  }
 }
+window.selectPixType = selectPixType;
 
 /* ── PASSO 1 → próximo passo ── */
 async function goToTermStep() {
@@ -27,11 +44,14 @@ async function goToTermStep() {
   const formOk = typeof WithdrawalRules !== 'undefined'
     ? WithdrawalRules.validatePaymentForm(pay)
     : { ok: !!pay.pix?.pix_key && !!pay.pix?.holder_name };
-  if (!formOk.ok) { showToast(formOk.msg || 'Dados de pagamento incompletos.', 'warning'); return; }
-
   const amt = moneyWallet
     ? (typeof parseMoneyAmount === 'function' ? parseMoneyAmount(rawAmt) : parseFloat(rawAmt))
     : Math.max(0, Math.floor(Number(rawAmt)));
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'withdrawal-flow.js:goToTermStep',message:'step1 validation',data:{rawAmt,amt,formOk,moneyWallet,pixKey:pay.pix?.pix_key||'',holderName:pay.pix?.holder_name||''},timestamp:Date.now(),hypothesisId:'H1-H3',runId:'post-fix'})}).catch(()=>{});
+  // #endregion
+  if (!formOk.ok) { showToast(formOk.msg || 'Dados de pagamento incompletos.', 'warning'); return; }
+
   if (!amt || amt <= 0) {
     showToast(moneyWallet ? 'Informe o valor em reais.' : 'Informe a quantidade de pontos.', 'warning');
     return;
@@ -41,6 +61,9 @@ async function goToTermStep() {
 
   if (moneyWallet && typeof WithdrawalRules !== 'undefined') {
     const ev = await WithdrawalRules.evaluate(currentUser.id, amt, currentUser);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'withdrawal-flow.js:goToTermStep',message:'evaluate result',data:{amt,ok:ev.ok,msg:ev.msg||null,partnerFee:ev.partnerFee,irpjTax:ev.irpjTax,netAmount:ev.netAmount},timestamp:Date.now(),hypothesisId:'H4',runId:'post-fix'})}).catch(()=>{});
+    // #endregion
     if (!ev.ok) { showToast(ev.msg, 'error', 6000); return; }
     window._wdCalc = ev;
   } else {
@@ -180,7 +203,8 @@ function goToFaceStepFromDoc() {
 /* ── Termo ── */
 function openTermScreen(amount, pixType, pixKey, holderName) {
   const calc = window._wdCalc || {};
-  const amtDisp = calc.netAmount != null ? calc.netAmount : (typeof parseMoneyAmount === 'function' ? parseMoneyAmount(amount) : amount);
+  const requested = calc.requestedAmount != null ? calc.requestedAmount : (typeof parseMoneyAmount === 'function' ? parseMoneyAmount(amount) : amount);
+  const amtDisp = calc.netAmount != null ? calc.netAmount : requested;
   document.getElementById('termAmount').textContent = formatCurrency(amtDisp, currentUser);
   const pay = window._wdPaymentDraft || {};
   const payLabel = pay.method === 'conta' ? 'Conta corrente' : `PIX ${String(pixType || '').toUpperCase()}`;
@@ -191,7 +215,45 @@ function openTermScreen(amount, pixType, pixKey, holderName) {
       ? 'O pagamento será realizado via <strong>transferência para conta corrente</strong> (dados informados nesta solicitação). É de responsabilidade exclusiva do solicitante garantir que banco, agência, conta e titular estão corretos e atualizados.'
       : 'O pagamento será realizado via <strong>transferência PIX</strong> para a chave informada nesta solicitação. É de responsabilidade exclusiva do solicitante garantir que os dados bancários estão corretos e atualizados.';
   }
+  let feeClause = document.getElementById('termClausePartnerFee');
+  const scrollArea = document.getElementById('termScrollArea');
+  if (calc.partnerFee > 0) {
+    const feeTxt = typeof formatMoney === 'function' ? formatMoney(calc.partnerFee) : `R$ ${calc.partnerFee}`;
+    const reqTxt = typeof formatMoney === 'function' ? formatMoney(requested) : String(requested);
+    if (!feeClause && scrollArea) {
+      const block = document.createElement('div');
+      block.id = 'termClausePartnerFee';
+      block.style.cssText = 'border-left:3px solid var(--color-warning);padding-left:16px;margin-bottom:20px;';
+      block.innerHTML = `<p style="font-weight:700;margin-bottom:8px;color:var(--color-text);">Cláusula — Taxa administrativa (parceiro)</p>
+        <p style="font-size:13px;line-height:1.8;color:var(--color-text-secondary);">Sobre o valor solicitado de <strong>${reqTxt}</strong>, será descontada taxa administrativa de <strong>${feeTxt}</strong>. O crédito via PIX será do valor líquido após essa dedução.</p>`;
+      const transfer = document.getElementById('termClauseTransfer');
+      if (transfer && transfer.parentElement) {
+        transfer.parentElement.insertAdjacentElement('afterend', block);
+      } else {
+        scrollArea.querySelector('div[style*="max-width"]')?.appendChild(block);
+      }
+      feeClause = block;
+    } else if (feeClause) {
+      feeClause.style.display = '';
+      feeClause.querySelector('p:last-child').innerHTML = `Sobre o valor solicitado de <strong>${reqTxt}</strong>, será descontada taxa administrativa de <strong>${feeTxt}</strong>. O crédito via PIX será do valor líquido após essa dedução.`;
+    }
+  } else if (feeClause) {
+    feeClause.style.display = 'none';
+  }
   let holderHtml = `Titular: <strong>${holderName}</strong>`;
+  if (calc.partnerFee > 0 || calc.irpjTax > 0) {
+    holderHtml += `<div style="margin-top:8px;font-size:13px;color:var(--color-warning);">
+      Valor solicitado: <strong>${typeof formatMoney === 'function' ? formatMoney(requested) : requested}</strong><br>`;
+    if (calc.partnerFee > 0) {
+      holderHtml += `Taxa administrativa: <strong>− ${typeof formatMoney === 'function' ? formatMoney(calc.partnerFee) : calc.partnerFee}</strong><br>`;
+    }
+    if (calc.irpjTax > 0) {
+      const rateLbl = calc.irpjRate ? ` (${String(calc.irpjRate).replace('.', ',')}%)` : '';
+      holderHtml += `Retenção IRPJ${rateLbl}: <strong>− ${typeof formatMoney === 'function' ? formatMoney(calc.irpjTax) : calc.irpjTax}</strong><br>`;
+    }
+    holderHtml += `Valor líquido PIX: <strong>${formatCurrency(amtDisp, currentUser)}</strong>
+    </div>`;
+  }
   if (calc.irpfTax > 0) {
     holderHtml += `<div style="margin-top:8px;font-size:13px;color:var(--color-warning);">
       Retenção IRPF (3,5%): <strong>${formatMoney(calc.irpfTax)}</strong><br>
@@ -549,6 +611,8 @@ async function executeWithdrawal() {
 
     if (r.irpf_tax > 0 && typeof showToast === 'function') {
       showToast(`Saque registrado. Retenção IRPF: ${formatMoney(r.irpf_tax)}.`, 'info', 5000);
+    } else if (r.partner_fee > 0 && typeof showToast === 'function') {
+      showToast(`Saque registrado. Taxa administrativa: ${formatMoney(r.partner_fee)}. Valor líquido PIX: ${formatMoney(r.withdrawal?.amount)}.`, 'info', 6000);
     }
 
     const isBank = payDraft?.method === 'conta';

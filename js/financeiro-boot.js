@@ -8,7 +8,7 @@
     secPrestadorServicos: 'Cadastro prestador serviço',
     secFiscalParceiro: 'Fiscal parceiro',
     secContaCorrente: 'Conta corrente administrar',
-    secEsteiraCredito: 'Esteira proposta crédito',
+    secEsteiraCredito: 'Esteira de crédito',
     secRetornoPropostas: 'Retorno de propostas',
     secAdiantamentoSalarial: 'Adiantamento salarial',
     secSolicitarReembolso: 'Solicitar reembolso',
@@ -324,12 +324,25 @@
         if (typeof renderRhPartnersPanel === 'function') await renderRhPartnersPanel();
         else if (typeof renderPartnersPanel === 'function') await renderPartnersPanel();
       },
-      secPartnerOps: () => {
+      secPartnerOps: async () => {
+        const box = document.getElementById('partnerOpsContent');
         if (typeof canViewFinanceiroPartnerNav === 'function' && !canViewFinanceiroPartnerNav()) {
           if (typeof showToast === 'function') showToast('Sem permissão para gestão de parceiros.', 'warning');
-          return Promise.resolve();
+          if (box) {
+            box.innerHTML = '<div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-text-muted);">Sem permissão para esta área.</div>';
+          }
+          return;
         }
-        return window.PartnerOps?.renderPanel?.();
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'financeiro-boot.js:secPartnerOps',message:'PartnerOps check',data:{hasPartnerOps:!!window.PartnerOps,hasRenderPanel:typeof window.PartnerOps?.renderPanel==='function'},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
+        // #endregion
+        if (!window.PartnerOps?.renderPanel) {
+          if (box) {
+            box.innerHTML = '<div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-text-muted);">Módulo PartnerOps não carregado. Recarregue a página (Ctrl+F5).</div>';
+          }
+          return;
+        }
+        return window.PartnerOps.renderPanel();
       },
     };
 
@@ -405,6 +418,7 @@
       wireBalanceForm();
       if (typeof wirePartnerBalanceForm === 'function') wirePartnerBalanceForm();
       wireSidebar();
+      if (window.WhatsAppChat?.applyNavVisibility) WhatsAppChat.applyNavVisibility();
     },
 
     async openSection(sectionId, opts) {

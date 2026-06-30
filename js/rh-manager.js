@@ -12,6 +12,19 @@ let _allResumes = [];
 let _allJobs = [];
 window._allEmployees = window._allEmployees || [];
 
+function _rhEmpSortKey(row) {
+  return String(row?.nome || row?.name || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase('pt-BR');
+}
+
+function _sortRhEmpByName(rows) {
+  return (rows || []).slice().sort((a, b) =>
+    _rhEmpSortKey(a).localeCompare(_rhEmpSortKey(b), 'pt-BR', { sensitivity: 'base' })
+  );
+}
+
 let _editingCvId = null;
 let _editingJobId = null;
 
@@ -87,6 +100,153 @@ function _fmtCpf(v) {
   return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
 }
 
+const _lastRhFonteBundle = { cv: null, emp: null };
+
+function _fonteDateToInput(raw) {
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+  return '';
+}
+
+function _fmtPis(digits) {
+  const d = _digits(digits);
+  if (d.length !== 11) return digits || '';
+  return d.replace(/^(\d{3})(\d{5})(\d{2})$/, '$1.$2.$3-$4');
+}
+
+function _rhMetaFromRow(row) {
+  let meta = row?.fontedata_meta;
+  if (typeof meta === 'string') {
+    try { meta = JSON.parse(meta); } catch { meta = null; }
+  }
+  return meta && typeof meta === 'object' ? meta : null;
+}
+
+function _renderRhFonteInfo(prefix, bundle) {
+  const el = document.getElementById(`${prefix}_fontedata_info`);
+  if (!el) return;
+  const html = (typeof FonteData !== 'undefined' && FonteData.formatRhConsultaSummary)
+    ? FonteData.formatRhConsultaSummary(bundle)
+    : '';
+  if (!html) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  el.style.display = '';
+  el.innerHTML = html;
+}
+
+function _applyRhFonteBundle(prefix, bundle) {
+  _lastRhFonteBundle[prefix] = bundle;
+  const nomeId = prefix === 'emp' ? 'emp_nome' : 'cv_nome';
+
+  if (bundle?.basico?.ok && bundle.basico.client) {
+    const c = bundle.basico.client;
+    if (c.name) _set(nomeId, c.name);
+    if (prefix === 'cv') {
+      if (c.phone1) _set('cv_contato', c.phone1);
+      if (c.email) _set('cv_email', c.email);
+    } else {
+      if (c.phone1) _set('emp_contato', c.phone1);
+      if (c.email) _set('emp_email_pessoal', c.email);
+    }
+    const bd = _fonteDateToInput(c.birthDate);
+    if (bd && !_val(`${prefix}_data_nascimento`)) _set(`${prefix}_data_nascimento`, bd);
+  }
+
+  if (bundle?.receita?.ok && bundle.receita.receita) {
+    const r = bundle.receita.receita;
+    if (r.nome) _set(nomeId, r.nome);
+    const dn = _fonteDateToInput(r.data_nascimento);
+    if (dn) _set(`${prefix}_data_nascimento`, dn);
+    _set(`${prefix}_situacao_rf`, r.situacao_cadastral || '');
+  }
+
+  if (bundle?.pis?.ok && bundle.pis.pis) {
+    const p = bundle.pis.pis;
+    if (p.pis) _set(`${prefix}_pis`, _fmtPis(p.pis));
+  }
+
+  _renderRhFonteInfo(prefix, bundle);
+}
+
+function _fonteMetaForSave(prefix) {
+  const bundle = _lastRhFonteBundle[prefix];
+  if (!bundle) return null;
+  return {
+    consultado_em: new Date().toISOString(),
+    receita: bundle.receita?.ok ? bundle.receita.receita : (bundle.receita?.error || null),
+    pis: bundle.pis?.ok ? bundle.pis.pis : (bundle.pis?.error || null),
+    basico: bundle.basico?.ok ? bundle.basico.client : (bundle.basico?.error || null),
+  };
+}
+
+async function _consultarFonteDataRh(prefix) {
+  const cpfId = prefix === 'emp' ? 'emp_cpf' : 'cv_cpf';
+  const cpf = _digits(_val(cpfId));
+  if (cpf.length !== 11) {
+    showToast('Informe um CPF válido (11 dígitos).', 'warning');
+    return null;
+  }
+  if (typeof FonteData === 'undefined' || typeof FonteData.lookupRhPerson !== 'function') {
+    showToast('API FonteData não disponível. Recarregue a página.', 'error');
+    return null;
+  }
+
+  const dataNasc = _val(`${prefix}_data_nascimento`);
+  showLoading('Consultando Receita Federal, PIS e cadastro...');
+  try {
+    const bundle = await FonteData.lookupRhPerson(cpf, dataNasc);
+    if (!bundle.ok) {
+      _renderRhFonteInfo(prefix, bundle);
+      showToast(bundle.error || 'Nenhuma consulta retornou dados.', 'warning');
+      return bundle;
+    }
+    _applyRhFonteBundle(prefix, bundle);
+    const parts = [];
+    if (bundle.receita?.ok) parts.push('Receita Federal');
+    if (bundle.pis?.ok) parts.push('PIS');
+    if (bundle.basico?.ok) parts.push('cadastro');
+    showToast(`Consultas concluídas: ${parts.join(', ') || 'dados carregados'}.`, 'success');
+    return bundle;
+  } catch (e) {
+    console.error('[RH] _consultarFonteDataRh:', e);
+    showToast('Falha nas consultas FonteData.', 'error');
+    return null;
+  } finally {
+    hideLoading();
+  }
+}
+
+function _loadRhFonteFieldsFromRow(prefix, row) {
+  if (!row) return;
+  const meta = _rhMetaFromRow(row);
+  const dn = _fonteDateToInput(row.data_nascimento || meta?.receita?.data_nascimento || meta?.pis?.data_nascimento);
+  if (dn) _set(`${prefix}_data_nascimento`, dn);
+  const pis = row.pis || meta?.pis?.pis || meta?.pis?.pis_formatado;
+  if (pis) _set(`${prefix}_pis`, _fmtPis(pis));
+  const sit = row.situacao_cadastral || meta?.receita?.situacao_cadastral;
+  if (sit) _set(`${prefix}_situacao_rf`, sit);
+  if (meta) {
+    _renderRhFonteInfo(prefix, {
+      ok: true,
+      receita: meta.receita && typeof meta.receita === 'object' && !meta.receita.error
+        ? { ok: true, receita: meta.receita } : { ok: false, error: meta.receita },
+      pis: meta.pis && typeof meta.pis === 'object' && !meta.pis.error
+        ? { ok: true, pis: meta.pis } : { ok: false, error: meta.pis },
+      basico: meta.basico && typeof meta.basico === 'object' && !meta.basico.error
+        ? { ok: true, client: meta.basico } : { ok: false, error: meta.basico },
+    });
+  } else {
+    _renderRhFonteInfo(prefix, null);
+  }
+  _lastRhFonteBundle[prefix] = null;
+}
+
 function _fmtDate(iso) {
   if (!iso) return '—';
   try {
@@ -105,21 +265,22 @@ function _set(id, v) {
   if (el) el.value = v ?? '';
 }
 
-function _gerarProtocoloRh() {
+/** Prefixo fixo — não usar _gerarProtocoloRh de rh-ops.js (carregado depois e exige prefix). */
+function _gerarProtocoloRhManager(prefix = 'RH') {
   const d = new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
   const seq = String(Math.floor(1000 + Math.random() * 9000));
-  return `RH-${ymd}-${seq}`;
+  return `${prefix}-${ymd}-${seq}`;
 }
 
 function gerarProtocoloCurriculo() {
-  const p = _gerarProtocoloRh();
+  const p = _gerarProtocoloRhManager('RH');
   _set('cv_protocolo', p);
   return p;
 }
 
 function gerarProtocoloCargo() {
-  const p = _gerarProtocoloRh();
+  const p = _gerarProtocoloRhManager('RH');
   _set('jg_protocolo', p);
   return p;
 }
@@ -429,11 +590,27 @@ function navigateBack() {
 }
 
 function openJuridicoChamados() {
-  window.location.replace(_adminPanelHrefFresh('secManageTickets'));
+  const base = typeof Auth !== 'undefined' && Auth.juridicoManagerPageHrefFresh
+    ? Auth.juridicoManagerPageHrefFresh()
+    : (typeof Auth !== 'undefined' && Auth.resolveHref
+      ? Auth.resolveHref('pages/juridico-manager.html')
+      : 'pages/juridico-manager.html');
+  try {
+    const u = new URL(base, window.location.href);
+    u.hash = 'chamados';
+    window.location.replace(u.href);
+  } catch (_) {
+    window.location.replace(`${base}#chamados`);
+  }
 }
 
 function openJuridicoContestacao() {
-  window.location.replace(_adminPanelHrefFresh('secContestacao'));
+  const base = typeof Auth !== 'undefined' && Auth.juridicoManagerPageHrefFresh
+    ? Auth.juridicoManagerPageHrefFresh()
+    : (typeof Auth !== 'undefined' && Auth.resolveHref
+      ? Auth.resolveHref('pages/juridico-manager.html')
+      : 'pages/juridico-manager.html');
+  window.location.replace(base);
 }
 
 /* ══ RENDER LISTAS ══ */
@@ -534,23 +711,44 @@ function renderJobList() {
   const tbody = document.getElementById('job_list_body');
   if (!tbody) return;
   if (!_allJobs.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
     return;
   }
-  tbody.innerHTML = _allJobs.map((j) => `<tr>
+  tbody.innerHTML = _allJobs.map((j) => {
+    const insalubre = String(j.trabalho_insalubre || 'NÃO').toUpperCase() === 'SIM' ? 'SIM' : 'NÃO';
+    const insBadge = insalubre === 'SIM' ? 'badge-warning' : 'badge-muted';
+    return `<tr>
     <td><code>${_esc(j.protocolo || '—')}</code></td>
     <td><strong>${_esc(j.cargo)}</strong></td>
     <td>${_esc(j.cbo_cod || j.cbo_codigo || '—')}</td>
     <td>${_esc(j.cbo_descricao || '—')}</td>
     <td>${_esc(j.departamento || '—')}</td>
+    <td><span class="badge ${insBadge}">${insalubre}</span></td>
     <td><button type="button" class="btn btn-xs btn-outline" onclick="editCargo('${_esc(j.id)}')">Editar</button></td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('');
 }
 
 function renderEmployeeList() {
   const tbody = document.getElementById('employee_list_body');
   if (!tbody) return;
-  const list = window._allEmployees || [];
+  const raw = window._allEmployees || [];
+  const list = _sortRhEmpByName(raw);
+  // #region agent log
+  try {
+    const sample = list.slice(0, 5).map((e) => _rhEmpSortKey(e));
+    const rawSample = raw.slice(0, 5).map((e) => _rhEmpSortKey(e));
+    const sorted = sample.length <= 1 || sample.every((n, i, arr) => i === 0 || arr[i - 1].localeCompare(n, 'pt-BR', { sensitivity: 'base' }) <= 0);
+    const dbg = { count: list.length, sorted, rawFirst: rawSample, sortedFirst: sample, scriptV: '97c411rh2' };
+    window.__rhSortDbg = dbg;
+    if (tbody) {
+      tbody.dataset.rhSort = sorted ? '1' : '0';
+      tbody.dataset.rhSortVer = '97c411rh2';
+    }
+    const logBody = JSON.stringify({ sessionId: '97c411', location: 'rh-manager.js:renderEmployeeList', message: 'employee list sort', data: dbg, timestamp: Date.now(), hypothesisId: 'H1-rh-sort', runId: 'post-fix' });
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: logBody }).catch(() => {});
+  } catch (_) {}
+  // #endregion
   if (!list.length) {
     tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
     return;
@@ -594,7 +792,7 @@ async function reloadAllData(opts = {}) {
     _allCompanies = companies || [];
     _allResumes = resumes || [];
     _allJobs = jobs || [];
-    window._allEmployees = employees || [];
+    window._allEmployees = _sortRhEmpByName(employees || []);
     window._allCompanies = _allCompanies;
     window._allResumes = _allResumes;
     window._allJobs = _allJobs;
@@ -701,6 +899,9 @@ function openCurriculoModal(row) {
     _set('cv_nome_terceiros', row.nome_terceiros || '');
     _set('cv_unidade', row.unidade || '');
     _set('cv_vaga', row.vaga_id || row.vaga || '');
+    _loadRhFonteFieldsFromRow('cv', row);
+  } else {
+    _loadRhFonteFieldsFromRow('cv', null);
   }
 
   openModalRH('curriculoModal');
@@ -712,28 +913,7 @@ function editCurriculo(id) {
 }
 
 async function buscarCpfCurriculo() {
-  const cpf = _digits(_val('cv_cpf'));
-  if (cpf.length !== 11) {
-    showToast('Informe um CPF válido (11 dígitos).', 'warning');
-    return;
-  }
-  showLoading('Consultando CPF...');
-  try {
-    const res = await FonteData.lookupCpf(cpf);
-    if (!res.ok) {
-      showToast(res.error || 'Não foi possível consultar o CPF.', 'error');
-      return;
-    }
-    if (res.client?.name) _set('cv_nome', res.client.name);
-    if (res.client?.phone1) _set('cv_contato', res.client.phone1);
-    if (res.client?.email) _set('cv_email', res.client.email);
-    showToast('Dados do CPF carregados.', 'success');
-  } catch (e) {
-    console.error('[RH] buscarCpfCurriculo:', e);
-    showToast('Falha na consulta do CPF.', 'error');
-  } finally {
-    hideLoading();
-  }
+  await _consultarFonteDataRh('cv');
 }
 
 async function salvarCurriculo(event) {
@@ -764,6 +944,10 @@ async function salvarCurriculo(event) {
     nome_terceiros: _val('cv_nome_terceiros').trim(),
     unidade: _val('cv_unidade').trim(),
     vaga_id: vagaId,
+    data_nascimento: _val('cv_data_nascimento') || null,
+    pis: _digits(_val('cv_pis')),
+    situacao_cadastral: _val('cv_situacao_rf').trim(),
+    fontedata_meta: _fonteMetaForSave('cv'),
     stage: _editingCvId
       ? (_allResumes.find((r) => String(r.id) === String(_editingCvId))?.stage || 'triagem')
       : 'triagem',
@@ -789,6 +973,7 @@ function openCargoModal(row) {
   if (form) form.reset();
   _editingJobId = null;
   _set('jg_id', '');
+  _set('jg_trabalho_insalubre', 'NÃO');
   gerarProtocoloCargo();
 
   if (row) {
@@ -800,6 +985,7 @@ function openCargoModal(row) {
     _set('jg_cbo_descricao', row.cbo_descricao || '');
     _set('jg_hierarquia', row.hierarquia || '');
     _set('jg_departamento', row.departamento || '');
+    _set('jg_trabalho_insalubre', String(row.trabalho_insalubre || 'NÃO').toUpperCase() === 'SIM' ? 'SIM' : 'NÃO');
     const search = document.getElementById('jg_cbo_search');
     if (search && row.cbo_cod) {
       search.value = `${row.cbo_cod || row.cbo_codigo} — ${row.cbo_descricao || ''}`;
@@ -833,6 +1019,7 @@ async function salvarCargo(event) {
     cbo_descricao: desc,
     hierarquia: _val('jg_hierarquia').trim(),
     departamento: dept,
+    trabalho_insalubre: _val('jg_trabalho_insalubre') === 'SIM' ? 'SIM' : 'NÃO',
   };
 
   showLoading('Salvando cargo...');
@@ -862,6 +1049,7 @@ function limparFormFuncionario() {
   const hist = document.getElementById('history_log');
   if (hist) hist.innerHTML = '';
   document.getElementById('funcModalTitle').textContent = 'Novo Funcionário';
+  _loadRhFonteFieldsFromRow('emp', null);
 }
 
 async function openFuncionarioModal(row) {
@@ -911,6 +1099,7 @@ async function openFuncionarioModal(row) {
     _set('emp_emergencia_contato_2', row.emergencia_contato_2 || '');
     _set('emp_role', row.system_role || row.role || 'vendedor');
     _fillPermissoesForm(row.permissions || {});
+    _loadRhFonteFieldsFromRow('emp', row);
 
     const audit = document.getElementById('emp_audit_section');
     if (audit) audit.style.display = '';
@@ -988,26 +1177,14 @@ async function buscarCpfFuncionario() {
     if (!_val('emp_email_pessoal')) _set('emp_email_pessoal', cv.email || '');
     if (!_val('emp_protocolo_entrevista')) _set('emp_protocolo_entrevista', cv.protocolo || '');
     if (!_val('emp_cargo') && cv.vaga_id) _set('emp_cargo', cv.vaga_id);
+    if (!_val('emp_data_nascimento') && cv.data_nascimento) {
+      _set('emp_data_nascimento', _fonteDateToInput(cv.data_nascimento));
+    }
+    if (!_val('emp_pis') && cv.pis) _set('emp_pis', _fmtPis(cv.pis));
     _onEmpCargoChange();
   }
 
-  showLoading('Consultando bases de dados...');
-  try {
-    const res = await FonteData.lookupCpf(cpf);
-    if (res.ok && res.client) {
-      if (res.client.name) _set('emp_nome', res.client.name);
-      if (res.client.phone1) _set('emp_contato', res.client.phone1);
-      if (res.client.email) _set('emp_email_pessoal', res.client.email);
-      showToast('Dados do CPF carregados.', 'success');
-    } else if (!cv) {
-      showToast(res.error || 'Nenhum dado encontrado para este CPF.', 'warning');
-    }
-  } catch (e) {
-    console.error('[RH] buscarCpfFuncionario:', e);
-    showToast('Falha na consulta do CPF.', 'error');
-  } finally {
-    hideLoading();
-  }
+  await _consultarFonteDataRh('emp');
 }
 
 async function buscarCnpjFuncionario() {
@@ -1153,6 +1330,10 @@ async function salvarFuncionario(event) {
     emergencia_contato_1: _val('emp_emergencia_contato_1').trim(),
     emergencia_nome_2: _val('emp_emergencia_nome_2').trim(),
     emergencia_contato_2: _val('emp_emergencia_contato_2').trim(),
+    data_nascimento: _val('emp_data_nascimento') || null,
+    pis: _digits(_val('emp_pis')),
+    situacao_cadastral: _val('emp_situacao_rf').trim(),
+    fontedata_meta: _fonteMetaForSave('emp'),
     system_role: role,
     role,
     permissions,

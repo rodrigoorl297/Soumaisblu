@@ -1,0 +1,115 @@
+SOU+BLU — Deploy Locaweb (public_html)
+Data do pacote: 2026-06-19
+Git: b58e0f9 (master)
+
+================================================================================
+1. ONDE SUBIR
+================================================================================
+Locaweb → Gerenciador de arquivos → public_html/
+Conteúdo desta pasta na RAIZ do site (não criar subpasta deploy/).
+
+URL: https://www.soumaisblu.com.br
+
+================================================================================
+2. PACOTE ZIP (recomendado)
+================================================================================
+Arquivo gerado ao lado desta pasta:
+  ../SOUBLU_deploy_2026-06-19.zip
+
+Descompacte e envie o CONTEÚDO para public_html/ via WebFTP.
+
+O ZIP NÃO inclui (propositalmente):
+  - .git/
+  - config.db.local.php / config.pix.local.php (já no servidor — NÃO sobrescrever)
+  - certs/*.p12
+  - storage/fontedata_cache/ (cache local de CPF)
+  - scripts/ de desenvolvimento
+  - arquivos temp (_extract_tmp.txt, temp_orig*.html, router-dev.php, etc.)
+
+================================================================================
+3. ARQUIVOS QUE JÁ DEVEM ESTAR NO SERVIDOR (não apagar)
+================================================================================
+public_html/config.db.local.php
+public_html/config.pix.local.php
+public_html/certs/efipay-producao.p12
+public_html/uploads/          (fotos e anexos — manter pasta)
+
+Permissão de escrita: uploads/ e storage/
+
+================================================================================
+4. PRIORIDADE — correções parceiro + chamados (commits 2ac44b8)
+================================================================================
+Subir estes JS/HTML se o servidor estiver desatualizado:
+
+  js/db.js
+  js/partners.js
+  js/proposals.js
+  js/tickets.js
+  js/ui.js
+  js/profile.js
+  js/employee.js
+  js/admin.js
+  js/partners-ui.js
+  js/partner-ops.js
+  api/upload.php
+  admin.html
+  pages/admin.html
+  employee.html
+  pages/employee.html
+
+Cache-bust no HTML (?v=): proposals.js v=43, partners.js, tickets.js
+
+Depois: Ctrl+F5 no navegador.
+
+================================================================================
+5. NOVIDADES deste pacote (commits fa8b735 + b58e0f9)
+================================================================================
+  api/fontedata.php
+  js/rh-manager.js
+  js/rh-ops.js
+  js/prestador-servicos.js
+  js/juridico-manager.js          (NOVO)
+  pages/juridico-manager.html     (NOVO)
+  js/monitoria-atendimento.js
+  js/financeiro-boot.js
+  js/financeiro-credito.js
+  js/financeiro-page.js
+  js/proposta-credito.js
+  js/esteira-credito.js
+  js/auth.js
+  rh-manager.html
+
+WhatsApp / Evolution: NÃO implementado — nada a subir disso.
+
+================================================================================
+6. ESTRUTURA public_html (referência)
+================================================================================
+  index.html
+  admin.html, employee.html, financeiro.html, rh-manager.html, ...
+  pages/
+  js/
+  css/
+  api/          ← upload.php, pix_api.php, rest/v1/, fontedata.php
+  images/
+  uploads/      ← ticket-docs, proposal-attachments, etc.
+  storage/      ← vazio ou .gitkeep (sem fontedata_cache)
+
+================================================================================
+7. TESTES APÓS SUBIR
+================================================================================
+  [ ] Login vendedor / parceiro / master
+  [ ] Parceiro: editar e excluir proposta
+  [ ] Chamado: anexo abre (tickets.js novo)
+  [ ] Saque PIX equipe (db.js novo)
+  [ ] F12 → Rede: /api/rest/v1/ (MySQL Locaweb), sem erro 404 em js/
+  [ ] Opcional: /check_proposals_deploy.php
+
+================================================================================
+8. MIGRAÇÕES PHP (só se ainda não rodou no servidor)
+================================================================================
+  GET com header X-API-Key (mesma chave do config.db.local.php):
+  /api/migrate-monitoria-atendimento.php
+  /api/migrate-rh-core.php
+  /api/migrate-proposals-comissao.php  (colunas comissão — ver DEPLOY-URGENTE.txt)
+
+================================================================================

@@ -445,7 +445,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
         ? `<button type="button" class="btn btn-outline btn-sm" onclick="navigateTo('secBalance');setTimeout(function(){var el=document.getElementById('balanceEmployee');if(el)el.value='${e.id}'},100)">+ Pontos</button>`
         : '';
       const statsHtml = publicRank
-        ? `<span class="ranking-item__count"><strong>${row.paidCount || 0}</strong> paga(s) · <strong>${row.count || 0}</strong> proposta(s)</span>`
+        ? `<span class="ranking-item__classif-label">Classificação</span>${tierBadge} <span class="ranking-item__count"><strong>${row.count || 0}</strong> proposta(s)</span>`
         : `${showMasterDetails ? `<span class="ranking-item__classif-label">Classificação</span>${tierBadge}` : ''}
             ${showSales ? `<span class="ranking-item__sales">${this._fmtSales(row.total)}</span>` : ''}
             <span class="ranking-item__count">${row.count} proposta(s)</span>`;
@@ -469,6 +469,10 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     const viewer = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     const masterMode = this._isMasterRankingMode(viewer);
     const showSalesAmount = masterMode;
+    const box = document.getElementById(listId);
+    if (box) {
+      box.innerHTML = '<div class="text-muted text-center" style="padding:24px;">Carregando ranking...</div>';
+    }
 
     if (masterMode) {
       this._showRankingToolbar('salesRankingFiltersAdmin', 'salesRankingSummaryAdmin');
@@ -484,9 +488,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     const userIds = users.map(u => u.id);
     const allProps = this._scopeProposals(await this._loadProposals(), userIds, vendorIndex);
     const filtered = masterMode ? this._filterProposals(allProps) : allProps;
-    const rows = masterMode
-      ? this._aggregate(users, filtered, vendorIndex)
-      : this._aggregateByPaidAndProposals(users, filtered, vendorIndex);
+    const rows = this._aggregate(users, filtered, vendorIndex);
 
     this._renderSummary('salesRankingSummaryAdmin', rows, filtered, { viewer, showSalesAmount, vendorIndex });
     const allowAddPoints = masterMode
@@ -521,9 +523,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     const userIds = users.map(u => u.id);
     const allProps = this._scopeProposals(await this._loadProposals(), userIds, vendorIndex);
     const filtered = masterMode ? this._filterProposals(allProps) : allProps;
-    const rows = masterMode
-      ? this._aggregate(users, filtered, vendorIndex)
-      : this._aggregateByPaidAndProposals(users, filtered, vendorIndex);
+    const rows = this._aggregate(users, filtered, vendorIndex);
 
     this._renderSummary('salesRankingSummaryEmployee', rows, filtered, { viewer: cu, showSalesAmount, vendorIndex });
     this._renderList(listId, rows, {

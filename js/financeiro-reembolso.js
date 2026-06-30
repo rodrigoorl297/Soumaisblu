@@ -139,7 +139,8 @@
       if (!file) continue;
       try {
         if (typeof DB.uploadProposalFile === 'function') {
-          const url = await DB.uploadProposalFile(file, recordId, `reemb_${key}`);
+          const uploaded = await DB.uploadProposalFile(file, recordId, `reemb_${key}`);
+          const url = typeof DB.resolveUploadUrl === 'function' ? DB.resolveUploadUrl(uploaded) : (uploaded?.url || uploaded);
           if (url) out[key] = url;
         } else if (typeof fileToBase64 === 'function') {
           out[key] = await fileToBase64(file);

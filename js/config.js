@@ -18,7 +18,49 @@
       };
     }
    
-   const CACHE_TTL = 45000; // Cache de 45 segundos para consultas do Supabase
+   const CACHE_TTL = 300000; // 5 min — leitura fresca
+   const CACHE_STALE_MAX = 86400000; // 24h — dados antigos ainda servem na tela
+   const API_RETRY_MAX = 3;
+   const API_RETRY_BASE_MS = 500;
+   const _supaInflight = new Map();
+   const _bgRefresh = new Set();
+
+   function _dbgSessionLog(location, message, data, hypothesisId) {
+     const payload = { sessionId: '97c411', location, message, data, timestamp: Date.now(), hypothesisId, runId: '97c411dbstable4' };
+     fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify(payload) }).catch(() => {});
+     if (typeof HOSTINGER_CONFIGURED !== 'undefined' && HOSTINGER_CONFIGURED && typeof API_BASE_URL !== 'undefined') {
+       fetch(`${API_BASE_URL}/api/debug-session-log.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': typeof API_KEY !== 'undefined' ? API_KEY : '' }, body: JSON.stringify(payload) }).catch(() => {});
+     }
+   }
+
+   function _cacheAgeMs(key) {
+     try {
+       const raw = sessionStorage.getItem(`supa_cache_${key}`);
+       if (!raw) return null;
+       const e = JSON.parse(raw);
+       return e?.ts ? Date.now() - e.ts : null;
+     } catch (_) {
+       return null;
+     }
+   }
+
+   function _scheduleBgRefresh(cacheKey, method, table, body, params) {
+     if (_bgRefresh.has(cacheKey)) return;
+     _bgRefresh.add(cacheKey);
+     supaReqOnce(method, table, body, params)
+       .then((data) => {
+         if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
+       })
+       .catch(() => {})
+       .finally(() => { setTimeout(() => _bgRefresh.delete(cacheKey), 15000); });
+   }
+
+   function _isTransientApiFailure(status, err) {
+     const code = Number(status) || 0;
+     if (code === 429 || code === 502 || code === 503 || code === 504) return true;
+     const msg = String(err?.message || err || '');
+     return /Sem conexão|Failed to fetch|NetworkError|network|timeout|temporariamente indisponível|aborted/i.test(msg);
+   }
     
     function _cacheGet(key) {
       try {
@@ -27,6 +69,19 @@
         const e = JSON.parse(raw);
         if (e && Date.now() - e.ts < CACHE_TTL) return e.val;
         return null;
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function _cacheGetAny(key) {
+      try {
+        const raw = sessionStorage.getItem(`supa_cache_${key}`);
+        if (!raw) return null;
+        const e = JSON.parse(raw);
+        if (!e?.val) return null;
+        if (e.ts && Date.now() - e.ts > CACHE_STALE_MAX) return null;
+        return e.val;
       } catch (err) {
         return null;
       }
@@ -182,18 +237,19 @@
 
     if (typeof window !== 'undefined') window.friendlyApiError = friendlyApiError;
 
-    async function supaReq(method, table, body = null, params = '') {
-      const isLocalForce = false;
-      if (isLocalForce || (!HOSTINGER_CONFIGURED && !SUPABASE_CONFIGURED)) {
-          return await localSupaMock(method, table, body, params);
+    /** Extrai JSON mesmo se o PHP emitir avisos antes do corpo (ex.: constantes duplicadas). */
+    function _parseApiJson(text) {
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        const trimmed = String(text || '').trim();
+        const start = trimmed.search(/[\[{]/);
+        if (start < 0) throw new Error('Resposta inválida do servidor.');
+        return JSON.parse(trimmed.slice(start));
       }
+    }
 
-     const cacheKey = method === 'GET' ? `${table}${params}` : null;
-     if (cacheKey) {
-       const hit = _cacheGet(cacheKey);
-       if (hit) return hit;
-     }
-
+    async function supaReqOnce(method, table, body = null, params = '') {
      const url = HOSTINGER_CONFIGURED
        ? `${API_BASE_URL}/api/rest/v1/${table}${params}`
        : `${SUPABASE_URL}/rest/v1/${table}${params}`;
@@ -221,23 +277,92 @@
        const hint = HOSTINGER_CONFIGURED
          ? 'Confira se o site e a API (/api/rest/v1) estão no ar.'
          : 'Confira internet, bloqueador de anúncios ou status do Supabase.';
-       throw new Error(`Sem conexão com o servidor (${netMsg}). ${hint}`);
+       const err = new Error(`Sem conexão com o servidor (${netMsg}). ${hint}`);
+       err.status = 0;
+       throw err;
      }
 
      if (!res.ok) {
        const e = await res.text();
        console.error(`ERRO ${method} ${table} (${res.status}):`, e);
-       throw new Error(friendlyApiError(res.status, e));
+       const err = new Error(friendlyApiError(res.status, e));
+       err.status = res.status;
+       throw err;
      }
-   
+
      const text = await res.text();
-     const data = text ? JSON.parse(text) : [];
-   
-     /* Não cachear respostas vazias — evita "usuário não encontrado" fantasma por 8s */
-     if (cacheKey && Array.isArray(data) ? data.length > 0 : data) _cacheSet(cacheKey, data);
-     if (method !== 'GET') _cacheDel(table);
-   
-     return data;
+     return text ? _parseApiJson(text) : [];
+   }
+
+    async function supaReq(method, table, body = null, params = '') {
+      const isLocalForce = false;
+      if (isLocalForce || (!HOSTINGER_CONFIGURED && !SUPABASE_CONFIGURED)) {
+          return await localSupaMock(method, table, body, params);
+      }
+
+     const cacheKey = method === 'GET' ? `${table}${params}` : null;
+     if (cacheKey) {
+       const hit = _cacheGet(cacheKey);
+       if (hit) return hit;
+       const stale = _cacheGetAny(cacheKey);
+       if (stale) {
+         const ageMs = _cacheAgeMs(cacheKey);
+         // #region agent log
+         _dbgSessionLog('config.js:supaReq', 'stale-while-revalidate', { table, ageMs }, 'H-B-cache-expire');
+         // #endregion
+         _scheduleBgRefresh(cacheKey, method, table, body, params);
+         return stale;
+       }
+     }
+
+     const inflightKey = `${method}:${table}:${params}`;
+     if (_supaInflight.has(inflightKey)) {
+       return _supaInflight.get(inflightKey);
+     }
+
+     const task = (async () => {
+     let lastErr;
+     for (let attempt = 1; attempt <= API_RETRY_MAX; attempt++) {
+       try {
+         const data = await supaReqOnce(method, table, body, params);
+         if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
+         if (method !== 'GET') _cacheDel(table);
+         // #region agent log
+         if (attempt > 1) fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'config.js:supaReq',message:'api retry ok',data:{table,attempt},timestamp:Date.now(),hypothesisId:'db-stable',runId:'97c411dbstable3'})}).catch(()=>{});
+         // #endregion
+         return data;
+       } catch (e) {
+         lastErr = e;
+         const stale = cacheKey ? _cacheGetAny(cacheKey) : null;
+         if (method === 'GET' && stale) {
+           // #region agent log
+           _dbgSessionLog('config.js:supaReq', 'stale cache fallback', { table, attempt }, 'H-A-mysql-timeout');
+           // #endregion
+           return stale;
+         }
+         if (attempt < API_RETRY_MAX && _isTransientApiFailure(e.status, e)) {
+           await new Promise(r => setTimeout(r, API_RETRY_BASE_MS * attempt));
+           continue;
+         }
+         throw e;
+       }
+     }
+     if (method === 'GET' && cacheKey) {
+       const stale = _cacheGetAny(cacheKey);
+       if (stale) return stale;
+     }
+     // #region agent log
+     _dbgSessionLog('config.js:supaReq', 'api failure no stale', { table, status: lastErr?.status, msg: String(lastErr?.message || '').slice(0, 120) }, 'H-D-hard-fail');
+     // #endregion
+     throw lastErr || new Error('Falha ao comunicar com o servidor.');
+     })();
+
+     _supaInflight.set(inflightKey, task);
+     try {
+       return await task;
+     } finally {
+       _supaInflight.delete(inflightKey);
+     }
    }
    
    // NOTE: User seed is handled by DB.init() in db.js → soublu_users

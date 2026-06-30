@@ -145,30 +145,89 @@ function userPts(u) {
   return 0;
 }
 
-/** Normaliza URL de foto (Supabase legado, caminho relativo, base64). */
+/** Normaliza URL de foto/arquivo (Supabase, uploads local, base64). */
 function resolvePhotoUrl(photo) {
   const raw = String(photo || '').trim();
   if (!raw) return '';
   if (/^data:/i.test(raw)) return raw;
   if (/^https?:\/\//i.test(raw)) {
     if (/supabase\.co\/storage/i.test(raw)) {
-      const m = raw.match(/\/storage\/v1\/object\/public\/([^/?#]+)\/(.+)$/i);
+      const m = raw.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
       if (m) {
         const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-        return `${base}/uploads/${m[1]}/${m[2]}`;
+        return `${base}/api/file.php?path=${encodeURIComponent(m[1] + '/' + m[2])}`;
       }
+    }
+    const up = raw.match(/\/uploads\/([^?#]+)/i);
+    if (up) {
+      const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
+      return `${base}/api/file.php?path=${encodeURIComponent(up[1])}`;
     }
     return raw;
   }
-  const rel = raw.replace(/^\.\//, '');
-  if (/^uploads\//i.test(rel) || rel.startsWith('/uploads/')) {
+  const rel = raw.replace(/^\.\//, '').replace(/^\//, '');
+  if (/^uploads\//i.test(rel)) {
     const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-    return `${base}/${rel.replace(/^\//, '')}`;
+    const path = rel.replace(/^uploads\//i, '');
+    return `${base}/api/file.php?path=${encodeURIComponent(path)}`;
+  }
+  const storageBuckets = 'profile-photos|product-images|partner-docs|ticket-docs|sonhos|misc|proposal-attachments|finance-docs|tim-docs|contestacao-docs|whatsapp-media';
+  if (new RegExp(`^(${storageBuckets})/`, 'i').test(rel)) {
+    const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
+    return `${base}/api/file.php?path=${encodeURIComponent(rel)}`;
   }
   if (typeof window.soubluAsset === 'function') return window.soubluAsset(rel);
   return raw;
 }
 window.resolvePhotoUrl = resolvePhotoUrl;
+window.resolveFileUrl = resolvePhotoUrl;
+
+/** Avatar com fallback para iniciais quando a URL da foto falha. */
+function profileAvatarHtml(name, photo, extraClass, onClickAttr) {
+  const cls = `profile-avatar${extraClass ? ' ' + extraClass : ''}`;
+  const click = onClickAttr ? ` onclick="${onClickAttr}"` : '';
+  const src = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(photo) : String(photo || '').trim();
+  if (src) {
+    const safe = String(src).replace(/"/g, '&quot;');
+    const ini = getInitials(name);
+    const bg = avatarColor(name);
+    return `<img src="${safe}" class="${cls}" style="object-fit:cover;cursor:pointer;"${click} onerror="this.outerHTML='<div class=\\'${cls}\\' style=\\'background:${bg};cursor:pointer;\\'>${ini}</div>'">`;
+  }
+  return `<div class="${cls}" style="background:${avatarColor(name)};cursor:pointer;"${click}>${getInitials(name)}</div>`;
+}
+window.profileAvatarHtml = profileAvatarHtml;
+
+/** Sidebar avatar — resolve URL e volta para iniciais se a imagem não carregar. */
+function applySidebarAvatar(el, name, photo) {
+  if (!el) return;
+  const src = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(photo) : String(photo || '').trim();
+  el.style.backgroundImage = '';
+  el.style.backgroundSize = '';
+  el.style.backgroundPosition = '';
+  if (!src) {
+    el.style.background = avatarColor(name);
+    el.textContent = getInitials(name);
+    return;
+  }
+  el.textContent = '';
+  const probe = new Image();
+  probe.onload = () => {
+    el.style.background = 'transparent';
+    el.style.backgroundImage = `url(${src})`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+  };
+  probe.onerror = () => {
+    el.style.backgroundImage = '';
+    el.style.background = avatarColor(name);
+    el.textContent = getInitials(name);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'ui.js:applySidebarAvatar',message:'photo load failed',data:{srcLen:src.length,srcHead:src.slice(0,80)},timestamp:Date.now(),hypothesisId:'C',runId:'perf-photo-fix'})}).catch(()=>{});
+    // #endregion
+  };
+  probe.src = src;
+}
+window.applySidebarAvatar = applySidebarAvatar;
 
 function userWalletBalance(u) { return userPts(u); }
 
@@ -210,7 +269,15 @@ async function userCanSacarPix(user) {
 
   if (typeof PartnerPerms === 'undefined' || typeof DB === 'undefined') return true;
 
-  if (u.role === 'parceiro') return false;
+  /** Gestor parceiro (role parceiro): respeita módulo sacar_pix do cadastro. */
+  if (u.role === 'parceiro') {
+    let perms = typeof window !== 'undefined' ? window._PARTNER_PERMS : null;
+    if (!perms) {
+      const prt = await DB.getPartnerByUserId(u.id).catch(() => null);
+      perms = prt?.permissions;
+    }
+    return PartnerPerms.can(perms, 'sacar_pix');
+  }
 
   let partnerRootId = null;
   try {
@@ -266,6 +333,7 @@ const _NAV_ICON_PATHS = {
   list: '<line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line>',
   chart: '<line x1="18" y1="20" x2="18" y2="10"></line><line x1="12" y1="20" x2="12" y2="4"></line><line x1="6" y1="20" x2="6" y2="14"></line>',
   roulette: '<circle cx="12" cy="12" r="10"></circle><path d="M12 2v4M12 18v4M2 12h4M18 12h4"></path><circle cx="12" cy="12" r="3"></circle>',
+  soccer: '<circle cx="12" cy="12" r="10"></circle><path d="M12 5.2l2.4 1.9 1.4 4.1H8.2l1.4-4.1L12 5.2z"></path><line x1="12" y1="5.2" x2="8.4" y2="7.8"></line><line x1="12" y1="5.2" x2="15.6" y2="7.8"></line><line x1="8.2" y1="11.2" x2="5.2" y2="13.8"></line><line x1="15.8" y1="11.2" x2="18.8" y2="13.8"></line><line x1="9.4" y1="11.2" x2="12" y2="17.5"></line><line x1="14.6" y1="11.2" x2="12" y2="17.5"></line>',
   users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
 };
 
@@ -475,7 +543,7 @@ function canViewRankingSalesValues(user) {
   }
   const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
   const r = String(u?.role || '').toLowerCase();
-  return r === 'master' || r === 'fundador' || r === 'gerente' || r === 'gerencia' || r === 'admin';
+  return ['master', 'fundador', 'gerente', 'gerencia', 'admin', 'rh', 'financeiro', 'financial', 'sup_backoffice'].includes(r);
 }
 window.canViewRankingSalesValues = canViewRankingSalesValues;
 
@@ -493,7 +561,7 @@ function isRankingParticipant(userOrRole) {
   }
   const r = String(userOrRole || '').toLowerCase();
   if (r === 'parceiro') return false;
-  return r === 'vendedor' || r === 'employee';
+  return true;
 }
 
 /** Supervisor dono da equipe no ranking (próprio id se for supervisor). */
@@ -564,7 +632,13 @@ function initSidebarToggle() {
   const sb=document.getElementById('sidebar'),ma=document.getElementById('mainArea'),btn=document.getElementById('sidebarToggle');
   if(!sb||!ma)return; btn?.addEventListener('click',()=>{sb.classList.toggle('collapsed');ma.classList.toggle('collapsed');});
 }
-function initNav() { document.querySelectorAll('[data-section]').forEach(b=>b.addEventListener('click',()=>navigateTo(b.dataset.section))); }
+function initNav() { document.querySelectorAll('[data-section]').forEach(wireNavButton); }
+function wireNavButton(b) {
+  if (!b || b.dataset.navWiredUi) return;
+  b.dataset.navWiredUi = '1';
+  b.addEventListener('click', () => navigateTo(b.dataset.section));
+}
+window.wireNavButton = wireNavButton;
 function navigateTo(id) {
   document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
@@ -587,6 +661,9 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
 
   const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
   const hostingerUp = String(_cfg.DB_BACKEND || '').toLowerCase() === 'hostinger' && _cfg.UPLOAD_URL && _cfg.API_KEY;
+  if (bucket === 'proposal-attachments') {
+    throw new Error('Use DB.uploadProposalFile para anexos de proposta.');
+  }
   if (hostingerUp) {
     try {
       const fd = new FormData();

@@ -15,7 +15,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     exit;
 }
 
-if (!soublu_api_auth_ok()) {
+if (php_sapi_name() !== 'cli' && !soublu_api_auth_ok()) {
     http_response_code(401);
     echo json_encode(['ok' => false, 'error' => 'Não autorizado'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -44,21 +44,18 @@ try {
     }
 
     $count = (int) $pdo->query('SELECT COUNT(*) FROM rh_cbo')->fetchColumn();
-    if ($count === 0) {
-        $seed = [
-            ['411010', 'Assistente administrativo'],
-            ['521110', 'Vendedor de comércio varejista'],
-            ['252105', 'Administrador'],
-            ['354120', 'Agente de vendas de serviços'],
-            ['411005', 'Auxiliar de escritório'],
-            ['142105', 'Gerente administrativo'],
-            ['317110', 'Programador de sistemas de informação'],
-        ];
-        $ins = $pdo->prepare('INSERT IGNORE INTO rh_cbo (codigo, titulo) VALUES (?, ?)');
-        foreach ($seed as [$cod, $titulo]) {
-            $ins->execute([$cod, $titulo]);
+    if ($count < 2000) {
+        $jsonStr = file_get_contents(__DIR__ . '/../js/cbo-data.js');
+        $jsonStr = preg_replace('/^window\.SOUBLU_CBO\s*=\s*/', '', $jsonStr);
+        $jsonStr = preg_replace('/;$/', '', $jsonStr);
+        $data = json_decode($jsonStr, true);
+        if ($data) {
+            $ins = $pdo->prepare('INSERT IGNORE INTO rh_cbo (codigo, titulo) VALUES (?, ?)');
+            foreach ($data as $item) {
+                $ins->execute([$item['codigo'] ?? '', $item['titulo'] ?? '']);
+            }
+            $applied[] = 'rh_cbo_seed_full';
         }
-        $applied[] = 'rh_cbo_seed';
     }
 
     echo json_encode([

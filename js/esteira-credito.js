@@ -7,6 +7,36 @@
     { key: 'termo_cessao_gov', label: 'ENVIAR TERMO DE CESSÃO DE CRÉDITO' },
   ];
 
+  const PIX_AUTOMATICO_FIXO = 'PIX automático';
+
+  function _ecPixAutoFieldHtml() {
+    return `<input type="text" class="form-control" value="${esc(PIX_AUTOMATICO_FIXO)}" readonly style="background:#f9fafb;font-weight:600;"/>
+      <input type="hidden" id="ecFormaPagamento" value="${esc(PIX_AUTOMATICO_FIXO)}"/>`;
+  }
+
+  const EC_STATUS_OPCOES = [
+    'EM ANÁLISE',
+    'AGUARDANDO DOCUMENTAÇÃO',
+    'APROVADO AG. PAGAMENTO',
+    'PAGO',
+    'REPROVADO',
+  ];
+
+  function _ecStatusSelectHtml(id, selected) {
+    const opts = ['<option value="">Selecione o status...</option>']
+      .concat(EC_STATUS_OPCOES.map((s) =>
+        `<option value="${esc(s)}"${String(selected || '') === s ? ' selected' : ''}>${esc(s)}</option>`));
+    return `<select id="${id}" class="form-control">${opts.join('')}</select>`;
+  }
+
+  function _ecStatusBadgeClass(status) {
+    const s = String(status || '').toUpperCase();
+    if (s === 'PAGO') return 'ec-status-aprovado';
+    if (s === 'REPROVADO') return 'ec-status-recusado';
+    if (s.includes('APROVADO')) return 'ec-status-aprovado';
+    return 'ec-status-pendente';
+  }
+
   let _esteiraPending = {};
   let _esteiraUrls = {};
   let _currentProposalId = null;
@@ -38,6 +68,32 @@
     try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '—'; }
   }
 
+  function _ecDbgLog(location, message, data, hypothesisId) {
+    const payload = {
+      sessionId: '97c411',
+      location,
+      message,
+      data: data || {},
+      timestamp: Date.now(),
+      hypothesisId: hypothesisId || 'calc-parcela',
+      runId: 'calc-fix-v2',
+    };
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    const cfg = window.SOUBLU_CONFIG || {};
+    const base = String(cfg.API_BASE_URL || cfg.SITE_URL || location.origin || '').replace(/\/+$/, '');
+    const key = cfg.API_KEY || '';
+    if (!base || !key) return;
+    fetch(`${base}/api/credito_api.php?action=client_log`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  }
+
   function gerarProtocolo() {
     const d = new Date();
     const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
@@ -53,18 +109,17 @@
 
   function isCreditoProposal(p) {
     if (!p) return false;
-    if (p.credito === true) return true;
+    // Somente solicitações da tabela dedicada credit_proposals (empréstimo interno ao funcionário).
+    if (window.CreditoPropostasApi?.isCreditTableRow?.(p)) return true;
     const m = p.meta && typeof p.meta === 'object' ? p.meta : {};
-    if (m.credito === true || m.opcao_credito === true) return true;
-    const obs = String(p.obs || '').toUpperCase();
-    return obs.includes('[CREDITO]') || obs.includes('ESTEIRA DE CRÉDITO') || obs.includes('ESTEIRA DE CREDITO');
+    return m.credit_table === 'credit_proposals';
   }
 
   function proposalLabel(p) {
-    const num = p.numero || p.protocolo || p.id || '—';
-    const cli = p.client_name || p.clientName || 'Cliente';
-    const vend = p.vendor_name || p.vendorName || '';
-    return `${num} · ${cli}${vend ? ` · ${vend}` : ''}`;
+    const num = p.protocolo || p.numero || p.id || '—';
+    const func = p.client_name || p.clientName || p.nome || 'Funcionário';
+    const vend = p.vendor_name || p.vendorName || p.employee_name || '';
+    return `${num} · ${func}${vend && vend !== func ? ` · solicitante: ${vend}` : ''}`;
   }
 
   function parseEsteira(p) {
@@ -112,7 +167,19 @@
 
   function proposalCpf(p) {
     const m = p?.meta && typeof p.meta === 'object' ? p.meta : {};
-    return digits(p?.clientCpf || p?.client_cpf || m.cpf_funcionario || '');
+    return digits(p?.cpf || p?.clientCpf || p?.client_cpf || m.cpf_funcionario || '');
+  }
+
+  async function resolveCreditBeneficiaryId(p) {
+    const m = p?.meta && typeof p.meta === 'object' ? p.meta : {};
+    if (m.beneficiary_user_id) return String(m.beneficiary_user_id);
+    const cpf = proposalCpf(p);
+    if (cpf.length === 11 && typeof DB !== 'undefined' && typeof DB.getUserByCpf === 'function') {
+      const emp = await DB.getUserByCpf(cpf);
+      if (emp?.id) return String(emp.id);
+    }
+    const fallback = p.employee_id || p.vendorId || p.vendor_id;
+    return fallback ? String(fallback) : null;
   }
 
   function blackBar(title) {
@@ -124,6 +191,44 @@
       <th class="ec-grid-th">${esc(label)}</th>
       <td class="ec-grid-td">${fieldHtml}</td>
     </tr>`;
+  }
+
+  function _parseParcelasValores(est, ret) {
+    const raw = est?.parcelas_valores ?? ret?.parcelas_valores;
+    if (Array.isArray(raw) && raw.length) {
+      return raw.map((v) => parseFloat(v)).filter((n) => Number.isFinite(n));
+    }
+    const vp = parseFloat(est?.valor_parcela ?? ret?.valor_parcela);
+    const n = parseInt(est?.parcelas_meses ?? est?.parcelas ?? '', 10);
+    if (Number.isFinite(vp) && vp > 0 && Number.isFinite(n) && n > 0) {
+      return Array(n).fill(vp);
+    }
+    return [];
+  }
+
+  function _sumParcelasInputs(containerId) {
+    const wrap = document.getElementById(containerId);
+    if (!wrap) return 0;
+    let sum = 0;
+    wrap.querySelectorAll('.ec-parcela-input').forEach((el) => {
+      const n = parseFloat(el.value);
+      if (Number.isFinite(n)) sum += n;
+    });
+    return Math.round(sum * 100) / 100;
+  }
+
+  function _renderParcelasInputsHtml(containerId, count, values = []) {
+    const n = Math.max(0, Math.min(12, parseInt(count, 10) || 0));
+    if (!n) {
+      return '<p class="text-muted" style="margin:0;font-size:13px;">Selecione o número de parcelas acima.</p>';
+    }
+    return Array.from({ length: n }, (_, i) => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:12px;font-weight:700;min-width:72px;color:var(--color-text-muted);">Parcela ${i + 1}</span>
+        <input type="number" class="form-control ec-parcela-input" data-idx="${i}" min="0" step="0.01"
+          placeholder="0,00" value="${values[i] != null && values[i] !== '' ? esc(String(values[i])) : ''}"
+          style="max-width:200px;" oninput="EsteiraCredito.onParcelaInputChange()"/>
+      </div>`).join('');
   }
 
   function _injectStyles() {
@@ -149,12 +254,16 @@
   }
 
   function _fmtConsultaRows(raw) {
+    if (raw && typeof raw === 'object' && (raw.rh || raw.score)) {
+      return [];
+    }
     const d = raw?.data ?? raw?.retorno ?? raw?.resultado ?? raw;
     if (!d || typeof d !== 'object') return [];
     const rows = [];
     const push = (l, v) => { if (v != null && v !== '') rows.push([l, String(v)]); };
     push('Nome', d.nome || d.name);
     push('Score', d.score || d.scoreCredito || d.pontuacao);
+    push('Classificação', d.classificacao || d.rating || d.faixa || d.risco);
     push('Resultado', d.resultado || d.parecer || d.situacao || d.status);
     push('Certidão', d.certidao_negativa || d.certidao_positiva || d.tipo_certidao);
     push('Protocolo', d.protocolo || d.numero || d.codigoControle);
@@ -162,6 +271,38 @@
       push('Processos', `${d.processos.length} registro(s)`);
     }
     return rows;
+  }
+
+  function _fmtAnaliseCreditoHtml(bundle) {
+    if (!bundle || typeof bundle !== 'object') return '';
+    if (!bundle.rh && !bundle.score) {
+      return _fmtConsultaHtml(bundle, 'Análise de crédito');
+    }
+    const lines = [];
+    if (bundle.rh?.ok && typeof FonteData !== 'undefined' && FonteData.formatRhConsultaSummary) {
+      const rhHtml = FonteData.formatRhConsultaSummary(bundle.rh);
+      if (rhHtml) lines.push(rhHtml);
+    } else if (bundle.rh && !bundle.rh.ok) {
+      lines.push(`<span style="color:#b45309;">Cadastro/RH: ${esc(bundle.rh.error || 'indisponível')}</span>`);
+    }
+    const sc = bundle.score;
+    if (sc?.ok && sc.score) {
+      const s = sc.score;
+      lines.push(`<strong>Score Quod:</strong> ${esc(s.score || '—')}${s.classificacao ? ` · ${esc(s.classificacao)}` : ''}`);
+      if (s.situacao) lines.push(`Situação: ${esc(s.situacao)}`);
+      if (s.mensagem) lines.push(esc(s.mensagem));
+    } else if (sc && !sc.ok && sc.error) {
+      lines.push(`<span style="color:#b45309;">Score Quod: ${esc(sc.error)}</span>`);
+    }
+    if (!lines.length && (bundle.nome || bundle.name)) {
+      lines.push(`<strong>Nome:</strong> ${esc(bundle.nome || bundle.name)}`);
+      lines.push(`<span style="color:#b45309;">Dados limitados — clique em CONSULTAR ANÁLISE CRÉDITO para atualizar.</span>`);
+    }
+    if (!lines.length) {
+      return _fmtConsultaHtml(bundle, 'Análise de crédito');
+    }
+    return `<div class="ec-api-box"><strong>Análise de crédito</strong>
+      <div style="margin-top:8px;font-size:13px;line-height:1.5;">${lines.join('<br/>')}</div></div>`;
   }
 
   function _fmtConsultaHtml(raw, title) {
@@ -187,8 +328,10 @@
     });
     const promStatus = document.getElementById('ec_promissoria_status');
     if (promStatus) {
-      promStatus.textContent = _esteiraUrls.promissoria
-        ? 'Nota promissória gerada — download no Retorno de Propostas'
+      const promUrl = _esteiraUrls.promissoria;
+      const promNome = _esteiraUrls.promissoria_nome || 'nota_promissoria.txt';
+      promStatus.innerHTML = promUrl
+        ? `Nota gerada — <a href="${esc(promUrl)}" target="_blank" rel="noopener" download="${esc(promNome)}">⬇ Baixar nota promissória</a> · também em Retorno de Propostas`
         : 'Nenhuma nota gerada';
     }
   }
@@ -204,7 +347,8 @@
       const file = _esteiraPending[key];
       if (!file) continue;
       try {
-        const url = await DB.uploadProposalFile(file, proposalId, `retorno_${key}`);
+        const uploaded = await DB.uploadProposalFile(file, proposalId, `retorno_${key}`);
+        const url = typeof DB.resolveUploadUrl === 'function' ? DB.resolveUploadUrl(uploaded) : (uploaded?.url || uploaded);
         if (url) out[key] = url;
       } catch (e) {
         console.warn('[EsteiraCredito] anexo', key, e);
@@ -216,6 +360,13 @@
   }
 
   async function _saveProposal(updated) {
+    if (window.CreditoPropostasApi?.isCreditTableRow?.(updated)) {
+      await CreditoPropostasApi.update(
+        updated.id,
+        CreditoPropostasApi.proposalToUpdateRow(updated)
+      );
+      return;
+    }
     if (typeof DB.saveProposal === 'function') await DB.saveProposal(updated);
     else await DB.save('proposals', updated);
   }
@@ -269,18 +420,17 @@
     _toolbarHtml() {
       const tab = this.tab || 'propostas';
       return `<div class="esteira-credito-toolbar" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center;">
-        <button type="button" class="btn ${tab === 'solicitar' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="EsteiraCredito.openSolicitarPanel()">Solicitar proposta crédito</button>
+        <button type="button" class="btn ${tab === 'solicitar' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="EsteiraCredito.openSolicitarPanel()">Nova solicitação</button>
         <button type="button" class="btn ${tab === 'propostas' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="EsteiraCredito.openPropostasPanel()">Esteira</button>
         <button type="button" class="btn ${tab === 'ccb' ? 'btn-primary' : 'btn-outline'} btn-sm" onclick="EsteiraCredito.openCcbPanel()">Emitir CCB</button>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="EsteiraCredito.openAddModal()">+ Adicionar à esteira</button>
         <button type="button" class="btn btn-ghost btn-sm" onclick="FinanceiroBoot.openSection('secRetornoPropostas')">Retorno de Propostas</button>
       </div>`;
     },
 
     _renderPropostasShell() {
       return `<div class="ec-wrap">
-        ${blackBar('ESTEIRA PROPOSTA DE CRÉDITO')}
-        ${blackBar('PROTOCOLO GERAR AUTOMÁTICO')}
+        ${blackBar('ESTEIRA DE CRÉDITO — EMPRÉSTIMO AO FUNCIONÁRIO')}
+        ${blackBar('SOLICITAÇÕES VIA PAINEL DO FUNCIONÁRIO · PROTOCOLO AUTOMÁTICO')}
         <div class="ec-body">
           ${this._toolbarHtml()}
           <div id="esteiraCreditoWorkflow">Carregando...</div>
@@ -293,7 +443,7 @@
         ${blackBar('Emitir CCB')}
         <div class="ec-body">
           <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center;margin-bottom:16px;">
-            <p class="text-muted" style="margin:0;font-size:14px;">Registre a emissão de Cédula de Crédito Bancário para propostas da esteira.</p>
+            <p class="text-muted" style="margin:0;font-size:14px;">Registre a emissão de Cédula de Crédito Bancário para solicitações de empréstimo interno (funcionários).</p>
             <button type="button" class="btn btn-ghost btn-sm" onclick="EsteiraCredito.openPropostasPanel()">← Voltar à esteira</button>
           </div>
           ${this._toolbarHtml()}
@@ -301,14 +451,14 @@
             <table class="data-table" style="width:100%;">
               <tbody>
                 ${finGridRow('PROPOSTA NA ESTEIRA', `<select id="ccbProposalSelect" class="form-control"><option value="">Carregando...</option></select>`)}
-                ${finGridRow('VALOR DO CRÉDITO (R$)', `<input type="number" id="ccbValor" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-                ${finGridRow('PARCELAS', `<input type="number" id="ccbParcelas" class="form-control" min="1" step="1" placeholder="Ex.: 84"/>`)}
+                ${finGridRow('PARCELAS', `<input type="number" id="ccbParcelas" class="form-control" min="1" max="12" step="1" placeholder="Ex.: 4" onchange="EsteiraCredito.onCcbParcelasChange()"/>`)}
+                ${finGridRow('VALORES DAS PARCELAS', `<div id="ccbParcelasWrap"></div>`)}
+                ${finGridRow('VALOR DO CRÉDITO (R$)', `<input type="number" id="ccbValor" class="form-control" min="0" step="0.01" placeholder="0,00" readonly style="background:#f9fafb;font-weight:700;"/>`)}
                 ${finGridRow('OBSERVAÇÕES DA EMISSÃO', `<textarea id="ccbObs" class="form-control" rows="3" placeholder="Dados complementares do CCB (opcional)"></textarea>`)}
               </tbody>
             </table>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-            <button type="button" class="btn btn-outline btn-sm" onclick="EsteiraCredito.openAddModal()">+ Adicionar proposta à esteira</button>
             <button type="button" class="btn btn-primary" onclick="EsteiraCredito.emitCcb()">Emitir CCB</button>
           </div>
           <div id="ccbEmitResult" style="margin-top:16px;"></div>
@@ -331,31 +481,35 @@
         <div class="table-wrap" style="margin-bottom:16px;">
           <table class="data-table" style="width:100%;">
             <tbody>
-              ${finGridRow('PROPOSTA', `<select id="ecProposalSelect" class="form-control" onchange="EsteiraCredito.onProposalChange()">
-                <option value="">Selecione a proposta...</option>
+                ${finGridRow('PROPOSTA', `<select id="ecProposalSelect" class="form-control" onchange="EsteiraCredito.onProposalChange()">
+                <option value="">Selecione a solicitação de crédito...</option>
                 ${options}
               </select>`)}
               ${finGridRow('PROTOCOLO', `<input type="text" id="ecProtocolo" class="form-control text-center" readonly style="font-weight:800;background:#f3f4f6;letter-spacing:.04em;max-width:320px;"/>`)}
               ${finGridRow('CPF', `<input type="text" id="ecCpf" class="form-control mask-cpf" placeholder="000.000.000-00" readonly style="background:#f9fafb;"/>`)}
               ${finGridRow('VALOR SOLICITADO', `<input type="number" id="ecValorSolicitado" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
               ${finGridRow('VALOR APROVADO', `<input type="number" id="ecValorAprovado" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-              ${finGridRow('FORMA DE PAGAMENTO', `<select id="ecFormaPagamento" class="form-control">
-                <option value="">Selecione...</option>
-                <option value="PIX">PIX</option>
+              ${finGridRow('Nº PARCELAS', `<select id="ecParcelas" class="form-control" onchange="EsteiraCredito.onParcelasChange()">
+                <option value="">Selecione (2, 3 ou 4 meses)...</option>
+                <option value="2">2 meses</option>
+                <option value="3">3 meses</option>
+                <option value="4">4 meses</option>
               </select>`)}
-              ${finGridRow('VALOR PARCELA', `<input type="number" id="ecValorParcela" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-              ${finGridRow('VALOR FINAL', `<input type="number" id="ecValorFinal" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
+              ${finGridRow('FORMA DE PAGAMENTO — PIX AUTOMÁTICO', _ecPixAutoFieldHtml())}
+              ${finGridRow('VALOR PARCELA', `<input type="number" id="ecValorParcela" class="form-control" min="0" step="0.01" placeholder="0,00" oninput="EsteiraCredito.onValorParcelaChange()"/>`)}
+              ${finGridRow('VALOR FINAL', `<input type="number" id="ecValorFinal" class="form-control" min="0" step="0.01" placeholder="0,00" readonly style="background:#f9fafb;font-weight:700;"/>`)}
+              ${finGridRow('STATUS DA PROPOSTA', `${_ecStatusSelectHtml('ecStatusCredito', 'EM ANÁLISE')}<div id="ecStatusBadge" style="margin-top:8px;"></div>`)}
             </tbody>
           </table>
         </div>
 
-        <div class="ec-section-label">Consultas API</div>
+        <div class="ec-section-label">Consultas</div>
         <div class="table-wrap" style="margin-bottom:16px;">
           <table class="data-table" style="width:100%;">
             <tbody>
-              ${finGridRow('ANÁLISE CRÉDITO (API)', `<button type="button" class="btn btn-accent btn-sm" onclick="EsteiraCredito.apiAnaliseCredito()">CONSULTAR ANÁLISE CRÉDITO</button>
+              ${finGridRow('ANÁLISE CRÉDITO', `<button type="button" class="btn btn-accent btn-sm" onclick="EsteiraCredito.apiAnaliseCredito()">CONSULTAR ANÁLISE CRÉDITO</button>
                 <div id="ecApiAnaliseResult" class="ec-api-box text-muted">Aguardando consulta...</div>`)}
-              ${finGridRow('CERTIDÃO NEGATIVA CIVIL (API)', `<button type="button" class="btn btn-accent btn-sm" onclick="EsteiraCredito.apiCertidaoCivil()">CONSULTAR CERTIDÃO CIVIL</button>
+              ${finGridRow('CERTIDÃO NEGATIVA CIVIL', `<button type="button" class="btn btn-accent btn-sm" onclick="EsteiraCredito.apiCertidaoCivil()">CONSULTAR CERTIDÃO CIVIL</button>
                 <div id="ecApiCertidaoResult" class="ec-api-box text-muted">Aguardando consulta...</div>`)}
             </tbody>
           </table>
@@ -377,26 +531,20 @@
                 </td>
               </tr>`).join('')}
               ${finGridRow('Nº NOTA PROMISSÓRIA', `<input type="text" id="ecNumPromissoria" class="form-control" placeholder="Ex.: NP-2026-0001"/>`)}
-              ${finGridRow('DATA DO CRÉDITO', `<input type="date" id="ecDataCredito" class="form-control"/>`)}
+              ${finGridRow('DATA DO DESCONTO', `<input type="date" id="ecDataDesconto" class="form-control"/>`)}
             </tbody>
           </table>
         </div>
         <p class="ec-note"><strong>Obs:</strong> FICAR RETORNO DE PROPOSTAS PARA DOWNLOAD — documentos enviados e nota promissória gerada ficam disponíveis em Retorno de Propostas.</p>
-        <div style="margin-bottom:20px;">
+        <div id="ecPixAutoHost"></div>
+        <div style="margin-bottom:20px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
           <button type="button" class="btn btn-outline" onclick="EsteiraCredito.gerarNotaPromissoria()">GERAR NOTA PROMISSÓRIA</button>
-          <span id="ec_promissoria_status" class="text-muted" style="font-size:12px;margin-left:10px;">Nenhuma nota gerada</span>
+          <button type="button" class="btn btn-accent" onclick="EsteiraCredito.enviarNotaPromissoriaAssinatura()">ENVIAR NOTA PROMISSÓRIA PARA ASSINATURA</button>
+          <span id="ec_promissoria_status" class="text-muted" style="font-size:12px;">Nenhuma nota gerada</span>
         </div>
 
         <div style="display:flex;justify-content:flex-end;margin-bottom:24px;">
           <button type="button" class="btn btn-primary" onclick="EsteiraCredito.salvarDados()">Salvar dados da esteira</button>
-        </div>
-
-        <div class="ec-section-label">Análise e decisão</div>
-        <p class="ec-review-text">Consultar pela proposta e analisar documento anexado e aprovar ou rejeitar.</p>
-        <div id="ecStatusBadge" style="margin-bottom:12px;"></div>
-        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-          <button type="button" class="btn btn-success" onclick="EsteiraCredito.decidir('aprovado')">APROVADO</button>
-          <button type="button" class="btn btn-danger" onclick="EsteiraCredito.decidir('recusado')">RECUSADO POLÍTICA INTERNA</button>
         </div>
 
         <div id="esteiraCreditoLista" style="margin-top:28px;"></div>`;
@@ -454,7 +602,26 @@
     },
 
     async _loadProposals() {
-      return DB.getProposals().catch(() => []);
+      if (!window.CreditoPropostasApi?.list) {
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'esteira-credito.js:_loadProposals',message:'CreditoPropostasApi missing',data:{},timestamp:Date.now(),hypothesisId:'H1',runId:'esteira-sep'})}).catch(()=>{});
+        // #endregion
+        return [];
+      }
+      try {
+        const creditRows = await CreditoPropostasApi.list();
+        const rows = Array.isArray(creditRows) ? creditRows.filter(isCreditoProposal) : [];
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'esteira-credito.js:_loadProposals',message:'loaded credit_proposals only',data:{count:rows.length,sampleIds:rows.slice(0,3).map((p)=>p.id)},timestamp:Date.now(),hypothesisId:'H1,H2',runId:'esteira-sep'})}).catch(()=>{});
+        // #endregion
+        return rows;
+      } catch (e) {
+        console.warn('[EsteiraCredito] credit_proposals:', e.message || e);
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'esteira-credito.js:_loadProposals:fail',message:'credit list failed',data:{error:String(e&&e.message||e)},timestamp:Date.now(),hypothesisId:'H3',runId:'esteira-sep'})}).catch(()=>{});
+        // #endregion
+        return [];
+      }
     },
 
     async renderWorkflow() {
@@ -464,16 +631,27 @@
       const credito = (props || []).filter(isCreditoProposal);
       if (!credito.length) {
         wrap.innerHTML = `<div class="text-center" style="padding:28px 16px;">
-          <p class="text-muted" style="margin:0 0 16px;">Nenhuma proposta na esteira de crédito.</p>
+          <p class="text-muted" style="margin:0 0 8px;">Nenhuma solicitação de empréstimo na esteira.</p>
+          <p class="text-muted" style="margin:0 0 16px;font-size:13px;">O funcionário solicita pelo painel <strong>Solicitar proposta crédito</strong>. Propostas comerciais (PROP-) não entram nesta esteira.</p>
           <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">
-            <button type="button" class="btn btn-primary btn-sm" onclick="EsteiraCredito.openAddModal()">+ Adicionar à esteira</button>
-            <button type="button" class="btn btn-outline btn-sm" onclick="EsteiraCredito.openSolicitarPanel()">Solicitar proposta crédito</button>
+            <button type="button" class="btn btn-primary btn-sm" onclick="EsteiraCredito.openSolicitarPanel()">Solicitar empréstimo (financeiro)</button>
           </div>
         </div>`;
         return;
       }
       wrap.innerHTML = this._workflowHtml(credito);
+      // #region agent log
+      _ecDbgLog('esteira-credito.js:render', 'workflow rendered v6', {
+        build: '97c411credito6',
+        hasPixSelect: !!wrap.querySelector('select#ecFormaPagamento'),
+        hasPixReadonly: !!wrap.querySelector('input[readonly][value="PIX automático"]'),
+        pixFixo: PIX_AUTOMATICO_FIXO,
+      }, 'pix-auto-fixo');
+      // #endregion
       if (typeof applyInputMasks === 'function') applyInputMasks(wrap);
+      if (window.PixAutomaticoCredito?.mount) PixAutomaticoCredito.mount('ecPixAutoHost');
+      this._valorAutoCalcWired = false;
+      this._wireValorAutoCalc();
       const sel = document.getElementById('ecProposalSelect');
       if (sel && _currentProposalId) sel.value = _currentProposalId;
       await this.onProposalChange();
@@ -484,20 +662,20 @@
       const wrap = document.getElementById('esteiraCreditoLista');
       if (!wrap) return;
       wrap.innerHTML = `
-        <h4 style="font-weight:800;margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;">Propostas na esteira</h4>
+        <h4 style="font-weight:800;margin:0 0 12px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;">Solicitações na esteira</h4>
         <div class="table-wrap"><table class="data-table" style="width:100%;">
           <thead><tr>
             <th>Protocolo</th><th>Cliente</th><th>Valor solicitado</th><th>Status</th><th>Ações</th>
           </tr></thead>
           <tbody>${credito.slice(0, 50).map((p) => {
             const est = parseEsteira(p);
-            const st = String(est.status || 'pendente').toLowerCase();
+            const st = String(est.status_credito || p.status || p.statusOp || 'EM ANÁLISE').toUpperCase();
             const pid = String(p.id || '').replace(/'/g, "\\'");
-            const stCls = st === 'aprovado' ? 'ec-status-aprovado' : (st.includes('recusado') ? 'ec-status-recusado' : 'ec-status-pendente');
+            const stCls = _ecStatusBadgeClass(st);
             return `<tr>
               <td>${esc(p.protocolo || p.numero || p.id)}</td>
               <td>${esc(p.client_name || p.clientName || '—')}</td>
-              <td>${esc(fmtMoney(p.valor || p.valorFinal))}</td>
+              <td>${esc(fmtMoney(p.valor || p.valorFinal || p.valor_solicitado))}</td>
               <td><span class="ec-status-badge ${stCls}">${esc(st.toUpperCase())}</span></td>
               <td><button type="button" class="btn btn-ghost btn-sm" onclick="EsteiraCredito.selecionar('${pid}')">Abrir</button></td>
             </tr>`;
@@ -512,6 +690,108 @@
       this.onProposalChange();
     },
 
+    _parcelasFromProposal(p, est, m) {
+      const estMeta = est._meta && typeof est._meta === 'object' ? est._meta : {};
+      const n = parseInt(
+        est.parcelas_meses ?? est.parcelas ?? m.parcelas_meses ?? m.parcelas
+          ?? estMeta.parcelas_meses ?? estMeta.parcelas ?? p.parcelas_meses ?? p.parcelas ?? '',
+        10
+      );
+      if ([2, 3, 4].includes(n)) return n;
+      const obsMatch = String(p?.obs || '').match(/Parcelas:\s*(\d+)\s*meses/i);
+      if (obsMatch) {
+        const fromObs = parseInt(obsMatch[1], 10);
+        if ([2, 3, 4].includes(fromObs)) return fromObs;
+      }
+      return null;
+    },
+
+    async _resolveDataNascimento(p, cpf) {
+      const m = p?.meta && typeof p.meta === 'object' ? p.meta : {};
+      const est = parseEsteira(p);
+      const estMeta = est._meta && typeof est._meta === 'object' ? est._meta : {};
+      let dn = m.data_nascimento || m.dataNascimento || estMeta.data_nascimento || estMeta.dataNascimento || '';
+      if (!dn && typeof DB !== 'undefined' && typeof DB.getRhEmployees === 'function') {
+        const rhList = await DB.getRhEmployees().catch(() => []);
+        const rh = (rhList || []).find((e) => digits(e.cpf) === cpf);
+        dn = rh?.data_nascimento || rh?.dataNascimento || '';
+      }
+      return String(dn || '').trim();
+    },
+
+    onParcelasChange() {
+      const parcelasEl = document.getElementById('ecParcelas');
+      const n = parseInt(parcelasEl?.value ?? '', 10);
+      if (parcelasEl && Number.isFinite(n)) parcelasEl.dataset.parcelas = String(n);
+      else if (parcelasEl) delete parcelasEl.dataset.parcelas;
+      this.onValorParcelaChange();
+    },
+
+    onValorParcelaChange() {
+      const parcela = parseFloat(document.getElementById('ecValorParcela')?.value) || 0;
+      const n = parseInt(document.getElementById('ecParcelas')?.value || document.getElementById('ecParcelas')?.dataset?.parcelas || '', 10);
+      const finalEl = document.getElementById('ecValorFinal');
+      if (!finalEl) return;
+      if (parcela > 0 && Number.isFinite(n) && n > 0) {
+        finalEl.value = String(Math.round(parcela * n * 100) / 100);
+      } else if (parcela > 0) {
+        finalEl.value = String(parcela);
+      } else {
+        finalEl.value = '';
+      }
+    },
+
+    onParcelaInputChange() {
+      this.onValorParcelaChange();
+    },
+
+    onCcbParcelasChange() {
+      const n = parseInt(document.getElementById('ccbParcelas')?.value || '', 10);
+      const wrap = document.getElementById('ccbParcelasWrap');
+      if (wrap) {
+        const prev = [];
+        wrap.querySelectorAll('.ec-parcela-input').forEach((el) => prev.push(el.value));
+        wrap.innerHTML = _renderParcelasInputsHtml('ccbParcelasWrap', n, prev)
+          .replace(/EsteiraCredito\.onParcelaInputChange/g, 'EsteiraCredito.onCcbParcelaInputChange');
+      }
+      this.onCcbParcelaInputChange();
+    },
+
+    onCcbParcelaInputChange() {
+      const sum = _sumParcelasInputs('ccbParcelasWrap');
+      const v = document.getElementById('ccbValor');
+      if (v) v.value = sum > 0 ? String(sum) : '';
+    },
+
+    _recalcValorFinalFromParcelas() {
+      const sum = _sumParcelasInputs('ecParcelasWrap');
+      const finalEl = document.getElementById('ecValorFinal');
+      if (finalEl) finalEl.value = sum > 0 ? String(sum) : '';
+      // #region agent log
+      _ecDbgLog('esteira-credito.js:_recalcValorFinalFromParcelas', 'sum parcelas', { sum }, 'parcelas-soma');
+      // #endregion
+    },
+
+    _recalcValoresParcela() {
+      this.onParcelasChange();
+    },
+
+    _wireValorAutoCalc() {
+      if (this._valorAutoCalcWired) return;
+      this._valorAutoCalcWired = true;
+    },
+
+    _fillParcelasInputs(containerId, count, values) {
+      const wrap = document.getElementById(containerId);
+      if (!wrap) return;
+      wrap.innerHTML = _renderParcelasInputsHtml(containerId, count, values);
+      if (containerId === 'ccbParcelasWrap') {
+        wrap.querySelectorAll('.ec-parcela-input').forEach((el) => {
+          el.setAttribute('oninput', 'EsteiraCredito.onCcbParcelaInputChange()');
+        });
+      }
+    },
+
     async onProposalChange() {
       const id = document.getElementById('ecProposalSelect')?.value;
       _currentProposalId = id || null;
@@ -519,10 +799,14 @@
         _resetEsteiraAnexos();
         return;
       }
-      const props = await this._loadProposals();
-      const p = typeof DB.getProposal === 'function'
-        ? await DB.getProposal(id).catch(() => props.find((x) => String(x.id) === String(id)))
-        : props.find((x) => String(x.id) === String(id));
+      let p = null;
+      if (window.CreditoPropostasApi?.get) {
+        p = await CreditoPropostasApi.get(id).catch(() => null);
+      }
+      if (!p) {
+        const props = await this._loadProposals();
+        p = props.find((x) => String(x.id) === String(id)) || null;
+      }
       if (!p) return;
 
       const est = parseEsteira(p);
@@ -539,18 +823,38 @@
       set('ecCpf', fmtCpf(proposalCpf(p)));
       set('ecValorSolicitado', est.valor_solicitado ?? p.valor ?? p.valorFinal ?? '');
       set('ecValorAprovado', est.valor_aprovado ?? ret.valor_liberado ?? '');
-      set('ecFormaPagamento', est.forma_pagamento ?? m.forma_pagamento ?? ret.pagamento ?? '');
-      set('ecValorParcela', est.valor_parcela ?? ret.valor_parcela ?? '');
-      set('ecValorFinal', est.valor_final ?? p.valorFinal ?? p.valor_final ?? '');
+      const parcelas = this._parcelasFromProposal(p, est, m);
+      const parcelasEl = document.getElementById('ecParcelas');
+      if (parcelasEl) {
+        parcelasEl.value = parcelas ? String(parcelas) : '';
+        if (parcelas) parcelasEl.dataset.parcelas = String(parcelas);
+        else delete parcelasEl.dataset.parcelas;
+      }
+      // #region agent log
+      _ecDbgLog('esteira-credito.js:onProposalChange', 'proposal loaded', {
+        proposalId: id,
+        parcelas,
+        valorSolicitado: est.valor_solicitado ?? p.valor,
+        hasMetaParcelas: !!(m.parcelas_meses || m.parcelas),
+        hasEsteiraParcelas: !!(est.parcelas_meses || est.parcelas),
+      }, 'calc-parcela');
+      // #endregion
+      set('ecFormaPagamento', PIX_AUTOMATICO_FIXO);
+      const vp = est.valor_parcela ?? ret.valor_parcela ?? '';
+      set('ecValorParcela', vp);
+      this.onValorParcelaChange();
+      const statusCred = est.status_credito || p.status || p.statusOp || 'EM ANÁLISE';
+      const statusEl = document.getElementById('ecStatusCredito');
+      if (statusEl) statusEl.value = EC_STATUS_OPCOES.includes(statusCred) ? statusCred : 'EM ANÁLISE';
       set('ecNumPromissoria', est.num_nota_promissoria ?? est.num_promissoria ?? '');
-      set('ecDataCredito', est.data_credito ? String(est.data_credito).slice(0, 10) : '');
+      set('ecDataDesconto', (est.data_desconto || est.data_credito) ? String(est.data_desconto || est.data_credito).slice(0, 10) : '');
 
       _resetEsteiraAnexos(att);
 
       const analiseEl = document.getElementById('ecApiAnaliseResult');
       if (analiseEl) {
         analiseEl.innerHTML = est.consultas?.analise_credito
-          ? _fmtConsultaHtml(est.consultas.analise_credito, 'Análise de crédito')
+          ? _fmtAnaliseCreditoHtml(est.consultas.analise_credito)
           : 'Aguardando consulta...';
       }
       const certEl = document.getElementById('ecApiCertidaoResult');
@@ -562,14 +866,17 @@
 
       const badge = document.getElementById('ecStatusBadge');
       if (badge) {
-        const st = String(est.status || 'pendente').toLowerCase();
-        if (st === 'aprovado') {
-          badge.innerHTML = `<span class="ec-status-badge ec-status-aprovado">APROVADO em ${esc(fmtDt(est.aprovado_em))}</span>`;
-        } else if (st.includes('recusado')) {
-          badge.innerHTML = `<span class="ec-status-badge ec-status-recusado">RECUSADO POLÍTICA INTERNA em ${esc(fmtDt(est.recusado_em))}</span>`;
-        } else {
-          badge.innerHTML = `<span class="ec-status-badge ec-status-pendente">PENDENTE ANÁLISE</span>`;
-        }
+        const st = String(statusCred || 'EM ANÁLISE').toUpperCase();
+        badge.innerHTML = `<span class="ec-status-badge ${_ecStatusBadgeClass(st)}">${esc(st)}</span>`;
+      }
+      if (window.PixAutomaticoCredito?.mountFromEsteira) {
+        const pa = est.pix_automatico || {};
+        const m = p?.meta || {};
+        PixAutomaticoCredito.mountFromEsteira(pa, {
+          banco: p.banco || m.banco || '',
+          agencia: p.agencia || m.agencia || '',
+          conta: p.conta_corrente || m.conta_corrente || '',
+        });
       }
     },
 
@@ -588,8 +895,9 @@
     async _getCurrentProposal() {
       const id = document.getElementById('ecProposalSelect')?.value || _currentProposalId;
       if (!id) return null;
-      if (typeof DB.getProposal === 'function') {
-        return DB.getProposal(id).catch(() => null);
+      if (window.CreditoPropostasApi?.get) {
+        const row = await CreditoPropostasApi.get(id).catch(() => null);
+        if (row) return row;
       }
       const props = await this._loadProposals();
       return props.find((x) => String(x.id) === String(id)) || null;
@@ -597,15 +905,25 @@
 
     _collectEsteiraFields() {
       const gv = (id) => document.getElementById(id)?.value?.trim() ?? '';
+      const parcelasEl = document.getElementById('ecParcelas');
+      const parcelasMeses = parseInt(parcelasEl?.value || parcelasEl?.dataset?.parcelas || '', 10);
+      const valorParcela = parseFloat(gv('ecValorParcela')) || null;
+      const valorFinal = parseFloat(gv('ecValorFinal')) || null;
+      const statusCred = gv('ecStatusCredito') || 'EM ANÁLISE';
+      const dataDesconto = gv('ecDataDesconto') || null;
       return {
         protocolo: gv('ecProtocolo'),
         valor_solicitado: parseFloat(gv('ecValorSolicitado')) || null,
         valor_aprovado: parseFloat(gv('ecValorAprovado')) || null,
+        parcelas_meses: Number.isFinite(parcelasMeses) ? parcelasMeses : null,
+        parcelas: Number.isFinite(parcelasMeses) ? parcelasMeses : null,
         forma_pagamento: gv('ecFormaPagamento'),
-        valor_parcela: parseFloat(gv('ecValorParcela')) || null,
-        valor_final: parseFloat(gv('ecValorFinal')) || null,
+        valor_parcela: valorParcela,
+        valor_final: valorFinal,
+        status_credito: statusCred,
         num_nota_promissoria: gv('ecNumPromissoria'),
-        data_credito: gv('ecDataCredito') || null,
+        data_desconto: dataDesconto,
+        data_credito: dataDesconto,
       };
     },
 
@@ -633,9 +951,11 @@
 
         const retorno = {
           ...prevRet,
-          valor_liberado: fields.valor_aprovado ?? prevRet.valor_liberado,
+          valor_liberado: fields.valor_aprovado ?? fields.valor_final ?? prevRet.valor_liberado,
           valor_parcela: fields.valor_parcela ?? prevRet.valor_parcela,
           pagamento: fields.forma_pagamento || prevRet.pagamento,
+          status_credito: fields.status_credito,
+          data_desconto: fields.data_desconto,
           attachments: mergedAtt,
         };
 
@@ -645,6 +965,8 @@
           numero: fields.protocolo || p.numero || p.protocolo,
           valorFinal: fields.valor_final ?? p.valorFinal,
           valor_final: fields.valor_final ?? p.valor_final,
+          status: fields.status_credito,
+          statusOp: fields.status_credito,
           creditoEsteira: esteira,
           credito_esteira: esteira,
           creditoRetorno: retorno,
@@ -653,6 +975,16 @@
         };
 
         await _saveProposal(updated);
+        // #region agent log
+        _ecDbgLog('esteira-credito.js:salvarDados', 'esteira saved', {
+          proposalId: p.id,
+          valorParcela: fields.valor_parcela,
+          valorFinal: fields.valor_final,
+          statusCredito: fields.status_credito,
+          dataDesconto: fields.data_desconto,
+          formaPagamento: fields.forma_pagamento,
+        }, 'credito-form-v3');
+        // #endregion
         _esteiraPending = {};
         showToast('Dados da esteira salvos. Documentos disponíveis no Retorno de Propostas.', 'success');
         await this.renderWorkflow();
@@ -683,12 +1015,25 @@
       if (el) el.textContent = 'Consultando análise de crédito...';
 
       try {
-        const res = await FonteData.lookupCpf(cpf);
+        const m = p.meta && typeof p.meta === 'object' ? p.meta : {};
+        const dataNasc = await this._resolveDataNascimento(p, cpf) || m.data_nascimento || m.dataNascimento || '';
+        const res = await FonteData.lookupAnaliseCreditoPf(cpf, dataNasc);
+        // #region agent log
+        _ecDbgLog('esteira-credito.js:apiAnaliseCredito', 'analise result', {
+          ok: res.ok,
+          rhOk: !!res.rh?.ok,
+          receitaOk: !!res.rh?.receita?.ok,
+          pisOk: !!res.rh?.pis?.ok,
+          hasDataNasc: !!dataNasc,
+          error: res.error || null,
+        }, 'analise-api');
+        // #endregion
         if (!res.ok) throw new Error(res.error || 'Falha na consulta');
+        const bundle = { rh: res.rh, score: res.score };
         const prevEst = parseEsteira(p);
         const esteira = {
           ...prevEst,
-          consultas: { ...(prevEst.consultas || {}), analise_credito: res.raw || res.client },
+          consultas: { ...(prevEst.consultas || {}), analise_credito: bundle },
           analise_credito_em: new Date().toISOString(),
         };
         await _saveProposal({
@@ -697,7 +1042,7 @@
           credito_esteira: esteira,
           updatedAt: new Date().toISOString(),
         });
-        if (el) el.innerHTML = _fmtConsultaHtml(res.raw || res.client, 'Análise de crédito');
+        if (el) el.innerHTML = _fmtAnaliseCreditoHtml(bundle);
         showToast('Análise de crédito consultada.', 'success');
       } catch (e) {
         if (el) el.innerHTML = `<span style="color:#dc2626;">${esc(e.message || 'Erro na consulta')}</span>`;
@@ -726,6 +1071,12 @@
 
       try {
         const res = await FonteData.lookupTjCertidao(cpf);
+        // #region agent log
+        _ecDbgLog('esteira-credito.js:apiCertidaoCivil', 'certidao result', {
+          ok: res.ok,
+          error: res.error || null,
+        }, 'certidao-host');
+        // #endregion
         if (!res.ok) throw new Error(res.error || 'Falha na consulta');
         const prevEst = parseEsteira(p);
         const esteira = {
@@ -758,7 +1109,7 @@
       const nome = p.client_name || p.clientName || '—';
       const num = fields.num_nota_promissoria || `NP-${Date.now()}`;
       const valor = fields.valor_final || fields.valor_aprovado || p.valor || 0;
-      const dataCred = fields.data_credito || new Date().toISOString().slice(0, 10);
+      const dataCred = fields.data_desconto || fields.data_credito || new Date().toISOString().slice(0, 10);
 
       const texto = [
         'NOTA PROMISSÓRIA',
@@ -771,7 +1122,9 @@
         `a quantia de ${fmtMoney(valor)}, conforme condições da proposta de crédito.`,
         '',
         `Forma de pagamento: ${fields.forma_pagamento || '—'}`,
-        `Valor da parcela: ${fields.valor_parcela ? fmtMoney(fields.valor_parcela) : '—'}`,
+        fields.valor_parcela && fields.parcelas_meses
+          ? `Parcelas: ${fields.parcelas_meses}x de ${fmtMoney(fields.valor_parcela)} = ${fmtMoney(valor)}`
+          : `Valor da parcela: ${fields.valor_parcela ? fmtMoney(fields.valor_parcela) : '—'}`,
         '',
         `Gerado em ${new Date().toLocaleString('pt-BR')}`,
       ].join('\n');
@@ -780,7 +1133,8 @@
       try {
         const blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
         const file = new File([blob], `nota_promissoria_${num.replace(/[^\w-]/g, '_')}.txt`, { type: 'text/plain' });
-        const url = await DB.uploadProposalFile(file, p.id, 'retorno_promissoria');
+        const uploaded = await DB.uploadProposalFile(file, p.id, 'retorno_promissoria');
+        const url = typeof DB.resolveUploadUrl === 'function' ? DB.resolveUploadUrl(uploaded) : (uploaded?.url || uploaded);
 
         const prevEst = parseEsteira(p);
         const prevRet = parseRetorno(p);
@@ -818,11 +1172,61 @@
         set('ecNumPromissoria', num);
 
         const promStatus = document.getElementById('ec_promissoria_status');
-        if (promStatus) promStatus.textContent = 'Nota promissória gerada — download no Retorno de Propostas';
+        if (promStatus) {
+          promStatus.innerHTML = url
+            ? `Nota gerada — <a href="${esc(url)}" target="_blank" rel="noopener" download="${esc(file.name)}">⬇ Baixar nota promissória</a> · também em Retorno de Propostas`
+            : 'Nota promissória gerada — download no Retorno de Propostas';
+        }
 
-        showToast('Nota promissória gerada. Disponível para download em Retorno de Propostas.', 'success');
+        showToast('Nota promissória gerada. Baixe aqui ou em Retorno de Propostas.', 'success');
       } catch (e) {
         showToast(e.message || 'Erro ao gerar nota.', 'error');
+      } finally {
+        hideLoading();
+      }
+    },
+
+    async enviarNotaPromissoriaAssinatura() {
+      const p = await this._getCurrentProposal();
+      if (!p) {
+        showToast('Selecione uma proposta.', 'warning');
+        return;
+      }
+      const fields = this._collectEsteiraFields();
+      const prevEst = parseEsteira(p);
+      const prevRet = parseRetorno(p);
+      const hasProm = prevRet.attachments?.promissoria || _esteiraUrls.promissoria;
+      if (!hasProm && !fields.num_nota_promissoria) {
+        await this.gerarNotaPromissoria();
+      }
+      showLoading('Registrando envio para assinatura...');
+      try {
+        const esteira = {
+          ...prevEst,
+          ...fields,
+          promissoria_enviada_assinatura_em: new Date().toISOString(),
+          promissoria_status: 'aguardando_assinatura',
+        };
+        const retorno = {
+          ...prevRet,
+          promissoria_enviada_assinatura_em: esteira.promissoria_enviada_assinatura_em,
+          promissoria_status: 'aguardando_assinatura',
+        };
+        await _saveProposal({
+          ...p,
+          creditoEsteira: esteira,
+          credito_esteira: esteira,
+          creditoRetorno: retorno,
+          credito_retorno: retorno,
+          updatedAt: new Date().toISOString(),
+        });
+        const promStatus = document.getElementById('ec_promissoria_status');
+        if (promStatus) {
+          promStatus.innerHTML = '<span style="color:#059669;font-weight:600;">Enviada para assinatura</span>';
+        }
+        showToast('Nota promissória marcada como enviada para assinatura.', 'success');
+      } catch (e) {
+        showToast(e.message || 'Erro ao registrar envio.', 'error');
       } finally {
         hideLoading();
       }
@@ -872,20 +1276,30 @@
           status: st === 'aprovado' ? 'aprovado_esteira' : 'recusado_politica',
         };
 
-        let empId = p.employee_id || p.vendorId || p.vendor_id;
+        let empId = null;
+        let beneficiaryName = '';
         if (st === 'aprovado') {
           const valorCredito = fields.valor_aprovado || fields.valor_final || p.valor || 0;
           if (!Number.isFinite(valorCredito) || valorCredito <= 0) {
             throw new Error('Informe o valor aprovado ou valor final antes de aprovar.');
           }
-          if (!empId) {
-            const cpf = proposalCpf(p);
-            if (cpf.length === 11 && typeof DB.getUserByCpf === 'function') {
-              const emp = await DB.getUserByCpf(cpf);
-              empId = emp?.id;
-            }
-          }
-          if (!empId) throw new Error('Funcionário/parceiro não identificado para crédito na conta corrente.');
+          empId = await resolveCreditBeneficiaryId(p);
+          if (!empId) throw new Error('Funcionário beneficiário não identificado (CPF da proposta sem cadastro).');
+
+          const beneficiary = typeof DB.getUser === 'function' ? await DB.getUser(empId) : null;
+          beneficiaryName = beneficiary?.name || p.clientName || p.client_name || p.nome || 'funcionário';
+          const submitterId = String(p.employee_id || p.vendor_id || '');
+          // #region agent log
+          _ecDbgLog('esteira-credito.js:decidir', 'credit beneficiary', {
+            proposalId: p.id,
+            empId,
+            beneficiaryName,
+            submitterId,
+            cpf: proposalCpf(p),
+            valorCredito,
+            redirectedFromSubmitter: submitterId && submitterId !== String(empId),
+          }, 'credit-beneficiary');
+          // #endregion
 
           const protocolo = fields.protocolo || p.protocolo || p.numero || p.id;
           const reason = `Crédito aprovado — Esteira Proposta de Crédito (${protocolo})`;
@@ -895,17 +1309,22 @@
             proposal_id: p.id,
             protocolo,
             credito: true,
+            beneficiary_cpf: proposalCpf(p),
+            beneficiary_user_id: empId,
           };
           const nb = await DB.addBalance(empId, valorCredito, reason, session?.id || 'financeiro', meta);
           if (nb == null) {
-            showToast('Decisão registrada, mas não foi possível creditar a conta corrente.', 'warning');
+            showToast('Decisão registrada, mas não foi possível creditar a conta corrente do beneficiário.', 'warning');
           }
           esteira.credito_conta_em = now;
           esteira.credito_valor = valorCredito;
+          esteira.credito_beneficiary_id = empId;
+          esteira.credito_beneficiary_cpf = proposalCpf(p);
+          esteira.credito_beneficiary_nome = beneficiaryName;
         }
 
         const linha = st === 'aprovado'
-          ? `[ESTEIRA CRÉDITO] Aprovado — ${fmtMoney(esteira.credito_valor || fields.valor_aprovado)} creditado na conta corrente`
+          ? `[ESTEIRA CRÉDITO] Aprovado — ${fmtMoney(esteira.credito_valor || fields.valor_aprovado)} creditado na conta de ${beneficiaryName || 'funcionário'}`
           : '[ESTEIRA CRÉDITO] Recusado — política interna';
 
         const updated = {
@@ -936,7 +1355,9 @@
         await _saveProposal(updated);
         _esteiraPending = {};
         showToast(
-          st === 'aprovado' ? 'Proposta aprovada e valor creditado na conta corrente SOU+BLU.' : 'Proposta recusada por política interna.',
+          st === 'aprovado'
+            ? `Proposta aprovada. ${fmtMoney(esteira.credito_valor || fields.valor_aprovado)} creditado na conta de ${beneficiaryName || 'funcionário'} (conta corrente SOU+BLU — não é transferência bancária automática).`
+            : 'Proposta recusada por política interna.',
           st === 'aprovado' ? 'success' : 'warning'
         );
         await this.renderWorkflow();
@@ -953,86 +1374,42 @@
       const props = await this._loadProposals();
       const credito = (props || []).filter(isCreditoProposal);
       if (!credito.length) {
-        sel.innerHTML = '<option value="">Nenhuma proposta na esteira — adicione primeiro</option>';
+        sel.innerHTML = '<option value="">Nenhuma solicitação na esteira</option>';
         return;
       }
-      sel.innerHTML = '<option value="">Selecione a proposta...</option>' + credito.map((p) =>
+      sel.innerHTML = '<option value="">Selecione a solicitação...</option>' + credito.map((p) =>
         `<option value="${esc(p.id)}" data-valor="${esc(p.valorFinal || p.valor_final || p.valor || '')}">${esc(proposalLabel(p))}</option>`
       ).join('');
       sel.onchange = () => {
         const opt = sel.selectedOptions[0];
-        const v = document.getElementById('ccbValor');
-        if (v && opt?.dataset.valor) v.value = parseFloat(opt.dataset.valor) || '';
+        const parcelasInput = document.getElementById('ccbParcelas');
+        const valorInput = document.getElementById('ccbValor');
+        if (!opt?.value) {
+          if (parcelasInput) parcelasInput.value = '';
+          if (valorInput) valorInput.value = '';
+          const wrap = document.getElementById('ccbParcelasWrap');
+          if (wrap) wrap.innerHTML = '';
+          return;
+        }
+        const p = credito.find((x) => String(x.id) === String(opt.value));
+        if (!p) return;
+        const est = parseEsteira(p);
+        const ret = parseRetorno(p);
+        const parcelas = this._parcelasFromProposal(p, est, p.meta || {}) || est.parcelas_meses || 2;
+        const valores = _parseParcelasValores(est, ret);
+        if (parcelasInput) parcelasInput.value = String(parcelas);
+        this._fillParcelasInputs('ccbParcelasWrap', parcelas, valores);
+        this.onCcbParcelaInputChange();
       };
     },
 
-    async openAddModal() {
-      this._ensureModal();
-      const sel = document.getElementById('esteiraAddProposal');
-      if (!sel) return;
-      const props = await this._loadProposals();
-      const disponiveis = (props || []).filter((p) => !isCreditoProposal(p));
-      sel.innerHTML = disponiveis.length
-        ? '<option value="">Selecione a proposta...</option>' + disponiveis.map((p) =>
-          `<option value="${esc(p.id)}">${esc(proposalLabel(p))}</option>`
-        ).join('')
-        : '<option value="">Todas as propostas já estão na esteira</option>';
-      openModal('esteiraCreditoAddModal');
+    openAddModal() {
+      showToast('Esta esteira é só para empréstimo interno ao funcionário. Use "Solicitar proposta crédito" ou aguarde a solicitação pelo painel do funcionário. Propostas comerciais (PROP-) não entram aqui.', 'info');
+      this.openSolicitarPanel();
     },
 
     async saveAdd() {
-      const id = document.getElementById('esteiraAddProposal')?.value;
-      if (!id) {
-        showToast('Selecione uma proposta.', 'warning');
-        return;
-      }
-
-      const props = await this._loadProposals();
-      const p = props.find((x) => String(x.id) === String(id));
-      if (!p) {
-        showToast('Proposta não encontrada.', 'error');
-        return;
-      }
-
-      const protocolo = p.protocolo || p.numero || gerarProtocolo();
-      const now = new Date().toISOString();
-
-      const updated = {
-        ...p,
-        credito: true,
-        protocolo,
-        numero: protocolo,
-        creditoEsteira: {
-          ...(parseEsteira(p)),
-          protocolo,
-          status: 'pendente',
-          criado_em: now,
-        },
-        credito_esteira: {
-          ...(parseEsteira(p)),
-          protocolo,
-          status: 'pendente',
-          criado_em: now,
-        },
-        obs: typeof DB._appendProposalObsLine === 'function'
-          ? DB._appendProposalObsLine(p.obs, `[CREDITO] Esteira — protocolo ${protocolo}`)
-          : `${String(p.obs || '').trim()}\n[CREDITO] Esteira — protocolo ${protocolo}`.trim(),
-        updatedAt: now,
-      };
-
-      showLoading('Salvando...');
-      try {
-        await _saveProposal(updated);
-        closeModal('esteiraCreditoAddModal');
-        _currentProposalId = id;
-        showToast(`Proposta adicionada à esteira. Protocolo: ${protocolo}`, 'success');
-        this.tab = 'propostas';
-        await this.mount();
-      } catch (e) {
-        showToast(e.message || 'Erro ao salvar.', 'error');
-      } finally {
-        hideLoading();
-      }
+      showToast('Não é possível adicionar propostas comerciais à esteira de crédito.', 'warning');
     },
 
     async emitCcb() {
@@ -1041,9 +1418,19 @@
         showToast('Selecione uma proposta da esteira.', 'warning');
         return;
       }
-      const valor = parseFloat(document.getElementById('ccbValor')?.value);
+      const valor = parseFloat(document.getElementById('ccbValor')?.value) || _sumParcelasInputs('ccbParcelasWrap');
       const parcelas = parseInt(document.getElementById('ccbParcelas')?.value, 10);
+      const parcelasValores = [];
+      document.querySelectorAll('#ccbParcelasWrap .ec-parcela-input').forEach((el) => {
+        const n = parseFloat(el.value);
+        if (Number.isFinite(n)) parcelasValores.push(n);
+      });
       const obsExtra = document.getElementById('ccbObs')?.value?.trim() || '';
+
+      if (!Number.isFinite(valor) || valor <= 0) {
+        showToast('Informe os valores das parcelas (soma do crédito).', 'warning');
+        return;
+      }
 
       const props = await this._loadProposals();
       const p = props.find((x) => String(x.id) === String(id));
@@ -1057,6 +1444,7 @@
         `CCB emitido em ${now}`,
         Number.isFinite(valor) ? `Valor: R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '',
         Number.isFinite(parcelas) ? `Parcelas: ${parcelas}` : '',
+        parcelasValores.length ? `Detalhe: ${parcelasValores.map((v) => fmtMoney(v)).join(' + ')} = ${fmtMoney(valor)}` : '',
         obsExtra,
       ].filter(Boolean).join(' · ');
 

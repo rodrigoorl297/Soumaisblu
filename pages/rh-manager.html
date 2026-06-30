@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <script charset="UTF-8" src="../js/base-path.js"></script>
   <script>window.SOUBLU_SKIP_BACK_TRAP = true;</script>
-  <script charset="UTF-8" src="../js/db-connect.js?v=12"></script>
+  <script charset="UTF-8" src="../js/db-connect.js?v=1781813000"></script>
   <title>Gerenciador de RH · SOU+BLU</title>
   <meta name="description" content="Painel de RH completo SOU+BLU"/>
   <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
@@ -706,11 +706,11 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Protocolo</th><th>Cargo</th><th>CBO</th><th>Descrição CBO</th><th>Departamento</th><th>Ações</th>
+                    <th>Protocolo</th><th>Cargo</th><th>CBO</th><th>Descrição CBO</th><th>Departamento</th><th>Insalubre</th><th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="job_list_body">
-                  <tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+                  <tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -1145,9 +1145,25 @@
               <input type="text" class="form-control mask-cpf" id="cv_cpf" placeholder="000.000.000-00" required />
             </div>
             <div class="form-group">
-              <button type="button" class="btn btn-accent btn-api-lookup btn-full" id="btn_buscar_cpf_cv" onclick="buscarCpfCurriculo()">BUSCAR API</button>
+              <button type="button" class="btn btn-accent btn-api-lookup btn-full" id="btn_buscar_cpf_cv" onclick="buscarCpfCurriculo()">BUSCAR API (RF + PIS)</button>
             </div>
           </div>
+          <div class="form-grid mt-md">
+            <div class="form-group">
+              <label for="cv_data_nascimento">Data de Nascimento</label>
+              <input type="date" class="form-control" id="cv_data_nascimento" />
+              <small class="text-muted" style="font-size:11px;">Recomendado para consulta Receita Federal e PIS.</small>
+            </div>
+            <div class="form-group">
+              <label for="cv_pis">Nº PIS (consulta trabalhista)</label>
+              <input type="text" class="form-control" id="cv_pis" readonly style="background:#f3f4f6;font-weight:700;" placeholder="Preenchido pela API" />
+            </div>
+          </div>
+          <div class="form-group mt-md">
+            <label for="cv_situacao_rf">Situação cadastral (Receita Federal)</label>
+            <input type="text" class="form-control" id="cv_situacao_rf" readonly style="background:#f3f4f6;" placeholder="Preenchido pela API" />
+          </div>
+          <div id="cv_fontedata_info" class="card card-padded mt-md" style="display:none;font-size:13px;background:var(--color-surface-2);"></div>
           <div class="form-group mt-md">
             <label for="cv_nome">Nome Completo</label>
             <input type="text" class="form-control" id="cv_nome" placeholder="Nome do Candidato" required />
@@ -1260,6 +1276,13 @@
             </div>
           </div>
           <div class="form-group mt-md">
+            <label for="jg_trabalho_insalubre">Trabalho insalubre?</label>
+            <select class="form-control" id="jg_trabalho_insalubre" required>
+              <option value="NÃO">NÃO</option>
+              <option value="SIM">SIM</option>
+            </select>
+          </div>
+          <div class="form-group mt-md">
             <label for="jg_pop">Procedimento Operacional Padrão (POP)</label>
             <input type="file" class="form-control" id="jg_pop" />
           </div>
@@ -1288,9 +1311,26 @@
                   <input type="text" class="form-control mask-cpf" id="emp_cpf" placeholder="000.000.000-00" required />
                 </div>
                 <div class="form-group">
-                  <button type="button" class="btn btn-accent btn-api-lookup btn-full" id="btn_buscar_cpf_emp" onclick="buscarCpfFuncionario()">BUSCAR BANCOS DE DADOS</button>
+                  <button type="button" class="btn btn-accent btn-api-lookup btn-full" id="btn_buscar_cpf_emp" onclick="buscarCpfFuncionario()">BUSCAR BANCOS DE DADOS (RF + PIS)</button>
                 </div>
               </div>
+
+              <div class="form-grid mt-md">
+                <div class="form-group">
+                  <label for="emp_data_nascimento">Data de Nascimento</label>
+                  <input type="date" class="form-control" id="emp_data_nascimento" />
+                  <small class="text-muted" style="font-size:11px;">Recomendado para consulta Receita Federal e PIS.</small>
+                </div>
+                <div class="form-group">
+                  <label for="emp_pis">Nº PIS (consulta trabalhista)</label>
+                  <input type="text" class="form-control" id="emp_pis" readonly style="background:#f3f4f6;font-weight:700;" placeholder="Preenchido pela API" />
+                </div>
+              </div>
+              <div class="form-group mt-md">
+                <label for="emp_situacao_rf">Situação cadastral (Receita Federal)</label>
+                <input type="text" class="form-control" id="emp_situacao_rf" readonly style="background:#f3f4f6;" placeholder="Preenchido pela API" />
+              </div>
+              <div id="emp_fontedata_info" class="card card-padded mt-md" style="display:none;font-size:13px;background:var(--color-surface-2);"></div>
 
               <div class="form-group mt-md">
                 <label for="emp_nome">Nome Completo</label>
@@ -1478,8 +1518,8 @@
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canPartnerDashboard" /> Dashboard de Parceiro</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canLeadsManager" /> Gerenciador de Leads</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canTreinamentos" /> Plataforma de Treinamentos</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canTimIndicacao" /> Indicação TIM</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canTimEsteira" /> Esteira TIM</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer; display:none;"><input type="checkbox" id="perm_canTimIndicacao" /> Indicação TIM</label>
+                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer; display:none;"><input type="checkbox" id="perm_canTimEsteira" /> Esteira TIM</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canContestacao" /> Contestações</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canFiscalParceiro" /> Fechamento Fiscal</label>
                   <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canMarketplaceBlu" /> Marketplace BLU</label>
@@ -1623,19 +1663,27 @@
             <select id="partnerComercial"><option value="">— Selecione —</option></select>
           </div>
           <div class="form-group">
-            <label>Retenção IRRF (%)</label>
+            <label>Retenção IRPJ (%)</label>
             <input type="number" id="partnerRetencaoIrrf" min="0" max="100" step="0.01" value="0"/>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group">
+            <label>Faixa de comissão</label>
+            <select id="partnerCommissionTier" onchange="PartnerPerms.updateCommissionTierHint()"></select>
+            <small id="partnerCommissionTierHint" style="display:block;font-size:12px;margin-top:4px;color:var(--color-text-muted);"></small>
+          </div>
+          <div class="form-group">
             <label>Taxa de saque (R$)</label>
             <input type="number" id="partnerTaxaSaque" min="0" step="0.01" value="10"/>
           </div>
+        </div>
+        <div class="form-row">
           <div class="form-group">
             <label>Limite de funcionários</label>
             <input type="number" id="partnerFuncLimite" min="0" step="1" placeholder="0 = sem limite"/>
           </div>
+          <div class="form-group"></div>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -2300,12 +2348,12 @@
 
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
   <script charset="UTF-8" src="../js/config.js?v=14"></script>
-  <script charset="UTF-8" src="../js/db.js?v=43"></script>
-  <script charset="UTF-8" src="../js/fontedata.js?v=2"></script>
-  <script charset="UTF-8" src="../js/auth.js?v=7"></script>
+  <script charset="UTF-8" src="../js/db.js?v=97c411rh2"></script>
+  <script charset="UTF-8" src="../js/fontedata.js?v=4"></script>
+  <script charset="UTF-8" src="../js/auth.js?v=1781813000"></script>
   <script charset="UTF-8" src="../js/ui.js?v=1781810513726"></script>
-  <script charset="UTF-8" src="../js/partners-ui.js?v=1781810513726"></script>
-  <script charset="UTF-8" src="../js/partners.js?v=1781810513726"></script>
+  <script charset="UTF-8" src="../js/partners-ui.js?v=97c411tier1"></script>
+  <script charset="UTF-8" src="../js/partners.js?v=97c411tier1"></script>
   <script charset="UTF-8" src="../js/cbo.js?v=1"></script>
   <script charset="UTF-8" src="../js/sales-ranking.js?v=3"></script>
   <script charset="UTF-8" src="../js/folha-pagamento.js?v=12"></script>
@@ -2315,7 +2363,7 @@
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2"></script>
   <script charset="UTF-8" src="../js/profile.js?v=1781810513726"></script>
   <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
-  <script charset="UTF-8" src="../js/rh-manager.js?v=34"></script>
+  <script charset="UTF-8" src="../js/rh-manager.js?v=97c411rh2"></script>
   <script charset="UTF-8" src="../js/rh-ops.js?v=12"></script>
 </body>
 </html>

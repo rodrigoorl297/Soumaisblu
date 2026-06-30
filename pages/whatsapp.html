@@ -1,0 +1,785 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>SOU+BLU · WhatsApp CRM</title>
+  <link rel="icon" href="../images/logo.png" type="image/png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css"/>
+  <link rel="stylesheet" href="../css/global.css"/>
+  <link rel="stylesheet" href="../css/whatsapp-chat.css?v=97c411wa16"/>
+
+  <script src="../js/base-path.js"></script>
+  <script src="../js/db-connect.js?v=12"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%; overflow: hidden;
+      background: var(--c-bg);
+      font-family: 'Inter', -apple-system, sans-serif;
+      color: var(--c-text);
+      font-size: 13px;
+    }
+
+    /* ── Color tokens (Clean Light Theme) ── */
+    :root {
+      --c-bg:       #ffffff;
+      --c-surface:  #ffffff;
+      --c-surface2: #f5f6f6;
+      --c-surface3: #e9edef;
+      --c-border:   #d1d7db;
+      --c-border2:  #e9edef;
+      --c-text:     #111b21;
+      --c-sub:      #54656f;
+      --c-muted:    #8696a0;
+      --c-accent:   #0284c7;  /* Blue accent as requested */
+      --c-accent-d: #0369a1;
+      --c-green:    #25d366;
+      --c-red:      #ef4444;
+      --c-orange:   #f59e0b;
+      --c-purple:   #8b5cf6;
+      --c-cyan:     #06b6d4;
+    }
+
+    /* ── Top bar ── */
+    .wa-topbar {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+      height: 48px;
+      background: var(--c-surface);
+      border-bottom: 1px solid var(--c-border);
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 16px;
+    }
+    .wa-topbar__left { display: flex; align-items: center; gap: 14px; }
+    .wa-topbar__back {
+      display: flex; align-items: center; gap: 6px;
+      color: var(--c-accent); text-decoration: none;
+      font-weight: 500; font-size: 13px;
+      padding: 5px 10px; border-radius: 6px;
+      transition: background .15s;
+    }
+    .wa-topbar__back:hover { background: var(--c-surface3); }
+    .wa-topbar__logo {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 700; font-size: 14px; color: var(--c-text);
+      padding-left: 8px; border-left: 1px solid var(--c-border2);
+    }
+    .wa-topbar__logo span {
+      background: var(--c-accent);
+      color: #fff; font-size: 10px; font-weight: 700;
+      padding: 2px 7px; border-radius: 12px; letter-spacing: .5px;
+    }
+
+    /* ── Layout ── */
+    .wa-body {
+      position: fixed; top: 48px; left: 0; right: 0; bottom: 0;
+      display: flex; overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════
+       LEFT — INBOX
+    ══════════════════════════════════════ */
+    .wa-inbox {
+      width: 280px; flex-shrink: 0;
+      background: var(--c-surface);
+      border-right: 1px solid var(--c-border);
+      display: flex; flex-direction: column;
+    }
+
+    .wa-inbox__head {
+      padding: 10px 12px 0;
+    }
+    .wa-inbox__title-row {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .wa-inbox__title {
+      font-weight: 700; font-size: 11px; letter-spacing: 1px;
+      text-transform: uppercase; color: var(--c-sub);
+    }
+    .wa-inbox__actions { display: flex; gap: 2px; }
+    .wa-icon-btn {
+      background: none; border: none; cursor: pointer;
+      color: var(--c-sub); padding: 5px; border-radius: 6px;
+      display: flex; align-items: center; transition: color .15s, background .15s;
+    }
+    .wa-icon-btn:hover { color: var(--c-text); background: var(--c-surface3); }
+
+    .wa-inbox__search {
+      position: relative; margin-bottom: 8px;
+    }
+    .wa-inbox__search svg {
+      position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+      color: var(--c-muted); pointer-events: none;
+    }
+    .wa-inbox__search input {
+      width: 100%; background: var(--c-surface3);
+      border: 1px solid var(--c-border2);
+      color: var(--c-text); padding: 6px 10px 6px 30px;
+      border-radius: 6px; font-size: 12px; font-family: inherit;
+      outline: none; transition: border-color .15s;
+    }
+    .wa-inbox__search input:focus { border-color: var(--c-accent); }
+    .wa-inbox__search input::placeholder { color: var(--c-muted); }
+
+    .wa-inbox__list { flex: 1; overflow-y: auto; }
+    .wa-inbox__list::-webkit-scrollbar { width: 3px; }
+    .wa-inbox__list::-webkit-scrollbar-thumb { background: var(--c-border2); border-radius: 2px; }
+
+    /* Connection status bar */
+    .wa-conn-bar {
+      padding: 10px 12px;
+      border-top: 1px solid var(--c-border);
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .wa-conn-status {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--c-sub);
+    }
+    .wa-conn-dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+      background: var(--c-muted);
+      box-shadow: 0 0 0 0 transparent;
+      transition: background .3s, box-shadow .3s;
+    }
+    .wa-conn-dot.connected {
+      background: var(--c-green);
+      box-shadow: 0 0 0 3px rgba(63,185,80,.2);
+    }
+    .wa-conn-dot.connecting {
+      background: var(--c-orange);
+      animation: pulse-dot 1.2s ease infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity: 1; } 50% { opacity: .4; }
+    }
+    .wa-conn-label { flex: 1; }
+    .wa-conn-btn {
+      width: 100%; background: var(--c-surface3);
+      border: 1px solid var(--c-border2); color: var(--c-text);
+      padding: 7px 12px; border-radius: 7px; font-size: 12px;
+      font-family: inherit; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; gap: 6px;
+      transition: background .15s, border-color .15s;
+    }
+    .wa-conn-btn:hover { background: var(--c-border); border-color: var(--c-accent); }
+    .wa-conn-btn.is-connected { color: var(--c-red); }
+    .wa-conn-btn.is-connected:hover { border-color: var(--c-red); }
+    .wa-conn-btn--reset {
+      margin-top: 6px; width: 100%;
+      color: var(--c-muted); font-size: 11px;
+      border-style: dashed;
+    }
+    .wa-conn-btn--reset:hover { color: var(--c-red); border-color: var(--c-red); }
+
+    /* QR Modal */
+    .wa-qr-modal {
+      background: var(--c-surface);
+      border: 1px solid var(--c-border2);
+      border-radius: 14px; padding: 32px 36px;
+      width: 360px; max-width: 95vw;
+      display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center;
+    }
+    .wa-qr-modal__icon {
+      width: 52px; height: 52px; border-radius: 14px;
+      background: rgba(47,129,247,.12); border: 1px solid rgba(47,129,247,.2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .wa-qr-modal__title { font-size: 16px; font-weight: 700; color: var(--c-text); }
+    .wa-qr-modal__desc { font-size: 12px; color: var(--c-sub); line-height: 1.6; }
+    .wa-qr-modal__qr { background: #fff; padding: 12px; border-radius: 10px; display: none; }
+    .wa-qr-modal__qr img { display: block; width: 200px; height: 200px; }
+    .wa-qr-modal__status { font-size: 11px; color: var(--c-muted); min-height: 16px; }
+    .wa-qr-modal__actions { display: flex; gap: 8px; }
+
+    /* Contact row */
+    .wa-contact {
+      display: flex; align-items: center; gap: 12px;
+      padding: 12px 14px; border-bottom: 1px solid var(--c-border2);
+      cursor: grab; user-select: none; -webkit-user-drag: element;
+      transition: background .15s;
+    }
+    .wa-contact:active { cursor: grabbing; }
+    .wa-contact:hover, .wa-contact.active { background: var(--c-surface2); }
+    .wa-contact.active {
+      background: rgba(47,129,247,.1);
+      border-left: 2px solid var(--c-accent);
+    }
+    .wa-contact__avatar {
+      width: 48px; height: 48px; border-radius: 50%; flex-shrink: 0;
+      background: var(--c-surface3);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 16px; color: var(--c-sub);
+      text-transform: uppercase;
+    }
+    .wa-contact__body { flex: 1; min-width: 0; }
+    .wa-contact__name {
+      font-weight: 600; font-size: 13px; color: var(--c-text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .wa-contact__preview {
+      font-size: 11px; color: var(--c-muted);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+    .wa-contact__meta {
+      display: flex; flex-direction: column; align-items: flex-end; gap: 4px; flex-shrink: 0;
+    }
+    .wa-contact__time { font-size: 10px; color: var(--c-muted); }
+    .wa-contact__badge {
+      background: var(--c-accent); color: #fff;
+      font-size: 10px; font-weight: 700; min-width: 16px; height: 16px;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      padding: 0 4px;
+    }
+
+    .wa-inbox__empty {
+      padding: 48px 20px; text-align: center;
+      color: var(--c-muted); font-size: 12px; line-height: 1.6;
+    }
+    .wa-inbox__empty strong { display: block; color: var(--c-sub); margin-bottom: 6px; font-size: 13px; }
+
+    /* ══════════════════════════════════════
+       RIGHT — KANBAN BOARD
+    ══════════════════════════════════════ */
+    .wa-board { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+    .wa-board.wa-board--chat-open::before {
+      content: '';
+      position: absolute; inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 40;
+      pointer-events: none;
+    }
+
+    /* Column headers strip */
+    .wa-board__strip {
+      display: flex; flex-shrink: 0;
+      background: var(--c-surface);
+      border-bottom: 1px solid var(--c-border);
+      overflow-x: auto; min-height: 46px;
+    }
+    .wa-board__strip::-webkit-scrollbar { height: 0; }
+
+    .wa-col-tab {
+      min-width: 280px; max-width: 280px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 0 14px; border-right: 1px solid var(--c-border);
+      position: relative; cursor: default;
+    }
+    .wa-col-tab::after {
+      content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
+      background: var(--col-color, var(--c-accent));
+    }
+    .wa-col-tab__name {
+      font-weight: 700; font-size: 11px; letter-spacing: .8px;
+      text-transform: uppercase; color: var(--c-text); flex: 1;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .wa-col-tab__count {
+      font-size: 11px; font-weight: 600; color: var(--c-sub);
+      background: var(--c-surface3); padding: 1px 6px; border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .wa-col-tab__value { font-size: 11px; color: var(--c-muted); flex-shrink: 0; }
+    .wa-col-tab__more {
+      background: none; border: none; cursor: pointer;
+      color: var(--c-muted); padding: 4px; border-radius: 4px;
+      display: flex; align-items: center; flex-shrink: 0;
+      transition: color .15s, background .15s;
+    }
+    .wa-col-tab__more:hover { color: var(--c-text); background: var(--c-surface3); }
+
+    /* Add column button */
+    .wa-add-col {
+      min-width: 52px; display: flex; align-items: center; justify-content: center;
+      background: none; border: none; border-right: 1px solid var(--c-border);
+      cursor: pointer; color: var(--c-muted);
+      transition: color .15s, background .15s; flex-shrink: 0;
+    }
+    .wa-add-col:hover { background: var(--c-surface2); color: var(--c-accent); }
+
+    /* Columns body */
+    .wa-board__cols {
+      flex: 1; display: flex; overflow-x: auto; overflow-y: hidden;
+    }
+    .wa-board__cols::-webkit-scrollbar { height: 5px; }
+    .wa-board__cols::-webkit-scrollbar-thumb { background: var(--c-border2); border-radius: 3px; }
+
+    .wa-col-body {
+      min-width: 280px; max-width: 280px; flex-shrink: 0;
+      border-right: 1px solid var(--c-border);
+      padding: 0; overflow-y: auto;
+      display: flex; flex-direction: column;
+      transition: background .15s;
+    }
+    .wa-col-body::-webkit-scrollbar { width: 3px; }
+    .wa-col-body::-webkit-scrollbar-thumb { background: var(--c-border2); border-radius: 2px; }
+    .wa-col-body.drag-over { background: rgba(47,129,247,.06); }
+
+    /* ── Kanban Card (WhatsApp style) ── */
+    .wa-kcard {
+      background: var(--c-surface);
+      border: none;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      border-radius: 0;
+      padding: 12px 16px;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-drag: element;
+      transition: background .15s;
+      position: relative;
+    }
+    .wa-kcard:active {
+      cursor: grabbing;
+    }
+    .wa-kcard:hover {
+      background: var(--c-surface2);
+    }
+    .wa-kcard.active {
+      background: rgba(2, 132, 199, 0.15);
+    }
+    .wa-kcard__header {
+      display: flex; align-items: center; gap: 9px; margin-bottom: 8px;
+    }
+    .wa-kcard__avatar {
+      width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0;
+      background: var(--c-surface3);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 14px; color: var(--c-sub); text-transform: uppercase;
+    }
+    .wa-kcard__info { flex: 1; min-width: 0; }
+    .wa-kcard__name {
+      font-weight: 600; font-size: 13px; color: var(--c-text);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .wa-kcard__phone { font-size: 11px; color: var(--c-muted); margin-top: 1px; }
+    .wa-kcard__badge {
+      background: var(--c-accent); color: #fff;
+      font-size: 10px; font-weight: 700; min-width: 16px; height: 16px;
+      border-radius: 8px; display: flex; align-items: center; justify-content: center;
+      padding: 0 4px; flex-shrink: 0;
+    }
+
+    .wa-kcard__preview {
+      font-size: 12px; color: var(--c-sub); line-height: 1.5;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+      overflow: hidden; margin-bottom: 10px;
+    }
+
+    .wa-kcard__tags { display: flex; gap: 4px; flex-wrap: wrap; margin-bottom: 8px; }
+    .wa-kcard__tag {
+      font-size: 10px; font-weight: 600; padding: 2px 7px;
+      border-radius: 4px; color: #fff; letter-spacing: .3px;
+    }
+
+    .wa-kcard__footer {
+      display: flex; align-items: center; justify-content: space-between;
+      padding-top: 8px; border-top: 1px solid rgba(255,255,255,.05);
+    }
+    .wa-kcard__time { font-size: 11px; color: var(--c-muted); display: flex; align-items: center; gap: 4px; }
+    .wa-kcard__actions { display: flex; gap: 2px; }
+    .wa-kcard__action {
+      background: none; border: none; cursor: pointer;
+      color: var(--c-muted); padding: 4px 5px; border-radius: 5px;
+      display: flex; align-items: center;
+      transition: color .15s, background .15s;
+    }
+    .wa-kcard__action:hover { color: var(--c-text); background: var(--c-surface3); }
+
+    /* Stage select on card */
+    .wa-kcard__stage {
+      background: var(--c-surface3); border: 1px solid var(--c-border2);
+      color: var(--c-sub); font-size: 11px; font-family: inherit;
+      padding: 3px 6px; border-radius: 5px; cursor: pointer;
+      max-width: 110px; outline: none;
+    }
+    .wa-kcard__stage:focus { border-color: var(--c-accent); }
+
+    /* Empty col */
+    .wa-col-empty {
+      display: flex; flex-direction: column; align-items: center;
+      padding: 32px 20px; color: var(--c-muted); gap: 8px;
+      border: 1px dashed var(--c-border); border-radius: 8px; margin: 4px;
+    }
+    .wa-col-empty p { font-size: 12px; text-align: center; }
+
+    /* ══════════════════════════════════════
+       CONNECT SCREEN
+    ══════════════════════════════════════ */
+    .wa-connect {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 0; background: var(--c-bg);
+    }
+    .wa-connect__card {
+      background: var(--c-surface);
+      border: 1px solid var(--c-border);
+      border-radius: 12px;
+      padding: 40px 48px;
+      max-width: 420px; width: 90%;
+      display: flex; flex-direction: column; align-items: center; gap: 16px;
+      text-align: center;
+    }
+    .wa-connect__icon {
+      width: 64px; height: 64px; border-radius: 16px;
+      background: rgba(47,129,247,.12); border: 1px solid rgba(47,129,247,.2);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .wa-connect__title { font-size: 18px; font-weight: 700; color: var(--c-text); }
+    .wa-connect__desc { font-size: 13px; color: var(--c-sub); line-height: 1.6; }
+    .wa-connect__qr {
+      background: #fff; padding: 12px; border-radius: 8px;
+      display: none;
+    }
+    .wa-connect__qr img { display: block; width: 200px; height: 200px; }
+    .wa-connect__status { font-size: 12px; color: var(--c-muted); min-height: 18px; }
+    .wa-connect__btn {
+      background: var(--c-accent); color: #fff;
+      border: none; cursor: pointer; font-family: inherit;
+      font-weight: 600; font-size: 13px; padding: 9px 24px;
+      border-radius: 8px; transition: background .15s;
+    }
+    .wa-connect__btn:hover { background: var(--c-accent-d); }
+
+    /* ══════════════════════════════════════
+       CHAT PANEL (slides in)
+    ══════════════════════════════════════ */
+    .wa-chat-panel {
+      position: absolute; inset: 0;
+      width: 100%; max-width: 100%;
+      background: var(--c-surface2);
+      border-left: none;
+      display: flex; flex-direction: column;
+      justify-content: stretch;
+      transform: translateX(100%);
+      transition: transform .22s cubic-bezier(.4,0,.2,1);
+      z-index: 50;
+      box-shadow: -8px 0 24px rgba(0,0,0,.4);
+      overflow: hidden;
+    }
+    .wa-chat-panel.open { transform: translateX(0); }
+    .wa-chat-panel #waChatRoot {
+      flex: 1; min-height: 0; width: 100%; max-width: 520px;
+      margin: 0 auto;
+    }
+
+    .wa-thread-only {
+      display: flex; flex-direction: column; height: 100%; min-height: 0;
+      background: #efeae2;
+    }
+    .wa-thread-only #waCrmThreadWrap {
+      flex: 1; display: flex; flex-direction: column; min-height: 0;
+    }
+    .wa-thread-only #waCrmThreadWrap.is-hidden { display: none; }
+    .wa-thread-only #waThreadBody {
+      flex: 1; min-height: 0;
+      display: flex; flex-direction: column;
+      overflow: hidden;
+    }
+    .wa-thread-only .wa-thread-back { display: none; }
+    .wa-thread-only .wa-thread-close {
+      background: none; border: none; cursor: pointer;
+      color: var(--c-sub); font-size: 22px; line-height: 1; padding: 4px 8px;
+    }
+    .wa-thread-only .wa-thread-close:hover { color: var(--c-text); }
+
+    /* ══════════════════════════════════════
+       MODALS
+    ══════════════════════════════════════ */
+    .wa-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.75);
+      z-index: 500; display: none; align-items: center; justify-content: center;
+    }
+    .wa-backdrop.open { display: flex; }
+    .wa-modal {
+      background: var(--c-surface);
+      border: 1px solid var(--c-border2);
+      border-radius: 12px; padding: 28px 28px 24px;
+      width: 400px; max-width: 95vw;
+    }
+    .wa-modal__title {
+      font-size: 15px; font-weight: 700; color: var(--c-text);
+      margin-bottom: 20px; display: flex; align-items: center; gap: 8px;
+    }
+    .wa-modal__label {
+      display: block; font-size: 11px; font-weight: 600;
+      letter-spacing: .5px; text-transform: uppercase;
+      color: var(--c-sub); margin-bottom: 6px; margin-top: 14px;
+    }
+    .wa-modal__label:first-of-type { margin-top: 0; }
+    .wa-modal__input {
+      width: 100%; background: var(--c-surface3);
+      border: 1px solid var(--c-border2); color: var(--c-text);
+      padding: 8px 12px; border-radius: 7px; font-size: 13px;
+      font-family: inherit; outline: none; transition: border-color .15s;
+    }
+    .wa-modal__input:focus { border-color: var(--c-accent); }
+
+    .wa-colors {
+      display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px;
+    }
+    .wa-color-dot {
+      width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+      border: 3px solid transparent; transition: border-color .12s, transform .12s;
+    }
+    .wa-color-dot.active { border-color: #fff; transform: scale(1.12); }
+
+    .wa-modal__actions {
+      display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px;
+    }
+    .wa-btn {
+      font-family: inherit; font-size: 13px; font-weight: 600;
+      padding: 7px 18px; border-radius: 7px; border: none;
+      cursor: pointer; transition: opacity .15s;
+    }
+    .wa-btn:hover { opacity: .85; }
+    .wa-btn--primary { background: var(--c-accent); color: #fff; }
+    .wa-btn--ghost { background: var(--c-surface3); color: var(--c-text); }
+    .wa-btn--danger { background: var(--c-red); color: #fff; }
+
+    /* ── Context menu ── */
+    .wa-ctx {
+      position: fixed; z-index: 1000;
+      background: var(--c-surface2);
+      border: 1px solid var(--c-border2);
+      border-radius: 8px; padding: 4px; min-width: 168px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.5);
+      display: none;
+    }
+    .wa-ctx.open { display: block; }
+    .wa-ctx__item {
+      padding: 7px 12px; font-size: 12px; color: var(--c-text);
+      cursor: pointer; border-radius: 5px;
+      display: flex; align-items: center; gap: 8px;
+      transition: background .1s;
+    }
+    .wa-ctx__item:hover { background: var(--c-surface3); }
+    .wa-ctx__item.danger { color: var(--c-red); }
+  </style>
+</head>
+<body>
+
+  <!-- ── Top bar ── -->
+  <header class="wa-topbar">
+    <div class="wa-topbar__left">
+      <a href="admin.html" class="wa-topbar__back">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M19 12H5M12 19l-7-7 7-7"/>
+        </svg>
+        Voltar
+      </a>
+      <div class="wa-topbar__logo">
+        WhatsApp CRM
+        <span>SOU+BLU</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── Body ── -->
+  <div class="wa-body">
+
+    <!-- INBOX -->
+    <aside class="wa-inbox">
+      <div class="wa-inbox__head">
+        <div class="wa-inbox__title-row">
+          <span class="wa-inbox__title">Conversas</span>
+          <div class="wa-inbox__actions">
+            <button class="wa-icon-btn" title="Atualizar" onclick="WA.refresh()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </button>
+            <button class="wa-icon-btn" title="Nova conversa" onclick="WA.openNewChat()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="wa-inbox__search">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          <input type="text" placeholder="Pesquisar..." oninput="WA.filterInbox(this.value)"/>
+        </div>
+      </div>
+      <div class="wa-inbox__list" id="waInboxList">
+        <div class="wa-inbox__empty">
+          <strong>Nenhuma conversa</strong>
+          Conecte o WhatsApp para ver suas conversas.
+        </div>
+      </div>
+
+      <!-- Connection status bar -->
+      <div class="wa-conn-bar">
+        <div class="wa-conn-status">
+          <div class="wa-conn-dot" id="waConnDot"></div>
+          <span class="wa-conn-label" id="waConnLabel">Verificando...</span>
+        </div>
+        <button class="wa-conn-btn" id="waConnBtn" onclick="WA.toggleConnect()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.4 2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          <span id="waConnBtnLabel">Conectar WhatsApp</span>
+        </button>
+        <button type="button" class="wa-conn-btn wa-conn-btn--reset" onclick="WA.resetWhatsApp()" title="Desconectar e limpar conversas da conta atual">
+          Reiniciar meu WhatsApp
+        </button>
+      </div>
+    </aside>
+
+
+    <!-- BOARD -->
+    <div class="wa-board" id="waBoard">
+
+      <!-- Header strip -->
+      <div class="wa-board__strip" id="waBoardStrip">
+        <button class="wa-add-col" id="waAddColBtn" onclick="WA.openAddColModal()" title="Adicionar coluna">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Columns -->
+      <div class="wa-board__cols" id="waBoardCols"></div>
+
+      <!-- Connect screen -->
+      <div class="wa-connect" id="waConnectScreen">
+        <div class="wa-connect__card">
+          <div class="wa-connect__icon">
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#2f81f7" stroke-width="1.5">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.65 3.4 2 2 0 0 1 3.62 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
+          </div>
+          <div class="wa-connect__title">Conectar WhatsApp</div>
+          <div class="wa-connect__desc">Escaneie o QR Code com seu celular para começar a usar o WhatsApp CRM</div>
+          <button class="wa-connect__btn" onclick="WA.openQrModal()">Conectar WhatsApp</button>
+        </div>
+      </div>
+
+      <!-- Chat panel -->
+      <div class="wa-chat-panel" id="waChatPanel">
+        <div id="waChatRoot" style="height:100%;display:flex;flex-direction:column;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── QR Code / Connect Modal ── -->
+  <div class="wa-backdrop" id="waQrModal">
+    <div class="wa-qr-modal">
+      <div class="wa-qr-modal__icon">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#2f81f7" stroke-width="1.5">
+          <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
+          <rect x="3" y="14" width="7" height="7"/>
+          <rect x="14" y="14" width="3" height="3"/><rect x="18" y="14" width="3" height="3"/>
+          <rect x="14" y="18" width="3" height="3"/><rect x="18" y="18" width="3" height="3"/>
+        </svg>
+      </div>
+      <div class="wa-qr-modal__title">Conectar WhatsApp</div>
+      <div class="wa-qr-modal__desc">Abra o WhatsApp no celular → Dispositivos Vinculados → Vincular Dispositivo → Escaneie o QR Code</div>
+      <div class="wa-qr-modal__qr" id="waQrBox">
+        <img id="waQrImg" src="" alt="QR Code"/>
+      </div>
+      <div class="wa-qr-modal__status" id="waQrStatus">Clique em "Gerar QR Code" para começar</div>
+      <div class="wa-qr-modal__actions">
+        <button class="wa-btn wa-btn--ghost" onclick="WA.closeQrModal()">Fechar</button>
+        <button class="wa-btn wa-btn--primary" id="waQrGenBtn" onclick="WA.generateQr()">Gerar QR Code</button>
+        <button class="wa-btn" id="waQrSimBtn" style="display:none;background:#3fb950;color:#fff;" onclick="WA.simulateScan()">Simular Leitura do QR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── New Chat Modal ── -->
+  <div class="wa-backdrop" id="waNewChatModal">
+    <div class="wa-modal">
+      <div class="wa-modal__title">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+        </svg>
+        <span>Nova Conversa</span>
+      </div>
+      <label class="wa-modal__label">Número com DDI (ex: 5562999990000)</label>
+      <input type="text" class="wa-modal__input" id="waNewChatPhone" placeholder="Digite apenas números..."/>
+      <label class="wa-modal__label" style="margin-top:12px;">Nome do contato (opcional)</label>
+      <input type="text" class="wa-modal__input" id="waNewChatName" placeholder="Ex: João Silva"/>
+      <div class="wa-modal__actions" style="margin-top:24px;">
+        <button class="wa-btn wa-btn--ghost" onclick="WA.closeNewChatModal()">Cancelar</button>
+        <button class="wa-btn wa-btn--primary" onclick="WA.submitNewChat()">Iniciar Conversa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Add/Edit Column Modal ── -->
+  <div class="wa-backdrop" id="waColModal">
+
+    <div class="wa-modal">
+      <div class="wa-modal__title">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+        <span id="waColModalTitle">Nova Coluna</span>
+      </div>
+      <label class="wa-modal__label">Nome da coluna</label>
+      <input type="text" class="wa-modal__input" id="waColName" placeholder="Ex: Proposta Enviada"/>
+      <label class="wa-modal__label">Cor</label>
+      <div class="wa-colors" id="waColColors">
+        <div class="wa-color-dot active" style="background:#2f81f7" data-color="#2f81f7" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#3fb950" data-color="#3fb950" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#f85149" data-color="#f85149" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#d29922" data-color="#d29922" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#bc8cff" data-color="#bc8cff" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#39c5cf" data-color="#39c5cf" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#ec6547" data-color="#ec6547" onclick="WA.selectColor(this)"></div>
+        <div class="wa-color-dot" style="background:#8b949e" data-color="#8b949e" onclick="WA.selectColor(this)"></div>
+      </div>
+      <input type="hidden" id="waColEditId"/>
+      <div class="wa-modal__actions">
+        <button class="wa-btn wa-btn--ghost" onclick="WA.closeColModal()">Cancelar</button>
+        <button class="wa-btn wa-btn--primary" onclick="WA.saveColumn()">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Context menu -->
+  <div class="wa-ctx" id="waCtxMenu">
+    <div class="wa-ctx__item" onclick="WA.editColumnCtx()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Renomear
+    </div>
+    <div class="wa-ctx__item danger" onclick="WA.deleteColumnCtx()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+        <path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/>
+      </svg>
+      Excluir coluna
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="../js/db.js"></script>
+  <script src="../js/auth.js"></script>
+  <script src="../js/whatsapp-chat.js?v=97c411wa20"></script>
+  <script src="../js/whatsapp-kanban.js?v=97c411wa20"></script>
+
+  <script>
+    (function () {
+      function boot() {
+        var session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+        if (!session || !session.id) { window.location.href = '../index.html'; return; }
+        if (window.WhatsAppChat && typeof WhatsAppChat.canAccess === 'function' && !WhatsAppChat.canAccess()) {
+          window.location.href = '../index.html';
+          return;
+        }
+        if (typeof WA !== 'undefined') WA.boot(session);
+      }
+      document.readyState === 'loading'
+        ? document.addEventListener('DOMContentLoaded', boot)
+        : boot();
+    })();
+  </script>
+</body>
+</html>

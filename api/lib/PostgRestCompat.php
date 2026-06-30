@@ -11,9 +11,11 @@ final class PostgRestCompat
         'tim_referrals', 'contestations', 'partner_fiscal',
         'marketplace_services', 'marketplace_orders',
         'finance_suppliers', 'finance_expenses',
+        'finance_adiantamento', 'finance_reembolso',
         'rh_companies', 'rh_resumes', 'rh_jobs', 'rh_employees',
         'rh_absence_justifications', 'rh_punishments', 'rh_dismissals',
         'rh_cbo', 'monitoria_atendimento',
+        'bolao_copa_picks', 'bolao_copa_results',
     ];
 
     /** Nome na API (snake_case) → coluna física no MySQL quando não há coluna duplicada. */
@@ -45,8 +47,10 @@ final class PostgRestCompat
         'partner_fiscal' => ['dados_nf'],
         'marketplace_orders' => ['request_data', 'result_data'],
         'finance_expenses' => ['pix_snapshot', 'attachments'],
-        'rh_employees' => ['change_history'],
-        'rh_resumes' => ['attachments'],
+        'finance_adiantamento' => ['attachments'],
+        'finance_reembolso' => ['attachments'],
+        'rh_employees' => ['change_history', 'fontedata_meta'],
+        'rh_resumes' => ['attachments', 'fontedata_meta'],
         'rh_dismissals' => ['checklist'],
         'monitoria_atendimento' => ['evidence_attachments'],
     ];
@@ -91,6 +95,7 @@ final class PostgRestCompat
             'or' => [],
             'order' => null,
             'limit' => null,
+            'offset' => null,
             'on_conflict' => null,
         ];
         if ($qs === '') {
@@ -104,6 +109,8 @@ final class PostgRestCompat
                 $out['order'] = (string) $val;
             } elseif ($key === 'limit') {
                 $out['limit'] = (int) $val;
+            } elseif ($key === 'offset') {
+                $out['offset'] = (int) $val;
             } elseif ($key === 'on_conflict') {
                 $out['on_conflict'] = (string) $val;
             } elseif ($key === 'or') {
@@ -148,7 +155,9 @@ final class PostgRestCompat
             $sql .= ' ORDER BY ' . $this->parseOrder($table, $params['order']);
         }
         if ($params['limit']) {
-            $sql .= ' LIMIT ' . max(1, (int) $params['limit']);
+            $lim = max(1, (int) $params['limit']);
+            $off = max(0, (int) ($params['offset'] ?? 0));
+            $sql .= $off > 0 ? (' LIMIT ' . $off . ',' . $lim) : (' LIMIT ' . $lim);
         }
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($bind);
@@ -355,6 +364,11 @@ final class PostgRestCompat
 
     private function prepareRow(string $table, array $item): array
     {
+        if ($table === 'proposals' && isset($item['attachments']) && is_array($item['attachments'])) {
+            require_once dirname(__DIR__) . '/lib/FileStorage.php';
+            $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
+            $item['attachments'] = soublu_attachments_normalize_for_api($item['attachments'], $uploadDir, true);
+        }
         $jsonCols = self::JSON_COLUMNS[$table] ?? [];
         $row = [];
         foreach ($item as $k => $v) {
@@ -383,9 +397,14 @@ final class PostgRestCompat
                     $row[$k] = $decoded;
                 }
             }
-            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked'], true)) {
+            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner'], true)) {
                 $row[$k] = (bool) (int) $v;
             }
+        }
+        if ($table === 'proposals' && isset($row['attachments']) && is_array($row['attachments'])) {
+            require_once dirname(__DIR__) . '/lib/FileStorage.php';
+            $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
+            $row['attachments'] = soublu_attachments_normalize_for_api($row['attachments'], $uploadDir, false);
         }
         return $row;
     }

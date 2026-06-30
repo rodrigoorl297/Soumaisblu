@@ -11,6 +11,28 @@
     { key: 'print_pix_automatico', label: 'PRINT AUTORIZAÇÃO PIX AUTOMÁTICO LIBERADO' },
   ];
 
+  const PIX_AUTOMATICO_FIXO = 'PIX automático';
+
+  function _fcPixAutoFieldHtml() {
+    return `<input type="text" class="form-control" value="${esc(PIX_AUTOMATICO_FIXO)}" readonly style="background:#f9fafb;font-weight:600;"/>
+      <input type="hidden" id="retornoPagamento" value="${esc(PIX_AUTOMATICO_FIXO)}"/>`;
+  }
+
+  const FC_STATUS_OPCOES = [
+    'EM ANÁLISE',
+    'AGUARDANDO DOCUMENTAÇÃO',
+    'APROVADO AG. PAGAMENTO',
+    'PAGO',
+    'REPROVADO',
+  ];
+
+  function _fcStatusSelectHtml(id, selected) {
+    const opts = ['<option value="">Selecione o status...</option>']
+      .concat(FC_STATUS_OPCOES.map((s) =>
+        `<option value="${esc(s)}"${String(selected || '') === s ? ' selected' : ''}>${esc(s)}</option>`));
+    return `<select id="${id}" class="form-control">${opts.join('')}</select>`;
+  }
+
   let _retornoAnexoPending = {};
   let _retornoAnexoUrls = {};
   let _adiantamentoEmployee = null;
@@ -38,6 +60,53 @@
     try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '—'; }
   }
 
+  function cpfDigits(v) {
+    return String(v || '').replace(/\D/g, '');
+  }
+
+  async function _lookupRhEmployee(cpf) {
+    const list = await DB.getRhEmployees().catch(() => []);
+    return (list || []).find(e => cpfDigits(e.cpf) === cpf) || null;
+  }
+
+  async function _lookupSystemUser(cpf) {
+    const users = await DB.getAllUsers().catch(() => []);
+    return (users || []).find(u => cpfDigits(u.cpf) === cpf && u.active !== false) || null;
+  }
+
+  function _mapRhToEmployee(rh, cpf) {
+    return {
+      id: rh.id,
+      name: rh.nome || rh.name || '',
+      cpf,
+      role: rh.cargo || rh.departamento || 'employee',
+      matricula: rh.matricula || '',
+    };
+  }
+
+  function _mapUserToEmployee(u, cpf) {
+    return {
+      id: u.id,
+      name: u.name || '',
+      cpf,
+      role: u.role || u.department || 'employee',
+      matricula: u.matricula || '',
+    };
+  }
+
+  async function _resolveEmployeeByCpf(cpf) {
+    const direct = await DB.getUserByCpf(cpf);
+    if (direct) return direct;
+
+    const rh = await _lookupRhEmployee(cpf);
+    if (rh) return _mapRhToEmployee(rh, cpf);
+
+    const u = await _lookupSystemUser(cpf);
+    if (u) return _mapUserToEmployee(u, cpf);
+
+    return null;
+  }
+
   function canView() {
     const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (!s || window.PARTNER_ROOT_ID) return false;
@@ -46,17 +115,54 @@
 
   function isCreditoProposal(p) {
     if (!p) return false;
-    if (p.credito === true) return true;
+    if (window.CreditoPropostasApi?.isCreditTableRow?.(p)) return true;
     const m = p.meta && typeof p.meta === 'object' ? p.meta : {};
-    if (m.credito === true || m.opcao_credito === true) return true;
-    const obs = String(p.obs || '').toUpperCase();
-    return obs.includes('[CREDITO]') || obs.includes('ESTEIRA DE CRÉDITO') || obs.includes('ESTEIRA DE CREDITO');
+    return m.credit_table === 'credit_proposals';
   }
 
   function proposalLabel(p) {
-    const num = p.numero || p.id || '—';
-    const cli = p.client_name || p.clientName || 'Cliente';
+    const num = p.protocolo || p.numero || p.id || '—';
+    const cli = p.client_name || p.clientName || p.nome || 'Funcionário';
     return `${num} · ${cli}`;
+  }
+
+  async function _loadCreditoProposals() {
+    if (window.CreditoPropostasApi?.list) {
+      try {
+        const rows = await CreditoPropostasApi.list();
+        if (Array.isArray(rows) && rows.length) return rows.filter(isCreditoProposal);
+      } catch (e) {
+        console.warn('[FinanceiroCredito] credit_proposals:', e.message || e);
+      }
+    }
+    const legacy = await DB.getProposals().catch(() => []);
+    return (legacy || []).filter(isCreditoProposal);
+  }
+
+  async function _getCreditoProposal(id) {
+    if (!id) return null;
+    if (window.CreditoPropostasApi?.get) {
+      const row = await CreditoPropostasApi.get(id).catch(() => null);
+      if (row) return row;
+    }
+    if (typeof DB.getProposal === 'function') {
+      const row = await DB.getProposal(id).catch(() => null);
+      if (row) return row;
+    }
+    const list = await _loadCreditoProposals();
+    return list.find((x) => String(x.id) === String(id)) || null;
+  }
+
+  async function _saveCreditoProposal(updated) {
+    if (window.CreditoPropostasApi?.isCreditTableRow?.(updated)) {
+      await CreditoPropostasApi.update(
+        updated.id,
+        CreditoPropostasApi.proposalToUpdateRow(updated)
+      );
+      return;
+    }
+    if (typeof DB.saveProposal === 'function') await DB.saveProposal(updated);
+    else await DB.save('proposals', updated);
   }
 
   function parseRetorno(p) {
@@ -92,6 +198,13 @@
       }
     }
     return ret;
+  }
+
+  function _recalcRetornoValorLiberado() {
+    const base = parseFloat(document.getElementById('retornoValorBase')?.value) || 0;
+    const totalEl = document.getElementById('retornoValorLiberado');
+    if (totalEl) totalEl.value = base > 0 ? String(base) : '';
+    return base;
   }
 
   function finGridRow(label, fieldHtml) {
@@ -145,7 +258,8 @@
       const file = _retornoAnexoPending[key];
       if (!file) continue;
       try {
-        const url = await DB.uploadProposalFile(file, proposalId, `retorno_${key}`);
+        const uploaded = await DB.uploadProposalFile(file, proposalId, `retorno_${key}`);
+        const url = typeof DB.resolveUploadUrl === 'function' ? DB.resolveUploadUrl(uploaded) : (uploaded?.url || uploaded);
         if (url) out[key] = url;
       } catch (e) {
         console.warn('[FinanceiroCredito] anexo', key, e);
@@ -176,35 +290,35 @@
       const root = document.getElementById('retornoPropostasRoot');
       if (!root || !canView()) return;
 
-      const props = await DB.getProposals().catch(() => []);
-      const credito = (props || []).filter(isCreditoProposal);
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'financeiro-credito.js:renderRetorno',message:'retorno form v6',data:{pixFixo:PIX_AUTOMATICO_FIXO,build:'97c411credito6'},timestamp:Date.now(),hypothesisId:'pix-auto-fixo',runId:'post-fix'})}).catch(()=>{});
+      // #endregion
+
+      const props = await _loadCreditoProposals();
+      const credito = props || [];
 
       root.innerHTML = `
         <div class="page-header">
           <div class="page-header-text">
             <h2>Retorno de Propostas</h2>
-            <p class="text-muted">Registre o retorno do banco, anexe documentos e aceite a proposta de crédito. Documentos enviados pela Esteira de Crédito ficam disponíveis para download abaixo.</p>
+            <p class="text-muted">Registre o retorno do banco, anexe documentos e aceite a solicitação de crédito. A nota promissória gerada na Esteira de Crédito aparece em <strong>ANEXO PROMISSÓRIA</strong> abaixo.</p>
           </div>
         </div>
         <div class="card card-padded">
           <div class="table-wrap" style="margin-bottom:20px;">
             <table class="data-table" style="width:100%;">
               <tbody>
-                ${finGridRow('PROPOSTA', `<select id="retornoPropostaSelect" class="form-control" onchange="FinanceiroCredito.onRetornoProposalChange()">
-                  <option value="">Selecione a proposta...</option>
+                ${finGridRow('SOLICITAÇÃO', `<select id="retornoPropostaSelect" class="form-control" onchange="FinanceiroCredito.onRetornoProposalChange()">
+                  <option value="">Selecione a solicitação de crédito...</option>
                   ${credito.map((p) => `<option value="${esc(p.id)}">${esc(proposalLabel(p))}</option>`).join('')}
                 </select>`)}
-                ${finGridRow('VALOR LIBERADO', `<input type="number" id="retornoValorLiberado" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-                ${finGridRow('PRAZO', `<input type="text" id="retornoPrazo" class="form-control" placeholder="Ex.: 84 meses"/>`)}
-                ${finGridRow('TAXA DE JUROS', `<input type="text" id="retornoTaxaJuros" class="form-control" placeholder="Ex.: 1,89% a.m."/>`)}
-                ${finGridRow('CET', `<input type="text" id="retornoCet" class="form-control" placeholder="Ex.: 2,15% a.m."/>`)}
+                ${finGridRow('VALOR CRÉDITO', `<input type="number" id="retornoValorBase" class="form-control" min="0" step="0.01" placeholder="0,00" oninput="FinanceiroCredito.onRetornoValorChange()"/>`)}
+                ${finGridRow('VALOR LIBERADO', `<input type="number" id="retornoValorLiberado" class="form-control" min="0" step="0.01" placeholder="0,00" readonly style="background:#f9fafb;font-weight:700;"/>`)}
+                ${finGridRow('PRAZO', `<input type="text" id="retornoPrazo" class="form-control" placeholder="Ex.: 2, 3 ou 4 meses"/>`)}
                 ${finGridRow('VALOR PARCELA', `<input type="number" id="retornoValorParcela" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-                ${finGridRow('TAC', `<input type="number" id="retornoTac" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-                ${finGridRow('VALOR LIBERADO', `<input type="number" id="retornoValorLiberado2" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
-                ${finGridRow('PAGAMENTO', `<select id="retornoPagamento" class="form-control">
-                  <option value="">Selecione...</option>
-                  <option value="PIX">PIX</option>
-                </select>`)}
+                ${finGridRow('FORMA DE PAGAMENTO — PIX AUTOMÁTICO', _fcPixAutoFieldHtml())}
+                ${finGridRow('STATUS DA PROPOSTA', _fcStatusSelectHtml('retornoStatusCredito', 'EM ANÁLISE'))}
+                ${finGridRow('DATA DO DESCONTO', `<input type="date" id="retornoDataDesconto" class="form-control"/>`)}
               </tbody>
             </table>
           </div>
@@ -270,13 +384,19 @@
       onRetornoAnexoPick(key, input);
     },
 
+    onRetornoValorChange() {
+      _recalcRetornoValorLiberado();
+    },
+
     limparRetorno() {
-      ['retornoValorLiberado', 'retornoPrazo', 'retornoTaxaJuros', 'retornoCet', 'retornoValorParcela', 'retornoTac', 'retornoValorLiberado2'].forEach((id) => {
+      ['retornoValorBase', 'retornoValorLiberado', 'retornoPrazo', 'retornoValorParcela', 'retornoDataDesconto'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
       const pag = document.getElementById('retornoPagamento');
-      if (pag) pag.value = '';
+      if (pag) pag.value = PIX_AUTOMATICO_FIXO;
+      const st = document.getElementById('retornoStatusCredito');
+      if (st) st.value = 'EM ANÁLISE';
       _resetRetornoAnexos();
     },
 
@@ -286,23 +406,28 @@
         this.limparRetorno();
         return;
       }
-      const p = typeof DB.getProposal === 'function'
-        ? await DB.getProposal(id).catch(() => null)
-        : (await DB.getProposals().catch(() => [])).find((x) => String(x.id) === String(id));
+      const p = await _getCreditoProposal(id);
       if (!p) return;
       const r = parseRetorno(p);
+      const est = p?.creditoEsteira || p?.credito_esteira || {};
+      const esteira = typeof est === 'string' ? (() => { try { return JSON.parse(est); } catch { return {}; } })() : (est || {});
       const set = (id, val) => {
         const el = document.getElementById(id);
         if (el) el.value = val != null && val !== '' ? val : '';
       };
-      set('retornoValorLiberado', r.valor_liberado ?? r.valorLiberado);
+      const liberado = parseFloat(r.valor_liberado ?? r.valorLiberado) || 0;
+      const base = parseFloat(r.valor_base ?? r.valorBase);
+      const valorBase = Number.isFinite(base) ? base : (liberado > 0 ? liberado : '');
+      set('retornoValorBase', valorBase);
+      _recalcRetornoValorLiberado();
       set('retornoPrazo', r.prazo);
-      set('retornoTaxaJuros', r.taxa_juros ?? r.taxaJuros);
-      set('retornoCet', r.cet);
-      set('retornoValorParcela', r.valor_parcela ?? r.valorParcela);
-      set('retornoTac', r.tac);
-      set('retornoValorLiberado2', r.valor_liberado_2 ?? r.valorLiberado2);
-      set('retornoPagamento', r.pagamento);
+      set('retornoValorParcela', r.valor_parcela ?? r.valorParcela ?? esteira.valor_parcela);
+      set('retornoPagamento', PIX_AUTOMATICO_FIXO);
+      const statusCred = r.status_credito ?? esteira.status_credito ?? p.status ?? p.statusOp ?? 'EM ANÁLISE';
+      const statusEl = document.getElementById('retornoStatusCredito');
+      if (statusEl) statusEl.value = FC_STATUS_OPCOES.includes(statusCred) ? statusCred : 'EM ANÁLISE';
+      set('retornoDataDesconto', (r.data_desconto ?? esteira.data_desconto ?? esteira.data_credito)
+        ? String(r.data_desconto ?? esteira.data_desconto ?? esteira.data_credito).slice(0, 10) : '');
       _resetRetornoAnexos(r.attachments || {});
     },
 
@@ -312,34 +437,25 @@
         showToast('Selecione uma proposta.', 'warning');
         return;
       }
-      const valorLiberado = parseFloat(document.getElementById('retornoValorLiberado')?.value);
+      const valorLiberado = _recalcRetornoValorLiberado();
+      const valorBase = parseFloat(document.getElementById('retornoValorBase')?.value);
       const prazo = document.getElementById('retornoPrazo')?.value?.trim();
-      const taxaJuros = document.getElementById('retornoTaxaJuros')?.value?.trim();
-      const cet = document.getElementById('retornoCet')?.value?.trim();
       const valorParcela = parseFloat(document.getElementById('retornoValorParcela')?.value);
-      const tac = parseFloat(document.getElementById('retornoTac')?.value);
-      const valorLiberado2 = parseFloat(document.getElementById('retornoValorLiberado2')?.value);
-      const pagamento = document.getElementById('retornoPagamento')?.value;
+      const statusCredito = document.getElementById('retornoStatusCredito')?.value || 'EM ANÁLISE';
+      const dataDesconto = document.getElementById('retornoDataDesconto')?.value?.trim() || null;
 
       if (!Number.isFinite(valorLiberado) || valorLiberado <= 0) {
-        showToast('Informe o valor liberado.', 'warning');
+        showToast('Informe o valor do crédito.', 'warning');
         return;
       }
       if (!prazo) {
         showToast('Informe o prazo.', 'warning');
         return;
       }
-      if (!pagamento) {
-        showToast('Selecione a forma de pagamento.', 'warning');
-        return;
-      }
 
-      const props = await DB.getProposals().catch(() => []);
-      const p = typeof DB.getProposal === 'function'
-        ? await DB.getProposal(id).catch(() => props.find((x) => String(x.id) === String(id)))
-        : props.find((x) => String(x.id) === String(id));
+      const p = await _getCreditoProposal(id);
       if (!p) {
-        showToast('Proposta não encontrada.', 'error');
+        showToast('Solicitação não encontrada.', 'error');
         return;
       }
 
@@ -351,14 +467,13 @@
         const mergedAtt = { ...(prev.attachments || {}), ...attachments };
 
         const retorno = {
+          valor_base: Number.isFinite(valorBase) ? valorBase : null,
           valor_liberado: valorLiberado,
           prazo,
-          taxa_juros: taxaJuros,
-          cet,
           valor_parcela: Number.isFinite(valorParcela) ? valorParcela : null,
-          tac: Number.isFinite(tac) ? tac : null,
-          valor_liberado_2: Number.isFinite(valorLiberado2) ? valorLiberado2 : null,
-          pagamento,
+          pagamento: PIX_AUTOMATICO_FIXO,
+          status_credito: statusCredito,
+          data_desconto: dataDesconto,
           attachments: mergedAtt,
           status: 'aceito',
           aceito_em: new Date().toISOString(),
@@ -370,11 +485,14 @@
           '[RETORNO CRÉDITO] Proposta aceita',
           `Valor: ${fmtMoney(valorLiberado)}`,
           prazo ? `Prazo: ${prazo}` : '',
-          pagamento ? `Pagamento: ${pagamento}` : '',
+          `PIX automático: ${PIX_AUTOMATICO_FIXO}`,
+          statusCredito ? `Status: ${statusCredito}` : '',
         ].filter(Boolean).join(' · ');
 
         const updated = {
           ...p,
+          status: statusCredito,
+          statusOp: statusCredito,
           creditoRetorno: retorno,
           credito_retorno: retorno,
           obs: typeof DB._appendProposalObsLine === 'function'
@@ -383,8 +501,7 @@
           updatedAt: new Date().toISOString(),
         };
 
-        if (typeof DB.saveProposal === 'function') await DB.saveProposal(updated);
-        else await DB.save('proposals', updated);
+        await _saveCreditoProposal(updated);
 
         _retornoAnexoPending = {};
         showToast('Proposta aceita com retorno registrado.', 'success');
@@ -444,7 +561,7 @@
       }
       showLoading('Buscando...');
       try {
-        const emp = await DB.getUserByCpf(digits);
+        const emp = await _resolveEmployeeByCpf(digits);
         _adiantamentoEmployee = emp;
         if (!emp) {
           if (info) {
@@ -502,8 +619,8 @@
       }
 
       let emp = _adiantamentoEmployee;
-      if (!emp || String(emp.cpf || '').replace(/\D/g, '') !== cpf) {
-        emp = await DB.getUserByCpf(cpf);
+      if (!emp || cpfDigits(emp.cpf) !== cpf) {
+        emp = await _resolveEmployeeByCpf(cpf);
       }
       if (!emp) {
         showToast('Funcionário não encontrado.', 'error');
@@ -539,6 +656,12 @@
             adiantamento_id: row.id,
           };
           const nb = await DB.addBalance(emp.id, valor, reason, session?.id || 'financeiro', meta);
+          // #region agent log
+          try {
+            const base = (typeof window !== 'undefined' && window.SOUBLU_BASE) ? window.SOUBLU_BASE : '';
+            fetch(`${base}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'financeiro-credito.js:decidirAdiantamento', message: 'addBalance result', data: { empId: emp.id, empName: emp.name, valor, credited: nb != null, newBalance: nb, partnerWallet: typeof DB._isPartnerWalletUser === 'function' ? DB._isPartnerWalletUser(emp) : null, adiantamentoId: row.id }, timestamp: Date.now(), hypothesisId: 'A', runId: 'post-fix' }) }).catch(() => {});
+          } catch (_) {}
+          // #endregion
           if (nb == null) {
             showToast('Adiantamento registrado, mas não foi possível creditar o saldo.', 'warning');
           }
@@ -559,6 +682,64 @@
       }
     },
 
+    async _adiantamentoHasCredit(row) {
+      if (!row?.employee_id || !row?.id) return false;
+      const txs = await DB.getTransactions(row.employee_id).catch(() => []);
+      return (txs || []).some((t) => {
+        if (String(t.type || '').toLowerCase() !== 'credit') return false;
+        const m = t.meta && typeof t.meta === 'object' ? t.meta : {};
+        return String(m.adiantamento_id || '') === String(row.id);
+      });
+    },
+
+    async retryAdiantamentoCredit(rowId) {
+      const rows = await DB.getFinanceAdiantamentos().catch(() => []);
+      const row = (rows || []).find((r) => String(r.id) === String(rowId));
+      if (!row) {
+        showToast('Adiantamento não encontrado.', 'error');
+        return;
+      }
+      if (String(row.status || '').toLowerCase() !== 'aprovado') {
+        showToast('Só é possível creditar adiantamentos aprovados.', 'warning');
+        return;
+      }
+      if (await this._adiantamentoHasCredit(row)) {
+        showToast('Saldo já creditado para este adiantamento.', 'info');
+        return;
+      }
+      let emp = row.employee_id ? await DB.getUser(row.employee_id).catch(() => null) : null;
+      if (!emp && row.cpf) emp = await _resolveEmployeeByCpf(row.cpf);
+      if (!emp?.id) {
+        showToast('Funcionário não encontrado para creditar.', 'error');
+        return;
+      }
+      const session = Auth.getSession();
+      const monthLabel = row.month_key
+        ? row.month_key.replace('-', '/')
+        : new Date(row.created_at || Date.now()).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const reason = `Adiantamento salarial (${monthLabel}) — desconto integral na folha subsequente`;
+      const meta = {
+        screen: 'adiantamento_salarial',
+        kind: 'adiantamento_salarial',
+        adiantamento_salarial: true,
+        folha_desconto: true,
+        adiantamento_id: row.id,
+        retry: true,
+      };
+      showLoading('Creditando saldo...');
+      try {
+        const nb = await DB.addBalance(emp.id, row.valor, reason, session?.id || 'financeiro', meta);
+        if (nb == null) {
+          showToast('Não foi possível creditar o saldo.', 'error');
+          return;
+        }
+        showToast('Saldo creditado com sucesso.', 'success');
+        await this._renderAdiantamentoHistorico();
+      } finally {
+        hideLoading();
+      }
+    },
+
     async _renderAdiantamentoHistorico() {
       const wrap = document.getElementById('advHistoricoWrap');
       if (!wrap) return;
@@ -567,6 +748,7 @@
         wrap.innerHTML = '<p class="text-muted" style="margin:0;font-size:13px;">Nenhum adiantamento registrado.</p>';
         return;
       }
+      const creditChecks = await Promise.all(rows.slice(0, 50).map((r) => this._adiantamentoHasCredit(r)));
       const stCls = (s) => {
         const v = String(s || '').toLowerCase();
         if (v === 'aprovado') return 'badge-success';
@@ -577,16 +759,24 @@
         <h4 style="font-weight:800;margin:0 0 12px;">Histórico de adiantamentos</h4>
         <div class="table-wrap"><table class="data-table" style="width:100%;">
           <thead><tr>
-            <th>Data</th><th>CPF</th><th>Funcionário</th><th>Valor</th><th>Status</th><th>Decidido por</th>
+            <th>Data</th><th>CPF</th><th>Funcionário</th><th>Valor</th><th>Status</th><th>Decidido por</th><th></th>
           </tr></thead>
-          <tbody>${rows.slice(0, 50).map((r) => `<tr>
+          <tbody>${rows.slice(0, 50).map((r, i) => {
+            const approved = String(r.status || '').toLowerCase() === 'aprovado';
+            const credited = creditChecks[i];
+            const action = approved && !credited
+              ? `<button type="button" class="btn btn-sm btn-warning" onclick="FinanceiroCredito.retryAdiantamentoCredit('${esc(r.id)}')">Creditar saldo</button>`
+              : (approved && credited ? '<span class="text-muted" style="font-size:12px;">Creditado</span>' : '');
+            return `<tr>
             <td>${esc(fmtDt(r.created_at))}</td>
             <td>${esc(fmtCpf(r.cpf))}</td>
             <td>${esc(r.employee_name || '—')}</td>
             <td>${esc(fmtMoney(r.valor))}</td>
             <td><span class="badge ${stCls(r.status)}">${esc(String(r.status || '—').toUpperCase())}</span></td>
             <td>${esc(r.decided_by_name || '—')}</td>
-          </tr>`).join('')}</tbody>
+            <td>${action}</td>
+          </tr>`;
+          }).join('')}</tbody>
         </table></div>`;
     },
   };

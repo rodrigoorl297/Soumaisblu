@@ -28,6 +28,25 @@
 
 const _DB_LOAD_ERROR = 'Erro na comunicação de dados. Verifique sua conexão ou limpe o cache (Ctrl+F5).';
 
+function _dbgLogin(location, message, data, hypothesisId) {
+  const payload = {
+    sessionId: '97c411',
+    location,
+    message,
+    data: data || {},
+    timestamp: Date.now(),
+    hypothesisId: hypothesisId || 'login-boot',
+    runId: '97c411login',
+  };
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+  // #endregion
+}
+
 // 1. Otimização do Waiter do Banco de Dados
 async function _requireDB(maxAttempts = 50) {
   if (window.DB?.init) return window.DB;
@@ -47,22 +66,27 @@ async function _requireDB(maxAttempts = 50) {
 
 // 2. Inicialização do Login
 document.addEventListener('DOMContentLoaded', async () => {
+  _dbgLogin('login.js:DOMContentLoaded', 'login boot start', { href: location.pathname }, 'login-entry');
   showLoading('Conectando...');
   try {
     const db = await _requireDB();
     if (!db) throw new Error('DB timeout');
+    _dbgLogin('login.js:db-ready', 'db available', { online: !!db.online }, 'login-db');
     await db.init();
 
     // Redireciona se já logado — sincroniza papel com o banco antes (evita sessão antiga no PC)
     if (await Auth.isLoggedIn()) {
+      _dbgLogin('login.js:already-logged-in', 'redirect existing session', { role: Auth.getSession()?.role }, 'login-redirect');
       await Auth.syncSessionFromDb();
       window.location.replace(Auth.defaultAppHref());
       return;
     }
     
     setupLoginForm();
+    _dbgLogin('login.js:form-ready', 'login form ready', {}, 'login-entry');
   } catch (e) {
     console.error('[Login Boot Error]', e);
+    _dbgLogin('login.js:boot-error', 'login boot failed', { err: String(e?.message || e) }, 'login-db');
     showLoginError(_DB_LOAD_ERROR);
   } finally {
     hideLoading();
@@ -97,15 +121,18 @@ function setupLoginForm() {
     try {
       const r = await Auth.login(id, pw);
       if (!r.ok) {
+        _dbgLogin('login.js:submit-fail', 'auth login rejected', { msg: r.msg }, 'login-auth');
         showLoginError(r.msg);
         passInput.value = ''; // Limpa a senha para nova tentativa
         passInput.focus();
       } else {
+        _dbgLogin('login.js:submit-ok', 'auth login ok', { role: r.user?.role, target: Auth.defaultAppHref() }, 'login-auth');
         window.location.replace(Auth.defaultAppHref());
         return; 
       }
     } catch (err) {
       console.error('[Login Submit Error]', err);
+      _dbgLogin('login.js:submit-error', 'auth login exception', { err: String(err?.message || err) }, 'login-auth');
       showLoginError('Erro de conexão. Verifique sua internet.');
     } finally {
       // Restaura o botão caso o login tenha falhado

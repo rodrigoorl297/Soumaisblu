@@ -62,6 +62,191 @@ const FonteData = {
     return out;
   },
 
+  _unwrapPayload(raw) {
+    const d = raw?.data ?? raw;
+    if (!d || typeof d !== 'object') return null;
+    if (d.error) return null;
+    return d.retorno || d.resultado || d.receita || d.cadastro || d;
+  },
+
+  _firstStr(...vals) {
+    for (const v of vals) {
+      const s = v == null ? '' : String(v).trim();
+      if (s) return s;
+    }
+    return '';
+  },
+
+  mapReceitaFederalPf(raw) {
+    const root = raw?.data ?? raw;
+    const d = root?.receita || root?.retorno || root?.resultado || this._unwrapPayload(raw) || {};
+    const nome = this._firstStr(
+      d.nomePessoaFisica, d.nome_pessoa_fisica, d.nome, d.nomeSocial, d.nome_social
+    );
+    const situacao = this._firstStr(
+      d.situacaoCadastral, d.situacao_cadastral, d.situacao, d.status
+    );
+    const nasc = this._firstStr(d.dataNascimento, d.data_nascimento, d.nascimento);
+    const cpf = String(d.numeroCPF || d.cpf || d.numero_cpf || '').replace(/\D/g, '');
+    return {
+      cpf,
+      nome,
+      situacao_cadastral: situacao,
+      data_nascimento: nasc,
+      data_inscricao: this._firstStr(d.dataInscricao, d.data_inscricao),
+      codigo_controle: this._firstStr(d.codigoControle, d.codigo_controle, d.codigoControleComprovante),
+      digito_verificador: this._firstStr(d.digitoVerificador, d.digito_verificador),
+    };
+  },
+
+  mapPisTrabalho(raw) {
+    const d = this._unwrapPayload(raw) || {};
+    const pis = this._firstStr(
+      d.pis, d.numeroPis, d.numero_pis, d.nis, d.pisPasep, d.pis_pasep, d.numeroPisPasep
+    ).replace(/\D/g, '');
+    return {
+      pis,
+      pis_formatado: pis ? pis.replace(/^(\d{3})(\d{5})(\d{2})$/, '$1.$2.$3-$4') : '',
+      situacao: this._firstStr(d.situacao, d.situacaoCadastral, d.situacao_cadastral, d.status),
+      nome: this._firstStr(d.nome, d.nomeTrabalhador, d.nome_trabalhador),
+      data_nascimento: this._firstStr(d.dataNascimento, d.data_nascimento),
+      data_cadastro: this._firstStr(d.dataCadastro, d.data_cadastro),
+      mensagem: this._firstStr(d.mensagem, d.message, d.observacao),
+    };
+  },
+
+  async lookupCpfConsulta(cpfDigits, consulta, opts = {}) {
+    const cpf = String(cpfDigits || '').replace(/\D/g, '');
+    if (cpf.length !== 11) return { ok: false, error: 'CPF inválido (11 dígitos)' };
+
+    const url = this.apiUrl();
+    const token = this.token();
+    if (!url || !token) {
+      return { ok: false, error: 'Consulta não configurada (fontedata.php).' };
+    }
+
+    const qs = new URLSearchParams({ cpf, consulta: consulta || 'dados-cadastrais-basicos' });
+    const dn = String(opts.dataNascimento || '').trim();
+    if (dn) {
+      qs.set('data_nascimento', dn);
+      qs.set('dataNascimento', dn);
+    }
+
+    try {
+      const res = await fetch(`${url}?${qs.toString()}`, {
+        method: 'GET',
+        headers: { 'X-FonteData-Token': token },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) {
+        return { ok: false, error: json.error || `Erro ${res.status}`, raw: json.raw || json.data || null };
+      }
+      return { ok: true, raw: json.data, consulta: consulta || 'dados-cadastrais-basicos', cpf };
+    } catch (e) {
+      return { ok: false, error: e.message || 'Falha na consulta' };
+    }
+  },
+
+  async lookupReceitaFederalPf(cpfDigits, dataNascimento) {
+    const res = await this.lookupCpfConsulta(cpfDigits, 'receita-federal-pf', { dataNascimento });
+    if (!res.ok) return res;
+    const mapped = this.mapReceitaFederalPf({ data: res.raw });
+    if (!mapped.nome && !mapped.situacao_cadastral) {
+      return { ok: false, error: 'Nenhum dado da Receita Federal para este CPF.', raw: res.raw };
+    }
+    return { ok: true, receita: mapped, raw: res.raw };
+  },
+
+  async lookupPisTrabalho(cpfDigits, dataNascimento) {
+    const res = await this.lookupCpfConsulta(cpfDigits, 'pis-trabalho', { dataNascimento });
+    if (!res.ok) return res;
+    const mapped = this.mapPisTrabalho({ data: res.raw });
+    if (!mapped.pis && !mapped.situacao && !mapped.nome) {
+      return { ok: false, error: 'Nenhum dado de PIS encontrado para este CPF.', raw: res.raw };
+    }
+    return { ok: true, pis: mapped, raw: res.raw };
+  },
+
+  mapScoreCredito(raw) {
+    const d = this._unwrapPayload(raw) || {};
+    return {
+      cpf: String(d.cpf || d.numeroCPF || d.numero_cpf || '').replace(/\D/g, ''),
+      nome: this._firstStr(d.nome, d.name, d.nomePessoaFisica, d.nome_pessoa_fisica),
+      score: this._firstStr(d.score, d.scoreCredito, d.pontuacao, d.nota, d.valorScore, d.score_quod),
+      classificacao: this._firstStr(d.rating, d.classificacao, d.faixa, d.risco, d.nivel_risco, d.classificacaoRisco),
+      situacao: this._firstStr(d.situacao, d.status, d.situacao_cadastral, d.situacaoCadastral),
+      mensagem: this._firstStr(d.mensagem, d.message, d.descricao, d.observacao),
+    };
+  },
+
+  async lookupScoreCreditoPf(cpfDigits) {
+    // Score Quod na FonteData é consulta CNPJ — não disponível para CPF.
+    return { ok: false, error: 'Score Quod disponível apenas para CNPJ (parceiros).' };
+  },
+
+  /**
+   * Análise de crédito PF — Receita Federal + PIS + cadastro básico.
+   */
+  async lookupAnaliseCreditoPf(cpfDigits, dataNascimento) {
+    const cpf = String(cpfDigits || '').replace(/\D/g, '');
+    if (cpf.length !== 11) return { ok: false, error: 'CPF inválido (11 dígitos)' };
+
+    const dn = String(dataNascimento || '').trim();
+    const rh = await this.lookupRhPerson(cpf, dn).catch((e) => ({ ok: false, error: e.message }));
+
+    const anyOk = rh.ok;
+    if (!anyOk) {
+      const err = rh.error || 'Nenhuma consulta retornou dados.';
+      return { ok: false, error: err, rh, score: null };
+    }
+    return { ok: true, rh, score: null };
+  },
+
+  /**
+   * Consulta cadastro básico + Receita Federal PF + PIS (RH / currículo).
+   */
+  async lookupRhPerson(cpfDigits, dataNascimento) {
+    const cpf = String(cpfDigits || '').replace(/\D/g, '');
+    if (cpf.length !== 11) return { ok: false, error: 'CPF inválido (11 dígitos)' };
+
+    const dn = String(dataNascimento || '').trim();
+    const [basico, receita, pis] = await Promise.all([
+      this.lookupCpf(cpf).catch((e) => ({ ok: false, error: e.message })),
+      this.lookupReceitaFederalPf(cpf, dn).catch((e) => ({ ok: false, error: e.message })),
+      this.lookupPisTrabalho(cpf, dn).catch((e) => ({ ok: false, error: e.message })),
+    ]);
+
+    const anyOk = basico.ok || receita.ok || pis.ok;
+    if (!anyOk) {
+      const err = receita.error || pis.error || basico.error || 'Nenhuma consulta retornou dados.';
+      return { ok: false, error: err, basico, receita, pis };
+    }
+
+    return { ok: true, basico, receita, pis };
+  },
+
+  formatRhConsultaSummary(bundle) {
+    if (!bundle || !bundle.ok) return '';
+    const lines = [];
+    if (bundle.receita?.ok && bundle.receita.receita) {
+      const r = bundle.receita.receita;
+      lines.push(`<strong>Receita Federal:</strong> ${r.nome || '—'} · Situação: ${r.situacao_cadastral || '—'}`);
+      if (r.data_nascimento) lines.push(`Nascimento (RF): ${r.data_nascimento}`);
+    } else if (bundle.receita && !bundle.receita.ok) {
+      lines.push(`<span style="color:#b45309;">Receita Federal: ${bundle.receita.error || 'indisponível'}</span>`);
+    }
+    if (bundle.pis?.ok && bundle.pis.pis) {
+      const p = bundle.pis.pis;
+      lines.push(`<strong>PIS:</strong> ${p.pis_formatado || p.pis || '—'}${p.situacao ? ` · ${p.situacao}` : ''}`);
+    } else if (bundle.pis && !bundle.pis.ok) {
+      lines.push(`<span style="color:#b45309;">PIS: ${bundle.pis.error || 'indisponível'}</span>`);
+    }
+    if (bundle.basico?.ok && bundle.basico.client?.name) {
+      lines.push(`<strong>Cadastro:</strong> ${bundle.basico.client.name}`);
+    }
+    return lines.join('<br/>');
+  },
+
   mapToClientFields(raw) {
     const d = raw?.data ?? raw;
     if (!d || d.error) return null;
@@ -181,7 +366,7 @@ const FonteData = {
     return '';
   },
 
-  /** Certidão TJ — Cível, Criminal e Fiscal (api.fontedata.com/tj-certidao?cpf_cnpj=). */
+  /** Certidão TJ — Cível, Criminal e Fiscal (proxy fontedata.php → FONTE_DATA_API_BASE/tj-certidao). */
   async lookupTjCertidao(docDigits) {
     const doc = String(docDigits || '').replace(/\D/g, '');
     if (doc.length !== 11 && doc.length !== 14) {

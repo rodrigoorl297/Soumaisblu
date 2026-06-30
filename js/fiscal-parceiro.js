@@ -46,6 +46,46 @@
     return typeof PartnerPerms !== 'undefined' && PartnerPerms.can(window._PARTNER_PERMS, key);
   }
 
+  function isPartnerOrgViewer() {
+    if (!window.PARTNER_ROOT_ID) return false;
+    const s = Auth.getSession();
+    if (!s) return false;
+    const role = String(s.role || '').toLowerCase();
+    if (role === 'parceiro') return false;
+    if (role === 'master' || role === 'fundador' || role === 'gerente' || role === 'financeiro' || role === 'financial' || role === 'rh' || role === 'diretoria' || role === 'desenvolvedor') {
+      return false;
+    }
+    return true;
+  }
+
+  function _dbgFiscalNav(location, show, extra) {
+    const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    const payload = {
+      sessionId: '97c411',
+      location,
+      message: 'fiscal nav visibility',
+      data: {
+        show: !!show,
+        partnerRoot: window.PARTNER_ROOT_ID || null,
+        inPartnerOrg: !!(window.__ADMIN_NAV_CFG__?._inPartnerOrg),
+        canFiscalParceiro: window.__ADMIN_NAV_CFG__?.canFiscalParceiro,
+        isPartnerViewer: isPartnerOrgViewer(),
+        role: s?.role || null,
+        ...(extra || {}),
+      },
+      timestamp: Date.now(),
+      hypothesisId: 'fiscal-partner-hide',
+      runId: '97c411bol8',
+    };
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    // #endregion
+  }
+
   function canManageFechamento() {
     const s = Auth.getSession();
     if (!s) return false;
@@ -55,6 +95,9 @@
   function canViewFiscal() {
     const s = Auth.getSession();
     if (!s) return false;
+    const role = String(s.role || '').toLowerCase();
+    if (role === 'parceiro') return !!window.PARTNER_ROOT_ID;
+    if (isPartnerOrgViewer()) return false;
     if (!window.PARTNER_ROOT_ID) return canManageFechamento();
     return hasPerm('fechamento_financeiro') || hasPerm('dados_nota_fiscal') || hasPerm('upload_nota_fiscal');
   }
@@ -102,9 +145,16 @@
 
   const FiscalParceiro = {
     ensureUi() {
-      if (_isSouBluAdminPanel() || _isSouBluFinanceiroPage()) {
-        this.ensureModals();
+      const cfg = window.__ADMIN_NAV_CFG__;
+      if (_isSouBluAdminPanel() && (cfg?._inPartnerOrg || window.PARTNER_ROOT_ID)) {
+        document.getElementById('navFiscalParceiro')?.remove();
         return;
+      }
+      const onAdminPartner = _isSouBluAdminPanel() && !!window.PARTNER_ROOT_ID && canViewFiscal();
+      if ((_isSouBluAdminPanel() && !onAdminPartner) || _isSouBluFinanceiroPage()) {
+        this.ensureModals();
+        if (_isSouBluFinanceiroPage()) return;
+        if (!onAdminPartner) return;
       }
 
       const nav = document.querySelector('.sidebar-nav');
@@ -117,7 +167,8 @@
         btn.className = 'nav-item fiscal-parceiro-nav';
         btn.id = 'navFiscalParceiro';
         btn.dataset.section = 'secFiscalParceiro';
-        btn.innerHTML = `${navIconHtml('receipt')}<span class="nav-label">Fiscal — parceiro</span>`;
+        const fiscalIcon = typeof navIconHtml === 'function' ? navIconHtml('receipt') : '<span class="nav-icon">📄</span>';
+        btn.innerHTML = `${fiscalIcon}<span class="nav-label">Comissões / Fiscal</span>`;
         const anchor = document.getElementById('navContestacao') || document.getElementById('navTimEsteira');
         if (anchor?.nextSibling) anchor.parentNode.insertBefore(btn, anchor.nextSibling);
         else nav.appendChild(btn);
@@ -134,9 +185,14 @@
     },
 
     applyNavVisibility(cfg) {
-      const show = cfg?.canFiscalParceiro !== false && canViewFiscal()
-        && !_isSouBluAdminPanel() && !_isSouBluFinanceiroPage();
+      const inPartnerAdmin = !!((cfg?._inPartnerOrg || window.PARTNER_ROOT_ID) && _isSouBluAdminPanel());
+      const show = !inPartnerAdmin
+        && cfg?.canFiscalParceiro !== false && canViewFiscal()
+        && (!_isSouBluAdminPanel() || !!window.PARTNER_ROOT_ID)
+        && !_isSouBluFinanceiroPage();
       document.querySelectorAll('.fiscal-parceiro-nav').forEach(el => { el.style.display = show ? '' : 'none'; });
+      if (!show) document.getElementById('navFiscalParceiro')?.remove();
+      _dbgFiscalNav('fiscal-parceiro.js:applyNavVisibility', show);
     },
 
     async render() {
@@ -384,8 +440,13 @@
     },
 
     init() {
-      this.ensureUi();
       const cfg = window.__ADMIN_NAV_CFG__;
+      if (_isSouBluAdminPanel() && (cfg?._inPartnerOrg || (window.PARTNER_ROOT_ID && isPartnerOrgViewer()))) {
+        document.getElementById('navFiscalParceiro')?.remove();
+        if (cfg) this.applyNavVisibility(cfg);
+        return;
+      }
+      this.ensureUi();
       if (cfg) this.applyNavVisibility(cfg);
     },
   };

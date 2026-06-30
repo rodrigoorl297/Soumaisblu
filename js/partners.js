@@ -2,7 +2,18 @@
    SOU + BLU – Permissões de Parceiros (módulos do portal)
    ========================================================== */
 
+/** Faixas de comissão do parceiro (valor líquido = valor bruto × rate). */
+const PARTNER_COMMISSION_TIERS = {
+  diamante: { label: 'Diamante', rate: 0.925, pct: 92.5 },
+  gold: { label: 'Gold', rate: 0.85, pct: 85 },
+  silver: { label: 'Silver', rate: 0.75, pct: 75 },
+  bronze: { label: 'Bronze', rate: 0.60, pct: 60 },
+};
+const PARTNER_COMMISSION_TIER_DEFAULT = 'bronze';
+
 const PartnerPerms = {
+  PARTNER_COMMISSION_TIERS,
+  DEFAULT_COMMISSION_TIER: PARTNER_COMMISSION_TIER_DEFAULT,
   DEFAULT: {
     contestacao: true,
     cadastrar_funcionario: true,
@@ -17,14 +28,14 @@ const PartnerPerms = {
     esteira_indicacao_tim: false,
     chat_whatsapp: false,
     marketplace_blu: false,
-    fechamento_financeiro: false,
+    fechamento_financeiro: true,
     dados_nota_fiscal: false,
     upload_nota_fiscal: false,
     cadastrar_proposta: true,
     visualizar_propostas: true,
     simulador: true,
     sacar_pix: true,
-    equipe_sacar_pix: false,
+    equipe_sacar_pix: true,
     conta_credito_proposta: false,
     conta_debito_proposta: false,
     conta_adiantamento_motivo: false,
@@ -42,7 +53,7 @@ const PartnerPerms = {
     dashboard: 'Dashboard',
     indicacao_tim: 'Indicação proposta TIM',
     esteira_indicacao_tim: 'Esteira indicação TIM',
-    chat_whatsapp: 'Chat WhatsApp (em desenvolvimento)',
+    chat_whatsapp: 'Chat WhatsApp (opcional — marque para liberar na rede)',
     marketplace_blu: 'Marketplace BLU — resgate de serviços com pontos',
     fechamento_financeiro: 'Fiscal — fechamento enviado pelo financeiro',
     dados_nota_fiscal: 'Fiscal — dados para emissão NF (CNPJ/API)',
@@ -61,7 +72,7 @@ const PartnerPerms = {
   MODULE_GROUPS: [
     {
       title: 'Operação',
-      keys: ['contestacao', 'cadastrar_funcionario', 'atendimento_leads', 'clientes', 'treinamentos', 'marketplace_blu', 'gestao_chamados', 'dashboard'],
+      keys: ['contestacao', 'cadastrar_funcionario', 'atendimento_leads', 'clientes', 'treinamentos', 'marketplace_blu', 'gestao_chamados', 'dashboard', 'chat_whatsapp'],
     },
     {
       title: 'TIM',
@@ -69,7 +80,7 @@ const PartnerPerms = {
     },
     {
       title: 'Em desenvolvimento',
-      keys: ['chat_whatsapp'],
+      keys: [],
       disabled: true,
     },
     {
@@ -84,7 +95,7 @@ const PartnerPerms = {
 
   /** Permissões configuráveis por cargo da equipe do parceiro */
   TEAM_PERM_KEYS: [
-    'dashboard', 'clientes', 'cadastrar_proposta', 'visualizar_propostas', 'simulador',
+    'dashboard', 'clientes', 'cadastrar_proposta', 'visualizar_propostas', 'simulador', 'chat_whatsapp',
     'gestao_chamados', 'contestacao', 'treinamentos', 'marketplace_blu', 'atendimento_leads',
     'cadastrar_funcionario', 'sacar_pix', 'conta_credito_proposta', 'conta_debito_proposta',
     'conta_adiantamento_motivo', 'fechamento_financeiro', 'dados_nota_fiscal', 'upload_nota_fiscal',
@@ -104,6 +115,85 @@ const PartnerPerms = {
       try { return JSON.parse(raw) || {}; } catch (_) { return {}; }
     }
     return {};
+  },
+
+  normalizeCommissionTier(tier) {
+    const t = String(tier || '').toLowerCase().trim();
+    return PARTNER_COMMISSION_TIERS[t] ? t : PARTNER_COMMISSION_TIER_DEFAULT;
+  },
+
+  commissionRate(partnerOrTier) {
+    const tier = typeof partnerOrTier === 'string'
+      ? this.normalizeCommissionTier(partnerOrTier)
+      : this.tierFromPartner(partnerOrTier);
+    return PARTNER_COMMISSION_TIERS[tier].rate;
+  },
+
+  tierFromPartner(partner) {
+    const meta = this._parseJsonField(partner?.meta);
+    return this.normalizeCommissionTier(meta.commission_tier);
+  },
+
+  tierLabel(partnerOrTier) {
+    const tier = typeof partnerOrTier === 'string'
+      ? this.normalizeCommissionTier(partnerOrTier)
+      : this.tierFromPartner(partnerOrTier);
+    return PARTNER_COMMISSION_TIERS[tier];
+  },
+
+  /**
+   * Comissão líquida do parceiro sobre valor bruto da proposta.
+   * Usado em: FinPropostas (baixa comissão), ContaCorrente (sugestão de crédito).
+   */
+  calcPartnerCommission(valorBruto, partnerOrTier) {
+    const v = parseFloat(valorBruto) || 0;
+    if (v <= 0) return 0;
+    const rate = typeof partnerOrTier === 'number'
+      ? partnerOrTier
+      : this.commissionRate(partnerOrTier);
+    return Math.round(v * rate * 100) / 100;
+  },
+
+  commissionTierSelectHtml(selectedTier) {
+    const tier = this.normalizeCommissionTier(selectedTier);
+    return Object.entries(PARTNER_COMMISSION_TIERS).map(([key, t]) => {
+      const pct = String(t.pct).replace('.', ',');
+      return `<option value="${key}"${key === tier ? ' selected' : ''}>${t.label.toUpperCase()} — ${pct}%</option>`;
+    }).join('');
+  },
+
+  updateCommissionTierHint() {
+    const sel = document.getElementById('partnerCommissionTier');
+    const hint = document.getElementById('partnerCommissionTierHint');
+    if (!sel || !hint) return;
+    const t = PARTNER_COMMISSION_TIERS[this.normalizeCommissionTier(sel.value)];
+    const pct = String(t.pct).replace('.', ',');
+    const desc = String((100 - t.pct).toFixed(1)).replace('.', ',');
+    hint.textContent = `Comissão líquida: ${pct}% do valor bruto da proposta (desconto automático de ${desc}%).`;
+  },
+
+  fillCommissionTierForm(meta) {
+    const sel = document.getElementById('partnerCommissionTier');
+    if (!sel) return;
+    const tier = this.normalizeCommissionTier(meta?.commission_tier);
+    sel.innerHTML = this.commissionTierSelectHtml(tier);
+    sel.value = tier;
+    this.updateCommissionTierHint();
+  },
+
+  readCommissionTierMeta(existingMeta) {
+    const sel = document.getElementById('partnerCommissionTier');
+    const tier = this.normalizeCommissionTier(sel?.value || existingMeta?.commission_tier);
+    return {
+      commission_tier: tier,
+      commission_rate: PARTNER_COMMISSION_TIERS[tier].rate,
+    };
+  },
+
+  tierBadgeHtml(partner) {
+    const t = this.tierLabel(partner);
+    const pct = String(t.pct).replace('.', ',');
+    return `<span class="badge badge-primary" style="font-size:10px;" title="Faixa de comissão do parceiro">${t.label.toUpperCase()} ${pct}%</span>`;
   },
 
   teamSacarEnabled(perms, meta) {
@@ -151,6 +241,7 @@ const PartnerPerms = {
       cadastrar_proposta: false,
       visualizar_propostas: true,
       simulador: true,
+      chat_whatsapp: false,
       gestao_chamados: false,
       contestacao: false,
       treinamentos: false,
@@ -166,13 +257,13 @@ const PartnerPerms = {
       upload_nota_fiscal: false,
     };
     if (r === 'vendedor') {
-      return { ...base, cadastrar_proposta: true, simulador: true };
+      return { ...base, cadastrar_proposta: true, simulador: true, sacar_pix: true };
     }
     if (r === 'backoffice' || r === 'operacional') {
-      return { ...base, cadastrar_proposta: true, visualizar_propostas: true, gestao_chamados: true, simulador: true };
+      return { ...base, cadastrar_proposta: true, visualizar_propostas: true, gestao_chamados: true, simulador: true, sacar_pix: true };
     }
     if (r === 'sup_backoffice') {
-      return { ...base, cadastrar_proposta: true, visualizar_propostas: true, gestao_chamados: true, cadastrar_funcionario: true, simulador: true };
+      return { ...base, cadastrar_proposta: true, visualizar_propostas: true, gestao_chamados: true, cadastrar_funcionario: true, simulador: true, sacar_pix: true };
     }
     if (r === 'rh') {
       return { ...base, cadastrar_funcionario: true, gestao_chamados: true };
@@ -230,12 +321,22 @@ const PartnerPerms = {
       return !!rolePerms.clientes || !!rolePerms.cadastrar_cliente;
     }
     if (key === 'sacar_pix') {
-      if (!this.teamSacarEnabled(perms, meta)) return false;
-      return this.PARTNER_TEAM_SACAR_ROLES.includes(r);
+      if (!this.PARTNER_TEAM_SACAR_ROLES.includes(r)) return false;
+      const orgAllows = this.teamSacarEnabled(perms, meta) || this.can(p, 'sacar_pix');
+      if (!orgAllows) return false;
+      return !!rolePerms.sacar_pix;
     }
     if (key === 'cadastrar_proposta') {
       if (!this.can(p, 'cadastrar_proposta')) return false;
       if (['backoffice', 'operacional', 'sup_backoffice'].includes(r)) return true;
+    }
+    if (key === 'visualizar_propostas') {
+      if (!this.can(p, 'visualizar_propostas') && !this.can(p, 'cadastrar_proposta')) return false;
+      if (['backoffice', 'operacional', 'sup_backoffice'].includes(r)) return true;
+    }
+    if (key === 'chat_whatsapp') {
+      if (!this.can(p, 'chat_whatsapp')) return false;
+      return !!rolePerms.chat_whatsapp;
     }
     if (!this.can(p, key)) return false;
     return !!rolePerms[key];
@@ -343,3 +444,6 @@ const PartnerPerms = {
       </details>`).join('');
   },
 };
+
+window.PartnerPerms = PartnerPerms;
+window.PARTNER_COMMISSION_TIERS = PARTNER_COMMISSION_TIERS;

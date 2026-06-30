@@ -1,0 +1,13 @@
+<?php
+/**
+ * Produção — Evolution na VPS Hostinger (srv1708249).
+ * Copie para config.evolution.local.php na Locaweb.
+ *
+ * API Key: na VPS rode (SSH):
+ *   grep '^AUTHENTICATION_API_KEY=' /root/evolution-stack/.env
+ */
+define('EVOLUTION_API_URL', 'https://srv1708249.hstgr.cloud');
+define('EVOLUTION_API_KEY', 'COLE_A_CHAVE_DO_ENV_DA_VPS');
+define('EVOLUTION_WEBHOOK_SECRET', 'soublu_webhook_prod_2026');
+define('EVOLUTION_ENABLED', true);
+define('EVOLUTION_SSL_VERIFY', false);

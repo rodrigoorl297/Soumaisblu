@@ -274,6 +274,7 @@
             <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
               <span style="font-size:17px;font-weight:800;">${esc(p.razao_social || u?.name || 'Parceiro')}</span>
               <span class="badge badge-info">Parceiro</span>${statusBadge}
+              ${typeof PartnerPerms !== 'undefined' ? PartnerPerms.tierBadgeHtml(p) : ''}
             </div>
             <div style="font-size:13px;color:var(--color-text-muted);margin-top:6px;line-height:1.5;">
               CNPJ: <strong>${esc(fmtCnpj(p.cnpj) || '—')}</strong><br>
@@ -559,9 +560,11 @@
       _set('partnerContato', p.contato || '');
       _set('partnerEmail', p.email || '');
       if (typeof PartnerPerms !== 'undefined') PartnerPerms.fillForm('partnerPermsCheckboxes', p.permissions);
+      if (typeof PartnerPerms !== 'undefined') PartnerPerms.fillCommissionTierForm(p.meta || {});
       document.getElementById('partnerModalTitle').textContent = 'Editar parceiro';
     } else if (typeof PartnerPerms !== 'undefined') {
       PartnerPerms.fillForm('partnerPermsCheckboxes', PartnerPerms.DEFAULT);
+      PartnerPerms.fillCommissionTierForm({});
     }
     openModal('partnerModal');
   }
@@ -581,8 +584,16 @@
     const perms = typeof PartnerPerms !== 'undefined'
       ? PartnerPerms.readForm('partnerPermsCheckboxes')
       : {};
+    const recordId = _val('partnerRecordId');
+    const prevMeta = recordId ? (await DB.getPartner(recordId).catch(() => null))?.meta : null;
+    const parsedPrev = typeof prevMeta === 'string'
+      ? (() => { try { return JSON.parse(prevMeta); } catch (_) { return {}; } })()
+      : (prevMeta || {});
+    const tierMeta = typeof PartnerPerms !== 'undefined'
+      ? PartnerPerms.readCommissionTierMeta(parsedPrev)
+      : {};
     const payload = {
-      id: _val('partnerRecordId') || undefined,
+      id: recordId || undefined,
       user_id: _val('partnerUserId') || undefined,
       cnpj,
       razao_social: razao,
@@ -592,9 +603,11 @@
       active: true,
       permissions: perms,
       meta: {
+        ...parsedPrev,
         representante_legal: _val('partnerRepresentante'),
         cpf_representante: _val('partnerCpfRepresentante').replace(/\D/g, ''),
-        status: document.getElementById('partnerStatus')?.value || 'analise',
+        status: document.getElementById('partnerStatus')?.value || parsedPrev.status || 'analise',
+        ...tierMeta,
         bank: {
           pix_key: _val('partnerPixKey'),
           pix_key_type: document.getElementById('partnerPixType')?.value || 'cnpj',

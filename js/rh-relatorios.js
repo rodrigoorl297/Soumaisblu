@@ -440,9 +440,9 @@ function renderRhRelatorioQualidade(container) {
   });
 }
 
-/** Usado pelos filtros do SalesRanking no RH */
+/** Usado pelos filtros do SalesRanking (admin + RH) */
 async function renderAdminRanking() {
-  if (_rhRelatorioAtual === 'ranking' && typeof SalesRanking !== 'undefined' && SalesRanking.renderAdmin) {
+  if (typeof SalesRanking !== 'undefined' && SalesRanking.renderAdmin) {
     return SalesRanking.renderAdmin();
   }
 }

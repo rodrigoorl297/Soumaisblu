@@ -1,0 +1,44 @@
+================================================================================
+SOU+BLU — Anexos após migração (Locaweb + Supabase)
+Atualizado: 2026-06-22
+================================================================================
+
+SUPABASE (já feito no painel)
+-----------------------------
+[OK] Projeto LEGADO (sou+blu / dqptnlywbarvznpzgtuj)
+     - Bucket proposal-attachments público, políticas OK
+     - Nada a rodar manualmente
+
+[OK] Projeto V2 (soublu-v2 / cpqediswbjxcvpnwflyj)
+     - Buckets criados: proposal-attachments, tim-docs, finance-docs, etc.
+     - Leitura/insert/update públicos configurados
+     - Nada a rodar manualmente no Supabase
+
+MYSQL LOCAWEB — NÃO precisa rodar SQL manual
+--------------------------------------------
+A coluna proposals.attachments já existe. O reparo é feito pelo PHP
+(api/repair-proposal-attachments.php), que atualiza o JSON automaticamente.
+
+Arquivos para enviar ao public_html/ da Locaweb:
+  api/file.php
+  api/lib/FileStorage.php
+  api/repair-proposal-attachments.php
+  config.supabase.local.php
+  js/proposals.js, js/db.js, js/db-connect.js
+  admin.html, employee.html, financeiro.html (+ pages/*)
+
+Depois de enviar, no PowerShell do SEU PC (não na Locaweb):
+
+  cd C:\Users\bluno\Downloads\leadsmanager_atualizado\public_ht_REMONTADO
+  .\scripts\repair-attachments.ps1 -DryRun
+  .\scripts\repair-attachments.ps1
+
+Ou um comando de teste:
+  curl.exe -s "https://www.soumaisblu.com.br/api/repair-proposal-attachments.php?dry_run=1&limit=10" -H "X-API-Key: soublu_api_52e8c7a6b3df4019"
+
+Por fim: Ctrl+F5 no navegador.
+
+Anexos com status "missing" no relatório = arquivo apagado do Storage;
+nesses casos só reenviando o anexo na proposta.
+
+================================================================================

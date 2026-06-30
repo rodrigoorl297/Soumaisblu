@@ -1,4 +1,7 @@
 window.Proposals = {
+  /** Limite por anexo de proposta (alinhado com api/upload.php). */
+  PROPOSAL_MAX_FILE_MB: 50,
+
   init: function() {
     this._initAnexoFolderDelegation();
     this._initStaticProposalSelects();
@@ -430,6 +433,28 @@ window.Proposals = {
       ],
     },
     {
+      group: 'AMIGOZ',
+      items: [
+        { value: 'AMIGOZ_100', label: 'AMIGOZ — 100%', pct: 1 },
+        { value: 'AMIGOZ_67', label: 'AMIGOZ — 67%', pct: 0.67 },
+        { value: 'AMIGOZ_58', label: 'AMIGOZ — 58%', pct: 0.58 },
+        { value: 'AMIGOZ_38', label: 'AMIGOZ — 38%', pct: 0.38 },
+        { value: 'AMIGOZ_13', label: 'AMIGOZ — 13%', pct: 0.13 },
+      ],
+    },
+    {
+      group: 'FUTURO',
+      items: [
+        { value: 'FUTURO_100', label: 'FUTURO — 100%', pct: 1 },
+        { value: 'FUTURO_95', label: 'FUTURO — 95%', pct: 0.95 },
+        { value: 'FUTURO_90', label: 'FUTURO — 90%', pct: 0.90 },
+        { value: 'FUTURO_82', label: 'FUTURO — 82%', pct: 0.82 },
+        { value: 'FUTURO_50', label: 'FUTURO — 50%', pct: 0.50 },
+        { value: 'FUTURO_25', label: 'FUTURO — 25%', pct: 0.25 },
+        { value: 'FUTURO_10', label: 'FUTURO — 10%', pct: 0.10 },
+      ],
+    },
+    {
       group: 'Outras',
       items: [
         { value: 'FOX', label: 'FOX — 100%', pct: 1 },
@@ -442,6 +467,8 @@ window.Proposals = {
   _tabelaPct: {
     NEO_NORMAL: 1, NEO_FLEX1: 0.82, NEO_FLEX2: 0.67, NEO_FLEX3: 0.52, NEO_FLEX4: 0.37, NEO_FLEX5: 0.17,
     AKI_100: 1, AKI_70: 0.70, AKI_35: 0.35, AKI_17: 0.17,
+    AMIGOZ_100: 1, AMIGOZ_67: 0.67, AMIGOZ_58: 0.58, AMIGOZ_38: 0.38, AMIGOZ_13: 0.13,
+    FUTURO_100: 1, FUTURO_95: 0.95, FUTURO_90: 0.90, FUTURO_82: 0.82, FUTURO_50: 0.50, FUTURO_25: 0.25, FUTURO_10: 0.10,
     FOX: 1, BLU: 1, GL3: 1,
     NORMAL: 1, FLEX1: 0.82, FLEX2: 0.67, FLEX3: 0.52, FLEX4: 0.37, FLEX5: 0.17, S: 1,
   },
@@ -528,7 +555,7 @@ window.Proposals = {
     const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     const r = (session?.role || '').toLowerCase();
     if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
-    return ['fundador', 'desenvolvedor', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria', 'backoffice', 'operacional'].includes(r);
+    return ['fundador', 'desenvolvedor', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria', 'backoffice', 'operacional', 'sup_backoffice', 'supervisor'].includes(r);
   },
 
   async _partnerProposalIdSet(proposals) {
@@ -558,10 +585,10 @@ window.Proposals = {
     if (typeof window === 'undefined' || !window.PARTNER_ROOT_ID) return true;
     if (typeof partnerOrgCan !== 'function') return false;
     const r = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
-    if (r === 'parceiro') return partnerOrgCan('cadastrar_proposta');
+    if (r === 'parceiro') return partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas');
     const roles = ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'];
     if (!roles.includes(r)) return false;
-    return partnerOrgCan('cadastrar_proposta');
+    return partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas');
   },
 
   _matchesVendorIdFilter: function(p, vendorId) {
@@ -729,9 +756,9 @@ window.Proposals = {
       : '';
     return `<div class="prop-folder__slot">
       ${sub}
-      <input type="file" id="${safeId}" class="form-control prop-folder__input" accept="image/*,.pdf">
+      <input type="file" id="${safeId}" class="form-control prop-folder__input" accept="*/*">
       <button type="button" class="btn btn-outline btn-sm prop-folder__btn" title="Selecionar arquivo">📁</button>
-      <span id="${lblId}" class="prop-file-label">-</span>
+      <div id="${lblId}" class="prop-file-label prop-file-preview-wrap">-</div>
     </div>`;
   },
 
@@ -809,7 +836,7 @@ window.Proposals = {
       const numbered = [];
 
       Object.keys(parsed).forEach((k) => {
-        if (k.endsWith('_nome') || k.endsWith('_pasta')) return;
+        if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
         const m = k.match(new RegExp('^' + esc + '(\\d+)$'));
         if (m) numbered.push(parseInt(m[1], 10));
       });
@@ -914,17 +941,18 @@ window.Proposals = {
 
   _collectAttachments: async function(proposalId) {
     if (!proposalId) throw new Error('ID da proposta é obrigatório para anexos.');
+    const maxBytes = (this.PROPOSAL_MAX_FILE_MB || 50) * 1024 * 1024;
     const getFile = id => document.getElementById(id)?.files?.[0];
     const attachments = {};
     const defs = this._getAllAnexoFieldDefs();
     await Promise.all(defs.map(async ({ id, grupo, customNameId }) => {
       const f = getFile(id);
       if (!f) return;
-      if (f.size > 25 * 1024 * 1024) {
-        throw new Error(`"${f.name}" excede 25 MB.`);
+      if (f.size > maxBytes) {
+        throw new Error(`"${f.name}" excede ${this.PROPOSAL_MAX_FILE_MB || 50} MB.`);
       }
       attachments[grupo] = await (window.DB || DB).uploadProposalFile(f, proposalId, grupo);
-      attachments[grupo + '_nome'] = f.name;
+      this._applyProposalUploadResult(attachments, grupo, attachments[grupo], f.name);
       if (customNameId) {
         const folderName = (document.getElementById(customNameId)?.value || '').trim();
         if (folderName) attachments[grupo + '_pasta'] = folderName;
@@ -947,6 +975,41 @@ window.Proposals = {
   _vendorStage: function(p) {
     if (!p) return '';
     return String(p.statusOp || p.status_op || p.status || '').trim();
+  },
+
+  /** Rótulo exibido na lista — prioriza statusOp (fluxo vendedor/parceiro). */
+  _proposalDisplayStatus: function(p) {
+    const stage = this._vendorStage(p);
+    if (stage) return this._labelEtapaVendedor(stage);
+    return String(p?.status || p?.statusOp || p?.status_op || '—').trim() || '—';
+  },
+
+  _proposalStatusBadgeClass: function(val) {
+    const u = String(val || '').trim().toUpperCase();
+    if (u === 'EM ANDAMENTO') return 'badge-info';
+    if (u === 'DIGITAÇÃO' || u === 'DIGITACAO') return 'badge-accent';
+    if (u === 'AG. BOLETO') return 'badge-warning';
+    if (u === 'PAGO') return 'badge-success';
+    if (u === 'CANCELADO') return 'badge-danger';
+    if (u === 'PENDENCIADO' || u === 'PENDENTE') return 'badge-warning';
+    if (u === 'AVERBADO') return 'badge-success';
+    return 'badge-muted';
+  },
+
+  /** Mantém status e statusOp alinhados quando o parceiro altera só o campo operacional. */
+  _syncProposalStatusFields: function(proposal) {
+    if (!proposal) return proposal;
+    const st = String(proposal.status || '').trim();
+    const op = String(proposal.statusOp || proposal.status_op || '').trim();
+    if (op && st === 'Em Andamento' && op !== st) {
+      proposal.status = op;
+    } else if (st && !op) {
+      proposal.statusOp = st;
+      proposal.status_op = st;
+    } else if (st && op) {
+      proposal.status_op = op;
+    }
+    return proposal;
   },
 
   _getProposalSearchQuery: function() {
@@ -1137,13 +1200,13 @@ window.Proposals = {
       msg = friendlyApiError(0, msg);
     }
     if (msg === 'PAYLOAD_TOO_LARGE' || msg === 'ATTACHMENTS_TOO_LARGE') {
-      return 'Esta proposta tem anexos muito grandes para salvar de uma vez. Remova anexos antigos, envie um PDF por vez (até 25 MB) ou peça ao suporte para liberar o envio.';
+      return `Esta proposta tem anexos muito grandes para salvar de uma vez. Envie um arquivo por vez (até ${this.PROPOSAL_MAX_FILE_MB || 50} MB) ou aguarde o upload terminar antes de salvar.`;
     }
     if (msg.includes('57014') || /statement timeout/i.test(msg)) {
       return 'Tempo esgotado ao salvar. Anexos grandes devem ir ao Storage — use Ctrl+F5 e tente de novo. Confira o bucket "proposal-attachments" no Supabase.';
     }
     if (/payload too large|413|entity too large|muito grandes/i.test(msg)) {
-      return 'Anexo muito grande para salvar de uma vez. Use PDF menor (até 25 MB) ou envie um arquivo por vez.';
+      return `Anexo muito grande. Limite de ${this.PROPOSAL_MAX_FILE_MB || 50} MB por arquivo — envie um por vez se necessário.`;
     }
     if (/403|acesso negado|forbidden/i.test(msg)) {
       return 'Acesso negado ao salvar. Verifique permissões, reduza anexos ou contate o suporte técnico.';
@@ -1163,9 +1226,106 @@ window.Proposals = {
     else alert('Erro ao salvar proposta: ' + msg);
   },
 
+  _applyProposalUploadResult: function(att, grupo, uploaded, fallbackNome) {
+    if (!att || !grupo) return;
+    const nome = (uploaded && uploaded.nome) || fallbackNome || '';
+    if (uploaded && typeof uploaded === 'object' && (uploaded.url || uploaded.caminho)) {
+      let caminho = String(uploaded.caminho || this._extractStorageRelative(uploaded.url) || '').replace(/^\/+/, '');
+      if (!caminho && !String(uploaded.url || '').startsWith('data:')) {
+        /* URL http(s) ou file.php sem caminho explícito — mantém referência sem bloquear save. */
+        att[grupo] = uploaded.url;
+        att[grupo + '_nome'] = nome;
+        if (uploaded.public_url) att[grupo + '_public'] = uploaded.public_url;
+        return;
+      }
+      if (!caminho && String(uploaded.url || '').startsWith('data:')) {
+        att[grupo] = uploaded.url;
+        att[grupo + '_nome'] = nome;
+        return;
+      }
+      if (caminho) {
+        caminho = this._normalizeStorageCaminho(caminho);
+        att[grupo + '_caminho'] = caminho;
+        const served = this._fileServeUrl(caminho);
+        att[grupo] = served || uploaded.url;
+      } else {
+        att[grupo] = uploaded.url;
+      }
+      if (uploaded.public_url) att[grupo + '_public'] = uploaded.public_url;
+      att[grupo + '_nome'] = nome;
+      return;
+    }
+    const raw = String(uploaded || '').trim();
+    if (!raw) return;
+    const rel = this._extractStorageRelative(raw);
+    if (!rel && !/^data:/i.test(raw)) {
+      throw new Error(`Anexo "${nome || grupo}" com URL inválida.`);
+    }
+    att[grupo] = rel ? (this._fileServeUrl(rel) || raw) : raw;
+    att[grupo + '_nome'] = nome;
+    if (rel) att[grupo + '_caminho'] = this._normalizeStorageCaminho(rel);
+  },
+
+  _validateAttachmentsBeforeSave: function(att) {
+    const parsed = this._parseAttachments(att);
+    Object.keys(parsed || {}).forEach((k) => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho') || k.endsWith('_public')) return;
+      const v = parsed[k];
+      if (!v || /^data:/i.test(String(v))) return;
+      let caminho = String(parsed[k + '_caminho'] || '').replace(/^\/+/, '')
+        || this._extractStorageRelative(v);
+      if (!caminho) {
+        const norm = this._normalizeAttachmentUrl(v);
+        caminho = this._extractStorageRelative(norm) || this._extractStorageRelative(v);
+      }
+      if (!caminho) {
+        if (/^https?:\/\//i.test(String(v)) || /file\.php/i.test(String(v))) {
+          parsed[k] = String(v);
+          parsed[k + '_nome'] = parsed[k + '_nome'] || k;
+          return;
+        }
+        throw new Error(`Anexo "${parsed[k + '_nome'] || k}" sem caminho — reenvie o arquivo antes de salvar.`);
+      }
+      caminho = this._normalizeStorageCaminho(caminho);
+      parsed[k + '_caminho'] = caminho;
+      if (!/file\.php/i.test(String(parsed[k])) && !/^data:/i.test(String(parsed[k]))) {
+        const served = this._fileServeUrl(caminho);
+        if (served) parsed[k] = served;
+      }
+    });
+    return parsed;
+  },
+
+  _attachmentCaminho: function(raw, att, key) {
+    const stored = att && key ? att[key + '_caminho'] : '';
+    const rel = stored
+      ? this._normalizeStorageCaminho(stored)
+      : this._normalizeStorageCaminho(this._extractStorageRelative(raw));
+    return rel;
+  },
+
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,
   _attachmentLoadPromises: {},
+
+  _SUPABASE_LEGACY: 'https://dqptnlywbarvznpzgtuj.supabase.co',
+  _SUPABASE_V2: 'https://cpqediswbjxcvpnwflyj.supabase.co',
+
+  _supabasePublicUrl: function(base, relPath) {
+    const rel = String(relPath || '').replace(/^\/+/, '');
+    if (!rel || !base) return '';
+    const parts = rel.split('/');
+    const bucket = parts.shift();
+    if (!bucket || !parts.length) return '';
+    const objectEnc = parts.map((p) => encodeURIComponent(p)).join('/');
+    return `${String(base).replace(/\/+$/, '')}/storage/v1/object/public/${encodeURIComponent(bucket)}/${objectEnc}`;
+  },
+
+  /** Anexos de proposta: só projeto original (sou+blu). v2 = WhatsApp. */
+  _allSupabasePublicUrls: function(relPath) {
+    const u = this._supabasePublicUrl(this._SUPABASE_LEGACY, relPath);
+    return u ? [u] : [];
+  },
 
   _siteBaseUrl: function() {
     const cfg = typeof window !== 'undefined' ? (window.SOUBLU_CONFIG || {}) : {};
@@ -1174,10 +1334,150 @@ window.Proposals = {
   },
 
   _mapSupabaseStorageToLocalUpload: function(url) {
-    const m = String(url || '').match(/\/storage\/v1\/object\/public\/([^/?#]+)\/(.+)$/i);
-    if (!m) return '';
+    const rel = this._extractStorageRelative(url);
+    return rel ? this._fileServeUrl(rel) : '';
+  },
+
+  _extractStorageRelative: function(url) {
+    const s = String(url || '').trim();
+    if (!s) return '';
+    if (/file\.php/i.test(s)) {
+      const m = s.match(/[?&]path=([^&]+)/i);
+      if (m) return decodeURIComponent(m[1]).replace(/^\/+/, '');
+    }
+    const up = s.match(/\/uploads\/([^?#]+)/i);
+    if (up) return decodeURIComponent(up[1]);
+    const supa = s.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
+    if (supa) {
+      let bucket = decodeURIComponent(supa[1]);
+      if (bucket === 'propostas') bucket = 'proposal-attachments';
+      return bucket + '/' + decodeURIComponent(supa[2]);
+    }
+    if (/^proposal-attachments\//i.test(s)) return s.replace(/^\/+/, '');
+    return '';
+  },
+
+  _extractUploadsRelative: function(url) {
+    return this._extractStorageRelative(url);
+  },
+
+  _normalizeStorageCaminho: function(caminho) {
+    const db = window.DB || (typeof DB !== 'undefined' ? DB : null);
+    if (db && typeof db.normalizeProposalCaminho === 'function') {
+      return db.normalizeProposalCaminho(caminho);
+    }
+    const rel = String(caminho || '').replace(/^\/+/, '');
+    if (!rel) return '';
+    const slash = rel.indexOf('/');
+    if (slash < 0) return rel;
+    const bucket = rel.slice(0, slash);
+    const object = rel.slice(slash + 1);
+    const segs = object.split('/').filter(Boolean).map((seg) => {
+      const ascii = seg.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      return ascii.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+|_+$/g, '') || 'arquivo';
+    });
+    return segs.length ? `${bucket}/${segs.join('/')}` : bucket;
+  },
+
+  _fileServeUrl: function(relativePath) {
+    const rel = this._normalizeStorageCaminho(relativePath);
+    if (!rel) return '';
     const base = this._siteBaseUrl();
-    return base ? `${base}/uploads/${m[1]}/${m[2]}` : '';
+    return base ? `${base}/api/file.php?path=${encodeURIComponent(rel)}` : '';
+  },
+
+  _fileProxyFromSupabaseUrl: function(url) {
+    const s = String(url || '').trim();
+    if (!/supabase\.co\/storage\/v1\/object\//i.test(s)) return '';
+    const base = this._siteBaseUrl();
+    return base ? `${base}/api/file.php?fetch_url=${encodeURIComponent(s)}` : '';
+  },
+
+  _attachmentDisplayUrl: function(raw, caminho) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    if (/^(data:|blob:)/i.test(s)) return this._toDisplayUrl(s);
+    if (/file\.php/i.test(s)) return s;
+    if (/supabase\.co\/storage/i.test(s)) return s.replace(/ /g, '%20');
+    if (/^https?:\/\//i.test(s)) {
+      if (this._isDirectUploadsUrl(s)) {
+        const rel = this._extractStorageRelative(s);
+        return rel ? this._fileServeUrl(rel) : '';
+      }
+      return s.replace(/ /g, '%20');
+    }
+    const path = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(s);
+    return path ? this._fileServeUrl(path) : '';
+  },
+
+  _toViewerUrl: function(url, caminho) {
+    return this._attachmentDisplayUrl(url, caminho) || '';
+  },
+
+  _verifyAttachmentServeUrl: async function(serveUrl) {
+    const u = String(serveUrl || '').trim();
+    if (!u || !/file\.php/i.test(u)) return null;
+    try {
+      const checkUrl = u + (u.includes('?') ? '&' : '?') + 'check=1';
+      const res = await fetch(checkUrl, { cache: 'no-store' });
+      const j = await res.json().catch(() => ({}));
+      if (j && j.ok && j.serve_url) return j.serve_url;
+      const normPath = this._normalizeStorageCaminho(decodeURIComponent((u.match(/[?&]path=([^&]+)/i) || [])[1] || ''));
+      if (normPath && normPath !== decodeURIComponent((u.match(/[?&]path=([^&]+)/i) || [])[1] || '')) {
+        const retry = this._fileServeUrl(normPath);
+        if (retry && retry !== u) {
+          const r2 = await fetch(retry + (retry.includes('?') ? '&' : '?') + 'check=1', { cache: 'no-store' });
+          const j2 = await r2.json().catch(() => ({}));
+          if (j2 && j2.ok && j2.serve_url) return j2.serve_url;
+        }
+      }
+    } catch (_) { /* noop */ }
+    return null;
+  },
+
+  _attachmentPreviewUrl: function(raw, caminho, urls, nome) {
+    const r = String(raw || '').trim();
+    if (!r) return '';
+    if (/^(data:|blob:)/i.test(r)) return this._toDisplayUrl(r);
+    if (this._isImageUrl(r, nome)) {
+      if (/supabase\.co\/storage/i.test(r)) return r.replace(/ /g, '%20');
+      const rel = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(r);
+      if (rel) {
+        const supa = this._allSupabasePublicUrls(rel);
+        if (supa[0]) return supa[0];
+        const served = this._fileServeUrl(rel);
+        if (served) return served;
+      }
+      if (this._isDirectUploadsUrl(r)) return r.replace(/ /g, '%20');
+    }
+    return this._pickViewerUrl(urls || [], r, caminho);
+  },
+
+  _pickViewerUrl: function(urls, raw, caminho) {
+    const list = urls || [];
+    if (/^(data:|blob:)/i.test(String(raw || ''))) {
+      return this._toDisplayUrl(raw);
+    }
+    const rel = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(raw);
+    if (rel) {
+      const served = this._fileServeUrl(rel);
+      if (served) return served;
+      const mirrors = this._allSupabasePublicUrls(rel);
+      if (mirrors.length) return mirrors[0];
+    }
+    if (/supabase\.co\/storage/i.test(String(raw || ''))) {
+      const proxied = this._fileProxyFromSupabaseUrl(raw);
+      if (proxied) return proxied;
+      return String(raw).replace(/ /g, '%20');
+    }
+    const proxy = list.find((u) => /file\.php/i.test(String(u)));
+    if (proxy) return proxy;
+    const supa = list.find((u) => /supabase\.co\/storage/i.test(String(u)) && !/file\.php/i.test(String(u)));
+    if (supa) return String(supa).replace(/ /g, '%20');
+    if (this._isDirectUploadsUrl(raw)) {
+      return String(raw).replace(/ /g, '%20');
+    }
+    return list[0] || this._attachmentDisplayUrl(raw, caminho) || '';
   },
 
   _normalizeAttachmentUrl: function(val) {
@@ -1191,24 +1491,27 @@ window.Proposals = {
     if (!s) return '';
     if (/^(data:|blob:)/i.test(s)) return s;
     if (/^https?:\/\//i.test(s)) {
-      if (/supabase\.co\/storage/i.test(s)) return s;
-      const up = s.match(/^(https?:\/\/[^/]+)(\/uploads\/.+)$/i);
-      if (up) {
-        const base = this._siteBaseUrl();
-        if (base) return base + up[2];
+      if (/supabase\.co\/storage/i.test(s)) return s.replace(/ /g, '%20');
+      if (/\/uploads\//i.test(s)) {
+        const rel = this._extractStorageRelative(s);
+        return rel ? this._fileServeUrl(rel) : s.replace(/ /g, '%20');
       }
-      return s;
+      return s.replace(/ /g, '%20');
     }
-    const base = this._siteBaseUrl();
     if (s.startsWith('/uploads/') || /^uploads\//i.test(s)) {
-      return base ? `${base}/${s.replace(/^\//, '')}` : s;
+      const rel = s.replace(/^\/?uploads\//i, '');
+      return this._fileServeUrl(rel);
     }
-    const supaBase = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL)
-      ? String(SUPABASE_URL).replace(/\/$/, '')
-      : String((typeof window !== 'undefined' && window.SOUBLU_CONFIG?.STORAGE_URL) || '').replace(/\/$/, '');
-    if (supaBase) {
-      if (s.startsWith('/storage/')) return supaBase + s;
-      if (s.startsWith('storage/v1/')) return supaBase + '/' + s;
+    if (/^proposal-attachments\//i.test(s)) {
+      return this._supabasePublicUrl(this._SUPABASE_LEGACY, s)
+        || this._fileServeUrl(s);
+    }
+    const legacyBase = this._SUPABASE_LEGACY;
+    if (s.startsWith('/storage/')) {
+      return (legacyBase + s).replace(/ /g, '%20');
+    }
+    if (s.startsWith('storage/v1/')) {
+      return (legacyBase + '/' + s).replace(/ /g, '%20');
     }
     if (/^[A-Za-z0-9+/=\s-]+$/.test(s.replace(/\s/g, '')) && s.length > 80) {
       return 'data:application/octet-stream;base64,' + s.replace(/\s/g, '');
@@ -1216,16 +1519,62 @@ window.Proposals = {
     return '';
   },
 
-  _attachmentOpenUrls: function(url) {
-    const primary = this._normalizeAttachmentUrl(url);
-    const list = [];
-    if (primary) list.push(primary);
+  _isDirectUploadsUrl: function(url) {
+    const s = String(url || '');
+    return /^https?:\/\//i.test(s) && /\/uploads\//i.test(s) && !/file\.php/i.test(s);
+  },
+
+  _attachmentOpenUrls: function(url, caminho) {
     const raw = String(url || '').trim();
-    if (/supabase\.co\/storage/i.test(raw)) {
-      const local = this._mapSupabaseStorageToLocalUpload(raw);
-      if (local && !list.includes(local)) list.push(local);
+    const list = [];
+    const add = (u) => {
+      const v = String(u || '').trim();
+      if (!v) return;
+      if (!list.includes(v)) list.push(v);
+    };
+
+    if (/^(data:|blob:)/i.test(raw)) {
+      add(this._toDisplayUrl(raw));
+      return list;
     }
+
+    const rel = this._normalizeStorageCaminho(
+      String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(raw)
+    );
+
+    if (rel) {
+      add(this._fileServeUrl(rel));
+      this._allSupabasePublicUrls(rel).forEach(add);
+      this._allSupabasePublicUrls(rel).forEach((u) => add(this._fileProxyFromSupabaseUrl(u)));
+    }
+
+    if (/supabase\.co\/storage/i.test(raw)) {
+      add(raw.replace(/ /g, '%20'));
+      add(this._fileProxyFromSupabaseUrl(raw));
+    }
+
+    if (/^https?:\/\//i.test(raw) && this._isDirectUploadsUrl(raw)) {
+      add(raw.replace(/ /g, '%20'));
+    }
+
     return list;
+  },
+
+  _attachmentFallbackChain: function(urls, primary) {
+    const p = String(primary || '').trim();
+    return (urls || []).filter((u) => String(u).trim() && String(u).trim() !== p).slice(0, 6);
+  },
+
+  _attachmentOnErrorHandler: function() {
+    return "var el=this;for(var i=1;i<=6;i++){var k='fb'+i;if(el.dataset[k]&&!el.dataset['t'+i]){el.dataset['t'+i]=1;el.src=el.dataset[k];return;}}el.replaceWith(Object.assign(document.createElement('p'),{textContent:'Arquivo indisponível (não encontrado no Supabase nem no servidor). Peça ao vendedor para reenviar o anexo.',style:'padding:24px;text-align:center;color:var(--color-danger);font-size:13px;line-height:1.4;'}));";
+  },
+
+  _attachmentFallbackAttrs: function(chain) {
+    const attrs = {};
+    (chain || []).forEach((u, i) => {
+      attrs[`data-fb${i + 1}`] = this._escUrlAttr(u);
+    });
+    return attrs;
   },
 
   _isValidAttachmentUrl: function(url) {
@@ -1237,7 +1586,7 @@ window.Proposals = {
   _hasProposalAttachments: function(att) {
     const parsed = this._parseAttachments(att);
     return Object.keys(parsed || {}).some((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta')) return false;
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
       const url = this._normalizeAttachmentUrl(parsed[k]);
       return this._isValidAttachmentUrl(url);
     });
@@ -1295,9 +1644,14 @@ window.Proposals = {
     const parsed = this._parseAttachments(att);
     const tryKey = (k) => {
       if (parsed[k] == null || parsed[k] === '') return null;
-      const url = this._normalizeAttachmentUrl(parsed[k]);
-      if (!this._isValidAttachmentUrl(url)) return null;
-      return { url, nome: parsed[k + '_nome'] || k };
+      const raw = parsed[k];
+      const docNome = parsed[k + '_nome'] || k;
+      const caminho = this._attachmentCaminho(raw, parsed, k);
+      const urls = this._attachmentOpenUrls(raw, caminho);
+      const display = this._attachmentPreviewUrl(raw, caminho, urls, docNome)
+        || this._normalizeAttachmentUrl(raw);
+      if (!display && !this._isValidAttachmentUrl(raw)) return null;
+      return { url: display, rawUrl: raw, urls, nome: docNome, caminho };
     };
     let doc = tryKey(grupo);
     if (doc) return doc;
@@ -1327,32 +1681,111 @@ window.Proposals = {
         }
         return;
       }
-      const name = doc.nome || 'Arquivo salvo';
-      const displayUrl = this._toDisplayUrl(doc.url);
-      lbl.innerHTML =
-        `<span style="color:var(--color-success);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;display:inline-block;vertical-align:middle;" title="${this._escAttr(name)}">✓ ${this._escHtml(name)}</span>` +
-        (this._isValidAttachmentUrl(displayUrl)
-          ? `<a href="${this._escAttr(displayUrl)}" target="_blank" rel="noopener" title="Visualizar salvo" style="margin-left:6px;font-size:18px;text-decoration:none;vertical-align:middle;">👁</a>`
-          : '');
+      lbl.innerHTML = this._renderFormSlotPreview(doc);
     });
+  },
+
+  /** Miniatura no formulário de anexos (pastas da proposta — admin / vendedor / financeiro). */
+  _renderFormSlotPreview: function(doc) {
+    const rawSrc = doc.rawUrl || doc.url || '';
+    const nome = doc.nome || 'Anexo';
+    if (!this._isValidAttachmentUrl(rawSrc) && !this._isValidAttachmentUrl(doc.url)) {
+      return '<span style="color:#999;">-</span>';
+    }
+    const previewPrimary = this._attachmentPreviewUrl(rawSrc, doc.caminho, doc.urls || [], nome)
+      || doc.url;
+    const previewList = [previewPrimary];
+    (doc.urls || []).forEach((u) => {
+      const v = String(u || '').trim();
+      if (v && !previewList.includes(v)) previewList.push(v);
+    });
+    const previewChain = this._attachmentFallbackChain(previewList, previewPrimary);
+    const previewFb = this._attachmentFallbackAttrs(previewChain);
+    const previewFbStr = Object.keys(previewFb).map((k) => `${k}="${previewFb[k]}"`).join(' ');
+    const safePreview = this._escUrlAttr(previewPrimary);
+    const safeNome = this._escHtml(nome);
+    const shortNome = safeNome.length > 28 ? (safeNome.slice(0, 25) + '…') : safeNome;
+    const openJs = `Proposals.openAttachment('${this._escAttr(String(rawSrc))}','${this._escAttr(nome)}','${this._escAttr(doc.caminho || '')}')`;
+    const wrap = 'display:inline-flex;flex-direction:column;align-items:center;max-width:88px;margin-top:6px;vertical-align:top;';
+    const card = 'width:80px;height:100px;border-radius:10px;border:2px solid var(--color-success);overflow:hidden;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.08);cursor:pointer;flex-shrink:0;';
+    const previewOnErr = this._attachmentOnErrorHandler();
+
+    if (this._isImageUrl(rawSrc, nome)) {
+      return `<div style="${wrap}" title="${safeNome} — clique para ampliar">
+        <div style="${card}" role="button" tabindex="0" onclick="${openJs}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${openJs};}">
+          <img src="${safePreview}" ${previewFbStr} alt="${safeNome}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;" loading="lazy" onerror="${previewOnErr}"/>
+        </div>
+        <span style="font-size:9px;line-height:1.15;text-align:center;margin-top:4px;word-break:break-word;color:var(--color-text-muted);">${shortNome}</span>
+      </div>`;
+    }
+    if (this._isPdfUrl(rawSrc, nome)) {
+      return `<div style="${wrap}" title="${safeNome} — clique para abrir">
+        <div style="${card}display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px;color:var(--color-primary);" role="button" tabindex="0" onclick="${openJs}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${openJs};}">
+          <span style="font-size:26px;line-height:1;">📄</span>
+        </div>
+        <span style="font-size:9px;line-height:1.15;text-align:center;margin-top:4px;word-break:break-word;color:var(--color-text-muted);">${shortNome}</span>
+      </div>`;
+    }
+    return `<div style="${wrap}">
+      <div style="${card}display:flex;align-items:center;justify-content:center;font-size:22px;" role="button" tabindex="0" onclick="${openJs}">📎</div>
+      <span style="font-size:9px;text-align:center;margin-top:4px;">${shortNome}</span>
+    </div>`;
+  },
+
+  _isLocawebProposalUploadUrl: function(val) {
+    const s = String(val || '').trim();
+    return /\/uploads\/proposal-attachments\//i.test(s)
+      || (/soumaisblu\.com\.br\/uploads\//i.test(s) && !/file\.php/i.test(s));
+  },
+
+  /** Reenvia anexos que estavam no disco Locaweb para o Supabase ao salvar a proposta. */
+  _migrateLocawebAttachmentsToSupabase: async function(proposalId, att) {
+    const out = { ...att };
+    const jobs = [];
+    Object.keys(out).forEach((k) => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
+      const v = out[k];
+      if (typeof v !== 'string' || !this._isLocawebProposalUploadUrl(v)) return;
+      jobs.push((async () => {
+        try {
+          const res = await fetch(v.replace(/ /g, '%20'), { cache: 'no-store' });
+          if (!res.ok) {
+            console.warn('[Proposals] arquivo Locaweb ausente, reenvie manualmente:', k, v);
+            return;
+          }
+          const blob = await res.blob();
+          const nome = out[k + '_nome'] || `${k}`;
+          const file = new File([blob], nome, { type: blob.type || 'application/octet-stream' });
+          const uploaded = await (window.DB || DB).uploadProposalFile(file, proposalId, k);
+          if (uploaded && (uploaded.caminho || uploaded.url)) {
+            this._applyProposalUploadResult(out, k, uploaded, nome);
+          }
+        } catch (e) {
+          console.warn('[Proposals] migrar anexo Locaweb→Supabase', k, e);
+        }
+      })());
+    });
+    await Promise.all(jobs);
+    return out;
   },
 
   _uploadPendingDataAttachments: async function(proposalId, att) {
     const out = { ...att };
     const jobs = [];
     Object.keys(out).forEach((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta')) return;
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
       const v = out[k];
       if (typeof v !== 'string' || !/^data:/i.test(v)) return;
       jobs.push((async () => {
         try {
           const res = await fetch(v);
           const blob = await res.blob();
-          const nome = out[k + '_nome'] || `${k}.pdf`;
-          const file = new File([blob], nome, { type: blob.type || 'application/pdf' });
+          const nome = out[k + '_nome'] || `${k}`;
+          const file = new File([blob], nome, { type: blob.type || 'application/octet-stream' });
           const uploaded = await (window.DB || DB).uploadProposalFile(file, proposalId, k);
-          if (uploaded && !String(uploaded).startsWith('data:')) {
-            out[k] = uploaded;
+          const url = uploaded && typeof uploaded === 'object' ? uploaded.url : uploaded;
+          if (url && !String(url).startsWith('data:')) {
+            this._applyProposalUploadResult(out, k, uploaded, nome);
           }
         } catch (e) {
           console.warn('[Proposals] upload pending attachment', k, e);
@@ -1367,26 +1800,28 @@ window.Proposals = {
     if (this._attachmentLoadPromises[proposalId]) {
       try { await this._attachmentLoadPromises[proposalId]; } catch { /* ignore */ }
     }
-    let base = this._parseAttachments(proposal.attachments);
-    if (!this._hasProposalAttachments(base)) {
-      try {
-        const attRow = await DB.getProposalAttachments(proposalId);
-        if (attRow?.attachments != null) {
-          base = this._parseAttachments(attRow.attachments);
-        }
-      } catch (e) {
-        console.warn('[Proposals] anexos save:', e);
-      }
-    }
+    let base = this._parseAttachments(proposal?.attachments);
     if (!this._hasProposalAttachments(base)) {
       try {
         const full = await DB.getProposal(proposalId);
         if (full?.attachments) base = this._parseAttachments(full.attachments);
-      } catch (_) { /* noop */ }
+      } catch (e) {
+        console.warn('[Proposals] anexos save:', e);
+      }
     }
-    base = await this._uploadPendingDataAttachments(proposalId, base);
+    const needsDataUpload = Object.keys(base).some((k) => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
+      return typeof base[k] === 'string' && /^data:/i.test(base[k]);
+    });
+    const needsLocawebMigrate = Object.keys(base).some((k) => {
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
+      return typeof base[k] === 'string' && this._isLocawebProposalUploadUrl(base[k]);
+    });
+    if (needsDataUpload) base = await this._uploadPendingDataAttachments(proposalId, base);
+    if (needsLocawebMigrate) base = await this._migrateLocawebAttachmentsToSupabase(proposalId, base);
     const uploaded = await this._collectAttachments(proposalId);
-    return { ...base, ...uploaded };
+    const merged = { ...base, ...uploaded };
+    return this._validateAttachmentsBeforeSave(merged);
   },
 
   _dataUrlToBlobUrl: function(dataUrl) {
@@ -1402,7 +1837,9 @@ window.Proposals = {
   },
 
   _toDisplayUrl: function(url) {
-    if (!url || !String(url).startsWith('data:')) return url;
+    if (!url || !String(url).startsWith('data:')) {
+      return typeof url === 'string' ? url.replace(/ /g, '%20') : url;
+    }
     if (String(url).length < 500000) return url;
     try {
       return this._dataUrlToBlobUrl(url);
@@ -1418,9 +1855,11 @@ window.Proposals = {
     }
   },
 
-  openAttachment: function(cacheIdxOrUrl, nome) {
+  openAttachment: function(cacheIdxOrUrl, nome, caminhoOpt) {
+    let raw = '';
     let urls = [];
     let name = nome || 'Anexo';
+    let caminho = caminhoOpt || '';
 
     if (typeof cacheIdxOrUrl === 'number') {
       const item = this._attachmentViewerCache?.[cacheIdxOrUrl];
@@ -1428,58 +1867,64 @@ window.Proposals = {
         alert('Anexo indisponível.');
         return;
       }
-      urls = item.urls || this._attachmentOpenUrls(item.rawUrl || item.url);
+      raw = String(item.rawUrl || item.url || '').trim();
+      caminho = item.caminho || '';
+      urls = item.urls || this._attachmentOpenUrls(raw, caminho);
       name = item.nome || name;
     } else {
-      urls = this._attachmentOpenUrls(cacheIdxOrUrl);
+      raw = String(cacheIdxOrUrl || '').trim();
+      caminho = String(caminhoOpt || '').replace(/^\/+/, '');
+      urls = this._attachmentOpenUrls(raw, caminho);
       name = nome || name;
     }
 
-    const url = urls.find((u) => this._isValidAttachmentUrl(u)) || '';
-    if (!url) {
+    const displayUrl = this._isImageUrl(raw, name)
+      ? (this._attachmentPreviewUrl(raw, caminho, urls, name) || this._pickViewerUrl(urls, raw, caminho))
+      : this._pickViewerUrl(urls, raw, caminho);
+    if (!displayUrl) {
       alert('Anexo indisponível ou inválido.');
       return;
     }
 
+    const fallbackChain = this._attachmentFallbackChain(urls, displayUrl);
+    const fbAttrs = this._attachmentFallbackAttrs(fallbackChain);
+    const fbAttrStr = Object.keys(fbAttrs).map((k) => `${k}="${fbAttrs[k]}"`).join(' ');
+    const onErr = this._attachmentOnErrorHandler();
+
     const modal = document.getElementById('attachmentViewerModal');
-    const displayUrl = this._toDisplayUrl(url);
+    const titleEl = document.getElementById('attachmentViewerTitle');
+    const bodyEl = document.getElementById('attachmentViewerBody');
+    const openExtEl = document.getElementById('attachmentViewerOpenExternal');
+
+    if (titleEl) titleEl.textContent = name;
 
     this._revokeAttachmentBlobUrl();
-    if (displayUrl !== url && String(displayUrl).startsWith('blob:')) {
+    if (String(displayUrl).startsWith('blob:')) {
       this._lastAttachmentBlobUrl = displayUrl;
     }
 
+    const finalUrl = displayUrl;
+
     if (!modal) {
-      const w = window.open(displayUrl, '_blank', 'noopener,noreferrer');
+      const w = window.open(finalUrl, '_blank', 'noopener,noreferrer');
       if (!w) alert('Não foi possível abrir o anexo. Verifique se pop-ups estão permitidos.');
       return;
     }
 
-    const titleEl = document.getElementById('attachmentViewerTitle');
-    const bodyEl = document.getElementById('attachmentViewerBody');
-    const openExtEl = document.getElementById('attachmentViewerOpenExternal');
-    if (titleEl) titleEl.textContent = name;
+    if (typeof openModal === 'function') openModal('attachmentViewerModal');
+    else modal.classList.add('open');
+
     if (openExtEl) {
       openExtEl.onclick = () => {
-        const extUrl = urls.find((u) => this._isValidAttachmentUrl(u)) || displayUrl;
-        const w = window.open(this._toDisplayUrl(extUrl), '_blank', 'noopener,noreferrer');
+        const w = window.open(finalUrl, '_blank', 'noopener,noreferrer');
         if (!w) alert('Não foi possível abrir em nova aba.');
       };
     }
 
-    const safeDisplay = this._escUrlAttr(displayUrl);
-    const safeName = this._escHtml(name);
-
     if (bodyEl) {
-      if (this._isImageUrl(url, name)) {
-        bodyEl.innerHTML = `<img src="${safeDisplay}" alt="${safeName}" style="max-width:100%;max-height:70vh;display:block;margin:0 auto;border-radius:8px;object-fit:contain;"/>`;
-      } else {
-        bodyEl.innerHTML = `<iframe src="${safeDisplay}" title="${safeName}" style="width:100%;height:70vh;border:0;border-radius:8px;background:#fff;"></iframe>`;
-      }
+      const kind = this._guessAttachmentKind(raw || displayUrl, name);
+      bodyEl.innerHTML = this._renderAttachmentViewerBody(kind, finalUrl, name, fbAttrStr, onErr);
     }
-
-    if (typeof openModal === 'function') openModal('attachmentViewerModal');
-    else modal.classList.add('open');
   },
 
   closeAttachmentViewer: function() {
@@ -1492,9 +1937,12 @@ window.Proposals = {
 
   _isImageUrl: function(url, nome) {
     if (!url) return false;
-    if (String(url).startsWith('data:image/')) return true;
-    const ref = ((nome || '') + ' ' + String(url).split('?')[0]).toLowerCase();
-    return /\.(jpe?g|png|gif|webp|jfif|bmp|heic)(\?|$)/i.test(ref);
+    const s = String(url);
+    if (s.startsWith('data:image/')) return true;
+    const ref = ((nome || '') + ' ' + s.split('?')[0]).toLowerCase();
+    if (/\.(jpe?g|png|gif|webp|jfif|bmp|heic|heif)(\?|$)/i.test(ref)) return true;
+    if (/(?:^|[/_.-])(jpe?g|png|gif|webp|jfif|bmp|heic)(?:[/_.-]|$)/i.test(ref)) return true;
+    return false;
   },
 
   _isPdfUrl: function(url, nome) {
@@ -1504,34 +1952,84 @@ window.Proposals = {
     return /\.pdf(\?|$)/i.test(ref);
   },
 
+  _guessAttachmentKind: function(url, nome) {
+    if (this._isImageUrl(url, nome)) return 'image';
+    if (this._isPdfUrl(url, nome)) return 'pdf';
+    const ref = ((nome || '') + ' ' + String(url || '').split('?')[0]).toLowerCase();
+    if (/\.(mp4|webm|ogv|mov|m4v|avi|mkv)(\?|$)/i.test(ref)) return 'video';
+    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)(\?|$)/i.test(ref)) return 'audio';
+    if (/\.(txt|csv|json|xml|html?|md|log|yml|yaml)(\?|$)/i.test(ref)) return 'text';
+    return 'other';
+  },
+
+  _renderAttachmentViewerBody: function(kind, displayUrl, name, fbAttrStr, onErr) {
+    const safeDisplay = this._escUrlAttr(displayUrl);
+    const safeName = this._escHtml(name);
+    const safeNameAttr = this._escAttr(name);
+    if (kind === 'image') {
+      return `<img src="${safeDisplay}" ${fbAttrStr} alt="${safeName}" style="max-width:100%;max-height:70vh;display:block;margin:0 auto;border-radius:8px;object-fit:contain;" onerror="${onErr}"/>`;
+    }
+    if (kind === 'pdf' || kind === 'text') {
+      return `<iframe src="${safeDisplay}" ${fbAttrStr} title="${safeName}" style="width:100%;height:70vh;border:0;border-radius:8px;background:#fff;"></iframe>`;
+    }
+    if (kind === 'video') {
+      return `<video src="${safeDisplay}" ${fbAttrStr} controls playsinline style="max-width:100%;max-height:70vh;display:block;margin:0 auto;border-radius:8px;background:#000;" onerror="${onErr}">${safeName}</video>`;
+    }
+    if (kind === 'audio') {
+      return `<div style="padding:24px;text-align:center;"><p style="margin-bottom:16px;font-weight:600;">${safeName}</p><audio src="${safeDisplay}" ${fbAttrStr} controls style="width:min(100%,480px);" onerror="${onErr}"></audio></div>`;
+    }
+    return `<div style="padding:32px 24px;text-align:center;">
+      <div style="font-size:52px;line-height:1;margin-bottom:16px;">📎</div>
+      <p style="font-weight:600;margin-bottom:8px;word-break:break-word;">${safeName}</p>
+      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:20px;">Este tipo de arquivo não pode ser exibido aqui. Baixe ou abra em nova aba.</p>
+      <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+        <a href="${safeDisplay}" download="${safeNameAttr}" class="btn btn-primary" style="text-decoration:none;">Baixar</a>
+        <button type="button" class="btn btn-outline" onclick="window.open('${safeDisplay}','_blank','noopener,noreferrer')">Abrir em nova aba</button>
+      </div>
+    </div>`;
+  },
+
   _renderAttachmentPreview: function(doc, cacheIdx) {
-    const url = doc.url || '';
+    const rawSrc = doc.rawUrl || doc.url || '';
     const nome = doc.nome || ('Anexo ' + (cacheIdx + 1));
-    if (!this._isValidAttachmentUrl(url)) {
-      return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:120px;height:150px;border-radius:10px;border:2px dashed var(--color-border);background:var(--color-surface-2);color:var(--color-text-muted);font-size:11px;padding:8px;text-align:center;flex-shrink:0;" title="Anexo inválido">
+    if (!this._isValidAttachmentUrl(rawSrc) && !this._isValidAttachmentUrl(doc.url)) {
+      return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;width:120px;height:150px;border-radius:10px;border:2px dashed var(--color-border);background:var(--color-surface-2);color:var(--color-text-muted);font-size:11px;padding:8px;text-align:center;flex-shrink:0;" title="Anexo indisponível">
         <span style="font-size:24px;margin-bottom:4px;">⚠️</span>
-        <span>inválido</span>
+        <span style="word-break:break-word;line-height:1.2;">${this._escHtml(nome)}</span>
       </div>`;
     }
-    const safePreview = this._escUrlAttr(url);
+    const previewPrimary = this._attachmentPreviewUrl(rawSrc, doc.caminho, doc.urls || [], nome)
+      || this._attachmentDisplayUrl(rawSrc, doc.caminho)
+      || doc.url;
+    const previewList = [previewPrimary];
+    (doc.urls || []).forEach((u) => {
+      const v = String(u || '').trim();
+      if (v && !previewList.includes(v)) previewList.push(v);
+    });
+    const previewChain = this._attachmentFallbackChain(previewList, previewPrimary);
+    const previewFb = this._attachmentFallbackAttrs(previewChain);
+    const previewFbStr = Object.keys(previewFb).map((k) => `${k}="${previewFb[k]}"`).join(' ');
+    const safePreview = this._escUrlAttr(previewPrimary);
     const safeNome = this._escHtml(nome);
+    const shortNome = safeNome.length > 42 ? (safeNome.slice(0, 39) + '…') : safeNome;
+    const previewOnErr = this._attachmentOnErrorHandler();
     const box = 'display:block;width:120px;height:150px;border-radius:10px;border:2px solid var(--color-success);overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;cursor:pointer;';
     const click = `role="button" tabindex="0" onclick="Proposals.openAttachment(${cacheIdx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Proposals.openAttachment(${cacheIdx});}"`;
 
-    if (this._isImageUrl(url, nome)) {
+    if (this._isImageUrl(rawSrc, nome)) {
       return `<div ${click} style="${box}" title="${safeNome} — clique para ampliar">
-        <img src="${safePreview}" alt="${safeNome}" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;" loading="lazy"/>
+        <img src="${safePreview}" ${previewFbStr} alt="${safeNome}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;background:#f4f4f4;" loading="lazy" onerror="${previewOnErr}"/>
       </div>`;
     }
-    if (this._isPdfUrl(url, nome)) {
+    if (this._isPdfUrl(rawSrc, nome)) {
       return `<div ${click} style="${box}display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-primary);padding:8px;text-align:center;" title="${safeNome} — clique para abrir">
-        <span style="font-size:32px;margin-bottom:6px;">📄</span>
-        <span style="font-size:10px;line-height:1.2;word-break:break-word;max-height:48px;overflow:hidden;">${safeNome}</span>
+        <span style="font-size:32px;margin-bottom:6px;line-height:1;">📄</span>
+        <span style="font-size:10px;line-height:1.25;word-break:break-word;max-height:52px;overflow:hidden;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;">${shortNome}</span>
       </div>`;
     }
     return `<div ${click} style="${box}display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-primary);padding:8px;text-align:center;" title="${safeNome}">
       <span style="font-size:28px;margin-bottom:6px;">📎</span>
-      <span style="font-size:10px;line-height:1.2;word-break:break-word;">${safeNome}</span>
+      <span style="font-size:10px;line-height:1.25;word-break:break-word;">${shortNome}</span>
     </div>`;
   },
 
@@ -2017,11 +2515,29 @@ window.Proposals = {
       lbl.innerHTML = '<span style="color:#999;">-</span>';
       return;
     }
-    // cria URL temporária para visualização
     const url = URL.createObjectURL(f);
+    const safeName = this._escHtml(f.name);
+    const wrap = 'display:inline-flex;flex-direction:column;align-items:center;max-width:88px;margin-top:6px;';
+    const card = 'width:80px;height:100px;border-radius:10px;border:2px solid var(--color-primary);overflow:hidden;background:#fff;cursor:pointer;';
+    if (f.type && f.type.startsWith('image/')) {
+      lbl.innerHTML = `<div style="${wrap}" title="${this._escAttr(f.name)} — novo arquivo">
+        <a href="${url}" target="_blank" rel="noopener" style="${card}display:block;">
+          <img src="${url}" alt="${safeName}" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+        </a>
+        <span style="font-size:9px;margin-top:4px;text-align:center;color:var(--color-success);font-weight:600;">Novo</span>
+      </div>`;
+      return;
+    }
+    if (f.type === 'application/pdf' || /\.pdf$/i.test(f.name)) {
+      lbl.innerHTML = `<div style="${wrap}">
+        <a href="${url}" target="_blank" rel="noopener" style="${card}display:flex;align-items:center;justify-content:center;font-size:26px;text-decoration:none;">📄</a>
+        <span style="font-size:9px;margin-top:4px;text-align:center;color:var(--color-success);font-weight:600;">Novo PDF</span>
+      </div>`;
+      return;
+    }
     lbl.innerHTML =
-      `<span style="color:var(--color-success);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;display:inline-block;vertical-align:middle;" title="${f.name}">${f.name}</span>` +
-      `<a href="${url}" target="_blank" title="Visualizar" style="margin-left:6px;font-size:18px;text-decoration:none;vertical-align:middle;">👁</a>`;
+      `<span style="color:var(--color-success);font-weight:600;">${safeName}</span>` +
+      `<a href="${url}" target="_blank" title="Visualizar" style="margin-left:6px;font-size:18px;text-decoration:none;">👁</a>`;
   },
 
   updateAnexosLabel: function() {},  // compatibilidade
@@ -2188,8 +2704,9 @@ window.Proposals = {
       const proposalId = 'PROP-' + Date.now();
       try {
         attachments = await this._collectAttachments(proposalId);
+        attachments = this._validateAttachmentsBeforeSave(attachments);
       } catch (e) {
-        alert(e.message || "Erro ao enviar anexo. Use PDFs menores ou menos arquivos por vez.");
+        alert(e.message || `Erro ao enviar anexo. Verifique o tamanho (máx. ${this.PROPOSAL_MAX_FILE_MB || 50} MB) e tente novamente.`);
         if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
         return;
       }
@@ -2273,11 +2790,11 @@ window.Proposals = {
       
       if (document.getElementById('manageProposalsTbody')) {
         this._adminList.page = 1;
-        await this.renderAdminList();
+        this.renderAdminList();
       }
       else {
         this._employeeList.page = 1;
-        await this.renderEmployeeList();
+        this.renderEmployeeList();
       }
     } catch(e) {
       console.error(e);
@@ -2326,15 +2843,9 @@ window.Proposals = {
       const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
       let html = '';
       proposals.forEach(p => {
-        let badgeClass = 'badge-muted';
-        if (p.status === 'Em Andamento') badgeClass = 'badge-info';
-        if (p.status === 'Digitação') badgeClass = 'badge-accent';
-        if (p.status === 'AG. BOLETO') badgeClass = 'badge-warning';
-        if (p.status === 'Pago') badgeClass = 'badge-success';
-        if (p.status === 'Cancelado') badgeClass = 'badge-danger';
-        if (p.status === 'Pendenciado') badgeClass = 'badge-warning';
-
-        const etapaLabel = this._vendorStage(p) ? this._labelEtapaVendedor(this._vendorStage(p)) : '';
+        const stage = this._vendorStage(p);
+        const statusLabel = this._proposalDisplayStatus(p);
+        const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
         const safeId = this._escAttr(p.id);
         html += `
           <div class="card" style="padding: 16px; margin-bottom: 12px;">
@@ -2343,10 +2854,10 @@ window.Proposals = {
                   <strong style="font-size:16px;">${p.numero || p.id}</strong>
                   ${p.numero ? `<span style="font-size:11px;color:var(--color-text-muted);margin-left:8px;">(${p.id})</span>` : ''}
                 </div>
-                <span class="badge ${badgeClass}">${etapaLabel || p.status}</span>
+                <span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>
              </div>
              <div style="margin-bottom:4px; font-size:14px;"><strong>Cliente:</strong> ${p.clientName} (CPF: ${p.clientCpf})</div>
-             <div style="font-size:14px;"><strong>Produto:</strong> ${this._escHtml(p.product || '—')} | <strong>Convênio:</strong> ${this._escHtml(p.convenio || '—')} | <strong>Entidade:</strong> ${this._escHtml(p.entidade || '—')}${etapaLabel ? ` | <strong>Situação:</strong> ${this._escHtml(etapaLabel)}` : ''}</div>
+             <div style="font-size:14px;"><strong>Produto:</strong> ${this._escHtml(p.product || '—')} | <strong>Convênio:</strong> ${this._escHtml(p.convenio || '—')} | <strong>Entidade:</strong> ${this._escHtml(p.entidade || '—')}</div>
              ${p.protocolo ? `<div style="font-size:14px;margin-top:4px;"><strong>Nº Protocolo:</strong> ${this._escHtml(p.protocolo)}</div>` : ''}
              <div style="display:flex; gap:20px; margin-top:10px; background:var(--color-surface-2); padding:10px; border-radius:8px; flex-wrap:wrap;">
                <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Proposta</span><br><strong>${fmtR(p.valor)}</strong></div>
@@ -2414,6 +2925,9 @@ window.Proposals = {
     }
     if (!window.PARTNER_ROOT_ID && !this._canSeePartnerProposalsInAdminList()) {
       proposals = await this._filterProposalsExcludePartnerOrg(proposals);
+    }
+    if (window.PARTNER_ROOT_ID) {
+      proposals = await this._filterProposalsToPartnerOrg(proposals);
     }
     proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
@@ -2548,17 +3062,10 @@ window.Proposals = {
       const partnerRoot = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
       let html = '';
       proposals.forEach(p => {
-        let badgeClass = 'badge-muted';
-        if (p.status === 'Em Andamento') badgeClass = 'badge-info';
-        if (p.status === 'Digitação') badgeClass = 'badge-accent';
-        if (p.status === 'AG. BOLETO') badgeClass = 'badge-warning';
-        if (p.status === 'Pago') badgeClass = 'badge-success';
-        if (p.status === 'Cancelado') badgeClass = 'badge-danger';
-        if (p.status === 'Pendenciado') badgeClass = 'badge-warning';
-
-        const etapaLabel = this._vendorStage(p) ? this._labelEtapaVendedor(this._vendorStage(p)) : '';
-        const statusLabel = p.status || p.statusOp || '—';
-        const subStatus = (etapaLabel && etapaLabel !== statusLabel) ? etapaLabel : '';
+        const stage = this._vendorStage(p);
+        const statusLabel = this._proposalDisplayStatus(p);
+        const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
+        const subStatus = '';
         const safeId = this._escAttr(p.id);
         const safeLabel = this._escAttr(p.numero || p.clientName || p.id);
         const isPartnerRow = partnerIds.has(String(p.id));
@@ -2604,7 +3111,7 @@ window.Proposals = {
     const items = (seedItems || []).map(i => ({ ...i, legado: i.legado || [] }));
     const seen = new Set(items.map(i => i.key));
     Object.keys(att || {}).forEach(k => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta')) return;
+      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
       if (k.startsWith(prefix) && !seen.has(k)) {
         seen.add(k);
         items.push({ key: k, legado: [] });
@@ -2622,10 +3129,13 @@ window.Proposals = {
       const tryKey = (k) => {
         if (att[k] == null || att[k] === '') return null;
         const raw = att[k];
-        const urls = this._attachmentOpenUrls(raw);
-        const url = urls.find((u) => this._isValidAttachmentUrl(u)) || '';
-        if (!url) return null;
-        return { url, rawUrl: raw, urls, nome: att[k + '_nome'] || item.label || item.key || k };
+        const docNome = att[k + '_nome'] || item.label || item.key || k;
+        const caminho = this._attachmentCaminho(raw, att, k);
+        const urls = this._attachmentOpenUrls(raw, caminho);
+        const display = this._attachmentPreviewUrl(raw, caminho, urls, docNome)
+          || this._attachmentDisplayUrl(raw, caminho);
+        if (!display && !this._isValidAttachmentUrl(raw)) return null;
+        return { url: display || raw, rawUrl: raw, urls, nome: docNome, caminho };
       };
       let doc = tryKey(item.key);
       if (doc) return doc;
@@ -2650,7 +3160,7 @@ window.Proposals = {
         usedKeys.add(item.key);
         (item.legado || []).forEach((lk) => usedKeys.add(lk));
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome });
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
         html += this._renderAttachmentPreview(doc, cacheIdx);
       });
       if (!algum) html += `<span style="font-size:12px;color:var(--color-text-muted);align-self:center;">Nenhum arquivo</span>`;
@@ -2659,13 +3169,13 @@ window.Proposals = {
 
     const customGroupIds = new Set();
     Object.keys(att).forEach(k => {
-      if (!k.startsWith('custom_') || k.endsWith('_nome') || k.endsWith('_pasta')) return;
+      if (!k.startsWith('custom_') || k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
       const m = k.match(/^custom_(.+)_(\d+)$/);
       if (m) customGroupIds.add(m[1]);
     });
     customGroupIds.forEach(groupId => {
       const keys = Object.keys(att).filter(k =>
-        k.startsWith('custom_' + groupId + '_') && !k.endsWith('_nome') && !k.endsWith('_pasta')
+        k.startsWith('custom_' + groupId + '_') && !k.endsWith('_nome') && !k.endsWith('_pasta') && !k.endsWith('_caminho')
       ).sort();
       const titulo = att['custom_' + groupId + '_1_pasta'] || att[keys[0] + '_pasta'] || '📁 Pasta extra';
       html += `<div>
@@ -2677,7 +3187,7 @@ window.Proposals = {
         if (!doc) return;
         algumCustom = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome });
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
         html += this._renderAttachmentPreview(doc, cacheIdx);
       });
       if (!algumCustom) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
@@ -2685,7 +3195,7 @@ window.Proposals = {
     });
 
     const miscKeys = Object.keys(att).filter(k =>
-      !k.endsWith('_nome') && !k.endsWith('_pasta') && !usedKeys.has(k)
+      !k.endsWith('_nome') && !k.endsWith('_pasta') && !k.endsWith('_caminho') && !usedKeys.has(k)
     );
     if (miscKeys.length) {
       html += `<div>
@@ -2697,7 +3207,7 @@ window.Proposals = {
         if (!doc) return;
         algumMisc = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome });
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
         html += this._renderAttachmentPreview(doc, cacheIdx);
       });
       if (!algumMisc) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
@@ -2854,8 +3364,10 @@ window.Proposals = {
     let proposal = this._employeeEditCache[id] ? { ...this._employeeEditCache[id] } : await DB.getProposal(id);
     if (!proposal) return;
     if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
-      const attRow = await DB.getProposalAttachments(id);
-      if (attRow?.attachments != null) proposal.attachments = attRow.attachments;
+      try {
+        const full = await DB.getProposal(id);
+        if (full?.attachments) proposal.attachments = full.attachments;
+      } catch (_) { /* noop */ }
     }
     const norm = this._normProposal(proposal);
     if (!this._ownsProposal(norm, user)) {
@@ -2885,6 +3397,7 @@ window.Proposals = {
       proposal.statusOp = etapa;
       proposal.status = etapa;
     }
+    this._syncProposalStatusFields(proposal);
 
     this._setFolderContext('empPropAnexosFolders', 'empProp');
     try {
@@ -2907,14 +3420,13 @@ window.Proposals = {
     if (typeof showLoading === 'function') showLoading('Salvando proposta…');
     try {
       await this._saveProposalClientData(proposal, 'emp');
-      await DB.saveProposal(proposal);
+      await DB.saveProposal(proposal, { skipHydrate: true });
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._employeeEditCache[id];
       if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
       else alert('Proposta atualizada!');
       closeModal('employeeProposalModal');
-      this._employeeList.page = 1;
-      await this.renderEmployeeList();
+      this.renderEmployeeList();
     } catch (e) {
       console.error('[employeeSave]', e);
       this._proposalSaveErrorNotify(e);
@@ -3140,8 +3652,10 @@ window.Proposals = {
       }
     }
     if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
-      const attRow = await DB.getProposalAttachments(id);
-      if (attRow?.attachments != null) proposal.attachments = attRow.attachments;
+      try {
+        const full = await DB.getProposal(id);
+        if (full?.attachments) proposal.attachments = full.attachments;
+      } catch (_) { /* noop */ }
     }
 
     const role = user?.role || '';
@@ -3193,7 +3707,12 @@ window.Proposals = {
     proposal.assinou         = gv('managePropAssinou');
     const newStatusOp = gv('managePropStatusOp');
     const oldStatus = proposal.status;
-    const newStatus = gv('managePropStatus') || proposal.status;
+    const oldStatusOp = String(proposal.statusOp || proposal.status_op || '').trim();
+    let newStatus = gv('managePropStatus') || proposal.status;
+    // Parceiro costuma alterar só "Status Proposta (Op.)"; se o geral não mudou, espelha o Op.
+    if (newStatusOp && newStatusOp !== oldStatusOp && newStatus === oldStatus) {
+      newStatus = newStatusOp;
+    }
     proposal.status = newStatus;
     if (newStatusOp) {
       proposal.statusOp = newStatusOp;
@@ -3203,6 +3722,7 @@ window.Proposals = {
       proposal.statusOp = proposal.statusOp || proposal.status;
     }
     proposal.status_op = proposal.statusOp;
+    this._syncProposalStatusFields(proposal);
     proposal.posVenda        = gv('managePropPosVenda');
     proposal.nuvidio         = gv('managePropNuvidio');
     proposal.fases           = gv('managePropFases');
@@ -3249,15 +3769,14 @@ window.Proposals = {
           showToast('Proposta salva parcialmente — falha ao gravar cadastro do cliente: ' + cm, 'warning', 8000);
         }
       }
-      await DB.saveProposal(proposal);
+      await DB.saveProposal(proposal, { skipHydrate: true });
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._adminEditCache[id];
       if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
       else alert('Proposta atualizada!');
       const modal = document.getElementById('manageProposalModal');
       if (modal) modal.classList.remove('open');
-      this._adminList.page = 1;
-      await this.renderAdminList();
+      this.renderAdminList();
     } catch (e) {
       console.error('[adminSave]', e);
       this._proposalSaveErrorNotify(e);

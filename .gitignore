@@ -1,6 +1,10 @@
 # Credenciais locais — nunca versionar
 config.db.local.php
+config.ftp.local.php
 config.pix.local.php
+config.evolution.local.php
+config.supabase.local.php
+config.stack.local.php
 *.p12
 *.pem
 .env
@@ -9,3 +13,7 @@ config.pix.local.php
 # Uploads de usuários
 uploads/**/*
 !uploads/**/.htaccess
+!uploads/**/.gitkeep
+
+# Cache local FonteData (CPF — não versionar nem enviar ao servidor)
+storage/fontedata_cache/

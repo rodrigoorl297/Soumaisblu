@@ -655,6 +655,12 @@ const PainelSonhos = (() => {
     const done = dreams.filter(d => d.done).length;
     const open = dreams.length - done;
     const withPhotos = dreams.filter(d => d.photoUrl).length;
+    const bolaoWelcome = (typeof BolaoCopa !== 'undefined' && typeof BolaoCopa.renderWelcomeHtml === 'function')
+      ? await Promise.race([
+        BolaoCopa.renderWelcomeHtml(),
+        new Promise((resolve) => setTimeout(() => resolve(''), 6000)),
+      ]).catch(() => '')
+      : '';
     const level = Math.min(99, Math.max(1, 1 + Math.floor(done * 1.5) + Math.floor(withPhotos / 3)));
     const journeyPct = dreams.length ? Math.round((done / dreams.length) * 100) : 0;
     const editingDream = _editingDreamId
@@ -688,6 +694,7 @@ const PainelSonhos = (() => {
               </div>
             </div>
             <p class="painel-sonhos-hero__sub">${esc(motivationalPhrase())}</p>
+            ${bolaoWelcome}
             <p class="painel-sonhos-hero__sub painel-sonhos-hero__sub--muted">Visualize suas metas com imagens inspiradoras — viagens, conquistas e o estilo de vida que você está construindo.</p>
             <div class="painel-sonhos-hero__kpis" id="painelSonhosHeroKpis">
               ${buildHeroKpisHtml(open, done, withPhotos, journeyPct)}
@@ -722,6 +729,9 @@ const PainelSonhos = (() => {
         </div>
       </div>`;
 
+    if (typeof BolaoCopa !== 'undefined' && typeof BolaoCopa.checkAndCelebrate === 'function') {
+      BolaoCopa.checkAndCelebrate(user).catch(() => {});
+    }
   }
 
   function _bindDateField() {
@@ -1063,6 +1073,8 @@ const PainelSonhos = (() => {
   function shouldLandOnInicio(role, opts = {}) {
     if (!eligible(role)) return false;
     if (opts.lojaMode || opts.perfilMode || opts.previewMode) return false;
+    if (opts.partnerOrg || opts.partnerLanding) return false;
+    if (opts.canMasterPanel || opts.canPartnerDashboard || opts.canDashboard) return false;
     return true;
   }
 

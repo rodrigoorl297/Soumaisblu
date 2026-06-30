@@ -258,10 +258,23 @@
       };
     },
 
+    async _resolvePartnerForVendor(vendor) {
+      if (!vendor || typeof DB === 'undefined') return null;
+      let rootId = vendor.partner_root_id || null;
+      if (!rootId && String(vendor.role || '').toLowerCase() === 'parceiro') rootId = vendor.id;
+      if (!rootId) return null;
+      return DB.getPartnerByUserId(rootId).catch(() => null);
+    },
+
     async _preencherBaixaComissao(proposal, prefix = 'fpd') {
       const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
       set(`${prefix}ComissaoRecebida`, proposal.comissaoRecebida || proposal.comissao_recebida || '');
       set(`${prefix}AptoComissao`, proposal.comissaoElegivel || proposal.comissao_elegivel || '');
+      const vcr = proposal.valorComissaoRecebida ?? proposal.valor_comissao_recebida;
+      if (vcr != null && vcr !== '') {
+        const elV = document.getElementById(`${prefix}ValorComissao`);
+        if (elV) elV.value = vcr;
+      }
 
       const vendorId = (typeof DB !== 'undefined' && typeof DB.proposalVendorId === 'function')
         ? DB.proposalVendorId(proposal)
@@ -272,6 +285,19 @@
       set(`${prefix}OrigemParceiro`, isPartner ? 'SIM' : 'NÃO');
       set(`${prefix}OrigemVendedor`, vendorId ? 'SIM' : 'NÃO');
 
+      // Comissão líquida automática pela faixa do parceiro (FinPropostas / baixa comissão).
+      if (isPartner && (vcr == null || vcr === '') && typeof PartnerPerms !== 'undefined') {
+        const prt = await this._resolvePartnerForVendor(vendor);
+        const valorBruto = typeof DB.proposalAmount === 'function'
+          ? DB.proposalAmount(proposal)
+          : parseFloat(proposal.valorFinal ?? proposal.valor_final ?? proposal.valor ?? 0);
+        const liquido = PartnerPerms.calcPartnerCommission(valorBruto, prt);
+        if (liquido > 0) {
+          const elV = document.getElementById(`${prefix}ValorComissao`);
+          if (elV) elV.value = liquido.toFixed(2);
+        }
+      }
+
       const lastOp = await this._getLastBaixaOp(proposal.id);
       if (lastOp) {
         set(`${prefix}Divergencia`, lastOp.divergencia_tabela || '');
@@ -281,6 +307,10 @@
         if (lastOp.origem_vendedor) set(`${prefix}OrigemVendedor`, lastOp.origem_vendedor);
         if (lastOp.apto_comissao && !proposal.comissaoElegivel && !proposal.comissao_elegivel) {
           set(`${prefix}AptoComissao`, lastOp.apto_comissao);
+        }
+        if (lastOp.valor_comissao != null && lastOp.valor_comissao !== '' && !vcr) {
+          const elV = document.getElementById(`${prefix}ValorComissao`);
+          if (elV) elV.value = lastOp.valor_comissao;
         }
       }
 
@@ -304,6 +334,7 @@
               <tbody>
                 ${proposalRow}
                 ${finGridRow('COMISSÃO RECEBIDA?', simNaoSelect(`${prefix}ComissaoRecebida`, oc('_updateAptoComissao')))}
+                ${finGridRow('VALOR DA COMISSÃO (R$)', `<input type="number" id="${prefix}ValorComissao" class="form-control" min="0" step="0.01" placeholder="0,00"/>`)}
                 ${finGridRow('DIVERGÊNCIA TABELA', simNaoSelect(`${prefix}Divergencia`, oc('onDivergenciaChange')))}
                 <tr id="${prefix}ProtocoloRow" style="display:none;">
                   <th style="width:34%;text-align:left;padding:10px 12px;background:var(--color-surface-2);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;">PROTOCOLO PARA TRATAR DIVERGÊNCIA</th>
@@ -511,7 +542,8 @@
           || 'prejuizo';
         let url = '';
         if (typeof DB.uploadProposalFile === 'function') {
-          url = await DB.uploadProposalFile(file, propId, `prejuizo_evid_${n}`);
+          const uploaded = await DB.uploadProposalFile(file, propId, `prejuizo_evid_${n}`);
+          url = typeof DB.resolveUploadUrl === 'function' ? DB.resolveUploadUrl(uploaded) : (uploaded?.url || uploaded);
         } else if (typeof uploadImage === 'function') {
           url = await uploadImage(file, 'finance-docs', `prejuizo_evid_${n}_${Date.now()}`);
         } else if (typeof fileToBase64 === 'function') {
@@ -542,11 +574,16 @@
         return;
       }
 
+      const rawValor = val(`${prefix}ValorComissao`);
+      const valorComissao = rawValor !== '' && rawValor != null ? Number(rawValor) : null;
+
       const dados = {
         comissaoRecebida: val(`${prefix}ComissaoRecebida`) || null,
         comissao_recebida: val(`${prefix}ComissaoRecebida`) || null,
         comissaoElegivel: val(`${prefix}AptoComissao`) || null,
         comissao_elegivel: val(`${prefix}AptoComissao`) || null,
+        valorComissaoRecebida: valorComissao != null && !Number.isNaN(valorComissao) ? valorComissao : null,
+        valor_comissao_recebida: valorComissao != null && !Number.isNaN(valorComissao) ? valorComissao : null,
       };
 
       const op = {
@@ -555,6 +592,7 @@
         proposal_id: propId,
         proposal_numero: p.numero || p.id,
         comissao_recebida: dados.comissaoRecebida,
+        valor_comissao: dados.valorComissaoRecebida,
         divergencia_tabela: val(`${prefix}Divergencia`) || null,
         protocolo_divergencia: val(`${prefix}Protocolo`)?.trim() || '',
         origem_parceiro: val(`${prefix}OrigemParceiro`) || null,
@@ -833,7 +871,8 @@
           <tbody>${rows.map((r) => {
             let det = '—';
             if (r.type === 'baixa_comissao') {
-              det = `Recebida: ${esc(r.comissao_recebida || '—')} · Apto: ${esc(r.apto_comissao || '—')}`;
+              const v = r.valor_comissao != null ? ` · Valor: ${fmtMoney(r.valor_comissao)}` : '';
+              det = `Recebida: ${esc(r.comissao_recebida || '—')} · Apto: ${esc(r.apto_comissao || '—')}${v}`;
             } else if (r.type === 'prejuizo') {
               det = `${esc(r.status)} — ${esc(r.responsavel_erro || '—')} · ${fmtMoney(r.valor_estorno)}`;
             } else if (r.type === 'debitar_parceiro') {
@@ -1088,7 +1127,8 @@
           ? sorted.map((r) => {
             let det = '—';
             if (r.type === 'baixa_comissao') {
-              det = `Recebida: ${esc(r.comissao_recebida || '—')} · Divergência: ${esc(r.divergencia_tabela || '—')} · Apto: ${esc(r.apto_comissao || '—')}`;
+              const v = r.valor_comissao != null ? ` · Valor: ${fmtMoney(r.valor_comissao)}` : '';
+              det = `Recebida: ${esc(r.comissao_recebida || '—')} · Divergência: ${esc(r.divergencia_tabela || '—')} · Apto: ${esc(r.apto_comissao || '—')}${v}`;
             } else if (r.type === 'prejuizo') {
               det = `${esc(r.status)} — ${esc(r.responsavel_erro || '—')} · ${fmtMoney(r.valor_estorno)}`;
             } else if (r.type === 'debitar_parceiro') {

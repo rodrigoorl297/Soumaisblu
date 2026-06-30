@@ -1,7 +1,12 @@
 <?php
 declare(strict_types=1);
 
+/** Respostas REST devem ser JSON puro — avisos PHP quebram o login no navegador. */
+ini_set('display_errors', '0');
+error_reporting(E_ALL);
+
 require_once dirname(__DIR__) . '/bootstrap.php';
+require_once dirname(__DIR__) . '/lib/FinanceMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/PostgRestCompat.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
@@ -29,8 +34,20 @@ $query = preg_replace('/(^|&)table=[^&]*/', '', $query) ?? $query;
 $query = ltrim($query, '&');
 
 try {
-    $api = new PostgRestCompat(soublu_pdo());
-    $rows = $api->handle($table, $method, $body, $query);
+    $run = static function () use ($table, $method, $body, $query) {
+        soublu_ensure_finance_modulos_tables(soublu_pdo());
+        $api = new PostgRestCompat(soublu_pdo());
+        return $api->handle($table, $method, $body, $query);
+    };
+    try {
+        $rows = $run();
+    } catch (Throwable $e) {
+        if (!soublu_pdo_gone_away($e)) {
+            throw $e;
+        }
+        soublu_pdo(true);
+        $rows = $run();
+    }
     soublu_json($rows, $method === 'POST' ? 201 : 200);
 } catch (RuntimeException $e) {
     $code = $e->getCode() >= 400 && $e->getCode() < 600 ? (int) $e->getCode() : 500;

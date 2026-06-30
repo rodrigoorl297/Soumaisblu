@@ -41,9 +41,18 @@
     ? (origin && origin !== 'null' ? origin : PROD_SITE)
     : (origin || c.SITE_URL || PROD_SITE);
 
-  const SUPABASE_URL = 'https://dqptnlywbarvznpzgtuj.supabase.co';
-  const SUPABASE_ANON_KEY =
+  /** Projeto original sou+blu — propostas, anexos, dados gerais */
+  const SUPABASE_LEGACY_URL = 'https://dqptnlywbarvznpzgtuj.supabase.co';
+  const SUPABASE_LEGACY_ANON_KEY =
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRxcHRubHl3YmFydnpucHpndHVqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1NzQ5NTEsImV4cCI6MjA5NDE1MDk1MX0.ntbw10N2fno5hbdLWaKgz11jk-n2gvxZ7zjI0O_Xt1I';
+
+  /** soublu-v2 — exclusivo WhatsApp (sa-east-1) */
+  const SUPABASE_V2_URL = 'https://cpqediswbjxcvpnwflyj.supabase.co';
+  const SUPABASE_V2_ANON_KEY =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwcWVkaXN3Ymp4Y3ZwbndmbHlqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwNzc1MDEsImV4cCI6MjA5NzY1MzUwMX0.oe_njTabnKBVvopX7INporQQMMaI3dyFRDmLCuCOtWE';
+
+  const SUPABASE_URL = SUPABASE_LEGACY_URL;
+  const SUPABASE_ANON_KEY = SUPABASE_LEGACY_ANON_KEY;
 
   c.API_KEY = c.API_KEY || 'soublu_api_52e8c7a6b3df4019';
   c.PIX_INTERNAL_TOKEN = c.PIX_INTERNAL_TOKEN || 'soublu_pix_52e8c7a6b3df4019';
@@ -74,9 +83,14 @@
   if (c.FORCE_HOSTINGER === true && c.FORCE_SUPABASE !== true) {
     c.DB_BACKEND = 'hostinger';
     c.API_BASE_URL = phpApiBase;
-    /* Storage Supabase: anexos legados + fallback de upload (API REST usa MySQL). */
-    c.STORAGE_URL = c.STORAGE_URL || SUPABASE_URL;
-    c.STORAGE_KEY = c.STORAGE_KEY || SUPABASE_ANON_KEY;
+    /* Anexos de proposta: projeto original (legado). */
+    c.PROPOSAL_STORAGE_URL = c.PROPOSAL_STORAGE_URL || SUPABASE_LEGACY_URL;
+    c.PROPOSAL_STORAGE_KEY = c.PROPOSAL_STORAGE_KEY || SUPABASE_LEGACY_ANON_KEY;
+    c.STORAGE_URL = c.STORAGE_URL || SUPABASE_LEGACY_URL;
+    c.STORAGE_KEY = c.STORAGE_KEY || SUPABASE_LEGACY_ANON_KEY;
+    /* WhatsApp no soublu-v2 (quando WA_DB_BACKEND=supabase no servidor). */
+    c.WA_SUPABASE_URL = c.WA_SUPABASE_URL || SUPABASE_V2_URL;
+    c.WA_SUPABASE_ANON_KEY = c.WA_SUPABASE_ANON_KEY || SUPABASE_V2_ANON_KEY;
     delete c.SUPABASE_URL;
     delete c.SUPABASE_ANON_KEY;
     delete c.SUPABASE_KEY;
@@ -88,5 +102,18 @@
     c.PROPOSALS_BANCO_DIGITADO_COLUMN = true;
     delete c.API_BASE_URL;
     delete c.FORCE_HOSTINGER;
+  }
+
+  /* Debug ingest só em localhost — evita CORS/loopback no site publicado */
+  if (!isLocal && typeof window.fetch === 'function' && !window.__SOUBLU_FETCH_DBG_GUARD__) {
+    window.__SOUBLU_FETCH_DBG_GUARD__ = true;
+    const _fetchOrig = window.fetch.bind(window);
+    window.fetch = function soubluFetchGuard(input, init) {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      if (String(url).includes('127.0.0.1:7816')) {
+        return Promise.resolve(new Response(null, { status: 204 }));
+      }
+      return _fetchOrig(input, init);
+    };
   }
 })();

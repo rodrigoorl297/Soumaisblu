@@ -32,10 +32,19 @@
       rh_punishments:'soublu_rh_punishments',
       rh_dismissals:'soublu_rh_dismissals',
       monitoria_atendimento:'soublu_monitoria_atendimento',
+      bolao_copa_picks:'soublu_bolao_copa_picks',
+      bolao_copa_results:'soublu_bolao_copa_results',
     },
     _genId(p='x') { return p+Date.now().toString(36)+Math.random().toString(36).slice(2,7); },
     _lget(k)      { try{return JSON.parse(localStorage.getItem(k)||'[]');}catch{return[];} },
     _lset(k,d)    { localStorage.setItem(k,JSON.stringify(d)); },
+    _sortUsersByName(rows, field = 'name') {
+      return (rows || []).slice().sort((a, b) =>
+        String(a?.[field] || a?.name || a?.nome || '').localeCompare(
+          String(b?.[field] || b?.name || b?.nome || ''), 'pt-BR', { sensitivity: 'base' }
+        )
+      );
+    },
 
     normalizeEmail(email) {
       return String(email || '').trim().toLowerCase();
@@ -102,6 +111,8 @@
         this._lset(this.LK.rh_punishments, []);
         this._lset(this.LK.rh_dismissals, []);
         this._lset(this.LK.monitoria_atendimento, []);
+        this._lset(this.LK.bolao_copa_picks, []);
+        this._lset(this.LK.bolao_copa_results, []);
       }
     },
 
@@ -252,7 +263,38 @@
           console.warn('[DB] getUserByCpf:', e.message);
         }
       }
-      return this._lget(this.LK.users).find(u => String(u.cpf || '').replace(/\D/g, '') === digits) || null;
+      const fromLocal = this._lget(this.LK.users).find(u => String(u.cpf || '').replace(/\D/g, '') === digits);
+      if (fromLocal) return fromLocal;
+
+      try {
+        const rhList = await this.getRhEmployees().catch(() => []);
+        const rh = (rhList || []).find(e => String(e.cpf || '').replace(/\D/g, '') === digits);
+        if (rh) {
+          return {
+            id: rh.id,
+            name: rh.nome || rh.name || '',
+            cpf: digits,
+            role: rh.cargo || rh.departamento || 'employee',
+            matricula: rh.matricula || '',
+          };
+        }
+      } catch (e) {
+        console.warn('[DB] getUserByCpf RH fallback:', e?.message || e);
+      }
+
+      try {
+        const users = this.online
+          ? await this.getAllUsers().catch(() => [])
+          : this._lget(this.LK.users);
+        const u = (users || []).find(x =>
+          String(x.cpf || '').replace(/\D/g, '') === digits && x.active !== false
+        );
+        if (u) return u;
+      } catch (e) {
+        console.warn('[DB] getUserByCpf users scan:', e?.message || e);
+      }
+
+      return null;
     },
   
     async findUserByIdentifier(identifier) {
@@ -327,9 +369,9 @@
         const all = await supaReq('GET', 'users', null, '?select=*&order=name.asc&limit=2000').catch(() => []);
         return (all || []).filter(u => ids.has(String(u.id)) && this.PARTNER_TEAM_ROLES.includes(u.role));
       }
-      return this._lget(this.LK.users).filter(u =>
+      return this._sortUsersByName(this._lget(this.LK.users).filter(u =>
         ids.has(String(u.id)) && this.PARTNER_TEAM_ROLES.includes(u.role)
-      );
+      ));
     },
 
     /** ID do parceiro dono da equipe (sobe a cadeia admin_id até achar role parceiro). */
@@ -350,7 +392,7 @@
     /* Funcionários de um admin específico (supervisor: vendedores) */
     async getEmployeesByAdmin(adminId) {
       if (this.online) return await supaReq('GET','users',null,`?admin_id=eq.${adminId}&role=in.(employee,vendedor)&select=*&order=name.asc`);
-      return this._lget(this.LK.users).filter(u=>(u.role==='employee'||u.role==='vendedor')&&u.admin_id===adminId);
+      return this._sortUsersByName(this._lget(this.LK.users).filter(u=>(u.role==='employee'||u.role==='vendedor')&&u.admin_id===adminId));
     },
 
     /** IDs do time de um supervisor/parceiro (consulta leve). */
@@ -382,9 +424,9 @@
       if (this.online) {
         return await supaReq('GET','users',null,'?role=in.(employee,vendedor,supervisor,sup_backoffice,backoffice,desenvolvedor)&select=*&order=name.asc&limit=500');
       }
-      return this._lget(this.LK.users).filter(u =>
+      return this._sortUsersByName(this._lget(this.LK.users).filter(u =>
         ['employee','vendedor','supervisor','sup_backoffice','backoffice','desenvolvedor'].includes(u.role)
-      );
+      ));
     },
   
     /** Papéis que podem ser marcados em reunião (gerente para baixo na hierarquia). */
@@ -446,9 +488,54 @@
     },
   
     /* Todos os usuários sem filtro (master panel) */
-    async getAllUsers() {
+    __allUsersMem: null,
+    __allUsersMemAt: 0,
+    __allUsersInflight: null,
+    ALL_USERS_MEM_TTL: 86400000,
+    __allUsersBgRefresh: false,
+
+    clearAllUsersCache() {
+      this.__allUsersMem = null;
+      this.__allUsersMemAt = 0;
+    },
+
+    async getAllUsers(force = false) {
       if (this.online) {
-        return await supaReq('GET','users',null,'?select=id,name,email,role,matricula,department,admin_id,balance,points,active,photo_url,show_points,created_at&order=name.asc&limit=1000');
+        const now = Date.now();
+        if (!force && this.__allUsersMem?.length) {
+          const age = now - (this.__allUsersMemAt || 0);
+          if (age > 240000 && !this.__allUsersBgRefresh) {
+            this.__allUsersBgRefresh = true;
+            this.getAllUsers(true).finally(() => { this.__allUsersBgRefresh = false; });
+          }
+          return this.__allUsersMem;
+        }
+        if (!force && this.__allUsersInflight) {
+          return this.__allUsersInflight;
+        }
+        const run = (async () => {
+          const cols = 'id,name,email,role,matricula,department,admin_id,balance,points,active,photo_url,show_points,created_at';
+          const pageSize = 400;
+          let offset = 0;
+          const all = [];
+          for (let page = 0; page < 5; page++) {
+            const chunk = await supaReq('GET', 'users', null,
+              `?select=${cols}&order=name.asc&limit=${pageSize}&offset=${offset}`);
+            if (!Array.isArray(chunk) || !chunk.length) break;
+            all.push(...chunk);
+            if (chunk.length < pageSize) break;
+            offset += pageSize;
+          }
+          this.__allUsersMem = all;
+          this.__allUsersMemAt = Date.now();
+          return all;
+        })();
+        this.__allUsersInflight = run;
+        try {
+          return await run;
+        } finally {
+          this.__allUsersInflight = null;
+        }
       }
       return this._lget(this.LK.users);
     },
@@ -698,6 +785,8 @@
         return this._partnerTeamSacarRoles().includes(r);
       }
       if (m.screen === 'conta_corrente_gestao') return true;
+      if (m.screen === 'esteira_credito' || m.kind === 'proposta_credito') return true;
+      if (m.screen === 'adiantamento_salarial' || m.kind === 'adiantamento_salarial' || m.adiantamento_salarial) return true;
       return false;
     },
 
@@ -718,7 +807,16 @@
     /* ── SALDO ── */
     async addBalance(empId, amount, reason, byId, meta) {
       const emp=await this.getUser(empId); if(!emp)return null;
-      if (!this._partnerBalanceMutationAllowed(emp, meta)) return null;
+      const allowed = this._partnerBalanceMutationAllowed(emp, meta);
+      // #region agent log
+      if (!allowed || !emp) {
+        try {
+          const base = (typeof window !== 'undefined' && window.SOUBLU_BASE) ? window.SOUBLU_BASE : '';
+          fetch(`${base}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'db.js:addBalance', message: 'balance blocked', data: { empId, hasEmp: !!emp, allowed, partnerWallet: this._isPartnerWalletUser(emp), metaScreen: meta?.screen, metaKind: meta?.kind }, timestamp: Date.now(), hypothesisId: 'A' }) }).catch(() => {});
+        } catch (_) {}
+      }
+      // #endregion
+      if (!allowed) return null;
       const amt = this._walletAmt(amount, emp, false);
       if (!Number.isFinite(amt) || amt <= 0) return null;
       const current = this._isPartnerWalletUser(emp)
@@ -1022,45 +1120,77 @@
     },
     /** Normaliza tipo/chave PIX antes de gravar ou enviar à Efi. */
     normalizePixPayment(type, key) {
-      let t = String(type || '').trim().toLowerCase();
-      let k = String(key || '').trim();
-      if (!k) return { pix_key_type: t || 'cpf', pix_key: '' };
+      const alias = (t) => {
+        let x = String(t || '').trim().toLowerCase();
+        if (!x || x === 'pix') return '';
+        if (['celular', 'telefone'].includes(x)) x = 'phone';
+        if (['e-mail', 'mail'].includes(x)) x = 'email';
+        if (['aleatoria', 'chave_aleatoria', 'evp'].includes(x)) x = 'random';
+        return x;
+      };
 
-      if (['celular', 'telefone'].includes(t)) t = 'phone';
-      if (['e-mail', 'mail'].includes(t)) t = 'email';
-      if (['aleatoria', 'chave_aleatoria', 'evp'].includes(t)) t = 'random';
-
-      const digits = k.replace(/\D/g, '');
-      const inferType = () => {
+      const inferType = (raw) => {
+        const k = String(raw || '').trim();
+        if (!k) return 'cpf';
         if (k.includes('@')) return 'email';
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)) return 'random';
+        const digits = k.replace(/\D/g, '');
         if (digits.length === 14) return 'cnpj';
-        if (digits.length === 11 && !k.includes('@')) return 'cpf';
+        if (digits.length === 11 && !k.includes('@')) {
+          if (/^\+?55/.test(k.replace(/\s/g, '')) || /^\(\d{2}\)/.test(k)) return 'phone';
+          return 'cpf';
+        }
         if (digits.length === 10 || digits.length === 11) return 'phone';
         return 'random';
       };
 
-      if (!t || t === 'pix') t = inferType();
-      if (t === 'cpf' && (k.includes('@') || (digits.length !== 11 && digits.length > 0))) t = inferType();
-      if (t === 'cnpj' && digits.length !== 14 && k.includes('@')) t = 'email';
+      const formatKey = (t, raw) => {
+        let k = String(raw || '').trim();
+        const digits = k.replace(/\D/g, '');
+        switch (t) {
+          case 'cpf':
+          case 'cnpj':
+            return digits;
+          case 'phone':
+            if (!digits) return k;
+            if (digits.startsWith('55') && digits.length >= 12) return '+' + digits;
+            if (digits.length === 10 || digits.length === 11) return '+55' + digits;
+            return '+' + digits;
+          case 'email':
+            return k.toLowerCase();
+          default:
+            return k.trim();
+        }
+      };
 
-      switch (t) {
-        case 'cpf':
-        case 'cnpj':
-          k = digits;
-          break;
-        case 'phone':
-          if (!digits) break;
-          k = digits.startsWith('55') && digits.length >= 12
-            ? '+' + digits
-            : (digits.length === 10 || digits.length === 11 ? '+55' + digits : '+' + digits);
-          break;
-        case 'email':
-          k = k.toLowerCase();
-          break;
-        default:
-          k = k.trim();
+      const isValid = (t, k) => {
+        if (!k) return false;
+        switch (t) {
+          case 'cpf': return /^\d{11}$/.test(k);
+          case 'cnpj': return /^\d{14}$/.test(k);
+          case 'email': return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(k);
+          case 'phone': return /^\+55\d{10,11}$/.test(k);
+          case 'random': return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k);
+          default: return k.length >= 3;
+        }
+      };
+
+      let t = alias(type);
+      let k = String(key || '').trim();
+      if (!k) return { pix_key_type: t || 'cpf', pix_key: '' };
+
+      if (!t) t = inferType(k);
+      k = formatKey(t, k);
+
+      if (!isValid(t, k)) {
+        const inferred = inferType(String(key || '').trim());
+        if (inferred !== t) {
+          t = inferred;
+          k = formatKey(t, key);
+        }
       }
+
+      if (!isValid(t, k)) return { pix_key_type: t, pix_key: '' };
       return { pix_key_type: t, pix_key: k };
     },
 
@@ -1083,6 +1213,9 @@
       let irpfTax = 0;
       let totalDebit = amt;
       let irpfReason = '';
+      let partnerFee = 0;
+      let irpjTax = 0;
+      let irpjRate = 0;
 
       if (money && typeof WithdrawalRules !== 'undefined') {
         const ev = await WithdrawalRules.evaluate(empId, amt, emp);
@@ -1091,11 +1224,14 @@
         irpfTax = ev.irpfTax || 0;
         totalDebit = ev.totalDebit;
         irpfReason = ev.irpfReason || '';
+        partnerFee = ev.partnerFee || 0;
+        irpjTax = ev.irpjTax || 0;
+        irpjRate = ev.irpjRate || 0;
         try {
           if (ev.flagSplitNext) await this.updateUser(empId, { withdrawal_irpf_next: true });
           if (ev.clearPendingIrpf) await this.updateUser(empId, { withdrawal_irpf_next: false });
         } catch (e) { console.warn('[requestWithdrawal] flags IRPF:', e); }
-      } else if (money && amt < 50) {
+      } else if (money && amt < 50 && !this._isPartnerWalletUser(emp)) {
         return { ok:false, msg:'Valor mínimo para saque: R$ 50,00.' };
       } else if (!money && typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
         const wd = VendorTierPoints.canWithdrawToday(emp);
@@ -1121,7 +1257,22 @@
       const holderName = pixData.holder_name || '';
       const bankName = pixData.bank_name || '';
 
+      const notePayload = {
+        net_amount: netAmount,
+        requested_amount: amt,
+        partner_fee: partnerFee,
+        irpj_tax: irpjTax,
+        irpj_rate: irpjRate,
+        irpf_tax: irpfTax,
+        gross_debit: totalDebit,
+        irpf_reason: irpfReason,
+        payment_method: 'pix',
+        bank: null,
+      };
+
       let reason = `Saque PIX — ${pixType.toUpperCase()} ${pixKey}`;
+      if (partnerFee > 0) reason += ` (taxa R$ ${Number(partnerFee).toFixed(2)})`;
+      if (irpjTax > 0) reason += ` (IRPJ R$ ${irpjTax.toFixed(2)})`;
       if (irpfTax > 0) reason += ` (IRPF R$ ${irpfTax.toFixed(2)})`;
 
       const wdMeta = { screen: 'saque_pix', kind: 'saque_solicitado' };
@@ -1132,15 +1283,6 @@
           msg: 'Não foi possível reservar o saldo para o saque. Verifique o saldo disponível ou contate o suporte.',
         };
       }
-
-      const notePayload = {
-        net_amount: netAmount,
-        irpf_tax: irpfTax,
-        gross_debit: totalDebit,
-        irpf_reason: irpfReason,
-        payment_method: 'pix',
-        bank: null,
-      };
 
       const wd={
         id:this._genId('wdw'),
@@ -1163,7 +1305,7 @@
       };
       try {
         await this._insertWithdrawal(wd);
-        return{ok:true,withdrawal:wd, irpf_tax: irpfTax, total_debit: totalDebit};
+        return{ok:true,withdrawal:wd, irpf_tax: irpfTax, irpj_tax: irpjTax, total_debit: totalDebit, partner_fee: partnerFee};
       } catch (e) {
         console.error('[requestWithdrawal]', e);
         try {
@@ -1748,12 +1890,12 @@
             try {
               list = await supaReq('GET', 'clients', null, `?select=${cols}&order=${this._CLIENTS_ORDER}&limit=${limit}`);
             } catch (e2) {
-              console.warn('[DB] getClients fallback:', e2.message);
-              list = this._lget(this.LK.clients);
+              console.warn('[DB] getClients retry failed:', e2.message);
+              throw e2;
             }
           } else {
-            console.warn('[DB] Erro ao buscar clientes no Supabase, usando local:', msg);
-            list = this._lget(this.LK.clients);
+            console.warn('[DB] getClients falhou:', msg);
+            throw e;
           }
         }
       } else {
@@ -1911,6 +2053,35 @@
     _proposalsListQuery(extra = '') {
       return `?select=${this._PROPOSALS_LIST_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=2000${extra}`;
     },
+
+    /** Busca propostas só da equipe (evita GET de 2000 linhas + filtro no browser). */
+    async _fetchProposalsForVendorIds(teamIds) {
+      const ids = [...teamIds].filter(Boolean).map(String);
+      if (!ids.length) return [];
+      const base = this._proposalsListQuery();
+      const seen = new Set();
+      const rows = [];
+      const push = (list) => {
+        for (const p of list || []) {
+          if (!p?.id || seen.has(p.id)) continue;
+          seen.add(p.id);
+          rows.push(p);
+        }
+      };
+      const CHUNK = 50;
+      const cols = ['employee_id', 'vendor_id', 'vendorId'];
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        const chunk = ids.slice(i, i + CHUNK);
+        const inList = chunk.map(encodeURIComponent).join(',');
+        const parts = await Promise.all(
+          cols.map((col) =>
+            supaReq('GET', 'proposals', null, `${base}&${col}=in.(${inList})`).catch(() => [])
+          )
+        );
+        parts.forEach(push);
+      }
+      return rows.sort((a, b) => this.proposalSortTime(b) - this.proposalSortTime(a));
+    },
   
     _normVendorName(n) {
       return String(n || '').trim().toLowerCase()
@@ -1972,11 +2143,7 @@
       if (this.online) {
         if (!uid && partnerRootId) {
           const teamIds = await this.getPartnerTeamIds(partnerRootId);
-          const all = await supaReq('GET', 'proposals', null, this._proposalsListQuery()).catch(() => []);
-          return (all || []).filter(p => {
-            const vids = this._proposalVendorIds(p);
-            return vids.some(id => id && teamIds.has(String(id)));
-          }).sort((a, b) => this.proposalSortTime(b) - this.proposalSortTime(a));
+          return this._fetchProposalsForVendorIds(teamIds);
         }
         if (!uid) {
           return await supaReq('GET', 'proposals', null, this._proposalsListQuery());
@@ -1993,14 +2160,16 @@
         };
   
         const base = this._proposalsListQuery();
-        for (const col of ['employee_id', 'vendorId', 'vendor_id']) {
-          try {
-            const part = await supaReq('GET', 'proposals', null, `${base}&${col}=eq.${encodeURIComponent(uid)}`);
-            push(part);
-          } catch (e) {
-            console.warn(`[DB] getProposals ${col}:`, e.message);
-          }
-        }
+        const vendorCols = ['employee_id', 'vendorId', 'vendor_id'];
+        const parts = await Promise.all(
+          vendorCols.map((col) =>
+            supaReq('GET', 'proposals', null, `${base}&${col}=eq.${encodeURIComponent(uid)}`).catch((e) => {
+              console.warn(`[DB] getProposals ${col}:`, e.message);
+              return [];
+            })
+          )
+        );
+        parts.forEach(push);
   
         if (rows.length === 0) {
           try {
@@ -2055,7 +2224,7 @@
         'valorComissaoRecebida', 'valor_comissao_recebida',
         'attachments', 'history', 'email_contato',
         'creditoRetorno', 'credito_retorno', 'creditoEsteira', 'credito_esteira',
-        'meta', 'credito',
+        'meta',
         'createdAt', 'created_at', 'updatedAt', 'updated_at',
         'lastUpdatedBy', 'last_updated_by',
       ]);
@@ -2072,33 +2241,38 @@
     _compactProposalPayloadForApi(payload) {
       if (!payload || typeof payload !== 'object') return payload;
       const p = { ...payload };
-      const maxBytes = 1500000;
+      const maxBytes = 4000000;
       if (p.attachments && typeof p.attachments === 'object' && !Array.isArray(p.attachments)) {
         const att = { ...p.attachments };
         const stripped = [];
         Object.keys(att).forEach((k) => {
           const v = att[k];
           if (typeof v === 'string' && /^data:/i.test(v)) {
-            stripped.push(k);
-            delete att[k];
-            if (att[k + '_nome']) delete att[k + '_nome'];
-            if (att[k + '_pasta']) delete att[k + '_pasta'];
+            const hasPath = !!att[k + '_caminho'];
+            if (hasPath) {
+              stripped.push(k);
+              delete att[k];
+              if (att[k + '_nome']) delete att[k + '_nome'];
+              if (att[k + '_pasta']) delete att[k + '_pasta'];
+            }
           }
         });
         p.attachments = att;
         if (stripped.length) {
-          console.warn('[DB] Anexos base64 omitidos do save (envie ao servidor antes):', stripped);
-          p._attachments_stripped = stripped;
+          console.warn('[DB] Anexos base64 omitidos do save (referência no Storage mantida):', stripped);
+        }
+        const stillBase64 = Object.keys(att).some((k) => {
+          if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho') || k.endsWith('_public')) return false;
+          return typeof att[k] === 'string' && /^data:/i.test(att[k]);
+        });
+        if (stillBase64) {
+          throw new Error('ATTACHMENTS_TOO_LARGE');
         }
       }
       const json = JSON.stringify(p);
       if (json.length > maxBytes) {
         throw new Error('PAYLOAD_TOO_LARGE');
       }
-      if (p._attachments_stripped?.length) {
-        throw new Error('ATTACHMENTS_TOO_LARGE');
-      }
-      delete p._attachments_stripped;
       return p;
     },
 
@@ -2120,6 +2294,13 @@
         } else {
           p.obs = this._appendProposalObsLine(p.obs, `Banco digitado: ${bancoDig}`);
         }
+      }
+
+      if (p.credito !== undefined) {
+        const meta = this._parseProposalJsonField(p.meta);
+        p.meta = { ...meta, credito: p.credito };
+        if (p.credito) p.meta.opcao_credito = p.meta.opcao_credito ?? true;
+        delete p.credito;
       }
 
       const out = {};
@@ -2163,9 +2344,9 @@
     },
 
     /** PATCH limpo — evita enviar campos inválidos que quebram status/histórico. */
-    async saveProposal(proposal) {
+    async saveProposal(proposal, opts = {}) {
       if (!proposal?.id) throw new Error('ID da proposta é obrigatório.');
-      const merged = await this._hydrateProposalForSave(proposal);
+      const merged = opts.skipHydrate ? proposal : await this._hydrateProposalForSave(proposal);
       let payload = this._sanitizeProposalForApi(this._normalizeProposalForDb(merged, { isNew: false }));
       if (this.online) {
         payload = this._compactProposalPayloadForApi(payload);
@@ -2207,6 +2388,7 @@
             const key = `file_${i + 1}`;
             out[key] = url;
             if (item.name || item.nome) out[key + '_nome'] = item.name || item.nome;
+            if (item.caminho || item.path) out[key + '_caminho'] = item.caminho || item.path;
           }
         });
         return out;
@@ -2262,13 +2444,15 @@
     },
 
     /** Mescla proposta com registro existente — preserva anexos e dados de crédito. */
-    async _hydrateProposalForSave(proposal) {
+    async _hydrateProposalForSave(proposal, existingHint = null) {
       if (!proposal?.id) return proposal;
-      let existing = null;
-      try {
-        existing = await this.getProposal(proposal.id);
-      } catch (e) {
-        console.warn('[DB] hydrateProposalForSave:', e.message);
+      let existing = existingHint || null;
+      if (!existing) {
+        try {
+          existing = await this.getProposal(proposal.id);
+        } catch (e) {
+          console.warn('[DB] hydrateProposalForSave:', e.message);
+        }
       }
       if (!existing) {
         const cr = proposal.creditoRetorno || proposal.credito_retorno;
@@ -2316,8 +2500,17 @@
           ...this._parseProposalJsonField(proposal.meta),
         };
       }
-      if (proposal.credito !== undefined) out.credito = proposal.credito;
-      else if (existing.credito !== undefined) out.credito = existing.credito;
+      const creditoFlag = proposal.credito !== undefined
+        ? proposal.credito
+        : existing.credito !== undefined
+          ? existing.credito
+          : undefined;
+      if (creditoFlag !== undefined) {
+        out.meta = out.meta || {};
+        out.meta.credito = creditoFlag;
+        if (creditoFlag) out.meta.opcao_credito = out.meta.opcao_credito ?? true;
+      }
+      delete out.credito;
 
       return out;
     },
@@ -2359,9 +2552,55 @@
       });
     },
 
+    resolveUploadUrl(result) {
+      if (!result) return '';
+      if (typeof result === 'object' && result.url) return result.url;
+      return String(result);
+    },
+
+    /** Nome seguro no Storage — sem acentos no caminho (exibição usa _nome original). */
+    _safeProposalStorageFileName(name) {
+      const base = String(name || 'arquivo')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '_')
+        .replace(/\s+/g, '_')
+        .trim();
+      const ext = base.includes('.') ? base.split('.').pop() : '';
+      const stem = ext ? base.slice(0, -(ext.length + 1)) : base;
+      const safeStem = (stem || 'arquivo').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+      const safeExt = String(ext || 'bin').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) || 'bin';
+      return `${safeStem}.${safeExt}`;
+    },
+
+    _sanitizeProposalObjectPath(objectPath) {
+      return String(objectPath || '')
+        .replace(/\\/g, '/')
+        .split('/')
+        .filter((s) => s)
+        .map((seg) => {
+          const ascii = seg.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const clean = ascii.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/^_+|_+$/g, '');
+          return clean || 'arquivo';
+        })
+        .join('/');
+    },
+
+    /** Caminho relativo proposal-attachments/... sempre sanitizado (igual upload.php). */
+    normalizeProposalCaminho(caminho) {
+      const rel = String(caminho || '').replace(/^\/+/, '');
+      if (!rel) return '';
+      const slash = rel.indexOf('/');
+      if (slash < 0) return rel;
+      let bucket = rel.slice(0, slash);
+      const object = rel.slice(slash + 1);
+      if (bucket === 'propostas') bucket = 'proposal-attachments';
+      const safeObj = this._sanitizeProposalObjectPath(object);
+      return safeObj ? `${bucket}/${safeObj}` : bucket;
+    },
+
     /**
-     * Upload de anexo da proposta: tenta bucket Supabase `proposal-attachments` (público);
-     * se falhar (bucket inexistente, CORS, file://, etc.), grava data URL na proposta.
+     * Upload de anexo da proposta — servidor PHP → Supabase (nunca disco Locaweb).
      */
     async uploadProposalFile(file, proposalId, grupo) {
       if (!file || !(file instanceof Blob)) {
@@ -2371,52 +2610,52 @@
       const safePid = String(proposalId || 'new').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
       const safeGrp = String(grupo || 'doc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);
       const origName = file.name || 'arquivo';
-      const extRaw = origName.includes('.') ? origName.split('.').pop() : '';
-      const ext = (extRaw && /^[a-zA-Z0-9]+$/.test(extRaw)) ? extRaw.toLowerCase().slice(0, 12) : 'bin';
-      const path = `${safePid}/${safeGrp}_${Date.now()}.${ext}`;
-      const contentType = file.type || (ext === 'pdf' ? 'application/pdf' : 'application/octet-stream');
+      const storageName = this._safeProposalStorageFileName(origName);
+      const path = `${safePid}/${safeGrp}/${Date.now()}_${storageName}`;
+      const caminho = `${bucket}/${path}`;
 
       const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
-      const _hostUp = String(_cfg.DB_BACKEND || '').toLowerCase() === 'hostinger'
-        && _cfg.UPLOAD_URL && _cfg.API_KEY;
-      if (_hostUp && typeof uploadImage === 'function') {
-        try {
-          const url = await uploadImage(file, bucket, `${safePid}/${safeGrp}_${Date.now()}`);
-          if (url && !String(url).startsWith('data:')) return url;
-        } catch (e) {
-          console.warn('[DB] uploadProposalFile hostinger:', e);
+      const phpUp = _cfg.UPLOAD_URL && _cfg.API_KEY;
+
+      if (phpUp) {
+        const fd = new FormData();
+        fd.append('file', file, origName);
+        const q = new URLSearchParams({ bucket, path });
+        const res = await fetch(`${_cfg.UPLOAD_URL}?${q}`, {
+          method: 'POST',
+          headers: { 'X-API-Key': _cfg.API_KEY },
+          body: fd,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok || !data.caminho) {
+          const errMsg = data.error || `HTTP ${res.status}`;
+          throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         }
+        return {
+          url: data.url || data.public_url || '',
+          caminho: (window.DB || DB).normalizeProposalCaminho(data.caminho || data.path || caminho),
+          nome: data.nome || origName,
+          public_url: data.public_url || null,
+        };
       }
 
-      const storageBase = (typeof SUPABASE_URL !== 'undefined' && SUPABASE_URL)
-        ? String(SUPABASE_URL).replace(/\/$/, '')
-        : String(_cfg.STORAGE_URL || '').replace(/\/$/, '');
-      const storageKey = (typeof SUPABASE_KEY !== 'undefined' && SUPABASE_KEY)
-        ? SUPABASE_KEY
-        : String(_cfg.STORAGE_KEY || '').trim();
-
-      if (this.online && storageBase && storageKey) {
-        try {
-          const res = await fetch(`${storageBase}/storage/v1/object/${bucket}/${path}`, {
-            method: 'POST',
-            headers: {
-              'apikey': storageKey,
-              'Authorization': `Bearer ${storageKey}`,
-              'Content-Type': contentType,
-              'x-upsert': 'true',
-            },
-            body: file,
-          });
-          if (res.ok) {
-            return `${storageBase}/storage/v1/object/public/${bucket}/${path}`;
-          }
-          const txt = await res.text().catch(() => '');
-          console.warn('[DB] proposal-attachments storage:', res.status, txt);
-        } catch (e) {
-          console.warn('[DB] uploadProposalFile:', e);
-        }
+      if (!this.online) {
+        const dataUrl = await this._fileToDataURL(file);
+        return { url: dataUrl, caminho: '', nome: origName };
       }
-      return this._fileToDataURL(file);
+
+      throw new Error(
+        'Upload de anexos indisponível: configure api/upload.php no servidor (UPLOAD_URL + API_KEY).'
+      );
+    },
+
+    _extractProposalStorageRelative(url) {
+      const s = String(url || '').trim();
+      const supa = s.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
+      if (!supa) return '';
+      let b = decodeURIComponent(supa[1]);
+      if (b === 'propostas') b = 'proposal-attachments';
+      return b + '/' + decodeURIComponent(supa[2]);
     },
   
     /* ══ TIM — Indicação e esteira ══ */
@@ -3711,6 +3950,36 @@
     },
 
     /* ══ TICKETS ══ */
+    _normalizeTicketForDb(data) {
+      if (!data || typeof data !== 'object') return data;
+      const thread = data.thread || data.messages || [];
+      const now = new Date().toISOString();
+      const openedId = data.openedById || data.opened_by_id || data.employee_id || '';
+      const openedName = data.openedByName || data.opened_by_name || '';
+      const openedDept = data.openedByDept || data.opened_by_dept || data.department || '';
+      const target = data.targetDept || data.target_dept || data.department || '';
+      const created = data.createdAt || data.created_at || now;
+      const updated = data.updatedAt || data.updated_at || now;
+      return {
+        id: data.id,
+        openedById: openedId,
+        employee_id: data.employee_id || openedId,
+        openedByName: openedName,
+        openedByDept: openedDept,
+        opened_by_name: data.opened_by_name || openedName,
+        opened_by_dept: data.opened_by_dept || openedDept,
+        targetDept: target,
+        department: data.department || target,
+        subject: data.subject || '',
+        status: data.status || 'aberto',
+        thread: Array.isArray(thread) ? thread : [],
+        createdAt: created,
+        updatedAt: updated,
+        created_at: data.created_at || created,
+        updated_at: data.updated_at || updated,
+      };
+    },
+
     async getTickets(empId=null, department=null) {
       if(this.online){
         let q = '?select=*&order=created_at.desc';
@@ -3724,15 +3993,21 @@
       return all.sort((a,b)=>new Date(b.created_at)-new Date(a.created_at));
     },
     async addTicket(data) {
-      const ticket = { id: this._genId('tkt'), ...data, status: 'aberto', created_at: new Date().toISOString() };
+      const ticket = this._normalizeTicketForDb({
+        id: this._genId('tkt'),
+        ...data,
+        status: 'aberto',
+        created_at: new Date().toISOString(),
+      });
       if(this.online){_cacheDel('tickets');await supaReq('POST','tickets',ticket);}
       else{const list=this._lget(this.LK.tickets);list.push(ticket);this._lset(this.LK.tickets,list);}
       return ticket;
     },
     async updateTicket(id, updates) {
-      if(this.online){_cacheDel('tickets');const r=await supaReq('PATCH','tickets',updates,`?id=eq.${id}`);return r[0]||null;}
+      const row = this._normalizeTicketForDb({ id, ...updates });
+      if(this.online){_cacheDel('tickets');const r=await supaReq('PATCH','tickets',row,`?id=eq.${id}`);return r[0]||null;}
       const list=this._lget(this.LK.tickets),idx=list.findIndex(t=>t.id===id);
-      if(idx===-1)return null;list[idx]={...list[idx],...updates};this._lset(this.LK.tickets,list);return list[idx];
+      if(idx===-1)return null;list[idx]={...list[idx],...row};this._lset(this.LK.tickets,list);return list[idx];
     },
 
     /* ══ MEETINGS (convocações + termo de ciência da ata) ══ */
@@ -4011,6 +4286,16 @@
           return r[0] || row;
         }
 
+        if (collection === 'tickets') {
+          const row = this._normalizeTicketForDb(data);
+          if (existing) {
+            const r = await supaReq('PATCH', 'tickets', row, `?id=eq.${encodeURIComponent(data.id)}`);
+            return r[0] || row;
+          }
+          const r = await supaReq('POST', 'tickets', row);
+          return r[0] || row;
+        }
+
         const row = { ...data };
         if (existing) {
           const r = await supaReq('PATCH', collection, row, `?id=eq.${encodeURIComponent(data.id)}`);
@@ -4036,6 +4321,8 @@
         normalized = this._sanitizeProposalForApi(
           this._normalizeProposalForDb(merged, { isNew: idx < 0 })
         );
+      } else if (collection === 'tickets') {
+        normalized = this._normalizeTicketForDb(data);
       }
       if (idx > -1) {
         list[idx] = { ...list[idx], ...normalized };
@@ -5322,8 +5609,8 @@
     async saveRhPosition(job) { return await this.saveRhJob(job); },
 
     async getRhEmployees() {
-      if (this.online) return await this._rhOnlineList('rh_employees');
-      return this._lget(this.LK.rh_employees);
+      if (this.online) return await this._rhOnlineList('rh_employees', 'nome.asc');
+      return this._sortUsersByName(this._lget(this.LK.rh_employees), 'nome');
     },
     async saveRhEmployee(employee) {
       if (this.online) return await this._rhOnlineSave('rh_employees', employee);
@@ -5451,6 +5738,96 @@
       const list = (this._lget(this.LK.monitoria_atendimento) || []).filter(x => x.id !== id);
       this._lset(this.LK.monitoria_atendimento, list);
       return true;
+    },
+
+    /* ══ BOLÃO COPA (Álbum Premiado) ══ */
+    async getBolaoPicks(opts = {}) {
+      const campaignId = opts.campaignId || 'album-copa-2026';
+      if (this.online) {
+        try {
+          let q = `?campaign_id=eq.${encodeURIComponent(campaignId)}&select=*&order=updated_at.desc&limit=5000`;
+          if (opts.userId) q += `&user_id=eq.${encodeURIComponent(opts.userId)}`;
+          return await supaReq('GET', 'bolao_copa_picks', null, q);
+        } catch (e) {
+          console.warn('[DB] getBolaoPicks:', e.message);
+        }
+      }
+      let all = this._lget(this.LK.bolao_copa_picks) || [];
+      all = all.filter(r => String(r.campaign_id || '') === String(campaignId));
+      if (opts.userId) all = all.filter(r => String(r.user_id) === String(opts.userId));
+      return all;
+    },
+
+    async saveBolaoPick(row) {
+      if (!row.id) row.id = this._genId('bp');
+      row.campaign_id = row.campaign_id || 'album-copa-2026';
+      row.updated_at = row.updated_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+      row.created_at = row.created_at || row.updated_at;
+      const syncLocal = () => {
+        const list = this._lget(this.LK.bolao_copa_picks) || [];
+        const idx = list.findIndex(r => r.id === row.id || (String(r.user_id) === String(row.user_id) && r.match_id === row.match_id));
+        if (idx >= 0) list[idx] = { ...list[idx], ...row };
+        else list.push(row);
+        this._lset(this.LK.bolao_copa_picks, list);
+      };
+      if (this.online) {
+        try {
+          if (typeof _cacheDel === 'function') _cacheDel('bolao_copa_picks');
+          await supaReq('POST', 'bolao_copa_picks', row, '?on_conflict=id');
+          syncLocal();
+          return row;
+        } catch (e) {
+          console.warn('[DB] saveBolaoPick online:', e.message);
+          throw e;
+        }
+      }
+      syncLocal();
+      return row;
+    },
+
+    async getBolaoResults(campaignId = 'album-copa-2026') {
+      if (this.online) {
+        try {
+          const rows = await supaReq('GET', 'bolao_copa_results', null,
+            `?campaign_id=eq.${encodeURIComponent(campaignId)}&select=*&limit=100`);
+          const map = {};
+          (rows || []).forEach(r => { if (r.match_id) map[r.match_id] = r; });
+          return map;
+        } catch (e) {
+          console.warn('[DB] getBolaoResults:', e.message);
+        }
+      }
+      const list = this._lget(this.LK.bolao_copa_results) || [];
+      const map = {};
+      list.filter(r => String(r.campaign_id || '') === String(campaignId)).forEach(r => { map[r.match_id] = r; });
+      return map;
+    },
+
+    async saveBolaoResult(row) {
+      if (!row.match_id) throw new Error('match_id obrigatório');
+      row.campaign_id = row.campaign_id || 'album-copa-2026';
+      row.id = row.id || `br_${row.campaign_id}_${row.match_id}`;
+      row.set_at = row.set_at || new Date().toISOString().slice(0, 19).replace('T', ' ');
+      const syncLocal = () => {
+        const list = this._lget(this.LK.bolao_copa_results) || [];
+        const idx = list.findIndex(r => r.match_id === row.match_id && String(r.campaign_id) === String(row.campaign_id));
+        if (idx >= 0) list[idx] = { ...list[idx], ...row };
+        else list.push(row);
+        this._lset(this.LK.bolao_copa_results, list);
+      };
+      if (this.online) {
+        try {
+          if (typeof _cacheDel === 'function') _cacheDel('bolao_copa_results');
+          await supaReq('POST', 'bolao_copa_results', row, '?on_conflict=id');
+          syncLocal();
+          return row;
+        } catch (e) {
+          console.warn('[DB] saveBolaoResult online:', e.message);
+          throw e;
+        }
+      }
+      syncLocal();
+      return row;
     },
   };
 

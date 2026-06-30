@@ -1,0 +1,33 @@
+<?php
+/**
+ * Copie para config.evolution.local.php na raiz do site (mesma pasta que config.db.local.php).
+ * Alternativa: use config.stack.local.php (veja config.stack.local.php.example).
+ * Evolution API — https://doc.evolution-api.com/
+ */
+
+/** URL base da Evolution (sem barra final). Ex.: https://evo.seudominio.com.br */
+define('EVOLUTION_API_URL', 'https://SEU_SERVIDOR_EVOLUTION');
+
+/** API Key global da Evolution (Settings → API Key). */
+define('EVOLUTION_API_KEY', 'SUA_EVOLUTION_API_KEY');
+
+/** Segredo para validar webhooks (?secret= ou header X-Webhook-Secret). */
+define('EVOLUTION_WEBHOOK_SECRET', 'webhook_secreto_forte');
+
+/** false = painel mostra "WhatsApp não configurado" sem erro fatal. */
+define('EVOLUTION_ENABLED', true);
+
+/**
+ * Dev local (Docker): copie este bloco após subir docker-compose.evolution.yml
+ *   EVOLUTION_API_URL = http://localhost:8081
+ *   EVOLUTION_API_KEY = soublu_evo_dev_change_me  (ou valor de AUTHENTICATION_API_KEY no compose)
+ */
+
+/**
+ * Importar contatos do celular ao conectar (leve).
+ * Só nome + telefone — máx. 30 — sem baixar conversas/mensagens.
+ */
+define('WA_MIRROR_MODE', true);
+define('WA_CONTACTS_SYNC', true);
+define('WA_CONTACTS_MAX', 150);
+define('WA_CONTACTS_COOLDOWN_SEC', 3600);

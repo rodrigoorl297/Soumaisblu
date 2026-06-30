@@ -57,6 +57,35 @@
     return MOTIVOS.find(m => m.value === v)?.label || v || '—';
   }
 
+  function _ctDbgLog(location, message, data, hypothesisId) {
+    const payload = {
+      sessionId: '97c411',
+      location,
+      message,
+      data: data || {},
+      timestamp: Date.now(),
+      hypothesisId: hypothesisId || 'contestacao-nav',
+      runId: 'contestacao-nav-fix-v1',
+    };
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    const cfg = window.SOUBLU_CONFIG || {};
+    const base = String(cfg.API_BASE_URL || cfg.SITE_URL || location.origin || '').replace(/\/+$/, '');
+    const key = cfg.API_KEY || '';
+    if (base && key) {
+      fetch(`${base}/api/credito_api.php?action=client_log`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    }
+    // #endregion
+  }
+
   async function scopeFilter() {
     const root = window.PARTNER_ROOT_ID;
     if (root) return { partnerRootId: root };
@@ -82,11 +111,13 @@
 
   const Contestacao = {
     ensureUi() {
+      const isJuridicoHub = /juridico-manager\.html/i.test(String(location.pathname || ''))
+        || document.body.classList.contains('leads-app');
       const nav = document.querySelector('.sidebar-nav');
       const main = document.querySelector('.page-content');
       if (!nav || !main) return;
 
-      if (!document.getElementById('navContestacao') && (canRespond() || canManage())) {
+      if (!isJuridicoHub && !document.getElementById('navContestacao') && (canRespond() || canManage())) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'nav-item contestacao-nav';
@@ -98,7 +129,24 @@
         else nav.appendChild(btn);
       }
 
-      if (!document.getElementById('secContestacao')) {
+      const navBtn = document.getElementById('navContestacao');
+      if (navBtn && !navBtn.dataset.navWired) {
+        navBtn.dataset.navWired = '1';
+        navBtn.addEventListener('click', () => {
+          // #region agent log
+          _ctDbgLog('contestacao.js:navClick', 'nav click', {
+            hasNavigateTo: typeof navigateTo === 'function',
+            hasSection: !!document.getElementById('secContestacao'),
+          }, 'H1');
+          // #endregion
+          if (typeof window.navigateTo === 'function') window.navigateTo('secContestacao');
+          else if (typeof navigateTo === 'function') navigateTo('secContestacao');
+          this.render();
+        });
+        if (typeof window.wireNavButton === 'function') window.wireNavButton(navBtn);
+      }
+
+      if (!isJuridicoHub && !document.getElementById('secContestacao')) {
         const sec = document.createElement('section');
         sec.className = 'section';
         sec.id = 'secContestacao';

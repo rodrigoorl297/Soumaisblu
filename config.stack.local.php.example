@@ -1,0 +1,37 @@
+<?php
+/**
+ * Config unificado do servidor — copie para config.stack.local.php na raiz do site.
+ * O bootstrap carrega este arquivo primeiro; arquivos individuais (config.db.local.php, etc.)
+ * sobrescrevem as mesmas constantes se existirem.
+ *
+ * Use quando preferir um único arquivo no FTP, ou como fallback se config.evolution.local.php
+ * ainda não existir.
+ *
+ * NÃO commitar config.stack.local.php com segredos reais.
+ */
+
+// ========== MySQL (Locaweb) ==========
+define('DB_HOST', 'soumaisblu.mysql.dbaas.com.br');
+define('DB_NAME', 'soumaisblu');
+define('DB_USER', 'soumaisblu');
+define('DB_PASS', 'SENHA_MYSQL');
+define('DB_CHARSET', 'utf8mb4');
+define('API_INTERNAL_KEY', 'soublu_api_52e8c7a6b3df4019');
+define('SITE_URL', 'https://www.soumaisblu.com.br');
+define('UPLOAD_DIR', __DIR__ . '/uploads');
+
+// ========== Evolution API (WhatsApp) ==========
+define('EVOLUTION_API_URL', 'https://evo.seudominio.com.br');
+define('EVOLUTION_API_KEY', 'MESMA_CHAVE_DO_DOCKER');
+define('EVOLUTION_WEBHOOK_SECRET', 'segredo_webhook_forte');
+define('EVOLUTION_ENABLED', true);
+
+// ========== Supabase (opcional — WA_DB_BACKEND=supabase) ==========
+// define('SUPABASE_URL', 'https://cpqediswbjxcvpnwflyj.supabase.co');
+// define('SUPABASE_ANON_KEY', '...');
+// define('SUPABASE_SERVICE_KEY', '...');
+// define('WA_DB_BACKEND', 'supabase');
+
+// ========== PIX (opcional) ==========
+// define('PIX_DB_BACKEND', 'mysql');
+// define('PIX_INTERNAL_TOKEN', 'soublu_pix_52e8c7a6b3df4019');

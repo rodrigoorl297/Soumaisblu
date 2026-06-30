@@ -111,7 +111,7 @@ const Auth = {
   /** Painel Master (Dashboard + Painel Master) — master e fundador. */
   hasMasterPanel() {
     const s = this.getSession();
-    return !!(s && (s.role === 'master' || s.role === 'fundador'));
+    return !!(s && (s.role === 'master' || s.role === 'fundador' || s.role === 'financeiro' || s.role === 'rh'));
   },
 
   isFinanceiroOnly() {
@@ -124,7 +124,7 @@ const Auth = {
     const s = this.getSession();
     if (!s) return this.loginPageHref();
     const role = String(s.role || '').toLowerCase();
-    if (this.isFinanceiroOnly()) return this.financeiroPageHref();
+    // Financeiro was originally redirected, but now they go to admin.html
     if (role === 'juridico') return this.juridicoManagerPageHref();
     return this.usesAdminPanel(s.role) ? this.adminPageHref() : this.employeePageHref();
   },
@@ -248,7 +248,16 @@ const Auth = {
   /* master ou fundador (Rodrigo / topo da hierarquia) — mesmo poder no painel e propostas */
   isMaster() {
     const s = this.getSession();
-    return !!(s && (s.role === 'master' || s.role === 'fundador'));
+    if (!s) return false;
+    
+    // Explicit master check
+    if (s.role === 'master' || s.role === 'fundador') return true;
+
+    // Emails with master access for both Painel and Propostas (without losing their primary role functionality)
+    const masterEmails = ['gabi@blupromotora.com.br', 'flaviahonda@gmail.com'];
+    if (masterEmails.includes(s.email?.trim().toLowerCase())) return true;
+
+    return false;
   },
 
   isFundador() {
@@ -257,6 +266,9 @@ const Auth = {
   },
 
   async requireLogin() {
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'auth.js:requireLogin',message:'requireLogin start',data:{path:location.pathname,hasSession:!!this.getSession()},timestamp:Date.now(),hypothesisId:'login-auth',runId:'97c411login'})}).catch(()=>{});
+    // #endregion
     const ok = await this.isLoggedIn();
     if (!ok) {
       this._clear();
@@ -269,8 +281,16 @@ const Auth = {
       try { await AttendancePenalty.onLogin(u); } catch (e) { console.warn('[Auth] attendance:', e); }
     }
     if (typeof VendorTierPoints !== 'undefined' && VendorTierPoints.onLogin && u) {
-      try { await VendorTierPoints.onLogin(u); } catch (e) { console.warn('[Auth] vendor tier:', e); }
+      try {
+        await Promise.race([
+          VendorTierPoints.onLogin(u),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('vendor tier timeout')), 8000)),
+        ]);
+      } catch (e) { console.warn('[Auth] vendor tier:', e); }
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'auth.js:requireLogin',message:'requireLogin ok',data:{role:this.getSession()?.role},timestamp:Date.now(),hypothesisId:'login-auth',runId:'97c411login'})}).catch(()=>{});
+    // #endregion
     if (window.location.protocol !== 'file:' && !window.SOUBLU_SKIP_BACK_TRAP) {
       window.history.pushState(null,'',window.location.href);
       window.addEventListener('popstate',()=>window.history.pushState(null,'',window.location.href));
@@ -289,7 +309,7 @@ const Auth = {
   canOpenTicketTo(department) {
     const s = this.getSession();
     if (!s) return false;
-    const role = s.role;
+    const role = String(s.role || '').toLowerCase();
     // Baseado na tabela de "quem abre"
     if (['vendedor','backoffice'].includes(role)) {
       return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Ouvidoria', 'Desenvolvimento'].includes(department);
@@ -313,7 +333,7 @@ const Auth = {
   canReplyToTicket(department) {
     const s = this.getSession();
     if (!s) return false;
-    const role = s.role;
+    const role = String(s.role || '').toLowerCase();
     if (role === 'master' || role === 'fundador' || role === 'diretoria') return true;
 
     // "quem trata (responde)"

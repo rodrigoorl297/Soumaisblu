@@ -3,7 +3,14 @@
   'use strict';
 
   const MAX_VALOR = 1621.0;
-  const TAXA_LABEL = 'SUJEITO ANÁLISE DA UY3, TAXA 3,5% ao mês';
+  const PIX_AUTOMATICO_FIXO = 'PIX automático';
+  const ALLOWED_BANKS = [
+    '001 - BANCO DO BRASIL',
+    '237 - BRADESCO',
+    '033 - SANTANDER',
+    '341 - ITAU',
+    '104 - CAIXA',
+  ];
 
   function esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -15,6 +22,42 @@
 
   function fmtMoney(n) {
     return 'R$ ' + Number(n).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtCpf(v) {
+    const d = digits(v).slice(0, 11);
+    if (d.length <= 3) return d;
+    if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+    if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+
+  function _renderPersonInfo(infoEl, data, loading) {
+    if (!infoEl) return;
+    if (loading) {
+      infoEl.hidden = false;
+      infoEl.innerHTML = '<span class="text-muted">Buscando dados...</span>';
+      return;
+    }
+    if (!data || !data.nome) {
+      infoEl.hidden = true;
+      infoEl.innerHTML = '';
+      return;
+    }
+    const rows = [
+      ['Nome', data.nome],
+      ['CPF', data.cpf ? fmtCpf(data.cpf) : ''],
+      ['Matrícula', data.matricula],
+      ['Departamento', data.departamento],
+      ['Cargo', data.cargo],
+      ['E-mail', data.email],
+      ['Telefone', data.telefone],
+      ['Telefone 2', data.telefone2],
+    ].filter(([, v]) => v);
+    infoEl.hidden = false;
+    infoEl.innerHTML = rows.map(([l, v]) =>
+      `<div><span style="color:var(--color-text-muted);font-size:11px;text-transform:uppercase;">${esc(l)}</span><br/><strong>${esc(v)}</strong></div>`
+    ).join('');
   }
 
   function gerarProtocolo() {
@@ -37,14 +80,7 @@
   }
 
   function bankOptions() {
-    const banks = (window.Proposals && Proposals._BANCOS_COMPRADOS) || [
-      '033 - Banco Santander (Brasil) S.A.',
-      '001 - Banco do Brasil S.A.',
-      '237 - Banco Bradesco S.A.',
-      '104 - Caixa Econômica Federal',
-      '341 - Itaú Unibanco S.A.',
-    ];
-    return banks.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
+    return ALLOWED_BANKS.map(b => `<option value="${esc(b)}">${esc(b)}</option>`).join('');
   }
 
   function blackBar(title) {
@@ -73,41 +109,40 @@
       <table class="data-table pc-grid-table">
         <tbody>
           ${finGridRow('PROTOCOLO', `<input type="text" class="form-control text-center" id="pc_protocolo" readonly style="font-weight:800;background:#f3f4f6;letter-spacing:.04em;max-width:320px;"/>`)}
-          ${finGridRow('CPF FUNCIONÁRIO', `<div class="form-row" style="gap:8px;margin:0;flex-wrap:wrap;">
-            <input type="text" class="form-control mask-cpf" id="pc_cpf_funcionario" placeholder="000.000.000-00" required style="flex:1;min-width:160px;"/>
-            <button type="button" class="btn btn-accent btn-api-lookup" id="btn_pc_buscar_func" onclick="PropostaCredito.buscarFuncionario()">BUSCAR BANCO DE DADOS</button>
-          </div>
-          <div id="pc_func_info" hidden class="pc-info-box"></div>
+          ${finGridRow('CPF FUNCIONÁRIO', `<input type="text" class="form-control mask-cpf" id="pc_cpf_funcionario" placeholder="000.000.000-00" required autocomplete="off"/>
+          <div id="pc_func_info" hidden class="pc-info-box pc-info-grid"></div>
           <input type="hidden" id="pc_func_nome"/>`)}
           ${finGridRow('VALOR SOLICITADO', `<input type="number" class="form-control" id="pc_valor" min="0.01" max="${MAX_VALOR}" step="0.01" placeholder="0,00" required/>
-            <p class="pc-field-hint">Máximo: ${fmtMoney(MAX_VALOR)}</p>`)}
-          ${finGridRow('POSSUI CONTA SANTANDER?', simNaoSelect('pc_conta_santander', true))}
-          ${finGridRow('FORMA DE PAGAMENTO', `<select class="form-control" id="pc_forma_pagamento" required>
+            <p class="pc-field-hint" id="pc_valor_hint">Máximo: ${fmtMoney(MAX_VALOR)}</p>`)}
+          ${finGridRow('NÚMERO DE PARCELAS', `<select class="form-control" id="pc_parcelas" required>
             <option value="">Selecione...</option>
-            <option value="PIX">PIX</option>
+            <option value="2">2 meses</option>
+            <option value="3">3 meses</option>
+            <option value="4">4 meses</option>
           </select>`)}
+          ${finGridRow('PIX AUTOMÁTICO', `<input type="text" class="form-control" value="${esc(PIX_AUTOMATICO_FIXO)}" readonly style="background:#f9fafb;font-weight:600;"/>
+          <input type="hidden" id="pc_forma_pagamento" value="${esc(PIX_AUTOMATICO_FIXO)}"/>
+          <p class="pc-field-hint">Débito automático na conta informada abaixo (agência e conta corrente).</p>`)}
           ${finGridRow('BANCO', `<select class="form-control" id="pc_banco" required>
             <option value="">Selecione o banco...</option>
             ${bankOptions()}
           </select>`)}
-          ${finGridRow('AGÊNCIA', `<input type="text" class="form-control" id="pc_agencia" placeholder="0000" required/>`)}
-          ${finGridRow('CONTA CORRENTE', `<input type="text" class="form-control" id="pc_conta" placeholder="00000-0" required/>`)}
+          ${finGridRow('AGÊNCIA', `<input type="text" class="form-control" id="pc_agencia" placeholder="2805 (sem dígito)" required/>
+          <p class="pc-field-hint">Somente o número da agência (até 4 dígitos), sem o dígito verificador.</p>`)}
+          ${finGridRow('CONTA CORRENTE', `<input type="text" class="form-control" id="pc_conta" placeholder="00000000-0" required/>
+          <p class="pc-field-hint">Número da conta com dígito (pode usar hífen).</p>`)}
           ${finGridRow('1ª CONTATO', `<input type="text" class="form-control mask-phone" id="pc_contato1" placeholder="(00) 00000-0000"/>`)}
           ${finGridRow('2ª CONTATO', `<input type="text" class="form-control mask-phone" id="pc_contato2" placeholder="(00) 00000-0000"/>`)}
-          <tr class="pc-section-row"><td colspan="2">SUJEITO ANÁLISE DA UY3</td></tr>
-          ${finGridRow('AVALISTA — CPF', `<div class="form-row" style="gap:8px;margin:0;flex-wrap:wrap;">
-            <input type="text" class="form-control mask-cpf" id="pc_avalista_cpf" placeholder="000.000.000-00" style="flex:1;min-width:160px;"/>
-            <button type="button" class="btn btn-accent btn-api-lookup" onclick="PropostaCredito.buscarAvalista()">BUSCAR BANCO DE DADOS</button>
-          </div>
-          <div id="pc_avalista_info" hidden class="pc-info-box"></div>
+          <tr class="pc-section-row"><td colspan="2">AVALISTA (OPCIONAL)</td></tr>
+          ${finGridRow('AVALISTA — CPF', `<input type="text" class="form-control mask-cpf" id="pc_avalista_cpf" placeholder="000.000.000-00" autocomplete="off"/>
+          <div id="pc_avalista_info" hidden class="pc-info-box pc-info-grid"></div>
           <input type="hidden" id="pc_avalista_nome"/>`)}
           ${finGridRow('TELEFONE AVALISTA', `<input type="text" class="form-control mask-phone" id="pc_avalista_tel" placeholder="(00) 00000-0000"/>`)}
-          <tr class="pc-footer-row"><td colspan="2">${esc(TAXA_LABEL)}</td></tr>
         </tbody>
       </table>
     </div>
     <div class="pc-form-actions">
-      <button type="submit" class="btn btn-primary btn-lg" id="pc_submit_btn">SOLICITAR 7 DIAS PARA ANÁLISE</button>
+      <button type="submit" class="btn btn-primary btn-lg" id="pc_submit_btn">SOLICITAR ANÁLISE</button>
     </div>
   </form>
 </div>`;
@@ -127,7 +162,10 @@
 .pc-section-row td { text-align: center; font-weight: 800; font-size: 13px; letter-spacing: .04em; text-transform: uppercase; padding: 12px; background: var(--color-surface-2, #f3f4f6); border-bottom: 1px solid var(--color-border, #e5e7eb); }
 .pc-footer-row td { text-align: center; font-size: 13px; font-weight: 700; padding: 12px 16px; color: var(--color-text-muted, #6b7280); background: #fff; border-bottom: none; }
 .pc-info-box { font-size: 13px; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--color-border); margin-top: 8px; background: var(--color-surface-2, #f9fafb); }
+.pc-info-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px 16px; }
 .pc-field-hint { margin: 4px 0 0; font-size: 11px; color: var(--color-text-muted); }
+.pc-field-hint.is-error { color: #dc2626; font-weight: 600; }
+.pc-input-invalid { border-color: #dc2626 !important; box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.12); }
 .pc-form-actions { padding: 16px 20px 20px; display: flex; justify-content: center; border-top: 1px solid var(--color-border, #e5e7eb); }
 #pc_submit_btn { font-weight: 800; letter-spacing: .03em; text-transform: uppercase; min-width: 280px; }
 `;
@@ -155,19 +193,90 @@
       const proto = gerarProtocolo();
       const pEl = document.getElementById('pc_protocolo');
       if (pEl) pEl.value = proto;
-      ['pc_cpf_funcionario', 'pc_func_nome', 'pc_valor', 'pc_agencia', 'pc_conta',
+      ['pc_cpf_funcionario', 'pc_func_nome', 'pc_valor', 'pc_parcelas', 'pc_agencia', 'pc_conta',
         'pc_contato1', 'pc_contato2', 'pc_avalista_cpf', 'pc_avalista_nome', 'pc_avalista_tel'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
-      ['pc_conta_santander', 'pc_forma_pagamento', 'pc_banco'].forEach(id => {
+      ['pc_banco'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
+      const fp = document.getElementById('pc_forma_pagamento');
+      if (fp) fp.value = PIX_AUTOMATICO_FIXO;
+      const valorEl = document.getElementById('pc_valor');
+      if (valorEl) valorEl.classList.remove('pc-input-invalid');
+      const hint = document.getElementById('pc_valor_hint');
+      if (hint) {
+        hint.classList.remove('is-error');
+        hint.textContent = `Máximo: ${fmtMoney(MAX_VALOR)}`;
+      }
       ['pc_func_info', 'pc_avalista_info'].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.hidden = true; el.innerHTML = ''; }
       });
+    },
+
+    _wireValorInput() {
+      const input = document.getElementById('pc_valor');
+      const hint = document.getElementById('pc_valor_hint');
+      if (!input) return;
+      const refresh = () => {
+        const v = parseFloat(input.value);
+        const over = Number.isFinite(v) && v > MAX_VALOR;
+        input.classList.toggle('pc-input-invalid', over);
+        if (hint) {
+          hint.classList.toggle('is-error', over);
+          hint.textContent = over
+            ? `Acima do máximo (${fmtMoney(MAX_VALOR)}). Ao sair do campo, o valor será ajustado.`
+            : `Máximo: ${fmtMoney(MAX_VALOR)}`;
+        }
+      };
+      input.addEventListener('input', refresh);
+      input.addEventListener('blur', () => {
+        let v = parseFloat(input.value);
+        if (Number.isFinite(v) && v > MAX_VALOR) {
+          input.value = String(MAX_VALOR);
+          refresh();
+          if (typeof showToast === 'function') {
+            showToast(`Valor ajustado para o máximo: ${fmtMoney(MAX_VALOR)}`, 'info');
+          }
+        }
+      });
+    },
+
+    _wireCpfAutoLookup(inputId, lookupFn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      let timer = null;
+      let lastCpf = '';
+      const schedule = () => {
+        clearTimeout(timer);
+        const cpf = digits(input.value);
+        if (cpf.length < 11) {
+          if (cpf.length === 0) lookupFn('', { reset: true });
+          return;
+        }
+        if (cpf === lastCpf) return;
+        timer = setTimeout(() => {
+          lastCpf = cpf;
+          lookupFn(cpf, { auto: true });
+        }, 450);
+      };
+      input.addEventListener('input', schedule);
+      input.addEventListener('blur', () => {
+        clearTimeout(timer);
+        const cpf = digits(input.value);
+        if (cpf.length === 11 && cpf !== lastCpf) {
+          lastCpf = cpf;
+          lookupFn(cpf, { auto: true });
+        }
+      });
+    },
+
+    _wireAutoLookups() {
+      this._wireCpfAutoLookup('pc_cpf_funcionario', (cpf, opts) => this.buscarFuncionario(cpf, opts));
+      this._wireCpfAutoLookup('pc_avalista_cpf', (cpf, opts) => this.buscarAvalista(cpf, opts));
     },
 
     renderShell(rootId) {
@@ -176,6 +285,8 @@
       if (!root) return;
       root.innerHTML = _formHtml();
       this.resetForm();
+      this._wireValorInput();
+      this._wireAutoLookups();
       if (typeof applyInputMasks === 'function') applyInputMasks(root);
     },
 
@@ -231,35 +342,48 @@
       nav.style.display = show ? '' : 'none';
     },
 
-    async buscarFuncionario() {
-      const cpf = digits(document.getElementById('pc_cpf_funcionario')?.value);
+    async buscarFuncionario(cpfArg, opts = {}) {
+      const cpf = digits(cpfArg || document.getElementById('pc_cpf_funcionario')?.value);
       const info = document.getElementById('pc_func_info');
       const nomeEl = document.getElementById('pc_func_nome');
+      if (opts.reset || cpf.length === 0) {
+        if (nomeEl) nomeEl.value = '';
+        _renderPersonInfo(info, null);
+        return;
+      }
       if (cpf.length !== 11) {
-        if (typeof showToast === 'function') showToast('Informe um CPF válido (11 dígitos).', 'warning');
+        if (!opts.auto && typeof showToast === 'function') showToast('Informe um CPF válido (11 dígitos).', 'warning');
         return;
       }
 
-      const btn = document.getElementById('btn_pc_buscar_func');
-      if (btn) { btn.disabled = true; btn.textContent = 'Buscando...'; }
+      _renderPersonInfo(info, null, true);
 
-      let nome = '';
-      let extra = '';
+      const data = { cpf, nome: '', matricula: '', departamento: '', cargo: '', email: '', telefone: '', telefone2: '' };
 
       try {
         const rh = await _lookupRhEmployee(cpf);
         if (rh) {
-          nome = rh.nome || rh.name || '';
-          extra = [rh.matricula ? `Matrícula: ${rh.matricula}` : '', rh.departamento ? `Depto: ${rh.departamento}` : ''].filter(Boolean).join(' · ');
+          data.nome = rh.nome || rh.name || '';
+          data.matricula = rh.matricula || '';
+          data.departamento = rh.departamento || '';
+          data.cargo = rh.cargo || '';
+          data.email = rh.email || '';
+          data.telefone = rh.contato || rh.phone || '';
+          data.telefone2 = rh.contato_terceiros || '';
           const c1 = document.getElementById('pc_contato1');
-          if (c1 && !c1.value && (rh.contato || rh.phone)) c1.value = rh.contato || rh.phone || '';
+          if (c1 && !c1.value && data.telefone) c1.value = data.telefone;
+          const c2 = document.getElementById('pc_contato2');
+          if (c2 && !c2.value && data.telefone2) c2.value = data.telefone2;
         }
 
-        if (!nome) {
+        if (!data.nome) {
           const u = await _lookupSystemUser(cpf);
           if (u) {
-            nome = u.name || '';
-            extra = u.department ? `Departamento: ${u.department}` : '';
+            data.nome = u.name || '';
+            data.departamento = u.department || data.departamento;
+            data.cargo = u.role || data.cargo;
+            data.email = u.email || data.email;
+            data.telefone = u.phone || data.telefone;
             const c1 = document.getElementById('pc_contato1');
             if (c1 && !c1.value && u.phone) c1.value = u.phone;
           }
@@ -268,61 +392,68 @@
         if (typeof FonteData !== 'undefined') {
           const res = await FonteData.lookupCpf(cpf);
           if (res.ok && res.client) {
-            if (!nome && res.client.name) nome = res.client.name;
-            if (!extra && res.client.email) extra = `E-mail: ${res.client.email}`;
+            if (!data.nome && res.client.name) data.nome = res.client.name;
+            if (!data.email && res.client.email) data.email = res.client.email;
+            if (!data.telefone && res.client.phone1) data.telefone = res.client.phone1;
             const c1 = document.getElementById('pc_contato1');
             if (c1 && !c1.value && res.client.phone1) c1.value = res.client.phone1;
-          } else if (!nome && !rh) {
+          } else if (!data.nome && !rh) {
             throw new Error(res.error || 'CPF não encontrado nas bases.');
           }
-        } else if (!nome) {
+        } else if (!data.nome) {
           throw new Error('Funcionário não encontrado no cadastro RH.');
         }
 
-        if (nomeEl) nomeEl.value = nome;
-        if (info) {
-          info.hidden = false;
-          info.innerHTML = `<strong>${esc(nome || '—')}</strong>${extra ? `<br/><span style="color:var(--color-text-muted);">${esc(extra)}</span>` : ''}`;
-        }
-        if (typeof showToast === 'function') showToast('Dados do funcionário carregados.', 'success');
+        if (nomeEl) nomeEl.value = data.nome;
+        _renderPersonInfo(info, data);
+        if (!opts.auto && typeof showToast === 'function') showToast('Dados do funcionário carregados.', 'success');
       } catch (e) {
+        if (nomeEl) nomeEl.value = '';
         if (info) {
           info.hidden = false;
           info.innerHTML = `<span style="color:#dc2626;">${esc(e.message || 'Falha na consulta')}</span>`;
-        } else if (typeof showToast === 'function') {
+        } else if (!opts.auto && typeof showToast === 'function') {
           showToast(e.message || 'Falha na consulta', 'error');
         }
-      } finally {
-        if (btn) { btn.disabled = false; btn.textContent = 'BUSCAR BANCO DE DADOS'; }
       }
     },
 
-    async buscarAvalista() {
-      const cpf = digits(document.getElementById('pc_avalista_cpf')?.value);
+    async buscarAvalista(cpfArg, opts = {}) {
+      const cpf = digits(cpfArg || document.getElementById('pc_avalista_cpf')?.value);
       const info = document.getElementById('pc_avalista_info');
       const nomeEl = document.getElementById('pc_avalista_nome');
+      if (opts.reset || cpf.length === 0) {
+        if (nomeEl) nomeEl.value = '';
+        _renderPersonInfo(info, null);
+        return;
+      }
       if (cpf.length !== 11) {
-        if (typeof showToast === 'function') showToast('Informe o CPF do avalista (11 dígitos).', 'warning');
+        if (!opts.auto && typeof showToast === 'function') showToast('Informe o CPF do avalista (11 dígitos).', 'warning');
         return;
       }
       if (typeof FonteData === 'undefined') {
-        if (typeof showToast === 'function') showToast('API de consulta não disponível.', 'error');
+        if (!opts.auto && typeof showToast === 'function') showToast('API de consulta não disponível.', 'error');
         return;
       }
+
+      _renderPersonInfo(info, null, true);
 
       try {
         const res = await FonteData.lookupCpf(cpf);
         if (!res.ok) throw new Error(res.error || 'CPF não encontrado.');
-        const nome = res.client?.name || '';
-        if (nomeEl) nomeEl.value = nome;
+        const data = {
+          cpf,
+          nome: res.client?.name || '',
+          email: res.client?.email || '',
+          telefone: res.client?.phone1 || '',
+        };
+        if (nomeEl) nomeEl.value = data.nome;
         const tel = document.getElementById('pc_avalista_tel');
-        if (tel && !tel.value && res.client?.phone1) tel.value = res.client.phone1;
-        if (info) {
-          info.hidden = false;
-          info.innerHTML = `<strong>${esc(nome || '—')}</strong>`;
-        }
-        if (typeof showToast === 'function') showToast('Dados do avalista carregados.', 'success');
+        if (tel && !tel.value && data.telefone) tel.value = data.telefone;
+        _renderPersonInfo(info, data);
+        if (!opts.auto && typeof showToast === 'function') showToast('Dados do avalista carregados.', 'success');
       } catch (e) {
+        if (nomeEl) nomeEl.value = '';
         if (info) {
           info.hidden = false;
           info.innerHTML = `<span style="color:#dc2626;">${esc(e.message || 'Falha na consulta')}</span>`;
@@ -332,22 +463,24 @@
 
     _collectMeta() {
       const gv = id => document.getElementById(id)?.value?.trim() || '';
+      const parcelas = parseInt(gv('pc_parcelas'), 10);
       return {
         tipo: 'proposta_credito_uy3',
         cpf_funcionario: digits(gv('pc_cpf_funcionario')),
         nome_funcionario: gv('pc_func_nome'),
-        conta_santander: gv('pc_conta_santander'),
-        forma_pagamento: gv('pc_forma_pagamento'),
+        parcelas: Number.isFinite(parcelas) ? parcelas : null,
+        parcelas_meses: Number.isFinite(parcelas) ? parcelas : null,
+        conta_santander: '',
+        forma_pagamento: PIX_AUTOMATICO_FIXO,
         banco: gv('pc_banco'),
         agencia: gv('pc_agencia'),
         conta_corrente: gv('pc_conta'),
         contato1: gv('pc_contato1'),
         contato2: gv('pc_contato2'),
+        observacao: '',
         avalista_cpf: digits(gv('pc_avalista_cpf')),
         avalista_nome: gv('pc_avalista_nome'),
         avalista_telefone: gv('pc_avalista_tel'),
-        taxa_mensal: '3,5%',
-        prazo_analise_dias: 7,
       };
     },
 
@@ -360,14 +493,20 @@
       const nome = document.getElementById('pc_func_nome')?.value?.trim()
         || document.getElementById('pc_func_info')?.querySelector('strong')?.textContent?.trim()
         || '';
-      const valor = parseFloat(document.getElementById('pc_valor')?.value);
+      let valor = parseFloat(document.getElementById('pc_valor')?.value);
+      if (Number.isFinite(valor) && valor > MAX_VALOR) valor = MAX_VALOR;
 
       if (cpf.length !== 11) {
         if (typeof showToast === 'function') showToast('Informe o CPF do funcionário.', 'warning');
         return;
       }
       if (!nome) {
-        if (typeof showToast === 'function') showToast('Busque o funcionário pelo CPF antes de enviar.', 'warning');
+        if (typeof showToast === 'function') showToast('Digite o CPF e aguarde o carregamento dos dados do funcionário.', 'warning');
+        return;
+      }
+      const parcelas = parseInt(document.getElementById('pc_parcelas')?.value, 10);
+      if (![2, 3, 4].includes(parcelas)) {
+        if (typeof showToast === 'function') showToast('Selecione o número de parcelas (2, 3 ou 4 meses).', 'warning');
         return;
       }
       if (!Number.isFinite(valor) || valor <= 0) {
@@ -384,20 +523,66 @@
       if (pEl) pEl.value = protocolo;
 
       const meta = this._collectMeta();
+      let beneficiaryUserId = user.id;
+      if (cpf.length === 11 && typeof DB !== 'undefined' && typeof DB.getUserByCpf === 'function') {
+        const beneficiary = await DB.getUserByCpf(cpf).catch(() => null);
+        if (beneficiary?.id) beneficiaryUserId = beneficiary.id;
+      }
+      meta.beneficiary_user_id = beneficiaryUserId;
+      meta.beneficiary_cpf = cpf;
       const obsLines = [
-        '[CREDITO] Solicitação proposta crédito UY3',
+        '[CREDITO] Solicitação proposta crédito',
         `Protocolo: ${protocolo}`,
         `Funcionário: ${nome} (CPF ${cpf})`,
         `Valor: ${fmtMoney(valor)}`,
-        `Santander: ${meta.conta_santander}`,
-        `Pagamento: ${meta.forma_pagamento} · ${meta.banco} Ag ${meta.agencia} Cc ${meta.conta_corrente}`,
+        `Parcelas: ${parcelas} meses`,
+        `PIX automático: ${meta.forma_pagamento} · Conta: ${meta.banco} Ag ${meta.agencia} Cc ${meta.conta_corrente}`,
         meta.avalista_cpf ? `Avalista: ${meta.avalista_nome || '—'} (${meta.avalista_cpf})` : '',
-        TAXA_LABEL,
       ].filter(Boolean);
 
       const proposalId = `PC-${Date.now()}`;
       const now = new Date().toISOString();
-      const status = 'AG. ANÁLISE UY3 (7 DIAS)';
+      const status = 'AG. ANÁLISE';
+
+      const creditRow = {
+        id: proposalId,
+        protocolo,
+        employee_id: user.id,
+        employee_name: user.name,
+        vendor_id: user.id,
+        vendor_name: user.name,
+        cpf,
+        nome,
+        valor_solicitado: valor,
+        conta_santander: meta.conta_santander,
+        forma_pagamento: meta.forma_pagamento,
+        banco: meta.banco,
+        agencia: meta.agencia,
+        conta_corrente: meta.conta_corrente,
+        contato1: meta.contato1,
+        contato2: meta.contato2,
+        observacao: meta.observacao,
+        avalista_cpf: meta.avalista_cpf,
+        avalista_nome: meta.avalista_nome,
+        avalista_telefone: meta.avalista_telefone,
+        status,
+        esteira: {
+          protocolo,
+          status: 'pendente',
+          valor_solicitado: valor,
+          forma_pagamento: meta.forma_pagamento,
+          parcelas,
+          parcelas_meses: parcelas,
+          criado_em: now,
+        },
+        meta: { ...meta, credito: true, opcao_credito: true, credit_table: 'credit_proposals' },
+        history: [{
+          date: now,
+          actorName: user.name,
+          action: 'Solicitação proposta crédito',
+          note: `Protocolo ${protocolo}`,
+        }],
+      };
 
       const proposal = {
         id: proposalId,
@@ -412,18 +597,19 @@
         client_cpf: cpf,
         clientName: nome,
         client_name: nome,
-        product: 'CRÉDITO UY3',
+        product: 'CRÉDITO',
         convenio: 'INTERNO',
         entidade: 'FUNCIONÁRIO',
         valor,
         valorFinal: valor,
         desconto: 0,
-        credito: true,
         creditoEsteira: {
           protocolo,
           status: 'pendente',
           valor_solicitado: valor,
           forma_pagamento: meta.forma_pagamento,
+          parcelas,
+          parcelas_meses: parcelas,
           criado_em: now,
         },
         credito_esteira: {
@@ -431,17 +617,19 @@
           status: 'pendente',
           valor_solicitado: valor,
           forma_pagamento: meta.forma_pagamento,
+          parcelas,
+          parcelas_meses: parcelas,
           criado_em: now,
         },
-        meta: { ...meta, credito: true, opcao_credito: true },
+        meta: { ...meta, credito: true, opcao_credito: true, credit_table: 'credit_proposals' },
         obs: obsLines.join('\n'),
         status,
         statusOp: status,
         history: [{
           date: now,
           actorName: user.name,
-          action: 'Solicitação proposta crédito UY3',
-          note: `Protocolo ${protocolo} — análise em até 7 dias`,
+          action: 'Solicitação proposta crédito',
+          note: `Protocolo ${protocolo}`,
         }],
         createdAt: now,
         updatedAt: now,
@@ -454,9 +642,10 @@
       if (typeof showLoading === 'function') showLoading('Registrando solicitação…');
 
       try {
-        if (typeof DB.save === 'function') await DB.save('proposals', proposal);
-        else if (typeof DB.saveProposal === 'function') await DB.saveProposal(proposal);
-        else throw new Error('Camada de dados indisponível.');
+        if (!window.CreditoPropostasApi?.create) {
+          throw new Error('API de propostas de crédito indisponível. Recarregue a página (Ctrl+F5).');
+        }
+        await CreditoPropostasApi.create(creditRow);
 
         if (typeof showToast === 'function') {
           showToast(`Solicitação registrada! Protocolo: ${protocolo}`, 'success');
@@ -473,7 +662,7 @@
         else alert(e.message || 'Erro ao salvar.');
       } finally {
         if (typeof hideLoading === 'function') hideLoading();
-        if (btn) { btn.disabled = false; btn.textContent = oldLabel || 'SOLICITAR 7 DIAS PARA ANÁLISE'; }
+        if (btn) { btn.disabled = false; btn.textContent = oldLabel || 'SOLICITAR ANÁLISE'; }
       }
     },
   };

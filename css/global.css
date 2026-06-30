@@ -1122,7 +1122,8 @@ textarea.form-control { resize: vertical; min-height: 90px; }
 .prop-folder__slot-wrap .prop-folder__slot {
   display: flex;
   gap: 8px;
-  align-items: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
 }
 .prop-folder__slot-label {
   font-size: 12px;
@@ -1161,11 +1162,13 @@ textarea.form-control { resize: vertical; min-height: 90px; }
   font-size: 12px;
   color: #999;
   min-width: 0;
-  flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 160px;
+  flex: 1 1 80px;
+  white-space: normal;
+  overflow: visible;
+  max-width: 100%;
+}
+.prop-file-preview-wrap {
+  flex: 0 0 auto;
 }
 
 /* ═══ Dashboard de Propostas ════════════════════════════════════════════ */
