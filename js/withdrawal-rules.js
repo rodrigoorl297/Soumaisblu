@@ -338,11 +338,6 @@ const WithdrawalRules = {
     const partnerWallet = this._partnerWalletUser(emp);
     const raw = document.getElementById('withdrawAmount')?.value;
     const amt = typeof parseMoneyAmount === 'function' ? parseMoneyAmount(raw) : 0;
-    // #region agent log
-    if (!amt && box.innerHTML && box.innerHTML.includes('Valor solicitado')) {
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'withdrawal-rules.js:updatePreview',message:'stale preview detected',data:{raw,previewSnippet:box.innerHTML.slice(0,120)},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
-    }
-    // #endregion
     if (!amt) {
       if (partnerWallet) {
         this._partnerSacFee(emp).then((fee) => {

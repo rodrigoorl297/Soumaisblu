@@ -107,6 +107,9 @@ final class PixKeyNormalizer
             return 'cnpj';
         }
         if (strlen($digits) === 11) {
+            if (preg_match('/^\+?55|\(\d{2}\)/', str_replace(' ', '', $k))) {
+                return 'phone';
+            }
             return 'cpf';
         }
         if (strlen($digits) === 10 || strlen($digits) === 11) {
@@ -147,6 +150,29 @@ final class PixKeyNormalizer
         }
     }
 
+    public static function isValid(string $type, string $key): bool
+    {
+        $type = strtolower(trim($type));
+        $key = trim($key);
+        if ($key === '') {
+            return false;
+        }
+        switch ($type) {
+            case 'cpf':
+                return (bool) preg_match('/^\d{11}$/', $key);
+            case 'cnpj':
+                return (bool) preg_match('/^\d{14}$/', $key);
+            case 'email':
+                return (bool) filter_var($key, FILTER_VALIDATE_EMAIL);
+            case 'phone':
+                return (bool) preg_match('/^\+55\d{10,11}$/', $key);
+            case 'random':
+                return (bool) preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $key);
+            default:
+                return strlen($key) >= 3;
+        }
+    }
+
     public static function forEfiPay(string $pixKeyType, string $pixKey): string
     {
         $type = strtolower(trim($pixKeyType));
@@ -165,7 +191,14 @@ final class PixKeyNormalizer
             $type = self::inferType($key);
             $normalized = self::normalize($type, $key);
         }
-        return $normalized;
+        if (!self::isValid($type, $normalized)) {
+            $inferred = self::inferType($key);
+            if ($inferred !== $type) {
+                $type = $inferred;
+                $normalized = self::normalize($type, $key);
+            }
+        }
+        return self::isValid($type, $normalized) ? $normalized : '';
     }
 }
 

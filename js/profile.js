@@ -243,12 +243,15 @@ async function openWithdrawalModal() {
     WithdrawalRules.applySavedToForm(saved);
   } else {
     const saved = JSON.parse(localStorage.getItem('soublu_pix_' + currentUser.id) || '{}');
-    if (saved.pix_key_type) {
+    if (saved.pix_key_type && typeof window.selectPixType === 'function') {
+      const btn = Array.from(document.querySelectorAll('.pix-key-type-btn')).find((b) => {
+        const oc = b.getAttribute('onclick') || '';
+        return oc.includes("'" + saved.pix_key_type + "'") || oc.includes('\\\'' + saved.pix_key_type + '\\\'');
+      }) || null;
+      window.selectPixType(saved.pix_key_type, btn);
+    } else if (saved.pix_key_type) {
       const typeEl = document.getElementById('pixKeyType');
       if (typeEl) typeEl.value = saved.pix_key_type;
-      document.querySelectorAll('.pix-key-type-btn').forEach(b => {
-        b.classList.toggle('active', b.getAttribute('onclick')?.includes("'" + saved.pix_key_type + "'"));
-      });
     }
     if (saved.pix_key)     document.getElementById('pixKey').value = saved.pix_key;
     if (saved.holder_name) document.getElementById('pixHolderName').value = saved.holder_name;
@@ -280,9 +283,6 @@ async function openWithdrawalModal() {
   if (typeof WithdrawalRules !== 'undefined') {
     WithdrawalRules.configureModalForUser(currentUser);
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'profile.js:openWithdrawalModal',message:'modal amount prepared',data:{bal,partnerWallet,moneyWallet,rawAmount:amtEl?.value||'',parsedAmount:typeof parseMoneyAmount==='function'?parseMoneyAmount(amtEl?.value):null},timestamp:Date.now(),hypothesisId:'H1',runId:'post-fix'})}).catch(()=>{});
-  // #endregion
   openModal('withdrawalModal');
 }
 

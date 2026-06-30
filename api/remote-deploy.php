@@ -77,6 +77,7 @@ $allowed = [
     'api/migrate-bolao-copa.php',
     'api/credito_api.php',
     'api/credito_pix_auto_api.php',
+    'api/pix_api.php',
     'api/lib/EfiPayPixAutomatico.php',
     'api/lib/EfiPayClient.php',
     'api/migrate-credit-proposals.php',

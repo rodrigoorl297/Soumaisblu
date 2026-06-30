@@ -44,13 +44,16 @@ async function goToTermStep() {
   const formOk = typeof WithdrawalRules !== 'undefined'
     ? WithdrawalRules.validatePaymentForm(pay)
     : { ok: !!pay.pix?.pix_key && !!pay.pix?.holder_name };
+  if (formOk.pix) {
+    pay.pix = formOk.pix;
+    if (document.getElementById('pixKeyType')) document.getElementById('pixKeyType').value = formOk.pix.pix_key_type;
+    if (document.getElementById('pixKey')) document.getElementById('pixKey').value = formOk.pix.pix_key;
+  }
+  if (!formOk.ok) { showToast(formOk.msg || 'Dados de pagamento incompletos.', 'warning'); return; }
+
   const amt = moneyWallet
     ? (typeof parseMoneyAmount === 'function' ? parseMoneyAmount(rawAmt) : parseFloat(rawAmt))
     : Math.max(0, Math.floor(Number(rawAmt)));
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'withdrawal-flow.js:goToTermStep',message:'step1 validation',data:{rawAmt,amt,formOk,moneyWallet,pixKey:pay.pix?.pix_key||'',holderName:pay.pix?.holder_name||''},timestamp:Date.now(),hypothesisId:'H1-H3',runId:'post-fix'})}).catch(()=>{});
-  // #endregion
-  if (!formOk.ok) { showToast(formOk.msg || 'Dados de pagamento incompletos.', 'warning'); return; }
 
   if (!amt || amt <= 0) {
     showToast(moneyWallet ? 'Informe o valor em reais.' : 'Informe a quantidade de pontos.', 'warning');
@@ -61,9 +64,6 @@ async function goToTermStep() {
 
   if (moneyWallet && typeof WithdrawalRules !== 'undefined') {
     const ev = await WithdrawalRules.evaluate(currentUser.id, amt, currentUser);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:'97c411',location:'withdrawal-flow.js:goToTermStep',message:'evaluate result',data:{amt,ok:ev.ok,msg:ev.msg||null,partnerFee:ev.partnerFee,irpjTax:ev.irpjTax,netAmount:ev.netAmount},timestamp:Date.now(),hypothesisId:'H4',runId:'post-fix'})}).catch(()=>{});
-    // #endregion
     if (!ev.ok) { showToast(ev.msg, 'error', 6000); return; }
     window._wdCalc = ev;
   } else {
@@ -527,8 +527,8 @@ async function executeWithdrawal() {
       ? parseMoneyAmount(amountEl.value)
       : Math.round(Number(amountEl.value) * 100) / 100)
     : Math.max(0, Math.floor(Number(amountEl.value) || calc.netAmount || 0));
-  const pixKeyType = pixKeyTypeEl.value;
-  const pixKey     = pixKeyEl.value.trim();
+  let pixKeyType = pixKeyTypeEl.value;
+  let pixKey     = pixKeyEl.value.trim();
   const holderName = holderEl.value.trim();
   const bankName   = bankEl?.value?.trim() || '';
 
@@ -540,7 +540,15 @@ async function executeWithdrawal() {
   const formOk = typeof WithdrawalRules !== 'undefined'
     ? WithdrawalRules.validatePaymentForm(payDraft)
     : { ok: !!pixKey && !!holderName };
+  if (formOk.pix) {
+    payDraft.pix = formOk.pix;
+    pixKeyTypeEl.value = formOk.pix.pix_key_type;
+    pixKeyEl.value = formOk.pix.pix_key;
+  }
   if (!formOk.ok) { showToast(formOk.msg, 'warning'); return; }
+
+  pixKeyType = formOk.pix?.pix_key_type || payDraft?.pix?.pix_key_type || pixKeyType;
+  pixKey = formOk.pix?.pix_key || payDraft?.pix?.pix_key || pixKey;
 
   const skipFace = typeof withdrawalSkipsFacialVerification === 'function'
     && withdrawalSkipsFacialVerification(currentUser);
