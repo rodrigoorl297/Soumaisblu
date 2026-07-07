@@ -1,4 +1,25 @@
-# Permite servir imagens/PDFs publicamente (Hostinger)
-<IfModule mod_headers.c>
-  Header set Access-Control-Allow-Origin "*"
+# SOU+BLU — Uploads: apenas arquivos, nunca scripts
+# Impede execução de PHP/scripts mesmo que o arquivo seja enviado por um atacante
+
+Options -Indexes -ExecCGI
+
+# Desativa o engine PHP completamente nesta pasta
+<IfModule mod_php.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php7.c>
+  php_flag engine off
+</IfModule>
+<IfModule mod_php8.c>
+  php_flag engine off
+</IfModule>
+
+RemoveHandler .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+RemoveType .php .php3 .php4 .php5 .php7 .php8 .phtml .phar
+
+# Bloqueia acesso direto a scripts executáveis
+<IfModule mod_authz_core.c>
+  <FilesMatch "\.(php|php3|php4|php5|php7|php8|phtml|phar|pl|py|cgi|sh|asp|aspx|jsp)$">
+    Require all denied
+  </FilesMatch>
 </IfModule>

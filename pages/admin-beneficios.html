@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <script src="../js/base-path.js?v=1781704178"></script>
+  <script src="../js/db-connect.js?v=1781813000"></script>
+  <title>Gestão de Benefícios · SOU+BLU</title>
+  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/global.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/layout.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/store.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
+  <style>
+    .benefit-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: var(--space-lg);
+    }
+    .benefit-title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      color: var(--color-primary);
+      margin-bottom: var(--space-md);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+    }
+    .menu-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 2px solid var(--color-border);
+      margin-bottom: var(--space-lg);
+      overflow-x: auto;
+    }
+    .menu-tab {
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--color-text-secondary);
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+    .menu-tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo"><img src="../images/logo.png" width="32" height="32" alt="SOU+BLU"/></div>
+        <span class="sidebar-title">SOU <span>+ BLU</span></span>
+      </div>
+      <div class="sidebar-nav">
+        <span class="sidebar-section-label">Principal</span>
+        <button class="nav-item" onclick="window.location.href='admin.html'"><span class="nav-icon">🏠</span><span class="nav-label">Painel Inicial</span></button>
+        <button class="nav-item" onclick="window.location.href='clube-beneficios.html'"><span class="nav-icon">⭐</span><span class="nav-label">Clube Benefícios</span></button>
+        <button class="nav-item active"><span class="nav-icon">⚙️</span><span class="nav-label">Gestão Benefícios</span></button>
+        <button class="nav-item" onclick="Auth.logout()"><span class="nav-icon">🚪</span><span class="nav-label">Sair</span></button>
+      </div>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="avatar avatar-sm" id="sidebarAvatar" style="background:var(--color-primary)"></div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name" id="sidebarName">Admin</div>
+            <div class="sidebar-user-role" style="color:var(--color-primary);" id="sidebarRole">Gestor</div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-area" id="mainArea">
+      <header class="topbar">
+        <span class="topbar-title">Painel ZS Clube Benefícios (Master/Financeiro)</span>
+      </header>
+
+      <main class="page-content">
+        <div id="beneficiosLoadError" class="wa-alert" style="display:none;margin-bottom:16px;"></div>
+        <div class="menu-tabs">
+          <div class="menu-tab active" onclick="switchTab('esteira-limites', this)">Esteira de Análise</div>
+          <div class="menu-tab" onclick="switchTab('cadastro-parceiros', this)">Cadastrar Prestador</div>
+          <div class="menu-tab" onclick="switchTab('cadastro-produtos', this)">Cadastrar Produtos</div>
+          <div class="menu-tab" onclick="switchTab('controle-pedidos', this)">Controle de Pedidos</div>
+          <div class="menu-tab" onclick="switchTab('fechamentos', this)">Gerar/Aprovar Fechamentos</div>
+          <div class="menu-tab" onclick="switchTab('relatorios-prestador', this)">Área do Prestador</div>
+        </div>
+
+        <!-- 1. ESTEIRA DE ANÁLISE -->
+        <div id="tab-esteira-limites" class="tab-content">
+          <div class="benefit-card">
+            <div class="benefit-title">⚖️ Solicitações de Limites</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Funcionário</th>
+                    <th>Telefones</th>
+                    <th>Status</th>
+                    <th>Limite Solicitado/Aprovado</th>
+                    <th>Documento</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="limitesTbody">
+                  <tr><td colspan="6" class="text-center">Nenhuma solicitação pendente.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. CADASTRO DE PARCEIROS -->
+        <div id="tab-cadastro-parceiros" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">🏢 Cadastrar Prestador de Serviços</div>
+            <form onsubmit="saveProvider(event)" id="providerForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>CNPJ / CPF</label>
+                  <input type="text" id="provCpfCnpj" class="form-control" placeholder="CNPJ ou CPF" required/>
+                </div>
+                <div class="form-group">
+                  <label>Nome Fantasia</label>
+                  <input type="text" id="provNome" class="form-control" placeholder="Nome Fantasia do Estabelecimento" required/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Chave PIX para Pagamento</label>
+                  <input type="text" id="provPix" class="form-control" placeholder="Chave PIX" required/>
+                </div>
+                <div class="form-group">
+                  <label>Dia de Pagamento</label>
+                  <input type="number" id="provDiaPgto" class="form-control" min="1" max="31" value="5" required/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Categoria</label>
+                  <select id="provCategoria" class="form-control" required>
+                    <option value="Restaurante">Restaurante</option>
+                    <option value="Saúde">Saúde</option>
+                    <option value="Transporte">Transporte</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Pagamento Automático?</label>
+                  <select id="provAutoPgto" class="form-control">
+                    <option value="NÃO">NÃO</option>
+                    <option value="SIM">SIM</option>
+                  </select>
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary">Salvar Prestador</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 3. CADASTRO DE PRODUTOS -->
+        <div id="tab-cadastro-produtos" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">📦 Cadastrar Produtos | Clube ZS Benefícios</div>
+            <form onsubmit="saveProduct(event)" id="productForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Categoria do Produto</label>
+                  <input type="text" id="prodCategoria" class="form-control" placeholder="Ex: Marmita, Bebida..." required/>
+                </div>
+                <div class="form-group">
+                  <label>Nome do Produto</label>
+                  <input type="text" id="prodNome" class="form-control" placeholder="Nome do Produto" required/>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Prestador de Serviço</label>
+                  <select id="prodProvider" class="form-control" required>
+                    <!-- Populated by JS -->
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Valor (R$)</label>
+                  <input type="number" id="prodValor" class="form-control" placeholder="0,00" step="0.01" required/>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Descrição do Produto</label>
+                <textarea id="prodDesc" class="form-control" rows="2" placeholder="Ingredientes ou detalhes..."></textarea>
+              </div>
+              <button type="submit" class="btn btn-primary">Salvar Produto</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 4. CONTROLE DE PEDIDOS -->
+        <div id="tab-controle-pedidos" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">🍔 Controle de Pedidos de Refeições</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Nº Pedido</th>
+                    <th>Funcionário</th>
+                    <th>Estabelecimento</th>
+                    <th>Valor</th>
+                    <th>Detalhes</th>
+                    <th>Situação</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="pedidosTbody">
+                  <tr><td colspan="7" class="text-center">Nenhum pedido registrado hoje.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 5. GERAR/APROVAR FECHAMENTOS -->
+        <div id="tab-fechamentos" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">🗓️ Gerar Fechamento Prestador de Serviços</div>
+            <form onsubmit="generateClosing(event)" id="closingForm">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Prestador de Serviço</label>
+                  <select id="closeProvider" class="form-control" onchange="loadProviderVouchers()" required>
+                    <option value="">Selecione...</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Data Inicial</label>
+                  <input type="date" id="closeDateStart" class="form-control" required/>
+                </div>
+                <div class="form-group">
+                  <label>Data Final</label>
+                  <input type="date" id="closeDateEnd" class="form-control" required/>
+                </div>
+              </div>
+              <div class="form-row" style="align-items: flex-end;">
+                <div class="form-group">
+                  <label>Vouchers Carregados</label>
+                  <input type="text" id="closeVouchersQty" class="form-control" readonly value="0"/>
+                </div>
+                <div class="form-group">
+                  <label>Valor Total Vouchers (R$)</label>
+                  <input type="text" id="closeTotalVal" class="form-control" readonly value="R$ 0,00"/>
+                </div>
+                <div class="form-group">
+                  <button type="submit" class="btn btn-primary btn-full">Gerar Fechamento</button>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <div class="benefit-card">
+            <div class="benefit-title">💳 Aprovar Fechamento (Dupla Aprovação Master/Financeiro)</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Protocolo</th>
+                    <th>Prestador</th>
+                    <th>Período</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                    <th>Ações</th>
+                  </tr>
+                </thead>
+                <tbody id="fechamentosTbody">
+                  <tr><td colspan="6" class="text-center">Nenhum fechamento pendente.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 6. RELATÓRIOS PRESTADOR -->
+        <div id="tab-relatorios-prestador" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">📊 Relatório de Vouchers do Fechamento</div>
+            <div class="form-row" style="align-items: flex-end;">
+              <div class="form-group">
+                <label>Número do Protocolo do Fechamento</label>
+                <input type="text" id="repProtocol" class="form-control" placeholder="ZS-DIAMESANO-XXXX"/>
+              </div>
+              <button class="btn btn-primary" onclick="loadReportVouchers()">Carregar Vouchers</button>
+            </div>
+            <div class="table-wrap" style="margin-top: 15px;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Nº Voucher</th>
+                    <th>Funcionário</th>
+                    <th>Valor</th>
+                    <th>Data</th>
+                  </tr>
+                </thead>
+                <tbody id="repVouchersTbody">
+                  <tr><td colspan="4" class="text-center">Digite um protocolo e carregue os dados.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="benefit-card">
+            <div class="benefit-title">🔍 Consulta Individual por Voucher</div>
+            <div class="form-row" style="align-items: flex-end;">
+              <div class="form-group">
+                <label>Digite o Número do Voucher</label>
+                <input type="text" id="searchVoucherNo" class="form-control" placeholder="ZS-DDMMYYYY-XXXX"/>
+              </div>
+              <button class="btn btn-outline" onclick="searchSingleVoucher()">Consultar</button>
+            </div>
+            <div id="voucherSearchResult" style="margin-top: 15px; display: none; background:var(--color-surface-2); padding: 15px; border-radius: var(--radius-md);">
+              <!-- Result elements -->
+            </div>
+          </div>
+
+          <div class="benefit-card">
+            <div class="benefit-title">🧾 Histórico de Fechamentos Emitidos</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Protocolo</th>
+                    <th>Prestador</th>
+                    <th>Período</th>
+                    <th>Valor</th>
+                    <th>Situação</th>
+                  </tr>
+                </thead>
+                <tbody id="fechamentosEmitidosTbody">
+                  <!-- Closings history -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- Modal Aprovação de Limite -->
+  <div class="modal-overlay" id="approveLimitModal" style="display:none;">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3>Definir Limite de Crédito</h3>
+        <button class="modal-close" onclick="closeApproveModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="modalReqId"/>
+        <div class="form-group">
+          <label>Funcionário</label>
+          <input type="text" id="modalReqName" class="form-control" readonly/>
+        </div>
+        <div class="form-group">
+          <label>Limite Máximo Aprovado (R$)</label>
+          <input type="number" id="modalReqLimit" class="form-control" value="600" min="0" max="600"/>
+        </div>
+        <div class="form-group">
+          <label>Anexo Contrato Assinado</label>
+          <input type="file" id="modalContractFile" class="form-control" accept="image/*,.pdf"/>
+        </div>
+        <div class="form-group">
+          <label>Anexo Nota Promissória Assinada</label>
+          <input type="file" id="modalPromissoryFile" class="form-control" accept="image/*,.pdf"/>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeApproveModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmLimitApproval()">Salvar e Aprovar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="../js/config.js?v=1781704178"></script>
+  <script src="../js/db.js?v=1781813000"></script>
+  <script src="../js/auth.js?v=1781813000"></script>
+  <script>
+    let currentUser = null;
+    let selectedVouchersForClose = [];
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (typeof DB !== 'undefined' && DB.init) await DB.init();
+      currentUser = Auth.getSession();
+      if (!currentUser || !Auth.canManageBeneficios(currentUser.role)) {
+        window.location.replace(Auth.pageHref('clube-beneficios.html'));
+        return;
+      }
+
+      document.getElementById('sidebarName').innerText = currentUser.name || 'Gestor';
+      document.getElementById('sidebarRole').innerText = currentUser.role || 'Administrador';
+
+      await loadAllData();
+    });
+
+    async function loadAllData() {
+      const errBox = document.getElementById('beneficiosLoadError');
+      if (errBox) errBox.style.display = 'none';
+      try {
+        await loadLimitRequests();
+        await loadProviders();
+        await loadActiveOrders();
+        await loadClosings();
+        await loadClosingsHistory();
+      } catch (e) {
+        console.error('Erro ao carregar painel:', e);
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.textContent = 'Não foi possível carregar o painel de benefícios. Atualize a página (Ctrl+F5).';
+        }
+      }
+    }
+
+    function switchTab(tabId, el) {
+      document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      el.classList.add('active');
+      document.getElementById(`tab-${tabId}`).style.display = 'block';
+    }
+
+    function formatCurrency(val) {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+    }
+
+    // LIMITS ESTEIRA
+    async function loadLimitRequests() {
+      const list = await supaReq('GET', 'beneficios_limites', null, '?order=created_at.desc');
+      const tbody = document.getElementById('limitesTbody');
+      tbody.innerHTML = '';
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhuma solicitação pendente.</td></tr>';
+        return;
+      }
+
+      list.forEach(item => {
+        const tr = document.createElement('tr');
+        const phones = `${item.contato1 || '—'}<br/>${item.contato2 || ''}`;
+        let docBtn = '—';
+        if (item.documento_url) {
+          docBtn = `<a href="${item.documento_url}" target="_blank" class="btn btn-outline btn-sm">📎 Ver</a>`;
+        }
+
+        let actionBtn = '—';
+        if (item.status === 'solicitado') {
+          actionBtn = `<button class="btn btn-primary btn-sm" onclick="openApproveModal('${item.id}', '${item.employee_name}')">Aprovar / Recusar</button>`;
+        }
+
+        tr.innerHTML = `
+          <td><strong>${item.employee_name}</strong></td>
+          <td>${phones}</td>
+          <td><span class="badge ${item.status === 'aprovado' ? 'badge-success' : 'badge-warning'}">${item.status}</span></td>
+          <td>${formatCurrency(item.limite_aprovado)}</td>
+          <td>${docBtn}</td>
+          <td>${actionBtn}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function openApproveModal(id, name) {
+      document.getElementById('modalReqId').value = id;
+      document.getElementById('modalReqName').value = name;
+      document.getElementById('approveLimitModal').style.display = 'flex';
+    }
+
+    function closeApproveModal() {
+      document.getElementById('approveLimitModal').style.display = 'none';
+    }
+
+    async function confirmLimitApproval() {
+      const id = document.getElementById('modalReqId').value;
+      const val = parseFloat(document.getElementById('modalReqLimit').value) || 0;
+
+      try {
+        await supaReq('PATCH', 'beneficios_limites', {
+          limite_aprovado: val,
+          limite_disponivel: val,
+          status: 'aprovado',
+          contrato_url: 'uploads/contract_' + Date.now() + '.pdf',
+          promissoria_url: 'uploads/promissory_' + Date.now() + '.pdf'
+        }, `?id=eq.${id}`);
+
+        alert('Limite aprovado e ativado!');
+        closeApproveModal();
+        await loadAllData();
+      } catch (e) {
+        alert('Erro ao aprovar limite: ' + e.message);
+      }
+    }
+
+    // PROVIDERS
+    async function loadProviders() {
+      const list = await supaReq('GET', 'beneficios_prestadores', null, '?order=nome_fantasia.asc');
+      
+      // Populate selects
+      const selectProd = document.getElementById('prodProvider');
+      const selectClose = document.getElementById('closeProvider');
+      selectProd.innerHTML = '<option value="">Selecione...</option>';
+      selectClose.innerHTML = '<option value="">Selecione...</option>';
+
+      if (list) {
+        list.forEach(p => {
+          const opt = `<option value="${p.id}">${p.nome_fantasia} (${p.categoria})</option>`;
+          selectProd.innerHTML += opt;
+          selectClose.innerHTML += opt;
+        });
+      }
+    }
+
+    async function saveProvider(e) {
+      e.preventDefault();
+      try {
+        const payload = {
+          codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
+          nome_fantasia: document.getElementById('provNome').value,
+          cnpj_cpf: document.getElementById('provCpfCnpj').value,
+          chave_pix: document.getElementById('provPix').value,
+          dia_pagamento: parseInt(document.getElementById('provDiaPgto').value) || 5,
+          categoria: document.getElementById('provCategoria').value,
+          pagamento_automatico: document.getElementById('provAutoPgto').value
+        };
+
+        await supaReq('POST', 'beneficios_prestadores', payload);
+        alert('Prestador cadastrado com sucesso!');
+        document.getElementById('providerForm').reset();
+        await loadAllData();
+      } catch (err) {
+        alert('Erro ao salvar prestador: ' + err.message);
+      }
+    }
+
+    // PRODUCTS
+    async function saveProduct(e) {
+      e.preventDefault();
+      try {
+        const select = document.getElementById('prodProvider');
+        const providerName = select.options[select.selectedIndex].text.split(' (')[0];
+
+        const payload = {
+          codigo_produto: 'PROD-' + Date.now().toString(36).toUpperCase(),
+          categoria: document.getElementById('prodCategoria').value,
+          nome: document.getElementById('prodNome').value,
+          prestador_id: select.value,
+          prestador_name: providerName,
+          descricao: document.getElementById('prodDesc').value,
+          valor: parseFloat(document.getElementById('prodValor').value) || 0
+        };
+
+        await supaReq('POST', 'beneficios_produtos', payload);
+        alert('Produto cadastrado com sucesso!');
+        document.getElementById('productForm').reset();
+      } catch (err) {
+        alert('Erro ao cadastrar produto: ' + err.message);
+      }
+    }
+
+    // ACTIVE ORDERS
+    async function loadActiveOrders() {
+      const list = await supaReq('GET', 'beneficios_vouchers', null, '?order=created_at.desc');
+      const tbody = document.getElementById('pedidosTbody');
+      tbody.innerHTML = '';
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Nenhum pedido registrado hoje.</td></tr>';
+        return;
+      }
+
+      list.forEach(v => {
+        const tr = document.createElement('tr');
+        const detalhes = v.detalhes_pedido || {};
+        let detailsStr = `Modo: ${detalhes.modo || 'Geral'}`;
+        if (detalhes.modo === 'entrega') {
+          detailsStr += `<br/>Hora: ${detalhes.horario_entrega || '—'}<br/>Carnes: ${(detalhes.carnes || []).join(', ')}`;
+        }
+
+        let actionBtn = '—';
+        if (v.status === 'em_analise') {
+          actionBtn = `<button class="btn btn-outline btn-sm btn-success" onclick="approveOrder('${v.id}')">Aprovar</button>`;
+        }
+
+        tr.innerHTML = `
+          <td><strong>${v.voucher_no}</strong></td>
+          <td>${v.employee_name}</td>
+          <td>${v.prestador_name}</td>
+          <td>${formatCurrency(v.valor)}</td>
+          <td style="font-size:12px; line-height:1.4;">${detailsStr}</td>
+          <td><span class="badge ${v.status === 'pago' ? 'badge-success' : 'badge-warning'}">${v.status}</span></td>
+          <td>${actionBtn}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function approveOrder(id) {
+      try {
+        await supaReq('PATCH', 'beneficios_vouchers', { status: 'utilizado' }, `?id=eq.${id}`);
+        alert('Pedido/Voucher aprovado com sucesso!');
+        await loadAllData();
+      } catch (e) {
+        alert('Erro ao aprovar pedido: ' + e.message);
+      }
+    }
+
+    // CLOSINGS
+    async function loadProviderVouchers() {
+      const provId = document.getElementById('closeProvider').value;
+      if (!provId) return;
+
+      const dateStart = document.getElementById('closeDateStart').value || '1970-01-01';
+      const dateEnd = document.getElementById('closeDateEnd').value || new Date().toISOString().split('T')[0];
+
+      try {
+        const vouchers = await supaReq('GET', 'beneficios_vouchers', null, 
+          `?prestador_id=eq.${provId}&status=eq.utilizado&fechamento_protocolo=is.null`);
+        
+        selectedVouchersForClose = (vouchers || []).filter(v => {
+          const d = v.created_at.split('T')[0];
+          return d >= dateStart && d <= dateEnd;
+        });
+
+        document.getElementById('closeVouchersQty').value = selectedVouchersForClose.length;
+        let sum = selectedVouchersForClose.reduce((acc, curr) => acc + parseFloat(curr.valor), 0);
+        document.getElementById('closeTotalVal').value = formatCurrency(sum);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function generateClosing(e) {
+      e.preventDefault();
+      if (selectedVouchersForClose.length === 0) {
+        alert('Nenhum voucher disponível para fechamento no período.');
+        return;
+      }
+
+      const provId = document.getElementById('closeProvider').value;
+      const select = document.getElementById('closeProvider');
+      const provName = select.options[select.selectedIndex].text.split(' (')[0];
+
+      const today = new Date();
+      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const protocol = `ZS-${today.getDate().toString().padStart(2,'0')}${(today.getMonth()+1).toString().padStart(2,'0')}${today.getFullYear()}-${rand}`;
+
+      const totalVal = selectedVouchersForClose.reduce((acc, curr) => acc + parseFloat(curr.valor), 0);
+      const voucherIds = selectedVouchersForClose.map(v => v.id);
+
+      try {
+        const payload = {
+          protocolo: protocol,
+          prestador_id: provId,
+          prestador_name: provName,
+          data_inicial: document.getElementById('closeDateStart').value,
+          data_final: document.getElementById('closeDateEnd').value,
+          valor_total: totalVal,
+          status: 'em_processamento',
+          voucher_ids: voucherIds
+        };
+
+        await supaReq('POST', 'beneficios_fechamentos', payload);
+
+        for (let vId of voucherIds) {
+          await supaReq('PATCH', 'beneficios_vouchers', { 
+            fechamento_protocolo: protocol,
+            status: 'em_processamento'
+          }, `?id=eq.${vId}`);
+        }
+
+        alert(`Fechamento gerado com sucesso! Protocolo: ${protocol}`);
+        document.getElementById('closingForm').reset();
+        selectedVouchersForClose = [];
+        await loadAllData();
+      } catch (err) {
+        alert('Erro ao gerar fechamento: ' + err.message);
+      }
+    }
+
+    async function loadClosings() {
+      const list = await supaReq('GET', 'beneficios_fechamentos', null, '?status=eq.em_processamento&order=created_at.desc');
+      const tbody = document.getElementById('fechamentosTbody');
+      tbody.innerHTML = '';
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhum fechamento pendente.</td></tr>';
+        return;
+      }
+
+      list.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${c.protocolo}</strong></td>
+          <td>${c.prestador_name}</td>
+          <td>${c.data_inicial} até ${c.data_final}</td>
+          <td>${formatCurrency(c.valor_total)}</td>
+          <td><span class="badge badge-warning">Em Processamento</span></td>
+          <td>
+            <button class="btn btn-outline btn-sm btn-success" onclick="approveClosing('${c.id}', '${c.protocolo}')">Aprovar Payout</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function approveClosing(id, protocol) {
+      try {
+        await supaReq('PATCH', 'beneficios_fechamentos', { status: 'pago' }, `?id=eq.${id}`);
+        
+        const vouchers = await supaReq('GET', 'beneficios_vouchers', null, `?fechamento_protocolo=eq.${protocol}`);
+        if (vouchers) {
+          for (let v of vouchers) {
+            await supaReq('PATCH', 'beneficios_vouchers', { status: 'pago' }, `?id=eq.${v.id}`);
+          }
+        }
+
+        alert('Fechamento e pagamento aprovados!');
+        await loadAllData();
+      } catch (e) {
+        alert('Erro ao aprovar fechamento: ' + e.message);
+      }
+    }
+
+    // REPORTS / EXTRACTS
+    async function loadReportVouchers() {
+      const prot = document.getElementById('repProtocol').value.trim();
+      const tbody = document.getElementById('repVouchersTbody');
+      tbody.innerHTML = '';
+
+      if (!prot) {
+        alert('Por favor, informe o protocolo do fechamento.');
+        return;
+      }
+
+      try {
+        const list = await supaReq('GET', 'beneficios_vouchers', null, `?fechamento_protocolo=eq.${prot}`);
+        if (!list || list.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhum voucher encontrado para o protocolo.</td></tr>';
+          return;
+        }
+
+        list.forEach(v => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${v.voucher_no}</strong></td>
+            <td>${v.employee_name}</td>
+            <td>${formatCurrency(v.valor)}</td>
+            <td>${new Date(v.created_at).toLocaleDateString('pt-BR')}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        alert('Erro ao buscar vouchers: ' + e.message);
+      }
+    }
+
+    async function searchSingleVoucher() {
+      const vNo = document.getElementById('searchVoucherNo').value.trim();
+      const resultDiv = document.getElementById('voucherSearchResult');
+      resultDiv.style.display = 'none';
+
+      if (!vNo) {
+        alert('Informe o número do voucher.');
+        return;
+      }
+
+      try {
+        const list = await supaReq('GET', 'beneficios_vouchers', null, `?voucher_no=eq.${vNo}&limit=1`);
+        if (!list || list.length === 0) {
+          alert('Voucher não encontrado.');
+          return;
+        }
+
+        const v = list[0];
+        resultDiv.innerHTML = `
+          <h4 style="margin-top:0;">Voucher: ${v.voucher_no}</h4>
+          <p><strong>Funcionário:</strong> ${v.employee_name}</p>
+          <p><strong>Prestador:</strong> ${v.prestador_name}</p>
+          <p><strong>Valor:</strong> ${formatCurrency(v.valor)}</p>
+          <p><strong>Situação:</strong> <span class="badge ${v.status === 'pago' ? 'badge-success' : 'badge-warning'}">${v.status}</span></p>
+          <p><strong>Data de Emissão:</strong> ${new Date(v.created_at).toLocaleString('pt-BR')}</p>
+        `;
+        resultDiv.style.display = 'block';
+      } catch (e) {
+        alert('Erro ao buscar voucher: ' + e.message);
+      }
+    }
+
+    async function loadClosingsHistory() {
+      const list = await supaReq('GET', 'beneficios_fechamentos', null, '?order=created_at.desc');
+      const tbody = document.getElementById('fechamentosEmitidosTbody');
+      tbody.innerHTML = '';
+
+      if (!list || list.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum fechamento emitido.</td></tr>';
+        return;
+      }
+
+      list.forEach(c => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${c.protocolo}</strong></td>
+          <td>${c.prestador_name}</td>
+          <td>${c.data_inicial} até ${c.data_final}</td>
+          <td>${formatCurrency(c.valor_total)}</td>
+          <td><span class="badge ${c.status === 'pago' ? 'badge-success' : 'badge-warning'}">${c.status === 'pago' ? 'Pago' : 'Pagamento Programado'}</span></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>

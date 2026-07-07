@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <script src="../js/base-path.js?v=1781704178"></script>
+  <script src="../js/db-connect.js?v=1781813000"></script>
+  <title>ZS Clube Benefícios · SOU+BLU</title>
+  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet" href="../css/variables.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/global.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/layout.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/store.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
+  <style>
+    .benefit-card {
+      background: var(--color-surface);
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-lg);
+      padding: var(--space-lg);
+      box-shadow: var(--shadow-sm);
+      margin-bottom: var(--space-lg);
+    }
+    .benefit-title {
+      font-family: var(--font-display);
+      font-weight: 800;
+      color: var(--color-primary);
+      margin-bottom: var(--space-md);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+    }
+    .limit-value {
+      font-size: 28px;
+      font-family: var(--font-display);
+      font-weight: 900;
+      color: var(--color-primary);
+    }
+    .meat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: 10px;
+      margin-top: 8px;
+    }
+    .meat-option {
+      border: 1.5px solid var(--color-border);
+      border-radius: var(--radius-md);
+      padding: 10px;
+      text-align: center;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .meat-option.active {
+      border-color: var(--color-primary);
+      background-color: var(--color-primary-light);
+      color: var(--color-primary);
+    }
+    .menu-tabs {
+      display: flex;
+      gap: 8px;
+      border-bottom: 2px solid var(--color-border);
+      margin-bottom: var(--space-lg);
+    }
+    .menu-tab {
+      padding: 10px 16px;
+      cursor: pointer;
+      font-weight: 700;
+      color: var(--color-text-secondary);
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+    }
+    .menu-tab.active {
+      color: var(--color-primary);
+      border-bottom-color: var(--color-primary);
+    }
+    .limit-dist-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--color-border);
+    }
+  </style>
+</head>
+<body>
+  <div class="app-layout">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo"><img src="../images/logo.png" width="32" height="32" alt="SOU+BLU"/></div>
+        <span class="sidebar-title">SOU <span>+ BLU</span></span>
+      </div>
+      <div class="sidebar-nav">
+        <span class="sidebar-section-label">Principal</span>
+        <button class="nav-item" onclick="window.location.href='employee.html'"><span class="nav-icon">🏠</span><span class="nav-label">Início</span></button>
+        <button class="nav-item active"><span class="nav-icon">⭐</span><span class="nav-label">Clube Benefícios</span></button>
+        <button class="nav-item benefits-admin-nav" onclick="window.location.href='admin-beneficios.html'" style="display:none;"><span class="nav-icon">⚙️</span><span class="nav-label">Gestão Benefícios</span></button>
+        <button class="nav-item" onclick="Auth.logout()"><span class="nav-icon">🚪</span><span class="nav-label">Sair</span></button>
+      </div>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="avatar avatar-sm" id="sidebarAvatar" style="background:var(--color-primary)"></div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name" id="sidebarName">–</div>
+            <div class="sidebar-user-role" id="sidebarRole">Funcionário</div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <div class="main-area" id="mainArea">
+      <header class="topbar">
+        <span class="topbar-title">ZS Clube Benefícios</span>
+        <div class="topbar-actions">
+          <div style="font-size:14px;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:4px;">
+            <span>Saldo Clube:</span>
+            <span id="topbarBalance">R$ 0,00</span>
+          </div>
+        </div>
+      </header>
+
+      <main class="page-content">
+        <div id="beneficiosLoadError" class="wa-alert" style="display:none;margin-bottom:16px;"></div>
+        <!-- TABS -->
+        <div class="menu-tabs">
+          <div class="menu-tab active" onclick="switchTab('meus-limites', this)">Meus Limites</div>
+          <div class="menu-tab" onclick="switchTab('restaurante', this)">Restaurante ZS</div>
+          <div class="menu-tab" onclick="switchTab('tem-saude', this)">Tem Saúde</div>
+          <div class="menu-tab" onclick="switchTab('solicitar-limite', this)">Solicitar Limite</div>
+        </div>
+
+        <!-- SECTIONS -->
+        <!-- 1. MEUS LIMITES -->
+        <div id="tab-meus-limites" class="tab-content">
+          <div class="grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px;">
+            <div class="benefit-card" style="text-align: center;">
+              <div class="benefit-title">💰 Limite Aprovado</div>
+              <div class="limit-value" id="valAprovado">R$ 0,00</div>
+            </div>
+            <div class="benefit-card" style="text-align: center;">
+              <div class="benefit-title">💸 Limite Utilizado</div>
+              <div class="limit-value" id="valUtilizado" style="color:var(--color-danger);">R$ 0,00</div>
+            </div>
+            <div class="benefit-card" style="text-align: center;">
+              <div class="benefit-title">✅ Limite Disponível</div>
+              <div class="limit-value" id="valDisponivel" style="color:var(--color-success);">R$ 0,00</div>
+            </div>
+          </div>
+
+          <div class="benefit-card">
+            <div class="benefit-title">⚖️ Distribuir Meus Limites</div>
+            <p class="form-hint" style="margin-bottom: 15px;">Permitido alterar apenas a cada 45 dias. Total disponível: <strong id="distTotalAvailable">R$ 0,00</strong></p>
+            <div id="distribList">
+              <!-- Prestadores/Categorias list -->
+            </div>
+            <button class="btn btn-primary" id="saveDistBtn" onclick="saveDistribution()" style="margin-top: 15px;">Salvar Alteração</button>
+          </div>
+
+          <div class="benefit-card">
+            <div class="benefit-title">🎫 Meus Vouchers</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Nº Voucher</th>
+                    <th>Estabelecimento</th>
+                    <th>Valor</th>
+                    <th>Situação</th>
+                    <th>Data</th>
+                  </tr>
+                </thead>
+                <tbody id="vouchersTbody">
+                  <tr><td colspan="5" class="text-center">Nenhum voucher emitido.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. RESTAURANTE -->
+        <div id="tab-restaurante" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">🍽️ Solicitar Pedido - Restaurante Clube ZS Benefícios</div>
+            <div style="display:flex; gap: 10px; margin-bottom: 20px;">
+              <button class="btn btn-primary" id="btnModeEntrega" onclick="setOrderMode('entrega')">Solicitar Pedido Entrega</button>
+              <button class="btn btn-outline" id="btnModeRetirada" onclick="setOrderMode('retirada')">Solicitar Pedido Retirada</button>
+            </div>
+
+            <form id="orderForm" onsubmit="submitFoodOrder(event)">
+              <div class="form-group">
+                <label>Dados do Funcionário</label>
+                <input type="text" id="orderEmpName" class="form-control" readonly/>
+              </div>
+
+              <!-- DELIVERY ONLY FIELDS -->
+              <div id="deliveryFields">
+                <div class="form-group">
+                  <label>Horário de Entrega?</label>
+                  <input type="time" id="orderDeliveryTime" class="form-control"/>
+                </div>
+
+                <div class="form-group">
+                  <label>Guarnições Adicionais (Opcional)</label>
+                  <div style="display:flex; gap: 20px; margin-top: 8px;">
+                    <label style="display:flex; align-items:center; gap: 6px; cursor:pointer;">
+                      <input type="checkbox" id="chkSalada" value="Salada"/> Salada
+                    </label>
+                    <label style="display:flex; align-items:center; gap: 6px; cursor:pointer;">
+                      <input type="checkbox" id="chkFeijaoCaldo" value="Feijão de caldo"/> Feijão de Caldo
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label>Selecione 2 Opções de Carne (Obrigatório)</label>
+                  <div class="meat-grid" id="meatGrid">
+                    <div class="meat-option" onclick="toggleMeat(this, 'Bovina')">Bovina</div>
+                    <div class="meat-option" onclick="toggleMeat(this, 'Suína')">Suína</div>
+                    <div class="meat-option" onclick="toggleMeat(this, 'Linguiça')">Linguiça</div>
+                    <div class="meat-option" onclick="toggleMeat(this, 'Frango')">Frango</div>
+                    <div class="meat-option" onclick="toggleMeat(this, 'Arroz')">Arroz</div>
+                    <div class="meat-option" onclick="toggleMeat(this, 'Legumes')">Legumes</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Valor do Pedido (R$)</label>
+                <input type="number" id="orderValue" class="form-control" placeholder="0,00" step="0.01" required/>
+              </div>
+
+              <div class="form-group">
+                <label>Observações</label>
+                <textarea id="orderObs" class="form-control" rows="2" placeholder="Ex: Sem cebola, talheres descartáveis..."></textarea>
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-full">Salvar Pedido</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- 3. TEM SAÚDE -->
+        <div id="tab-tem-saude" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">🩺 Tem Saúde - Assistência Médica</div>
+            <p style="margin-bottom: 20px; color:var(--color-text-secondary);">Agende consultas e tire dúvidas com o suporte credenciado Banco BMG.</p>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+              <a href="https://api.whatsapp.com/send?1=pt_BR&phone=551151287754" target="_blank" class="btn btn-primary" style="text-align: center; display: block; text-decoration: none;">
+                📞 Agendar Consulta (WhatsApp)
+              </a>
+              <a href="https://www.bancobmg.com.br/seguros/bmg-med/" target="_blank" class="btn btn-outline" style="text-align: center; display: block; text-decoration: none;">
+                ℹ️ Dúvidas & Coberturas
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- 4. SOLICITAR LIMITE -->
+        <div id="tab-solicitar-limite" class="tab-content" style="display:none;">
+          <div class="benefit-card">
+            <div class="benefit-title">📝 Solicitar Limite de Parceiros</div>
+            <p class="form-hint" style="margin-bottom: 20px;">
+              A ZS Benefícios realizará análise e liberação do limite conforme política do Clube de Benefícios, limitado ao máximo de <strong>R$ 600,00</strong>.
+            </p>
+            <form id="limitRequestForm" onsubmit="submitLimitRequest(event)">
+              <div class="form-group">
+                <label>CPF</label>
+                <input type="text" id="reqCpf" class="form-control" placeholder="000.000.000-00" required/>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>1º Contato (Telefone)</label>
+                  <input type="text" id="reqPhone1" class="form-control" placeholder="(00) 00000-0000" required/>
+                </div>
+                <div class="form-group">
+                  <label>2º Contato (Telefone)</label>
+                  <input type="text" id="reqPhone2" class="form-control" placeholder="(00) 00000-0000"/>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Forma de Pagamento</label>
+                <input type="text" class="form-control" value="SOU + BLU" readonly/>
+              </div>
+              <div class="form-group">
+                <label>Termo de Adesão de Limite</label>
+                <div style="background:var(--color-surface-2); padding: 15px; border-radius: var(--radius-md); font-size:13px; line-height: 1.6; margin-bottom: 12px;">
+                  Declaro para os devidos fins que aceito a disponibilização de limite para utilização na rede de parceiros do Clube ZS Benefícios, autorizando o desconto em folha ou repasses correspondentes.
+                </div>
+              </div>
+              <div class="form-group">
+                <label>Anexo Documento (RG / CNH)</label>
+                <input type="file" id="reqDocFile" class="form-control" accept="image/*,.pdf"/>
+              </div>
+              <button type="submit" class="btn btn-primary btn-full">Solicitar Limite Clube Benefícios</button>
+            </form>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  </div>
+
+  <script src="../js/config.js?v=1781704178"></script>
+  <script src="../js/db.js?v=1781813000"></script>
+  <script src="../js/auth.js?v=1781813000"></script>
+  <script>
+    let currentUser = null;
+    let currentLimit = null;
+    let orderMode = 'entrega';
+    let selectedMeats = [];
+
+    window.addEventListener('DOMContentLoaded', async () => {
+      if (typeof DB !== 'undefined' && DB.init) await DB.init();
+      currentUser = Auth.getSession();
+      if (!currentUser) {
+        window.location.replace(Auth.loginPageHref());
+        return;
+      }
+
+      document.getElementById('sidebarName').innerText = currentUser.name || 'Vendedor';
+      document.getElementById('sidebarRole').innerText = currentUser.role || 'Funcionário';
+      document.getElementById('orderEmpName').value = currentUser.name;
+      document.getElementById('reqCpf').value = currentUser.cpf || '';
+
+      const showBenefitsAdmin = typeof Auth.canManageBeneficios === 'function'
+        && Auth.canManageBeneficios(currentUser?.role);
+      document.querySelectorAll('.benefits-admin-nav').forEach(el => {
+        el.style.display = showBenefitsAdmin ? 'flex' : 'none';
+      });
+
+      await loadUserData();
+    });
+
+    async function loadUserData() {
+      const errBox = document.getElementById('beneficiosLoadError');
+      if (errBox) errBox.style.display = 'none';
+      try {
+        // Obter limites
+        const limits = await supaReq('GET', 'beneficios_limites', null, `?employee_id=eq.${currentUser.id}&limit=1`);
+        if (limits && limits.length > 0) {
+          currentLimit = limits[0];
+          document.getElementById('valAprovado').innerText = formatCurrency(currentLimit.limite_aprovado);
+          document.getElementById('valUtilizado').innerText = formatCurrency(currentLimit.limite_utilizado);
+          document.getElementById('valDisponivel').innerText = formatCurrency(currentLimit.limite_disponivel);
+          document.getElementById('topbarBalance').innerText = formatCurrency(currentLimit.limite_disponivel);
+          document.getElementById('distTotalAvailable').innerText = formatCurrency(currentLimit.limite_aprovado);
+        } else {
+          // Nenhum limite solicitado ou aprovado ainda
+          currentLimit = null;
+        }
+
+        // Carregar prestadores para distribuição
+        const providers = await supaReq('GET', 'beneficios_prestadores', null, '?select=*');
+        renderDistribution(providers);
+
+        // Carregar vouchers
+        const vouchers = await supaReq('GET', 'beneficios_vouchers', null, `?employee_id=eq.${currentUser.id}&order=created_at.desc`);
+        renderVouchers(vouchers);
+      } catch (e) {
+        console.error('Erro ao carregar dados do usuário:', e);
+        if (errBox) {
+          errBox.style.display = 'block';
+          errBox.textContent = 'Não foi possível carregar os dados do Clube Benefícios. Atualize a página (Ctrl+F5). Se persistir, avise o suporte.';
+        }
+      }
+    }
+
+    function formatCurrency(val) {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+    }
+
+    function switchTab(tabId, el) {
+      document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+      el.classList.add('active');
+      document.getElementById(`tab-${tabId}`).style.display = 'block';
+    }
+
+    function setOrderMode(mode) {
+      orderMode = mode;
+      const btnE = document.getElementById('btnModeEntrega');
+      const btnR = document.getElementById('btnModeRetirada');
+      const deliveryF = document.getElementById('deliveryFields');
+
+      if (mode === 'entrega') {
+        btnE.className = 'btn btn-primary';
+        btnR.className = 'btn btn-outline';
+        deliveryF.style.display = 'block';
+      } else {
+        btnE.className = 'btn btn-outline';
+        btnR.className = 'btn btn-primary';
+        deliveryF.style.display = 'none';
+      }
+    }
+
+    function toggleMeat(el, meat) {
+      if (selectedMeats.includes(meat)) {
+        selectedMeats = selectedMeats.filter(x => x !== meat);
+        el.classList.remove('active');
+      } else {
+        if (selectedMeats.length >= 2) {
+          alert('Selecione no máximo 2 carnes.');
+          return;
+        }
+        selectedMeats.push(meat);
+        el.classList.add('active');
+      }
+    }
+
+    function renderDistribution(providers) {
+      const container = document.getElementById('distribList');
+      container.innerHTML = '';
+      if (!providers || providers.length === 0) {
+        container.innerHTML = '<p class="text-muted">Nenhum prestador cadastrado no sistema.</p>';
+        return;
+      }
+
+      const currentDist = currentLimit?.distribuicao || {};
+
+      providers.forEach(p => {
+        const val = currentDist[p.id] || 0;
+        const row = document.createElement('div');
+        row.className = 'limit-dist-row';
+        row.innerHTML = `
+          <div>
+            <strong>${p.nome_fantasia}</strong>
+            <div style="font-size:12px;color:var(--color-text-secondary);">${p.categoria || 'Geral'}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <span>R$</span>
+            <input type="number" class="form-control dist-input" data-provider-id="${p.id}" value="${val}" style="width:100px; text-align:right;" min="0"/>
+          </div>
+        `;
+        container.appendChild(row);
+      });
+    }
+
+    async function saveDistribution() {
+      if (!currentLimit) {
+        alert('Você precisa ter um limite aprovado primeiro.');
+        return;
+      }
+
+      // Validar data da última alteração (mínimo 45 dias)
+      if (currentLimit.last_distribution_at) {
+        const lastDate = new Date(currentLimit.last_distribution_at);
+        const diffDays = Math.ceil((new Date() - lastDate) / (1000 * 60 * 60 * 24));
+        if (diffDays < 45) {
+          alert(`Você só pode alterar a distribuição do limite a cada 45 dias. Faltam ${45 - diffDays} dias.`);
+          return;
+        }
+      }
+
+      const inputs = document.querySelectorAll('.dist-input');
+      const distObj = {};
+      let sum = 0;
+
+      inputs.forEach(input => {
+        const val = parseFloat(input.value) || 0;
+        distObj[input.dataset.providerId] = val;
+        sum += val;
+      });
+
+      if (sum > currentLimit.limite_aprovado) {
+        alert(`A soma dos limites distribuídos (${formatCurrency(sum)}) excede o seu limite total aprovado (${formatCurrency(currentLimit.limite_aprovado)}).`);
+        return;
+      }
+
+      try {
+        await supaReq('PATCH', 'beneficios_limites', {
+          distribuicao: distObj,
+          last_distribution_at: new Date().toISOString()
+        }, `?id=eq.${currentLimit.id}`);
+        alert('Distribuição de limites atualizada com sucesso!');
+        await loadUserData();
+      } catch (e) {
+        alert('Erro ao salvar distribuição: ' + e.message);
+      }
+    }
+
+    function renderVouchers(vouchers) {
+      const tbody = document.getElementById('vouchersTbody');
+      tbody.innerHTML = '';
+
+      if (!vouchers || vouchers.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum voucher emitido.</td></tr>';
+        return;
+      }
+
+      vouchers.forEach(v => {
+        const tr = document.createElement('tr');
+        let statusBadge = '';
+        if (v.status === 'pago') statusBadge = '<span class="badge badge-success">Pago</span>';
+        else if (v.status === 'recusado') statusBadge = '<span class="badge badge-danger">Recusado</span>';
+        else statusBadge = '<span class="badge badge-warning">Em Processamento</span>';
+
+        tr.innerHTML = `
+          <td><strong>${v.voucher_no}</strong></td>
+          <td>${v.prestador_name || 'Restaurante'}</td>
+          <td>${formatCurrency(v.valor)}</td>
+          <td>${statusBadge}</td>
+          <td>${new Date(v.created_at).toLocaleDateString('pt-BR')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function submitLimitRequest(e) {
+      e.preventDefault();
+      try {
+        const fileInput = document.getElementById('reqDocFile');
+        let fileUrl = '';
+        if (fileInput.files.length > 0) {
+          // Simula upload do arquivo
+          fileUrl = 'uploads/' + Date.now() + '_' + fileInput.files[0].name;
+        }
+
+        const payload = {
+          employee_id: currentUser.id,
+          employee_name: currentUser.name,
+          contato1: document.getElementById('reqPhone1').value,
+          contato2: document.getElementById('reqPhone2').value,
+          forma_pagamento: 'SOU + BLU',
+          documento_url: fileUrl,
+          limite_aprovado: 0,
+          limite_utilizado: 0,
+          limite_disponivel: 0,
+          status: 'solicitado',
+          protocolo: 'REQ-' + Date.now().toString(36).toUpperCase()
+        };
+
+        await supaReq('POST', 'beneficios_limites', payload);
+        alert('Solicitação de limite enviada com sucesso! Aguarde a análise da gestão.');
+        document.getElementById('limitRequestForm').reset();
+        await loadUserData();
+      } catch (err) {
+        alert('Erro ao enviar solicitação: ' + err.message);
+      }
+    }
+
+    async function submitFoodOrder(e) {
+      e.preventDefault();
+
+      if (!currentLimit || currentLimit.limite_disponivel <= 0) {
+        alert('Você não possui limite disponível para realizar pedidos.');
+        return;
+      }
+
+      const orderVal = parseFloat(document.getElementById('orderValue').value) || 0;
+      if (orderVal <= 0) {
+        alert('Informe um valor de pedido válido.');
+        return;
+      }
+
+      if (orderVal > currentLimit.limite_disponivel) {
+        alert(`O valor do pedido excede o seu limite disponível (${formatCurrency(currentLimit.limite_disponivel)}).`);
+        return;
+      }
+
+      if (orderMode === 'entrega' && selectedMeats.length < 2) {
+        alert('Por favor, escolha 2 opções de carne.');
+        return;
+      }
+
+      try {
+        // Encontrar prestador do tipo Restaurante
+        const providers = await supaReq('GET', 'beneficios_prestadores', null, "?categoria=eq.Restaurante&limit=1");
+        const provider = (providers && providers.length > 0) ? providers[0] : { id: 'rest_default', nome_fantasia: 'Restaurante Clube ZS Benefícios' };
+
+        const today = new Date();
+        const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+        const voucherNo = `ZS-${today.getDate().toString().padStart(2,'0')}${(today.getMonth()+1).toString().padStart(2,'0')}${today.getFullYear()}-${rand}`;
+
+        const detalhes = {
+          modo: orderMode,
+          horario_entrega: orderMode === 'entrega' ? document.getElementById('orderDeliveryTime').value : null,
+          salada: orderMode === 'entrega' ? document.getElementById('chkSalada').checked : false,
+          feijao_caldo: orderMode === 'entrega' ? document.getElementById('chkFeijaoCaldo').checked : false,
+          carnes: orderMode === 'entrega' ? selectedMeats : []
+        };
+
+        const voucher = {
+          voucher_no: voucherNo,
+          employee_id: currentUser.id,
+          employee_name: currentUser.name,
+          prestador_id: provider.id,
+          prestador_name: provider.nome_fantasia,
+          categoria: 'Alimentação',
+          valor: orderVal,
+          status: 'em_analise',
+          detalhes_pedido: detalhes
+        };
+
+        await supaReq('POST', 'beneficios_vouchers', voucher);
+
+        // Deduzir limite
+        const newUsed = parseFloat(currentLimit.limite_utilizado) + orderVal;
+        const newAvailable = parseFloat(currentLimit.limite_disponivel) - orderVal;
+        await supaReq('PATCH', 'beneficios_limites', {
+          limite_utilizado: newUsed,
+          limite_disponivel: newAvailable
+        }, `?id=eq.${currentLimit.id}`);
+
+        alert(`Pedido salvo com sucesso! Seu voucher é: ${voucherNo}`);
+        document.getElementById('orderForm').reset();
+        selectedMeats = [];
+        document.querySelectorAll('.meat-option').forEach(o => o.classList.remove('active'));
+        await loadUserData();
+      } catch (err) {
+        alert('Erro ao salvar pedido: ' + err.message);
+      }
+    }
+  </script>
+</body>
+</html>
