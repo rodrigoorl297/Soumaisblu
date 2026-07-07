@@ -1,6 +1,10 @@
 <?php
 declare(strict_types=1);
 
+// Segurança: Oculta erros do PHP para evitar vazamento de diretórios do servidor
+ini_set('display_errors', '0');
+error_reporting(0);
+
 /** Carrega configs locais (MySQL, PIX, Supabase, Evolution). */
 function soublu_config_root(): string
 {
@@ -21,7 +25,7 @@ function soublu_load_local_configs(): void
         require_once $stack;
     }
 
-    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php'] as $file) {
+    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php'] as $file) {
         $path = $root . '/' . $file;
         if (is_file($path)) {
             require_once $path;
@@ -123,10 +127,15 @@ function soublu_pdo(bool $reset = false): PDO
     }
     $charset = defined('DB_CHARSET') ? DB_CHARSET : 'utf8mb4';
     $dsn = 'mysql:host=' . DB_HOST . ';dbname=' . DB_NAME . ';charset=' . $charset;
-    $pdo = new PDO($dsn, DB_USER, defined('DB_PASS') ? DB_PASS : '', [
+    $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    ]);
+        PDO::ATTR_PERSISTENT => true,
+    ];
+    if (defined('PDO::MYSQL_ATTR_CONNECT_TIMEOUT')) {
+        $options[PDO::MYSQL_ATTR_CONNECT_TIMEOUT] = 5;
+    }
+    $pdo = new PDO($dsn, DB_USER, defined('DB_PASS') ? DB_PASS : '', $options);
     $pdo->exec('SET NAMES ' . (preg_match('/^[a-z0-9_]+$/', $charset) ? $charset : 'utf8mb4'));
     try {
         $pdo->exec('SET SESSION wait_timeout = 28800');
@@ -210,6 +219,9 @@ function soublu_api_auth_ok(): bool
         return false;
     }
     $token = $_SERVER['HTTP_X_API_KEY'] ?? '';
+    if ($token === '' && isset($_GET['apikey'])) {
+        $token = (string) $_GET['apikey'];
+    }
     if ($token === '' && function_exists('getallheaders')) {
         foreach (getallheaders() as $k => $v) {
             if (strtolower((string) $k) === 'x-api-key') {
