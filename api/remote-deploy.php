@@ -1,14 +1,11 @@
 <?php
-/**
- * Deploy remoto de arquivos permitidos (API key). Uso único para atualizar o site sem FTP manual.
- * POST JSON: { "path": "js/proposals.js", "content_base64": "..." }
- * GET ?action=list — lista paths permitidos
- */
 declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
 
 header('Content-Type: application/json; charset=utf-8');
+header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
 
 if (!soublu_api_auth_ok()) {
     soublu_json(['ok' => false, 'error' => 'Não autorizado.'], 401);
@@ -18,21 +15,35 @@ $allowed = [
     'api/bootstrap.php',
     'api/rest-v1.php',
     'api/rest-ping.php',
+    'api/health.php',
     'api/debug-session-log.php',
     'api/rest/index.php',
     'api/lib/FileStorage.php',
     'api/lib/FinanceMysqlSchema.php',
+    'api/lib/BeneficiosMysqlSchema.php',
     'api/lib/PostgRestCompat.php',
     'api/lib/EvolutionClient.php',
+    'api/lib/ZApiClient.php',
+    'api/lib/WhaticketClient.php',
+    'api/lib/WhatsAppClientFactory.php',
     'api/lib/WhatsAppRepository.php',
     'api/lib/SupabaseClient.php',
     'api/lib/SupabaseLegacy.php',
     'api/repair-proposal-attachments.php',
+    'api/repair-partner-attachments.php',
+    'api/scan-partner-docs.php',
+    'api/repair-vendor-comissao.php',
+    'api/repair-user-roles.php',
+    'api/repair-beneficios-ids.php',
+    'api/purge-vendor-comissao-history.php',
+    'api/purge-eleva-transactions.php',
+    'api/attachment-proxy.php',
     'api/file.php',
     'api/upload.php',
     'api/whatsapp_api.php',
     'api/setup-stack.php',
     'api/migrate-whatsapp.php',
+    'api/migrate-whaticket-map.php',
     'api/remote-deploy.php',
     'js/proposals.js',
     'js/proposta-credito.js',
@@ -42,10 +53,13 @@ $allowed = [
     'js/partner-ops.js',
     'js/partners-ui.js',
     'js/clients.js',
+    'js/admin-beneficios.js',
+    'js/clube-beneficios.js',
     'js/db.js',
     'js/withdrawal-rules.js',
     'js/withdrawal-flow.js',
     'js/db-connect.js',
+    'js/base-path.js',
     'js/config.js',
     'js/tickets.js',
     'js/auth.js',
@@ -53,7 +67,10 @@ $allowed = [
     'js/employee.js',
     'js/admin.js',
     'js/sales-ranking.js',
+    'js/rh-relatorios.js',
     'js/whatsapp-chat.js',
+    'js/wa-audio-recorder.js',
+    'js/wa-emoji-mart.js',
     'js/whatsapp-kanban.js',
     'js/bolao-copa.js',
     'js/painel-sonhos.js',
@@ -61,7 +78,10 @@ $allowed = [
     'css/global.css',
     'css/whatsapp-chat.css',
     'admin.html',
+    'clube-beneficios.html',
     'pages/admin.html',
+    'pages/clube-beneficios.html',
+    'pages/admin-beneficios.html',
     'employee.html',
     'pages/employee.html',
     'financeiro.html',
@@ -74,9 +94,13 @@ $allowed = [
     'config.supabase.local.php',
     'api/fontedata.php',
     'api/migrate-rh-core.php',
+    'api/migrate-users-columns.php',
+    'api/migrate-finance-proposta-ops.php',
+    'api/migrate-proposals-comissao.php',
     'api/migrate-bolao-copa.php',
     'api/credito_api.php',
     'api/credito_pix_auto_api.php',
+    'api/recover-dismissed.php',
     'api/pix_api.php',
     'api/lib/EfiPayPixAutomatico.php',
     'api/lib/EfiPayClient.php',
@@ -85,13 +109,17 @@ $allowed = [
     'api/lib/CreditProposalMysqlRepository.php',
     'api/lib/CreditProposalRepository.php',
     'js/credito-propostas-api.js',
+    'js/credito-fluxo.js',
+    'js/pix-autorizar-employee.js',
     'js/financeiro-credito.js',
     'js/esteira-credito.js',
     'js/pix-automatico-credito.js',
     'js/financeiro-propostas.js',
+    'js/financeiro-boot.js',
     'js/fiscal-parceiro.js',
     'js/fontedata.js',
     'js/rh-manager.js',
+    'js/rh-ops.js',
     'js/contestacao.js',
     'js/juridico-manager.js',
     'rh-manager.html',
@@ -100,8 +128,7 @@ $allowed = [
     'config.pix.local.php',
 ];
 
-$action = (string) ($_GET['action'] ?? '');
-if ($action === 'list') {
+if (($_GET['action'] ?? '') === 'list') {
     soublu_json(['ok' => true, 'allowed' => $allowed]);
 }
 
@@ -109,29 +136,33 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
     soublu_json(['ok' => false, 'error' => 'POST JSON com path e content_base64'], 405);
 }
 
-$raw = file_get_contents('php://input');
-$data = json_decode($raw ?: '{}', true);
-$path = str_replace('\\', '/', trim((string) ($data['path'] ?? '')));
-$b64 = (string) ($data['content_base64'] ?? '');
-
-if ($path === '' || $b64 === '' || !in_array($path, $allowed, true)) {
-    soublu_json(['ok' => false, 'error' => 'path inválido ou não permitido'], 400);
+$raw = file_get_contents('php://input') ?: '';
+$body = json_decode($raw, true);
+if (!is_array($body)) {
+    soublu_json(['ok' => false, 'error' => 'POST JSON com path e content_base64'], 400);
 }
 
-$body = base64_decode($b64, true);
-if ($body === false || $body === '') {
-    soublu_json(['ok' => false, 'error' => 'content_base64 inválido'], 400);
+$path = str_replace('\\', '/', trim((string) ($body['path'] ?? '')));
+$b64 = (string) ($body['content_base64'] ?? '');
+$content = $b64 !== '' ? base64_decode($b64, true) : false;
+
+if ($path === '' || $content === false) {
+    soublu_json(['ok' => false, 'error' => 'POST JSON com path e content_base64'], 400);
+}
+
+if (!in_array($path, $allowed, true)) {
+    soublu_json(['ok' => false, 'error' => 'path inválido ou não permitido'], 400);
 }
 
 $root = dirname(__DIR__);
 $dest = $root . '/' . $path;
-$dir = dirname($dest);
-if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
-    soublu_json(['ok' => false, 'error' => 'Não foi criar pasta'], 500);
+$parent = dirname($dest);
+if (!is_dir($parent) && !mkdir($parent, 0755, true) && !is_dir($parent)) {
+    soublu_json(['ok' => false, 'error' => 'Não foi possível criar pasta destino.'], 500);
 }
 
-if (file_put_contents($dest, $body) === false) {
-    soublu_json(['ok' => false, 'error' => 'Falha ao gravar'], 500);
+if (file_put_contents($dest, $content) === false) {
+    soublu_json(['ok' => false, 'error' => 'Falha ao gravar arquivo.'], 500);
 }
 
-soublu_json(['ok' => true, 'path' => $path, 'bytes' => strlen($body)]);
+soublu_json(['ok' => true, 'path' => $path, 'bytes' => strlen($content)]);

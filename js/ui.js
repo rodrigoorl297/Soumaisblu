@@ -145,12 +145,55 @@ function userPts(u) {
   return 0;
 }
 
+function _siteBaseUrl() {
+  const cfg = window.SOUBLU_CONFIG || {};
+  let base = String(cfg.SITE_URL || '').replace(/\/+$/, '');
+  if (!base) {
+    try {
+      const p = String(window.location.pathname || '').replace(/\\/g, '/');
+      const root = /\/pages\//i.test(p)
+        ? new URL('../', window.location.href).href
+        : window.location.href;
+      base = new URL('.', root).href.replace(/\/$/, '');
+    } catch (_) {
+      base = String(window.location.origin || '').replace(/\/+$/, '');
+    }
+  }
+  return base;
+}
+
+function _escAttr(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;');
+}
+
 /** Normaliza URL de foto/arquivo (Supabase, uploads local, base64). */
 function resolvePhotoUrl(photo) {
   const raw = String(photo || '').trim();
   if (!raw) return '';
   if (/^data:/i.test(raw)) return raw;
+  const base = _siteBaseUrl();
+  if (/^(?:\/)?api\/(?:file|attachment-proxy)\.php/i.test(raw)) {
+    if (/attachment-proxy\.php/i.test(raw)) {
+      try {
+        const u = new URL(raw, base + '/');
+        const p = u.searchParams.get('path');
+        if (p) {
+          return `${base}/api/file.php?path=${encodeURIComponent(decodeURIComponent(p))}`;
+        }
+      } catch (_) { /* segue */ }
+    }
+    return /^https?:\/\//i.test(raw) ? raw : `${base}${raw.startsWith('/') ? raw : '/' + raw}`;
+  }
   if (/^https?:\/\//i.test(raw)) {
+    if (/attachment-proxy\.php/i.test(raw)) {
+      try {
+        const p = new URL(raw, window.location.origin).searchParams.get('path');
+        if (p) {
+          const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
+          return `${base}/api/file.php?path=${encodeURIComponent(decodeURIComponent(p))}`;
+        }
+      } catch (_) { /* segue */ }
+    }
     if (/supabase\.co\/storage/i.test(raw)) {
       const m = raw.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
       if (m) {
@@ -181,6 +224,69 @@ function resolvePhotoUrl(photo) {
 }
 window.resolvePhotoUrl = resolvePhotoUrl;
 window.resolveFileUrl = resolvePhotoUrl;
+
+async function verifyFileServeUrl(serveUrl) {
+  const u = String(serveUrl || '').trim();
+  if (!u || !/file\.php/i.test(u)) return '';
+  try {
+    const checkUrl = u + (u.includes('?') ? '&' : '?') + 'check=1';
+    const res = await fetch(checkUrl, { cache: 'no-store', credentials: 'same-origin' });
+    const j = await res.json().catch(() => ({}));
+    if (j && j.ok && j.serve_url) return j.serve_url;
+  } catch (_) { /* noop */ }
+  return '';
+}
+
+async function openAttachmentUrl(rawUrl) {
+  let url = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(rawUrl) : String(rawUrl || '').trim();
+  if (!url) {
+    showToast('Anexo indisponível.', 'warning');
+    return;
+  }
+  if (/file\.php/i.test(url)) {
+    const verified = await verifyFileServeUrl(url);
+    if (verified) {
+      url = verified;
+    } else {
+      try {
+        const checkUrl = url + (url.includes('?') ? '&' : '?') + 'check=1';
+        const res = await fetch(checkUrl, { cache: 'no-store', credentials: 'same-origin' });
+        const j = await res.json().catch(() => ({}));
+        if (!j || !j.ok) {
+          showToast('Arquivo não encontrado no servidor. Envie o documento novamente.', 'warning');
+          return;
+        }
+        if (j.serve_url) url = j.serve_url;
+      } catch (_) {
+        showToast('Não foi possível abrir o anexo.', 'warning');
+        return;
+      }
+    }
+  } else if (/supabase\.co\/storage/i.test(url)) {
+    url = `${_siteBaseUrl()}/api/file.php?fetch_url=${encodeURIComponent(url)}`;
+  }
+  const opened = window.open(url, '_blank', 'noopener,noreferrer');
+  if (!opened) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+}
+window.openAttachmentUrl = openAttachmentUrl;
+window.verifyFileServeUrl = verifyFileServeUrl;
+
+function partnerAttachmentLinkHtml(url, label = 'Ver anexo') {
+  const resolved = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(url) : String(url || '').trim();
+  if (!resolved) return '';
+  const safe = _escAttr(resolved);
+  return `<a href="${safe}" target="_blank" rel="noopener noreferrer" `
+    + `onclick="event.stopPropagation(); openAttachmentUrl(this.getAttribute('href')); return false;">${_escAttr(label)}</a>`;
+}
+window.partnerAttachmentLinkHtml = partnerAttachmentLinkHtml;
 
 /** Avatar com fallback para iniciais quando a URL da foto falha. */
 function profileAvatarHtml(name, photo, extraClass, onClickAttr) {
@@ -651,13 +757,25 @@ function updateCartBadge(n){const b=document.getElementById('cartBadge');if(!b)r
 function togglePassword(id,btn){const i=document.getElementById(id);if(!i)return;i.type=i.type==='password'?'text':'password';btn.textContent=i.type==='password'?'👁':'🙈';}
 function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=()=>rej(new Error('Erro'));r.readAsDataURL(file);});}
 
+const _UPLOAD_DOC_BUCKETS = new Set([
+  'partner-docs', 'ticket-docs', 'tim-docs', 'contestacao-docs', 'finance-docs',
+  'rh-demissao', 'rh-justificativa', 'rh-docs', 'monitoria-atendimento', 'partner-nf',
+]);
+
+function _isInlineAttachmentUrl(url) {
+  const s = String(url || '').trim();
+  return s.startsWith('data:') || s.startsWith('blob:');
+}
+
 /* Upload: Hostinger (api/upload.php), Supabase Storage ou Base64 */
 async function uploadImage(file, bucket = 'product-images', subPath = '') {
   if (!file) throw new Error('Arquivo inválido');
   const extRaw = (file.name && file.name.includes('.')) ? file.name.split('.').pop() : 'jpg';
   const ext = String(extRaw).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'jpg';
   const folder = subPath ? String(subPath).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) : '';
-  const path = folder ? `${folder}/img_${Date.now()}.${ext}` : `img_${Date.now()}.${ext}`;
+  const path = _UPLOAD_DOC_BUCKETS.has(bucket)
+    ? folder
+    : (folder ? `${folder}/img_${Date.now()}.${ext}` : `img_${Date.now()}.${ext}`);
 
   const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
   const hostingerUp = String(_cfg.DB_BACKEND || '').toLowerCase() === 'hostinger' && _cfg.UPLOAD_URL && _cfg.API_KEY;
@@ -676,9 +794,16 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.url) return data.url;
-      console.warn('[uploadImage hostinger]', res.status, data);
+      const errMsg = data.error || `HTTP ${res.status}`;
+      console.warn('[uploadImage hostinger]', bucket, errMsg);
+      if (_UPLOAD_DOC_BUCKETS.has(bucket)) {
+        throw new Error(`Falha ao enviar documento: ${errMsg}`);
+      }
     } catch (e) {
       console.warn('[uploadImage hostinger]', e.message || e);
+      if (_UPLOAD_DOC_BUCKETS.has(bucket)) {
+        throw e instanceof Error ? e : new Error('Falha ao enviar documento ao servidor.');
+      }
     }
   }
 
@@ -702,6 +827,9 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
       console.warn('[uploadImage]', e.message || e);
     }
   }
+  if (_UPLOAD_DOC_BUCKETS.has(bucket)) {
+    throw new Error('Upload de documento indisponível. Recarregue a página (Ctrl+F5) e tente novamente.');
+  }
   return await fileToBase64(file);
 }
 
@@ -720,7 +848,7 @@ function renderAdminSidebar(user) {
       financeiro: 'Financeiro', financial: 'Financeiro', supervisor: 'Supervisor',
       sup_backoffice: 'Sup. Backoffice', backoffice: 'Backoffice', rh: 'RH',
       operacional: 'Operacional', juridico: 'Jurídico', diretoria: 'Diretoria',
-      ouvidoria: 'Ouvidoria', parceiro: 'Parceiro', vendedor: 'Vendedor',
+      ouvidoria: 'Ouvidoria', parceiro: 'Parceiro', vendedor: 'Vendedor', portaria: 'Portaria',
     };
     roleEl.textContent = labels[role] || (role ? role : 'Gestor');
   }

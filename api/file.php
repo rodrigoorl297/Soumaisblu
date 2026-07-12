@@ -16,7 +16,7 @@ $fetchUrl = trim((string) ($_GET['fetch_url'] ?? ''));
 $allowedBuckets = [
     'proposal-attachments', 'tim-docs', 'contestacao-docs', 'finance-docs',
     'ticket-docs', 'partner-docs', 'profile-photos', 'product-images',
-    'rh-demissao', 'monitoria-atendimento', 'partner-nf', 'sonhos', 'misc',
+    'rh-demissao', 'rh-docs', 'monitoria-atendimento', 'partner-nf', 'sonhos', 'misc',
     'whatsapp-media',
 ];
 
@@ -122,3 +122,4 @@ if ($located) {
 $hasKey = soublu_file_supabase_keys()['service'] !== '' || soublu_file_supabase_keys()['anon'] !== '';
 $hint = $hasKey ? '' : ' Configure SUPABASE_SERVICE_KEY em config.supabase.local.php na Locaweb.';
 soublu_file_fail('Arquivo não encontrado no Supabase nem em /uploads/.' . $hint, 404, false);
+

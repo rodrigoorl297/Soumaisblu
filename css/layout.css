@@ -773,3 +773,9 @@
     min-width: 0;
   }
 }
+
+
+/* Hide specific sidebar items */
+.sidebar-nav .hide-from-sidebar {
+    display: none !important;
+}

@@ -23,6 +23,7 @@ let _kanbanDnDReady = false;
 let _dragResumeId = null;
 
 const _KANBAN_STAGES = ['triagem', 'entrevista', 'contratado', 'recusado'];
+const _RECUSADO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 const _JUSTIF_TIPO = {
   atestado: 'Atestado médico',
@@ -126,7 +127,10 @@ function _empByCpf(cpf) {
 }
 
 function _activeEmployees() {
-  return (window._allEmployees || []).filter(e => !e.demitido && e.status !== 'demitido');
+  const base = typeof window._rhCompanyEmployees === 'function'
+    ? window._rhCompanyEmployees(window._allEmployees)
+    : (window._allEmployees || []);
+  return base.filter(e => !e.demitido && e.status !== 'demitido');
 }
 
 function _fmtDate(iso) {
@@ -272,6 +276,65 @@ function _resumeStage(r) {
   return _KANBAN_STAGES.includes(s) ? s : 'triagem';
 }
 
+function _recusadoEnteredAt(r) {
+  if (_resumeStage(r) !== 'recusado') return null;
+  const raw = r.recusado_at || r.updated_at || r.created_at;
+  if (!raw) return null;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function _isRecusadoExpired(r) {
+  const entered = _recusadoEnteredAt(r);
+  if (!entered) return false;
+  return (Date.now() - entered.getTime()) >= _RECUSADO_TTL_MS;
+}
+
+function _recusadoExpiryHint(r) {
+  const entered = _recusadoEnteredAt(r);
+  if (!entered) return '';
+  const left = _RECUSADO_TTL_MS - (Date.now() - entered.getTime());
+  if (left <= 0) {
+    return '<div style="font-size:11px;color:var(--color-danger);margin-top:4px;">Será removido automaticamente</div>';
+  }
+  const days = Math.max(1, Math.ceil(left / (24 * 60 * 60 * 1000)));
+  return `<div style="font-size:11px;color:var(--color-danger);margin-top:4px;">Remove em ${days} dia(s)</div>`;
+}
+
+function _applyResumeStageChange(resume, stage) {
+  const prev = _resumeStage(resume);
+  const now = new Date().toISOString();
+  resume.stage = stage;
+  resume.updated_at = now;
+  if (stage === 'recusado') {
+    if (prev !== 'recusado' || !resume.recusado_at) resume.recusado_at = now;
+  } else {
+    resume.recusado_at = null;
+  }
+}
+
+async function purgeExpiredRecusados() {
+  const list = Array.isArray(window._allResumes) ? window._allResumes.slice() : [];
+  const expired = list.filter(_isRecusadoExpired);
+  if (!expired.length) return 0;
+  for (const r of expired) {
+    try {
+      if (typeof DB !== 'undefined' && DB.deleteRhResume) await DB.deleteRhResume(r.id);
+    } catch (e) {
+      console.warn('[RH] purge recusado:', r.id, e);
+    }
+  }
+  const gone = new Set(expired.map((r) => String(r.id)));
+  const kept = list.filter((r) => !gone.has(String(r.id)));
+  window._allResumes = kept;
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'rh-ops.js:purgeExpiredRecusados',message:'purged recusados',data:{count:expired.length},timestamp:Date.now(),hypothesisId:'H-recusado-ttl',runId:'recusado-week'})}).catch(()=>{});
+  // #endregion
+  return expired.length;
+}
+
+window.purgeExpiredRecusados = purgeExpiredRecusados;
+
 function _bindKanbanDnD() {
   if (_kanbanDnDReady) return;
   _kanbanDnDReady = true;
@@ -292,8 +355,7 @@ function _bindKanbanDnD() {
       if (!id) return;
       const resume = (window._allResumes || []).find(r => String(r.id) === String(id));
       if (!resume || _resumeStage(resume) === stage) return;
-      resume.stage = stage;
-      resume.updated_at = new Date().toISOString();
+      _applyResumeStageChange(resume, stage);
       try {
         await DB.saveRhResume(resume);
         if (typeof showToast === 'function') showToast('Estágio atualizado.', 'success');
@@ -324,8 +386,10 @@ function renderKanban() {
         <div style="font-size:12px;color:var(--color-text-muted);">${_esc(r.vaga || 'Vaga não informada')}</div>
         <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">${_esc(r.protocolo || '')}</div>
         ${r.data_entrevista ? `<div style="font-size:11px;margin-top:4px;">Entrevista: ${_fmtDate(r.data_entrevista)}</div>` : ''}
-        <div class="card-actions" style="margin-top:8px;display:flex;gap:6px;">
+        ${stage === 'recusado' ? _recusadoExpiryHint(r) : ''}
+        <div class="card-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
           <button type="button" class="btn btn-xs btn-outline" onclick="editCurriculo('${_esc(r.id)}')">Editar</button>
+          <button type="button" class="btn btn-xs btn-danger" onclick="excluirCurriculo('${_esc(r.id)}')">Excluir</button>
         </div>
       </div>
     `).join('');
@@ -608,7 +672,7 @@ function onPunicaoTipoChange() {
 
   if (metricaPanel) {
     if (disciplinar) {
-      const empId = document.getElementById('punicao_employee_id')?.value;
+      const empId = document.getElementById('punicao_employee')?.value;
       const nAdv = _countPunicoesEmp(empId, 'advertencia');
       const nSusp = _countPunicoesEmp(empId, 'suspensao');
       metricaPanel.style.display = '';
@@ -657,7 +721,7 @@ function openPunicaoModal() {
   const form = document.getElementById('form-punicao');
   if (form) form.reset();
 
-  document.getElementById('punicao_employee_id').value = '';
+  _fillEmployeeSelect('punicao_employee');
   document.getElementById('punicao_responsavel').value = _rhAuthor();
   document.getElementById('punicao_protocolo').value = _gerarProtocoloPunicao();
   document.getElementById('punicao_data').value = new Date().toISOString().slice(0, 10);
@@ -676,49 +740,42 @@ function openPunicaoModal() {
   _openRhModal('punicaoModal');
 }
 
-async function buscarDadosPunicao() {
-  const cpf = document.getElementById('punicao_cpf')?.value;
-  const digits = _digits(cpf);
-  if (digits.length !== 11) { alert('CPF inválido.'); return; }
-
-  const emp = _empByCpf(cpf);
+function onPunicaoEmployeeChange() {
+  const empId = document.getElementById('punicao_employee')?.value;
+  const emp = _empById(empId);
   if (!emp) {
-    if (typeof showLoading === 'function') showLoading('Consultando API...');
-    try {
-      const res = await FonteData.lookupCpf(digits);
-      if (typeof hideLoading === 'function') hideLoading();
-      if (res && res.ok && res.client?.name) {
-        document.getElementById('punicao_employee_id').value = 'external_' + digits;
-        const panel = document.getElementById('punicao_emp_info');
-        if (panel) {
-          panel.hidden = false;
-          panel.innerHTML = `<strong>${_esc(res.client.name)}</strong> — <span class="badge badge-muted">Externa (API)</span>`;
-        }
-        onPunicaoTipoChange();
-        if (typeof showToast === 'function') showToast('Dados carregados da API.', 'success');
-      } else {
-        alert('Funcionário não encontrado no RH nem na API.');
-        _renderEmpInfoPanel('punicao_emp_info', null);
-        document.getElementById('punicao_employee_id').value = '';
-      }
-    } catch(err) {
-      if (typeof hideLoading === 'function') hideLoading();
-      alert('Erro na consulta da API.');
-    }
+    _renderEmpInfoPanel('punicao_emp_info', null);
+    onPunicaoTipoChange();
     return;
   }
-
   if (emp.demitido || emp.status === 'demitido') {
     alert('Este colaborador já está desligado.');
+    document.getElementById('punicao_employee').value = '';
+    _renderEmpInfoPanel('punicao_emp_info', null);
+    onPunicaoTipoChange();
     return;
   }
-  document.getElementById('punicao_employee_id').value = emp.id;
-  document.getElementById('punicao_supervisor_nome').value = emp.supervisor || '';
+  const supEl = document.getElementById('punicao_supervisor_nome');
+  if (supEl) supEl.value = emp.supervisor || '';
   _renderEmpInfoPanel('punicao_emp_info', emp);
-  if (!document.getElementById('punicao_monitoria').value && emp.qualidade_monitoria) {
-    document.getElementById('punicao_monitoria').value = emp.qualidade_monitoria;
-  }
+  const mon = document.getElementById('punicao_monitoria');
+  if (mon && !mon.value && emp.qualidade_monitoria) mon.value = emp.qualidade_monitoria;
   onPunicaoTipoChange();
+  // #region agent log
+  try {
+    const logBody = JSON.stringify({ sessionId: '97c411', location: 'rh-ops.js:onPunicaoEmployeeChange', message: 'punicao employee selected', data: { empId, nome: emp.nome || '', dept: emp.departamento || '', scriptV: '97c411pun1' }, timestamp: Date.now(), hypothesisId: 'H-punicao-select', runId: 'punicao-select-v1' });
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: logBody }).catch(() => {});
+  } catch (_) {}
+  // #endregion
+}
+
+function buscarDadosPunicao() {
+  onPunicaoEmployeeChange();
+  const emp = _empById(document.getElementById('punicao_employee')?.value);
+  if (!emp) {
+    alert('Selecione um colaborador.');
+    return;
+  }
   if (typeof showToast === 'function') showToast('Dados do colaborador carregados.', 'success');
 }
 
@@ -780,21 +837,10 @@ async function salvarPunicao(event) {
   if (event) event.preventDefault();
 
   const isNew = !document.getElementById('punicao_id')?.value;
-  const empId = document.getElementById('punicao_employee_id').value;
-  let emp = _empById(empId);
-  
-  if (!emp) { 
-    if (empId.startsWith('external_')) {
-      const panel = document.getElementById('punicao_emp_info');
-      emp = {
-        id: empId,
-        cpf: _digits(document.getElementById('punicao_cpf').value),
-        nome: panel ? panel.querySelector('strong')?.innerText : 'Desconhecido'
-      };
-    } else {
-      alert('Busque o CPF do colaborador antes de salvar.'); 
-      return; 
-    }
+  const emp = _empById(document.getElementById('punicao_employee')?.value);
+  if (!emp) {
+    alert('Selecione um colaborador.');
+    return;
   }
 
   const tipo = document.getElementById('punicao_tipo').value;
@@ -951,10 +997,13 @@ function viewPunicao(id) {
   if (!p) return;
   const form = document.getElementById('form-punicao');
   if (form) form.reset();
+
+  _fillEmployeeSelect('punicao_employee');
   
   if (document.getElementById('punicao_id')) document.getElementById('punicao_id').value = p.id;
-  document.getElementById('punicao_employee_id').value = p.employee_id;
-  document.getElementById('punicao_cpf').value = p.employee_cpf || '';
+  const empMatch = _empById(p.employee_id) || _empByCpf(p.employee_cpf);
+  const sel = document.getElementById('punicao_employee');
+  if (sel) sel.value = empMatch?.id || p.employee_id || '';
   document.getElementById('punicao_protocolo').value = p.protocolo || '';
   document.getElementById('punicao_responsavel').value = p.registrado_por || '';
   document.getElementById('punicao_tipo').value = p.tipo || 'advertencia_verbal';
@@ -998,9 +1047,14 @@ function viewPunicao(id) {
 
   onPunicaoMotivoChange();
   
-  const emp = _empById(p.employee_id) || _empByCpf(p.employee_cpf);
-  if (emp) _renderEmpInfoPanel('punicao_emp_info', emp);
-  else _renderEmpInfoPanel('punicao_emp_info', null);
+  onPunicaoEmployeeChange();
+  if (!empMatch && p.employee_nome) {
+    const panel = document.getElementById('punicao_emp_info');
+    if (panel) {
+      panel.hidden = false;
+      panel.innerHTML = `<strong>${_esc(p.employee_nome)}</strong> — ${_esc(p.employee_cpf || '—')}`;
+    }
+  }
   
   document.getElementById('punicaoModalTitle').textContent = 'Editar Registro de Punição';
   _openRhModal('punicaoModal');
@@ -1236,6 +1290,7 @@ const _rhOpsExports = {
   onJustifAtestadoPick,
   gerarProtocoloJustificativa,
   openPunicaoModal,
+  onPunicaoEmployeeChange,
   buscarDadosPunicao,
   buscarTestemunhaPunicao,
   onPunicaoTipoChange,

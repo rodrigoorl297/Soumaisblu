@@ -7,12 +7,13 @@ declare(strict_types=1);
 
 final class EfiPayPixAutomatico
 {
-    public const CLIENT_BUILD = '97c411agencia1';
+    public const CLIENT_BUILD = '97c411pixauto9';
 
     public const BANK_CODE_ISPB = [
         '001' => '00000000',
         '237' => '60746948',
         '033' => '90400888',
+        '260' => '18236120',
         '341' => '60701190',
         '104' => '00360305',
     ];
@@ -33,7 +34,16 @@ final class EfiPayPixAutomatico
             return null;
         }
         if (preg_match('/(\d{3})/', $label, $m)) {
-            return self::BANK_CODE_ISPB[$m[1]] ?? null;
+            $code = $m[1];
+            if (isset(self::BANK_CODE_ISPB[$code])) {
+                return self::BANK_CODE_ISPB[$code];
+            }
+        }
+        if (preg_match('/nubank|nu\s*pagamentos/i', $label)) {
+            return self::BANK_CODE_ISPB['260'];
+        }
+        if (preg_match('/santander/i', $label)) {
+            return self::BANK_CODE_ISPB['033'];
         }
         $key = strtoupper($label);
         return self::BANK_CODE_ISPB[$key] ?? null;
@@ -134,6 +144,12 @@ final class EfiPayPixAutomatico
             ];
         }
         $res = $this->client->request('POST', '/v2/solicrec', $payload);
+        // #region agent log
+        pix_auto_dbg_log('EfiPayPixAutomatico.php:createSolicRec', 'http response', [
+            'http_code' => (int) ($res['http_code'] ?? 0),
+            'body_preview' => substr((string) ($res['body'] ?? ''), 0, 400),
+        ], 'H1-H5-http', 'push-debug');
+        // #endregion
         $this->assertOk($res, 201, 'criar solicitação de confirmação');
         $data = $this->decode($res['body']);
         return is_array($data) ? $data : [];
@@ -150,6 +166,32 @@ final class EfiPayPixAutomatico
         }
         $res = $this->client->request('GET', '/v2/solicrec/' . rawurlencode($idSolicRec));
         $this->assertOk($res, 200, 'consultar solicitação');
+        $data = $this->decode($res['body']);
+        return is_array($data) ? $data : [];
+    }
+
+    public function cancelSolicRec(string $idSolicRec): array
+    {
+        if ($this->mock) {
+            return ['idSolicRec' => $idSolicRec, 'status' => 'CANCELADA', 'mock' => true];
+        }
+        $res = $this->client->request('PATCH', '/v2/solicrec/' . rawurlencode($idSolicRec), [
+            'status' => 'CANCELADA',
+        ]);
+        $this->assertOk($res, 200, 'cancelar solicitação Pix Automático');
+        $data = $this->decode($res['body']);
+        return is_array($data) ? $data : [];
+    }
+
+    public function cancelRecurrence(string $idRec): array
+    {
+        if ($this->mock) {
+            return ['idRec' => $idRec, 'status' => 'CANCELADA', 'mock' => true];
+        }
+        $res = $this->client->request('PATCH', '/v2/rec/' . rawurlencode($idRec), [
+            'status' => 'CANCELADA',
+        ]);
+        $this->assertOk($res, 200, 'cancelar recorrência Pix Automático');
         $data = $this->decode($res['body']);
         return is_array($data) ? $data : [];
     }

@@ -40,6 +40,16 @@
       font-weight: 900;
       color: var(--color-primary);
     }
+    .menu-tabs {
+      display: none; /* tabs are now driven by sidebar nav */
+    }
+    .limit-dist-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--color-border);
+    }
     .meat-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -53,37 +63,12 @@
       text-align: center;
       cursor: pointer;
       font-weight: 600;
-      transition: all 0.2s;
+      transition: border-color .15s, background-color .15s, color .15s;
     }
     .meat-option.active {
       border-color: var(--color-primary);
-      background-color: var(--color-primary-light);
+      background-color: var(--color-primary-light, rgba(255, 122, 0, .12));
       color: var(--color-primary);
-    }
-    .menu-tabs {
-      display: flex;
-      gap: 8px;
-      border-bottom: 2px solid var(--color-border);
-      margin-bottom: var(--space-lg);
-    }
-    .menu-tab {
-      padding: 10px 16px;
-      cursor: pointer;
-      font-weight: 700;
-      color: var(--color-text-secondary);
-      border-bottom: 3px solid transparent;
-      transition: all 0.2s;
-    }
-    .menu-tab.active {
-      color: var(--color-primary);
-      border-bottom-color: var(--color-primary);
-    }
-    .limit-dist-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid var(--color-border);
     }
   </style>
 </head>
@@ -98,8 +83,34 @@
       <div class="sidebar-nav">
         <span class="sidebar-section-label">Principal</span>
         <button class="nav-item" onclick="window.history.back()"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span><span class="nav-label">Voltar</span></button>
-        <button class="nav-item active"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span><span class="nav-label">Clube Benefícios</span></button>
-        <button class="nav-item benefits-admin-nav" onclick="window.location.href='admin-beneficios.html'" style="display:none;"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="nav-label">Gestão Benefícios</span></button>
+
+        <button class="nav-item active" id="nav-meus-limites" onclick="navSwitchTab('meus-limites', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span><span class="nav-label">Clube Benefícios</span></button>
+
+        <button class="nav-item" id="nav-restaurante" onclick="navSwitchTab('restaurante', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg></span><span class="nav-label">Restaurante</span></button>
+
+        <button class="nav-item" id="nav-tem-saude" onclick="navSwitchTab('tem-saude', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span class="nav-label">Tem Saúde</span></button>
+
+
+        <!-- Loja de Prêmios — visível conforme role -->
+        <button class="nav-item store-shop-nav" id="nav-loja" onclick="navSwitchTab('loja', this)" style="display:none;"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg></span><span class="nav-label">Loja de Prêmios</span></button>
+
+        <!-- Tabs Admin: gestão embutida + página completa (visível para master/financeiro) -->
+        <button class="nav-item benefits-admin-nav" id="nav-gestao" onclick="openGestaoTab('loja-premios', this)" style="display:none;">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Gestão Benefícios</span>
+        </button>
+        <button class="nav-item benefits-admin-nav" id="nav-produtos" onclick="openGestaoTab('produtos-loja', this)" style="display:none;">
+          <span class="nav-icon">📦</span>
+          <span class="nav-label">Produtos da Loja</span>
+        </button>
+        <button class="nav-item benefits-admin-nav" id="nav-pedidos" onclick="openGestaoTab('pedidos-loja', this)" style="display:none;">
+          <span class="nav-icon">🛒</span>
+          <span class="nav-label">Pedidos da Loja</span>
+        </button>
+        <a class="nav-item benefits-admin-nav" id="nav-admin-benef" href="#" onclick="event.preventDefault();location.href=(typeof Auth!=='undefined'&&Auth.adminBeneficiosPageHref?Auth.adminBeneficiosPageHref():(typeof soubluPage==='function'?soubluPage('admin-beneficios.html'):'/pages/admin-beneficios.html'))" style="display:none;text-decoration:none;">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Esteira / Prestadores</span>
+        </a>
       </div>
       <div class="sidebar-footer">
         <div class="sidebar-user">
@@ -115,7 +126,7 @@
     <!-- Main Content Area -->
     <div class="main-area" id="mainArea">
       <header class="topbar">
-        <span class="topbar-title">ZS Clube Benefícios</span>
+        <span class="topbar-title" id="topbarTitle">ZS Clube Benefícios</span>
         <div class="topbar-actions">
           <div style="font-size:14px;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:4px;">
             <span>Saldo Clube:</span>
@@ -126,15 +137,7 @@
 
       <main class="page-content">
         <div id="beneficiosLoadError" class="wa-alert" style="display:none;margin-bottom:16px;"></div>
-        <!-- TABS -->
-        <div class="menu-tabs">
-          <div class="menu-tab active" onclick="switchTab('meus-limites', this)">Meus Limites</div>
-          <div class="menu-tab" onclick="switchTab('restaurante', this)">Restaurante ZS</div>
-          <div class="menu-tab" onclick="switchTab('tem-saude', this)">Tem Saúde</div>
-          <div class="menu-tab" onclick="switchTab('solicitar-limite', this)">Solicitar Limite</div>
-        </div>
 
-        <!-- SECTIONS -->
         <!-- 1. MEUS LIMITES -->
         <div id="tab-meus-limites" class="tab-content">
           <div class="grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px;">
@@ -185,7 +188,7 @@
         <!-- 2. RESTAURANTE -->
         <div id="tab-restaurante" class="tab-content" style="display:none;">
           <div class="benefit-card">
-            <div class="benefit-title">🍽️ Solicitar Pedido - Restaurante Clube ZS Benefícios</div>
+            <div class="benefit-title">🍽️ Solicitar Pedido - Restaurante</div>
             <div style="display:flex; gap: 10px; margin-bottom: 20px;">
               <button class="btn btn-primary" id="btnModeEntrega" onclick="setOrderMode('entrega')">Solicitar Pedido Entrega</button>
               <button class="btn btn-outline" id="btnModeRetirada" onclick="setOrderMode('retirada')">Solicitar Pedido Retirada</button>
@@ -206,7 +209,7 @@
 
                 <div class="form-group">
                   <label>Guarnições Adicionais (Opcional)</label>
-                  <div style="display:flex; gap: 20px; margin-top: 8px;">
+                  <div style="display:flex; gap: 20px; margin-top: 8px; flex-wrap:wrap;">
                     <label style="display:flex; align-items:center; gap: 6px; cursor:pointer;">
                       <input type="checkbox" id="chkSalada" value="Salada"/> Salada
                     </label>
@@ -231,7 +234,7 @@
 
               <div class="form-group">
                 <label>Valor do Pedido (R$)</label>
-                <input type="number" id="orderValue" class="form-control" placeholder="0,00" step="0.01" required/>
+                <input type="number" id="orderValue" class="form-control" placeholder="0,00" step="0.01" min="0" required/>
               </div>
 
               <div class="form-group">
@@ -254,379 +257,369 @@
                 📞 Agendar Consulta (WhatsApp)
               </a>
               <a href="https://www.bancobmg.com.br/seguros/bmg-med/" target="_blank" class="btn btn-outline" style="text-align: center; display: block; text-decoration: none;">
-                ℹ️ Dúvidas & Coberturas
+                ℹ️ Dúvidas &amp; Coberturas
               </a>
             </div>
           </div>
         </div>
 
-        <!-- 4. SOLICITAR LIMITE -->
-        <div id="tab-solicitar-limite" class="tab-content" style="display:none;">
+
+
+        <!-- 5. LOJA DE PRÊMIOS -->
+        <div id="tab-loja" class="tab-content" style="display:none;">
           <div class="benefit-card">
-            <div class="benefit-title">📝 Solicitar Limite de Parceiros</div>
-            <p class="form-hint" style="margin-bottom: 20px;">
-              A ZS Benefícios realizará análise e liberação do limite conforme política do Clube de Benefícios, limitado ao máximo de <strong>R$ 600,00</strong>.
-            </p>
-            <form id="limitRequestForm" onsubmit="submitLimitRequest(event)">
-              <div class="form-group">
-                <label>CPF</label>
-                <input type="text" id="reqCpf" class="form-control" placeholder="000.000.000-00" required/>
+            <div class="benefit-title">🛍️ Loja de Prêmios</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+              <div style="display:flex;gap:10px;align-items:center;">
+                <input type="text" id="storeSearch" class="form-control" placeholder="Buscar produto..." oninput="filterProducts()" style="max-width:260px;"/>
               </div>
-              <div class="form-row">
-                <div class="form-group">
-                  <label>1º Contato (Telefone)</label>
-                  <input type="text" id="reqPhone1" class="form-control" placeholder="(00) 00000-0000" required/>
-                </div>
-                <div class="form-group">
-                  <label>2º Contato (Telefone)</label>
-                  <input type="text" id="reqPhone2" class="form-control" placeholder="(00) 00000-0000"/>
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Forma de Pagamento</label>
-                <input type="text" class="form-control" value="SOU + BLU" readonly/>
-              </div>
-              <div class="form-group">
-                <label>Termo de Adesão de Limite</label>
-                <div style="background:var(--color-surface-2); padding: 15px; border-radius: var(--radius-md); font-size:13px; line-height: 1.6; margin-bottom: 12px;">
-                  Declaro para os devidos fins que aceito a disponibilização de limite para utilização na rede de parceiros do Clube ZS Benefícios, autorizando o desconto em folha ou repasses correspondentes.
-                </div>
-              </div>
-              <div class="form-group">
-                <label>Anexo Documento (RG / CNH)</label>
-                <input type="file" id="reqDocFile" class="form-control" accept="image/*,.pdf"/>
-              </div>
-              <button type="submit" class="btn btn-primary btn-full">Solicitar Limite Clube Benefícios</button>
-            </form>
+              <button class="btn btn-primary" onclick="openCart()">🛒 Carrinho <span id="cartCount">(0)</span></button>
+            </div>
+            <div id="categoryFilter" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+            <div id="productGrid" class="store-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">
+              <div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-text-muted);">Carregando produtos...</div>
+            </div>
+          </div>
+
+          <!-- Meus Pedidos na Loja -->
+          <div class="benefit-card">
+            <div class="benefit-title">📦 Meus Pedidos na Loja</div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Pedido</th>
+                    <th>Produto</th>
+                    <th>Qtd</th>
+                    <th>Valor</th>
+                    <th>Status</th>
+                    <th>Data</th>
+                  </tr>
+                </thead>
+                <tbody id="myOrdersTbody">
+                  <tr><td colspan="6" class="text-center">Nenhum pedido realizado.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
 
+        <!-- 6. GESTÃO BENEFÍCIOS (master/financeiro only) -->
+        <div id="tab-gestao-beneficios" class="tab-content" style="display:none;">
+
+          <!-- Sub-tabs dentro da gestão -->
+          <div style="display:flex;gap:0;border-bottom:2px solid var(--color-border);margin-bottom:var(--space-lg);overflow-x:auto;" id="gestaoSubTabs">
+            <div class="menu-tab active" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-primary);border-bottom:3px solid var(--color-primary);white-space:nowrap;" onclick="switchGestaoTab('loja-premios', this)">🛍️ Loja de Prêmios</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('cadastro-produtos', this)">🍱 Produtos ZS</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('controle-pedidos', this)">🍔 Pedidos ZS</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('produtos-loja', this)">📦 Produtos</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('pedidos-loja', this)">🛒 Pedidos (Esteira)</div>
+
+          </div>
+
+          <!-- Loja de Prêmios (admin view) -->
+          <div id="gtab-loja-premios" class="gtab-content">
+            <div class="benefit-card">
+              <div class="benefit-title" style="justify-content:space-between;">
+                🛍️ Loja de Prêmios
+                <button class="btn btn-primary" onclick="(function(){window.SOUBLU_ADMIN_PROFILE=true;StoreShop.init();})()">🔄 Atualizar</button>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+                <input type="text" id="adminStoreSearch" class="form-control" placeholder="Buscar produto..." oninput="StoreShop.filterProducts&&StoreShop.filterProducts()" style="max-width:260px;"/>
+                <button class="btn btn-outline" onclick="openCart()">🛒 Ver Carrinho</button>
+              </div>
+              <div id="adminCategoryFilter" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+              <div id="adminProductGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">
+                
+              </div>
+            </div>
+          </div>
+
+          <!-- Cadastro de Produtos -->
+          <div id="gtab-cadastro-produtos" class="gtab-content" style="display:none;">
+            <div class="benefit-card">
+              <div class="benefit-title">📦 Cadastrar Produtos | Clube ZS Benefícios</div>
+              <form onsubmit="saveProduct(event)" id="productForm">
+                <div class="form-row">
+                  <div class="form-group"><label>Categoria do Produto</label><input type="text" id="prodCategoria" class="form-control" placeholder="Ex: Marmita, Bebida..." required/></div>
+                  <div class="form-group"><label>Nome do Produto</label><input type="text" id="prodNome" class="form-control" placeholder="Nome do Produto" required/></div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group"><label>Prestador de Serviço</label><select id="prodProvider" class="form-control" required></select></div>
+                  <div class="form-group"><label>Valor (R$)</label><input type="number" id="prodValor" class="form-control" placeholder="0,00" step="0.01" required/></div>
+                </div>
+                <div class="form-group"><label>Descrição do Produto</label><textarea id="prodDesc" class="form-control" rows="2" placeholder="Ingredientes ou detalhes..."></textarea></div>
+                <button type="submit" class="btn btn-primary">Salvar Produto</button>
+              </form>
+            </div>
+          </div>
+
+          <!-- Controle de Pedidos -->
+          <div id="gtab-controle-pedidos" class="gtab-content" style="display:none;">
+            <div class="benefit-card">
+              <div class="benefit-title">🍔 Controle de Pedidos de Refeições</div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead><tr><th>Nº Pedido</th><th>Funcionário</th><th>Estabelecimento</th><th>Valor</th><th>Detalhes</th><th>Situação</th><th>Ação</th></tr></thead>
+                  <tbody id="pedidosTbody"><tr><td colspan="7" class="text-center">Nenhum pedido registrado hoje.</td></tr></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Produtos Loja de Prêmios -->
+          <div id="gtab-produtos-loja" class="gtab-content" style="display:none;">
+            <div class="benefit-card">
+              <div class="benefit-title" style="justify-content:space-between;">
+                🛍️ Esteira de Produtos — Loja de Prêmios
+                <button class="btn btn-primary btn-sm" onclick="openAddProductModal()">+ Novo Produto</button>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Produto</th>
+                      <th>Categoria</th>
+                      <th>Preço (pts)</th>
+                      <th>Estoque</th>
+                      <th>Status</th>
+                      <th>Destaque</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="productsTbody">
+                    <tr><td colspan="7" class="text-center">Carregando produtos...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pedidos Loja de Prêmios -->
+          <div id="gtab-pedidos-loja" class="gtab-content" style="display:none;">
+            <div class="benefit-card">
+              <div class="benefit-title" style="justify-content:space-between;">
+                📦 Esteira de Pedidos — Loja de Prêmios
+                <div class="search-bar" style="width:220px;">
+                  <input type="text" id="orderSearch" placeholder="Buscar pedido..." oninput="typeof renderOrdersTable==='function'&&renderOrdersTable()" class="form-control" style="height:36px;"/>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Pedido</th>
+                      <th>Funcionário</th>
+                      <th>Itens</th>
+                      <th>Total</th>
+                      <th>Data</th>
+                      <th>Status</th>
+                      <th>Alterar</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ordersTbody">
+                    <tr><td colspan="7" class="text-center">Carregando pedidos...</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+
+
+        </div><!-- /tab-gestao-beneficios -->
+
       </main>
+    </div>
+  </div>
+
+  <!-- Modal Aprovação de Limite -->
+  <div class="modal-overlay" id="approveLimitModal" style="display:none;">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3>Definir Limite de Crédito</h3>
+        <button class="modal-close" onclick="closeApproveModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="modalReqId"/>
+        <div class="form-group"><label>Funcionário</label><input type="text" id="modalReqName" class="form-control" readonly/></div>
+        <div class="form-group"><label>Limite Máximo Aprovado (R$)</label><input type="number" id="modalReqLimit" class="form-control" value="600" min="0" max="600"/></div>
+        <div class="form-group"><label>Anexo Contrato Assinado</label><input type="file" id="modalContractFile" class="form-control" accept="image/*,.pdf"/></div>
+        <div class="form-group"><label>Anexo Nota Promissória Assinada</label><input type="file" id="modalPromissoryFile" class="form-control" accept="image/*,.pdf"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeApproveModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmLimitApproval()">Salvar e Aprovar</button>
+      </div>
     </div>
   </div>
 
   <script src="../js/config.js?v=1781704178"></script>
   <script src="../js/db.js?v=1781813000"></script>
   <script src="../js/auth.js?v=1781813000"></script>
+  <script src="../js/ui.js?v=1781813000"></script>
+  <script src="../js/store-shop.js?v=1781704178"></script>
+  <script src="../js/admin-beneficios.js?v=benef-fix4"></script>
+  <script src="../js/clube-beneficios.js?v=benef-fix4"></script>
+
   <script>
-    let currentUser = null;
-    let currentLimit = null;
-    let orderMode = 'entrega';
-    let selectedMeats = [];
+  // ── Navegação por sidebar: troca seção sem sair da página ──
+  function navSwitchTab(tabId, el) {
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach(b => b.classList.remove('active'));
+    if (el) el.classList.add('active');
 
-    window.addEventListener('DOMContentLoaded', async () => {
-      if (typeof DB !== 'undefined' && DB.init) await DB.init();
-      currentUser = Auth.getSession();
-      if (!currentUser) {
-        window.location.replace(Auth.loginPageHref());
-        return;
-      }
+    document.querySelectorAll('.tab-content').forEach(c => { c.style.display = 'none'; });
 
-      const uName = currentUser.nome_completo || currentUser.name || currentUser.username || 'Vendedor';
-      const uRole = currentUser.role === 'employee' ? 'Funcionário' : (currentUser.role || 'Funcionário');
-      document.getElementById('sidebarName').innerText = uName.split(' ')[0];
-      document.getElementById('sidebarRole').innerText = uRole;
-      document.getElementById('orderEmpName').value = uName;
-      document.getElementById('reqCpf').value = currentUser.cpf || '';
-      
-      const av = document.getElementById('sidebarAvatar');
-      if (av) {
-        av.textContent = uName.charAt(0).toUpperCase();
-        av.style.display = 'flex';
-        av.style.alignItems = 'center';
-        av.style.justifyContent = 'center';
-        av.style.color = '#fff';
-        av.style.fontWeight = 'bold';
-      }
+    const panel = document.getElementById('tab-' + tabId);
+    if (panel) panel.style.display = 'block';
 
-      const showBenefitsAdmin = typeof Auth.canManageBeneficios === 'function'
-        && Auth.canManageBeneficios(currentUser?.role);
-      document.querySelectorAll('.benefits-admin-nav').forEach(el => {
-        el.style.display = showBenefitsAdmin ? 'flex' : 'none';
-      });
+    const titles = {
+      'meus-limites':      'ZS Clube Benefícios',
+      'restaurante':       'Restaurante',
+      'tem-saude':         'Tem Saúde',
+      'loja':              'Loja de Prêmios',
+      'gestao-beneficios': 'Gestão Benefícios'
+    };
+    const t = document.getElementById('topbarTitle');
+    if (t) t.textContent = titles[tabId] || 'ZS Clube Benefícios';
 
-      await loadUserData();
+    if (tabId === 'loja' && window.StoreShop) {
+      StoreShop.init();
+    }
+    if (tabId === 'gestao-beneficios' && window.BeneficiosAdmin) {
+      BeneficiosAdmin.loadAllData();
+    }
+  }
+
+  function openGestaoTab(subTabId, el) {
+    navSwitchTab('gestao-beneficios', el);
+    const map = {
+      'loja-premios': 0,
+      'cadastro-produtos': 1,
+      'controle-pedidos': 2,
+      'produtos-loja': 3,
+      'pedidos-loja': 4,
+    };
+    const tabs = document.querySelectorAll('#gestaoSubTabs .menu-tab');
+    const idx = map[subTabId];
+    const tabEl = (idx != null && tabs[idx]) ? tabs[idx] : tabs[0];
+    switchGestaoTab(subTabId || 'loja-premios', tabEl);
+  }
+
+  // ── Sub-tabs dentro da Gestão Benefícios ──
+  function switchGestaoTab(tabId, el) {
+    document.querySelectorAll('#gestaoSubTabs .menu-tab').forEach(t => {
+      t.style.color = 'var(--color-text-secondary)';
+      t.style.borderBottomColor = 'transparent';
     });
-
-    async function loadUserData() {
-      const errBox = document.getElementById('beneficiosLoadError');
-      if (errBox) errBox.style.display = 'none';
-      try {
-        // Obter limites
-        const limits = await supaReq('GET', 'beneficios_limites', null, `?employee_id=eq.${currentUser.id}&limit=1`);
-        if (limits && limits.length > 0) {
-          currentLimit = limits[0];
-          document.getElementById('valAprovado').innerText = formatCurrency(currentLimit.limite_aprovado);
-          document.getElementById('valUtilizado').innerText = formatCurrency(currentLimit.limite_utilizado);
-          document.getElementById('valDisponivel').innerText = formatCurrency(currentLimit.limite_disponivel);
-          document.getElementById('topbarBalance').innerText = formatCurrency(currentLimit.limite_disponivel);
-          document.getElementById('distTotalAvailable').innerText = formatCurrency(currentLimit.limite_aprovado);
-        } else {
-          // Nenhum limite solicitado ou aprovado ainda
-          currentLimit = null;
-        }
-
-        // Carregar prestadores para distribuição
-        const providers = await supaReq('GET', 'beneficios_prestadores', null, '?select=*');
-        renderDistribution(providers);
-
-        // Carregar vouchers
-        const vouchers = await supaReq('GET', 'beneficios_vouchers', null, `?employee_id=eq.${currentUser.id}&order=created_at.desc`);
-        renderVouchers(vouchers);
-      } catch (e) {
-        console.error('Erro ao carregar dados do usuário:', e);
-        if (errBox) {
-          errBox.style.display = 'block';
-          errBox.textContent = 'Não foi possível carregar os dados do Clube Benefícios. Atualize a página (Ctrl+F5). Se persistir, avise o suporte.';
-        }
-      }
+    if (el) {
+      el.style.color = 'var(--color-primary)';
+      el.style.borderBottomColor = 'var(--color-primary)';
     }
+    document.querySelectorAll('.gtab-content').forEach(c => { c.style.display = 'none'; });
+    const p = document.getElementById('gtab-' + tabId);
+    if (p) p.style.display = 'block';
 
-    function formatCurrency(val) {
-      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+    if (tabId === 'loja-premios' && window.StoreShop) { window.SOUBLU_ADMIN_PROFILE = true; StoreShop.init(); }
+    if (tabId === 'produtos-loja' && typeof renderProductsTable === 'function') {
+      renderProductsTable();
     }
-
-    function switchTab(tabId, el) {
-      document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
-      document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-      el.classList.add('active');
-      document.getElementById(`tab-${tabId}`).style.display = 'block';
+    if (tabId === 'pedidos-loja' && typeof renderOrdersTable === 'function') {
+      renderOrdersTable();
     }
-
-    function setOrderMode(mode) {
-      orderMode = mode;
-      const btnE = document.getElementById('btnModeEntrega');
-      const btnR = document.getElementById('btnModeRetirada');
-      const deliveryF = document.getElementById('deliveryFields');
-
-      if (mode === 'entrega') {
-        btnE.className = 'btn btn-primary';
-        btnR.className = 'btn btn-outline';
-        deliveryF.style.display = 'block';
-      } else {
-        btnE.className = 'btn btn-outline';
-        btnR.className = 'btn btn-primary';
-        deliveryF.style.display = 'none';
-      }
+    if ((tabId === 'cadastro-produtos' || tabId === 'controle-pedidos') && window.BeneficiosAdmin) {
+      BeneficiosAdmin.loadAllData();
     }
+  }
 
-    function toggleMeat(el, meat) {
-      if (selectedMeats.includes(meat)) {
-        selectedMeats = selectedMeats.filter(x => x !== meat);
-        el.classList.remove('active');
-      } else {
-        if (selectedMeats.length >= 2) {
-          alert('Selecione no máximo 2 carnes.');
-          return;
-        }
-        selectedMeats.push(meat);
-        el.classList.add('active');
+  // ── Após carregar, exibe itens de nav conforme role ──
+  setTimeout(() => {
+    try {
+      const session = JSON.parse(sessionStorage.getItem('soublu_session') || localStorage.getItem('soublu_session') || '{}');
+      const role = String(session.role || '').toLowerCase();
+      const IS_MASTER = ['admin', 'supervisor_geral', 'suporte', 'fundador', 'master', 'financeiro', 'financial'].includes(role);
+      const IS_STORE  = IS_MASTER || ['parceiro', 'colaborador', 'parceiro_master', 'vendedor', 'employee', 'funcionario'].includes(role);
+
+      if (IS_STORE) {
+        document.querySelectorAll('.store-shop-nav').forEach(el => el.style.display = 'flex');
       }
-    }
-
-    function renderDistribution(providers) {
-      const container = document.getElementById('distribList');
-      container.innerHTML = '';
-      if (!providers || providers.length === 0) {
-        container.innerHTML = '<p class="text-muted">Nenhum prestador cadastrado no sistema.</p>';
-        return;
+      if (IS_MASTER) {
+        document.querySelectorAll('.benefits-admin-nav').forEach(el => el.style.display = 'flex');
       }
-
-      const currentDist = currentLimit?.distribuicao || {};
-
-      providers.forEach(p => {
-        const val = currentDist[p.id] || 0;
-        const row = document.createElement('div');
-        row.className = 'limit-dist-row';
-        row.innerHTML = `
-          <div>
-            <strong>${p.nome_fantasia}</strong>
-            <div style="font-size:12px;color:var(--color-text-secondary);">${p.categoria || 'Geral'}</div>
-          </div>
-          <div style="display:flex; align-items:center; gap:8px;">
-            <span>R$</span>
-            <input type="number" class="form-control dist-input" data-provider-id="${p.id}" value="${val}" style="width:100px; text-align:right;" min="0"/>
-          </div>
-        `;
-        container.appendChild(row);
-      });
-    }
-
-    async function saveDistribution() {
-      if (!currentLimit) {
-        alert('Você precisa ter um limite aprovado primeiro.');
-        return;
-      }
-
-      // Validar data da última alteração (mínimo 45 dias)
-      if (currentLimit.last_distribution_at) {
-        const lastDate = new Date(currentLimit.last_distribution_at);
-        const diffDays = Math.ceil((new Date() - lastDate) / (1000 * 60 * 60 * 24));
-        if (diffDays < 45) {
-          alert(`Você só pode alterar a distribuição do limite a cada 45 dias. Faltam ${45 - diffDays} dias.`);
-          return;
-        }
-      }
-
-      const inputs = document.querySelectorAll('.dist-input');
-      const distObj = {};
-      let sum = 0;
-
-      inputs.forEach(input => {
-        const val = parseFloat(input.value) || 0;
-        distObj[input.dataset.providerId] = val;
-        sum += val;
-      });
-
-      if (sum > currentLimit.limite_aprovado) {
-        alert(`A soma dos limites distribuídos (${formatCurrency(sum)}) excede o seu limite total aprovado (${formatCurrency(currentLimit.limite_aprovado)}).`);
-        return;
-      }
-
-      try {
-        await supaReq('PATCH', 'beneficios_limites', {
-          distribuicao: distObj,
-          last_distribution_at: new Date().toISOString()
-        }, `?id=eq.${currentLimit.id}`);
-        alert('Distribuição de limites atualizada com sucesso!');
-        await loadUserData();
-      } catch (e) {
-        alert('Erro ao salvar distribuição: ' + e.message);
-      }
-    }
-
-    function renderVouchers(vouchers) {
-      const tbody = document.getElementById('vouchersTbody');
-      tbody.innerHTML = '';
-
-      if (!vouchers || vouchers.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum voucher emitido.</td></tr>';
-        return;
-      }
-
-      vouchers.forEach(v => {
-        const tr = document.createElement('tr');
-        let statusBadge = '';
-        if (v.status === 'pago') statusBadge = '<span class="badge badge-success">Pago</span>';
-        else if (v.status === 'recusado') statusBadge = '<span class="badge badge-danger">Recusado</span>';
-        else statusBadge = '<span class="badge badge-warning">Em Processamento</span>';
-
-        tr.innerHTML = `
-          <td><strong>${v.voucher_no}</strong></td>
-          <td>${v.prestador_name || 'Restaurante'}</td>
-          <td>${formatCurrency(v.valor)}</td>
-          <td>${statusBadge}</td>
-          <td>${new Date(v.created_at).toLocaleDateString('pt-BR')}</td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-
-    async function submitLimitRequest(e) {
-      e.preventDefault();
-      try {
-        const fileInput = document.getElementById('reqDocFile');
-        let fileUrl = '';
-        if (fileInput.files.length > 0) {
-          // Simula upload do arquivo
-          fileUrl = 'uploads/' + Date.now() + '_' + fileInput.files[0].name;
-        }
-
-        const payload = {
-          employee_id: currentUser.id,
-          employee_name: currentUser.name,
-          contato1: document.getElementById('reqPhone1').value,
-          contato2: document.getElementById('reqPhone2').value,
-          forma_pagamento: 'SOU + BLU',
-          documento_url: fileUrl,
-          limite_aprovado: 0,
-          limite_utilizado: 0,
-          limite_disponivel: 0,
-          status: 'solicitado',
-          protocolo: 'REQ-' + Date.now().toString(36).toUpperCase()
-        };
-
-        await supaReq('POST', 'beneficios_limites', payload);
-        alert('Solicitação de limite enviada com sucesso! Aguarde a análise da gestão.');
-        document.getElementById('limitRequestForm').reset();
-        await loadUserData();
-      } catch (err) {
-        alert('Erro ao enviar solicitação: ' + err.message);
-      }
-    }
-
-    async function submitFoodOrder(e) {
-      e.preventDefault();
-
-      if (!currentLimit || currentLimit.limite_disponivel <= 0) {
-        alert('Você não possui limite disponível para realizar pedidos.');
-        return;
-      }
-
-      const orderVal = parseFloat(document.getElementById('orderValue').value) || 0;
-      if (orderVal <= 0) {
-        alert('Informe um valor de pedido válido.');
-        return;
-      }
-
-      if (orderVal > currentLimit.limite_disponivel) {
-        alert(`O valor do pedido excede o seu limite disponível (${formatCurrency(currentLimit.limite_disponivel)}).`);
-        return;
-      }
-
-      if (orderMode === 'entrega' && selectedMeats.length < 2) {
-        alert('Por favor, escolha 2 opções de carne.');
-        return;
-      }
-
-      try {
-        // Encontrar prestador do tipo Restaurante
-        const providers = await supaReq('GET', 'beneficios_prestadores', null, "?categoria=eq.Restaurante&limit=1");
-        const provider = (providers && providers.length > 0) ? providers[0] : { id: 'rest_default', nome_fantasia: 'Restaurante Clube ZS Benefícios' };
-
-        const today = new Date();
-        const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const voucherNo = `ZS-${today.getDate().toString().padStart(2,'0')}${(today.getMonth()+1).toString().padStart(2,'0')}${today.getFullYear()}-${rand}`;
-
-        const detalhes = {
-          modo: orderMode,
-          horario_entrega: orderMode === 'entrega' ? document.getElementById('orderDeliveryTime').value : null,
-          salada: orderMode === 'entrega' ? document.getElementById('chkSalada').checked : false,
-          feijao_caldo: orderMode === 'entrega' ? document.getElementById('chkFeijaoCaldo').checked : false,
-          carnes: orderMode === 'entrega' ? selectedMeats : []
-        };
-
-        const voucher = {
-          voucher_no: voucherNo,
-          employee_id: currentUser.id,
-          employee_name: currentUser.name,
-          prestador_id: provider.id,
-          prestador_name: provider.nome_fantasia,
-          categoria: 'Alimentação',
-          valor: orderVal,
-          status: 'em_analise',
-          detalhes_pedido: detalhes
-        };
-
-        await supaReq('POST', 'beneficios_vouchers', voucher);
-
-        // Deduzir limite
-        const newUsed = parseFloat(currentLimit.limite_utilizado) + orderVal;
-        const newAvailable = parseFloat(currentLimit.limite_disponivel) - orderVal;
-        await supaReq('PATCH', 'beneficios_limites', {
-          limite_utilizado: newUsed,
-          limite_disponivel: newAvailable
-        }, `?id=eq.${currentLimit.id}`);
-
-        alert(`Pedido salvo com sucesso! Seu voucher é: ${voucherNo}`);
-        document.getElementById('orderForm').reset();
-        selectedMeats = [];
-        document.querySelectorAll('.meat-option').forEach(o => o.classList.remove('active'));
-        await loadUserData();
-      } catch (err) {
-        alert('Erro ao salvar pedido: ' + err.message);
-      }
-    }
+    } catch(e) {}
+  }, 300);
   </script>
+<!-- MODAL: PRODUTO -->
+<div class="modal-overlay" id="addProductModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="prodModalTitle">Novo Produto</h3>
+      <button class="modal-close" onclick="closeModal('addProductModal')"></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="editProdId"/>
+      <div class="form-row">
+        <div class="form-group" style="flex:2;">
+          <label>Nome do Produto</label>
+          <input type="text" id="prodName" placeholder="Ex: Fone Bluetooth"/>
+        </div>
+        <div class="form-group" style="flex:1;">
+          <label>Preço (Pontos)</label>
+          <input type="number" id="prodPrice" min="0" step="1" placeholder="Ex: 150"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Categoria</label>
+          <select id="prodCategory">
+            <option>Tecnologia</option>
+            <option>Vale-Compras</option>
+            <option>Acessórios</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Estoque</label>
+          <input type="number" id="prodStock" min="0" step="1" placeholder="Ex: 10"/>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Emoji (ícone)</label>
+          <input type="text" id="prodEmoji" placeholder="Ex: 🎧" maxlength="2"/>
+        </div>
+        <div class="form-group" style="display:flex;align-items:flex-end;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" id="prodFeatured"> Produto Destaque
+          </label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Descrição</label>
+        <textarea id="prodDesc" rows="3" placeholder="Detalhes do produto..."></textarea>
+      </div>
+      
+      <!-- Upload de imagem -->
+      <div class="form-group">
+        <label>Imagem do Produto (opcional, máx 3MB)</label>
+        <div style="display:flex;gap:12px;align-items:flex-start;">
+          <div id="prodImgThumb" style="width:64px;height:64px;border-radius:8px;background:var(--color-surface-2);display:flex;align-items:center;justify-content:center;overflow:hidden;">
+            <span style="font-size:32px;"></span>
+          </div>
+          <div style="flex:1;">
+            <input type="file" id="prodImageFile" accept="image/*" onchange="handleProductImageUpload(this)" class="form-control" style="padding:6px;"/>
+            <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;color:var(--color-danger);" onclick="removeProductImage()">Remover Imagem</button>
+            <img id="prodImagePreview" src="" style="display:none;margin-top:12px;max-width:100%;max-height:120px;border-radius:8px;object-fit:cover;"/>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" onclick="closeModal('addProductModal')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveStoreProduct()">Salvar Produto</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>

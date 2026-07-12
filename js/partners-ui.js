@@ -38,10 +38,9 @@
     return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
   }
 
-  function fmtCnpj(v) {
-    const d = String(v || '').replace(/\D/g, '');
-    if (d.length !== 14) return v || '';
-    return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
+  function _partnerAttachmentsMap(raw) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+    return { ...raw };
   }
 
   const _PARTNER_ROLE_LABELS = {
@@ -548,6 +547,17 @@
     _set('partnerContato', '');
     _set('partnerEmail', '');
     _set('partnerSenha', 'Blu@2025');
+    
+    const docKeys = ['termo_login', 'contrato_social', 'termo_compliance', 'rg_representante', 'termo_confissao_divida', 'contrato_prestacao_servicos'];
+    docKeys.forEach(k => {
+      const hid = document.getElementById(`partnerDoc_${k}`);
+      const lbl = document.getElementById(`partnerDocLabel_${k}`);
+      const fileInp = document.getElementById(`partnerDocFile_${k}`);
+      if (hid) hid.value = '';
+      if (fileInp) fileInp.value = '';
+      if (lbl) lbl.innerHTML = '<span style="color:#999;">Opcional</span>';
+    });
+
     document.getElementById('partnerModalTitle').textContent = 'Cadastrar parceiro';
     if (partnerId) {
       const p = await DB.getPartner(partnerId).catch(() => null);
@@ -561,6 +571,24 @@
       _set('partnerEmail', p.email || '');
       if (typeof PartnerPerms !== 'undefined') PartnerPerms.fillForm('partnerPermsCheckboxes', p.permissions);
       if (typeof PartnerPerms !== 'undefined') PartnerPerms.fillCommissionTierForm(p.meta || {});
+      
+      const metaObj = typeof p.meta === 'string'
+        ? (() => { try { return JSON.parse(p.meta); } catch (_) { return {}; } })()
+        : (p.meta || {});
+      const attMap = _partnerAttachmentsMap(metaObj.attachments);
+      docKeys.forEach(k => {
+        const url = attMap[k];
+        const hid = document.getElementById(`partnerDoc_${k}`);
+        const lbl = document.getElementById(`partnerDocLabel_${k}`);
+        if (hid && url) hid.value = url;
+        if (lbl && url) {
+          const link = typeof partnerAttachmentLinkHtml === 'function'
+            ? partnerAttachmentLinkHtml(url)
+            : `<a href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation(); openAttachmentUrl(this.href); return false;">Ver anexo</a>`;
+          lbl.innerHTML = link || '<span style="color:#999;">Opcional</span>';
+        }
+      });
+
       document.getElementById('partnerModalTitle').textContent = 'Editar parceiro';
     } else if (typeof PartnerPerms !== 'undefined') {
       PartnerPerms.fillForm('partnerPermsCheckboxes', PartnerPerms.DEFAULT);
@@ -592,6 +620,16 @@
     const tierMeta = typeof PartnerPerms !== 'undefined'
       ? PartnerPerms.readCommissionTierMeta(parsedPrev)
       : {};
+
+    const attachments = { ..._partnerAttachmentsMap(parsedPrev.attachments) };
+    const docKeys = ['termo_login', 'contrato_social', 'termo_compliance', 'rg_representante', 'termo_confissao_divida', 'contrato_prestacao_servicos'];
+    docKeys.forEach(k => {
+      const hid = document.getElementById(`partnerDoc_${k}`);
+      if (!hid?.value) return;
+      if (typeof _isInlineAttachmentUrl === 'function' && _isInlineAttachmentUrl(hid.value)) return;
+      attachments[k] = hid.value;
+    });
+
     const payload = {
       id: recordId || undefined,
       user_id: _val('partnerUserId') || undefined,
@@ -607,6 +645,7 @@
         representante_legal: _val('partnerRepresentante'),
         cpf_representante: _val('partnerCpfRepresentante').replace(/\D/g, ''),
         status: document.getElementById('partnerStatus')?.value || parsedPrev.status || 'analise',
+        attachments,
         ...tierMeta,
         bank: {
           pix_key: _val('partnerPixKey'),
@@ -641,21 +680,51 @@
   function partnerConsultaScore() { showToast('Consulta de score — use o painel Master para histórico completo.', 'info'); }
   function partnerConsultaCertidaoTj() { showToast('Consulta TJ — use o painel Master para histórico completo.', 'info'); }
 
+  async function _partnerPersistAttachment(partnerId, key, url) {
+    if (!partnerId || !key || !url) return;
+    const p = await DB.getPartner(partnerId).catch(() => null);
+    if (!p) return;
+    const meta = typeof p.meta === 'string'
+      ? (() => { try { return JSON.parse(p.meta); } catch (_) { return {}; } })()
+      : (p.meta || {});
+    const att = _partnerAttachmentsMap(meta.attachments);
+    att[key] = url;
+    await DB.savePartner({
+      ...p,
+      meta: { ...meta, attachments: att },
+    });
+  }
+
   async function _partnerUploadDoc(input, key) {
     const file = input?.files?.[0];
     if (!file) return;
     const label = document.getElementById(`partnerDocLabel_${key}`);
+    if (label) label.textContent = 'Enviando…';
     try {
-      let url = '';
-      if (typeof uploadImage === 'function') {
-        url = await uploadImage(file, 'partner-docs', key);
-      } else if (typeof fileToBase64 === 'function') {
-        url = await fileToBase64(file);
+      if (typeof uploadImage !== 'function') {
+        throw new Error('Upload indisponível — recarregue a página (Ctrl+F5).');
+      }
+      const url = await uploadImage(file, 'partner-docs', `${key}_${Date.now()}`);
+      if (!url || (typeof _isInlineAttachmentUrl === 'function' && _isInlineAttachmentUrl(url))) {
+        throw new Error('O servidor não aceitou o arquivo. Tente outro formato (PDF/JPG/PNG) ou contate o suporte.');
       }
       const hidden = document.getElementById(`partnerDoc_${key}`);
       if (hidden) hidden.value = url;
-      if (label) label.innerHTML = `<span style="color:var(--color-success);">${esc(file.name)}</span>`;
+      const link = typeof partnerAttachmentLinkHtml === 'function'
+        ? partnerAttachmentLinkHtml(url)
+        : `<a href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation(); openAttachmentUrl(this.href); return false;">Ver anexo</a>`;
+      if (label) {
+        label.innerHTML = `${link} <span style="color:var(--color-success);">(${esc(file.name)})</span>`;
+      }
+      const partnerId = _val('partnerRecordId');
+      if (partnerId) {
+        await _partnerPersistAttachment(partnerId, key, url);
+        showToast('Documento salvo no cadastro do parceiro.', 'success');
+      } else {
+        showToast('Anexo enviado. Clique em Salvar parceiro para concluir.', 'success');
+      }
     } catch (e) {
+      if (label) label.innerHTML = '<span style="color:var(--color-danger);">Falha no upload</span>';
       alert('Falha no upload: ' + (e.message || e));
     }
   }

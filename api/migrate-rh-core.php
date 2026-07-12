@@ -196,18 +196,32 @@ try {
     $columnMigrations = [
         'rh_jobs' => [
             'trabalho_insalubre' => 'ALTER TABLE `rh_jobs` ADD COLUMN `trabalho_insalubre` VARCHAR(8) NULL DEFAULT \'NÃO\'',
+            'attachments' => 'ALTER TABLE `rh_jobs` ADD COLUMN `attachments` JSON NULL',
+            'pop_nome' => 'ALTER TABLE `rh_jobs` ADD COLUMN `pop_nome` VARCHAR(255) NULL',
         ],
         'rh_resumes' => [
             'data_nascimento' => 'ALTER TABLE `rh_resumes` ADD COLUMN `data_nascimento` DATE NULL',
             'pis' => 'ALTER TABLE `rh_resumes` ADD COLUMN `pis` VARCHAR(20) NULL',
             'situacao_cadastral' => 'ALTER TABLE `rh_resumes` ADD COLUMN `situacao_cadastral` VARCHAR(64) NULL',
             'fontedata_meta' => 'ALTER TABLE `rh_resumes` ADD COLUMN `fontedata_meta` JSON NULL',
+            'recusado_at' => 'ALTER TABLE `rh_resumes` ADD COLUMN `recusado_at` DATETIME NULL',
         ],
         'rh_employees' => [
             'data_nascimento' => 'ALTER TABLE `rh_employees` ADD COLUMN `data_nascimento` DATE NULL',
             'pis' => 'ALTER TABLE `rh_employees` ADD COLUMN `pis` VARCHAR(20) NULL',
             'situacao_cadastral' => 'ALTER TABLE `rh_employees` ADD COLUMN `situacao_cadastral` VARCHAR(64) NULL',
             'fontedata_meta' => 'ALTER TABLE `rh_employees` ADD COLUMN `fontedata_meta` JSON NULL',
+            'attachments' => 'ALTER TABLE `rh_employees` ADD COLUMN `attachments` JSON NULL',
+            'supervisor_id' => 'ALTER TABLE `rh_employees` ADD COLUMN `supervisor_id` VARCHAR(64) NULL',
+            'responsavel_dpto_id' => 'ALTER TABLE `rh_employees` ADD COLUMN `responsavel_dpto_id` VARCHAR(64) NULL',
+            'diretor_dpto_id' => 'ALTER TABLE `rh_employees` ADD COLUMN `diretor_dpto_id` VARCHAR(64) NULL',
+            'email_pessoal' => 'ALTER TABLE `rh_employees` ADD COLUMN `email_pessoal` VARCHAR(255) NULL',
+            'cargo_id' => 'ALTER TABLE `rh_employees` ADD COLUMN `cargo_id` VARCHAR(64) NULL',
+            'system_role' => 'ALTER TABLE `rh_employees` ADD COLUMN `system_role` VARCHAR(64) NULL',
+            'role' => 'ALTER TABLE `rh_employees` ADD COLUMN `role` VARCHAR(64) NULL',
+            'permissions' => 'ALTER TABLE `rh_employees` ADD COLUMN `permissions` JSON NULL',
+            'audit_log' => 'ALTER TABLE `rh_employees` ADD COLUMN `audit_log` JSON NULL',
+            'user_id' => 'ALTER TABLE `rh_employees` ADD COLUMN `user_id` VARCHAR(64) NULL',
         ],
     ];
 
@@ -226,7 +240,7 @@ try {
                 $pdo->exec($sql);
                 $applied[] = "{$table}.{$col}";
             } catch (Throwable $e) {
-                if ($col === 'fontedata_meta') {
+                if (in_array($col, ['fontedata_meta', 'permissions', 'audit_log', 'attachments'], true)) {
                     $pdo->exec(str_replace(' JSON NULL', ' LONGTEXT NULL', $sql));
                     $applied[] = "{$table}.{$col}:longtext";
                 } else {
@@ -236,11 +250,32 @@ try {
         }
     }
 
+    $dataFixes = [];
+    try {
+        $stmt = $pdo->query(
+            "SELECT id, protocolo FROM rh_jobs
+             WHERE protocolo LIKE 'undefined-%' OR protocolo LIKE 'null-%'"
+        );
+        $badJobs = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+        foreach ($badJobs as $row) {
+            $proto = (string) ($row['protocolo'] ?? '');
+            if (preg_match('/^(?:undefined|null)-(.+)$/i', $proto, $m)) {
+                $fixed = 'RH-' . $m[1];
+                $upd = $pdo->prepare('UPDATE rh_jobs SET protocolo = ?, updated_at = NOW() WHERE id = ?');
+                $upd->execute([$fixed, $row['id']]);
+                $dataFixes[] = ['table' => 'rh_jobs', 'id' => $row['id'], 'protocolo' => $fixed];
+            }
+        }
+    } catch (Throwable $e) {
+        $dataFixes[] = ['error' => $e->getMessage()];
+    }
+
     echo json_encode([
         'ok' => true,
         'applied' => $applied,
-        'message' => $applied
-            ? 'Tabelas RH criadas no MySQL.'
+        'data_fixes' => $dataFixes,
+        'message' => $applied || $dataFixes
+            ? 'Migração RH aplicada.'
             : 'Nada a migrar — tabelas RH já existem.',
     ], JSON_UNESCAPED_UNICODE);
 } catch (Throwable $e) {

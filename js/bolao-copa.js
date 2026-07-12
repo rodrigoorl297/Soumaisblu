@@ -6,27 +6,28 @@ const BolaoCopa = (() => {
   const SECTION_ID = 'secBolaoCopa';
   const CAMPAIGN_ID = 'album-copa-2026';
   const PERFECT_BONUS = 150;
-  const PICK_WINDOW_MS = 30 * 60 * 1000;
+  const PICK_WINDOW_MS = 10 * 60 * 1000;
 
-  /** Jogos do bolão — prazo = 30 min antes do horário de início (kickoff). */
+  /** Jogos do bolão — prazo = 10 min antes do horário de início (kickoff, America/Sao_Paulo). */
   const MATCHES = [
-    { id: 'm01', home: { name: 'Brasil', code: 'br' }, away: { name: 'Japão', code: 'jp' }, date: '2026-06-29', kickoff: '13:30', sticker: 'patrocinador', stickerLabel: 'Figurinha patrocinador' },
-    { id: 'm02', home: { name: 'Holanda', code: 'nl' }, away: { name: 'Marrocos', code: 'ma' }, date: '2026-06-29', kickoff: '16:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
-    { id: 'm03', home: { name: 'França', code: 'fr' }, away: { name: 'Suécia', code: 'se' }, date: '2026-06-30', kickoff: '13:30', sticker: 'gold', stickerLabel: 'Figurinha gold' },
-    { id: 'm04', home: { name: 'México', code: 'mx' }, away: { name: 'Equador', code: 'ec' }, date: '2026-06-30', kickoff: '16:00', sticker: 'patrocinador', stickerLabel: 'Figurinha patrocinador' },
-    { id: 'm05', home: { name: 'Inglaterra', code: 'gb-eng' }, away: { name: 'RD Congo', code: 'cd' }, date: '2026-07-01', kickoff: '13:30', sticker: 'gold', stickerLabel: 'Figurinha gold' },
-    { id: 'm06', home: { name: 'Bélgica', code: 'be' }, away: { name: 'Senegal', code: 'sn' }, date: '2026-07-01', kickoff: '16:00', sticker: 'silver', stickerLabel: 'Figurinha silver' },
-    { id: 'm07', home: { name: 'Espanha', code: 'es' }, away: { name: 'Áustria', code: 'at' }, date: '2026-07-02', kickoff: '13:30', sticker: 'silver', stickerLabel: 'Figurinha silver' },
-    { id: 'm08', home: { name: 'Portugal', code: 'pt' }, away: { name: 'Croácia', code: 'hr' }, date: '2026-07-02', kickoff: '16:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
-    { id: 'm09', home: { name: 'Suíça', code: 'ch' }, away: { name: 'Argélia', code: 'dz' }, date: '2026-07-03', kickoff: '13:30', sticker: 'gold', stickerLabel: 'Figurinha gold' },
-    { id: 'm10', home: { name: 'Argentina', code: 'ar' }, away: { name: 'Cabo Verde', code: 'cv' }, date: '2026-07-03', kickoff: '16:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
-    { id: 'm11', home: { name: 'Colômbia', code: 'co' }, away: { name: 'Gana', code: 'gh' }, date: '2026-07-03', kickoff: '19:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm01', home: { name: 'Brasil', code: 'br' }, away: { name: 'Japão', code: 'jp' }, date: '2026-06-29', kickoff: '14:00', sticker: 'patrocinador', stickerLabel: 'Figurinha patrocinador' },
+    { id: 'm02', home: { name: 'Holanda', code: 'nl' }, away: { name: 'Marrocos', code: 'ma' }, date: '2026-06-29', kickoff: '22:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm03', home: { name: 'França', code: 'fr' }, away: { name: 'Suécia', code: 'se' }, date: '2026-06-30', kickoff: '18:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm04', home: { name: 'México', code: 'mx' }, away: { name: 'Equador', code: 'ec' }, date: '2026-06-30', kickoff: '22:00', sticker: 'patrocinador', stickerLabel: 'Figurinha patrocinador' },
+    { id: 'm05', home: { name: 'Inglaterra', code: 'gb-eng' }, away: { name: 'RD Congo', code: 'cd' }, date: '2026-07-01', kickoff: '13:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm06', home: { name: 'Bélgica', code: 'be' }, away: { name: 'Senegal', code: 'sn' }, date: '2026-07-01', kickoff: '17:00', sticker: 'silver', stickerLabel: 'Figurinha silver' },
+    { id: 'm07', home: { name: 'Espanha', code: 'es' }, away: { name: 'Áustria', code: 'at' }, date: '2026-07-02', kickoff: '16:00', sticker: 'silver', stickerLabel: 'Figurinha silver' },
+    { id: 'm08', home: { name: 'Portugal', code: 'pt' }, away: { name: 'Croácia', code: 'hr' }, date: '2026-07-02', kickoff: '20:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm09', home: { name: 'Suíça', code: 'ch' }, away: { name: 'Argélia', code: 'dz' }, date: '2026-07-02', kickoff: '23:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm10', home: { name: 'Argentina', code: 'ar' }, away: { name: 'Cabo Verde', code: 'cv' }, date: '2026-07-03', kickoff: '19:00', sticker: 'gold', stickerLabel: 'Figurinha gold' },
+    { id: 'm11', home: { name: 'Colômbia', code: 'co' }, away: { name: 'Gana', code: 'gh' }, date: '2026-07-03', kickoff: '22:30', sticker: 'gold', stickerLabel: 'Figurinha gold' },
   ];
 
   const STICKER_EMOJI = { patrocinador: '🎴', gold: '🥇', silver: '🥈' };
   /** Campanha interna: equipe SOU+BLU + equipe SAK; outras redes parceiras ficam de fora. */
   const BOLAO_PARTNER_RAZOES = ['SAK SERVICOS CADASTRAIS LTDA'];
-  let _saveInFlight = false;
+  const _saveInFlight = new Set();
+  let _deadlineTimer = null;
 
   function normRazao(s) {
     return String(s || '').toUpperCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/\s+/g, ' ').trim();
@@ -86,32 +87,21 @@ const BolaoCopa = (() => {
 
     const role = String(user.role || '').toLowerCase();
     if (role === 'parceiro' || window.IS_PARCEIRO) return false;
+    if (role === 'portaria') return true;
 
     if (typeof isSouBluInternalUser === 'function' && isSouBluInternalUser(user)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'bolao-copa.js:canAccessBolao',message:'internal blu allowed',data:{role,hasPartnerRoot:!!window.PARTNER_ROOT_ID},timestamp:Date.now(),hypothesisId:'F',runId:'post-fix-blu'})}).catch(()=>{});
-      // #endregion
       return true;
     }
 
     if (window.PARTNER_RAZAO_SOCIAL && isBolaoAllowedPartnerRazao(window.PARTNER_RAZAO_SOCIAL)) {
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'bolao-copa.js:canAccessBolao',message:'short-circuit razao',data:{hasRoot:!!window.PARTNER_ROOT_ID,role:String(user.role||'').toLowerCase()},timestamp:Date.now(),hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
       return true;
     }
     const rootId = await resolveBolaoPartnerRoot(user);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'bolao-copa.js:canAccessBolao',message:'resolved root',data:{rootId:rootId||null,winRoot:!!window.PARTNER_ROOT_ID,role:String(user.role||'').toLowerCase(),hasPartnerHint:!!user.partner_root_id},timestamp:Date.now(),hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     if (!rootId || typeof DB === 'undefined' || typeof DB.getPartnerByUserId !== 'function') return false;
     try {
       const prt = await DB.getPartnerByUserId(rootId);
       const razao = prt?.razao_social || prt?.razaoSocial || '';
       const allowed = !!(prt && isBolaoAllowedPartnerRazao(razao));
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'bolao-copa.js:canAccessBolao',message:'partner check',data:{allowed,hasPrt:!!prt,razaoNorm:normRazao(razao).slice(0,40)},timestamp:Date.now(),hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
       if (allowed) {
         if (!window.PARTNER_ROOT_ID) window.PARTNER_ROOT_ID = rootId;
         window.PARTNER_RAZAO_SOCIAL = razao;
@@ -164,8 +154,15 @@ const BolaoCopa = (() => {
     return !!parseScore(pick);
   }
 
+  function normalizeKickoff(kickoff) {
+    const parts = String(kickoff || '13:30').trim().split(':');
+    const h = String(Math.max(0, parseInt(parts[0], 10) || 0)).padStart(2, '0');
+    const m = String(Math.max(0, parseInt(parts[1], 10) || 0)).padStart(2, '0');
+    return `${h}:${m}`;
+  }
+
   function kickoffDate(match) {
-    const t = String(match.kickoff || '13:30').padStart(5, '0');
+    const t = normalizeKickoff(match.kickoff);
     return new Date(`${match.date}T${t}:00-03:00`);
   }
 
@@ -177,13 +174,18 @@ const BolaoCopa = (() => {
     return Date.now();
   }
 
+  /** true while now is strictly before kickoff minus 10 minutes (America/Sao_Paulo). */
+  function isBeforeDeadline(match) {
+    return nowMs() < deadlineDate(match).getTime();
+  }
+
   function formatDeadline(match) {
     try {
       return new Intl.DateTimeFormat('pt-BR', {
         timeZone: TZ, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
       }).format(deadlineDate(match));
     } catch (_) {
-      return `${match.date} (30 min antes)`;
+      return `${match.date} (10 min antes)`;
     }
   }
 
@@ -198,12 +200,24 @@ const BolaoCopa = (() => {
   }
 
   function canPick(match) {
-    return nowMs() < deadlineDate(match).getTime();
+    return isBeforeDeadline(match);
   }
 
   function pickStatusLabel(match, hasPick) {
-    if (!canPick(match)) return hasPick ? 'Placar registrado · prazo encerrado' : 'Prazo encerrado';
-    return hasPick ? 'Placar salvo · pode alterar até o prazo' : `Aberto até ${formatDeadline(match)}`;
+    if (!isBeforeDeadline(match)) return hasPick ? 'Placar registrado · prazo encerrado' : 'Prazo encerrado';
+    return hasPick ? `Placar salvo · pode alterar até ${formatDeadline(match)}` : `Aberto até ${formatDeadline(match)}`;
+  }
+
+  function normalizeStoredPick(pick) {
+    const s = parseScore(pick);
+    return s ? toScorePick(s.home, s.away) : String(pick || '');
+  }
+
+  function deadlineClosedToast(match) {
+    const msg = match
+      ? `Prazo encerrado às ${formatDeadline(match)} (10 min antes do jogo).`
+      : 'Prazo encerrado. Palpite até 10 min antes do jogo.';
+    if (typeof showToast === 'function') showToast(msg, 'warning');
   }
 
   function isPartnerPickRow(p) {
@@ -285,6 +299,7 @@ const BolaoCopa = (() => {
   }
 
   async function loadAllPicks() {
+    if (typeof _cacheDel === 'function') _cacheDel('bolao_copa_picks');
     if (typeof DB !== 'undefined' && typeof DB.getBolaoPicks === 'function') {
       return DB.getBolaoPicks({ campaignId: CAMPAIGN_ID });
     }
@@ -314,6 +329,10 @@ const BolaoCopa = (() => {
   async function savePick(user, matchId, pick) {
     if (!user?.id || !matchId || !hasScorePick(pick)) {
       throw new Error('Palpite inválido');
+    }
+    const match = MATCHES.find((m) => m.id === matchId);
+    if (match && !isBeforeDeadline(match)) {
+      throw new Error(`Prazo encerrado às ${formatDeadline(match)} (10 min antes do jogo).`);
     }
     const isPartner = await isPartnerParticipant(user);
     const row = {
@@ -494,8 +513,8 @@ const BolaoCopa = (() => {
           <button type="button" class="btn btn-primary btn-sm bolao-save-pick" data-match="${match.id}"${open ? '' : ' disabled'}>${saveLabel}</button>
         </div>
         <div class="bolao-match__status ${open ? 'is-open' : 'is-closed'}">
-          ${saved ? '' : esc(pickStatusLabel(match, false))}
-          ${saved && open ? '<span>Preencha os gols e clique em salvar · 1 palpite por jogo</span>' : ''}
+          <span>${esc(pickStatusLabel(match, saved))}</span>
+          ${!saved && open ? '<span> · Preencha os gols e clique em salvar · 1 palpite por jogo</span>' : ''}
           ${resultScored ? ` · Placar oficial: <strong>${esc(formatScoreDisplay(result))}</strong>` : ''}
           ${correct ? ' <span class="badge badge-success">Acertou!</span>' : ''}
         </div>
@@ -694,6 +713,7 @@ const BolaoCopa = (() => {
     }
 
     await checkAndCelebrate(user);
+    scheduleDeadlineRefresh();
     } catch (err) {
       console.error('[BolaoCopa] render:', err);
       if (root) {
@@ -703,7 +723,10 @@ const BolaoCopa = (() => {
   }
 
   async function submitScorePick(matchId, homeGoals, awayGoals) {
-    if (_saveInFlight) return;
+    if (_saveInFlight.has(matchId)) {
+      if (typeof showToast === 'function') showToast('Aguarde, salvando palpite...', 'info');
+      return;
+    }
     const home = parseScoreInput(homeGoals);
     const away = parseScoreInput(awayGoals);
     if (home === null || away === null) {
@@ -713,30 +736,77 @@ const BolaoCopa = (() => {
     const pick = toScorePick(home, away);
     const match = MATCHES.find((m) => m.id === matchId);
     if (!match) return;
-    if (!canPick(match)) {
-      if (typeof showToast === 'function') showToast('Prazo encerrado. Placar até 30 min antes do jogo.', 'warning');
+    if (!isBeforeDeadline(match)) {
+      deadlineClosedToast(match);
+      refreshGridDeadlineState();
       return;
     }
-    const session = Auth.getSession();
-    if (!eligible(session?.role)) return;
+    const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    if (!session?.id) {
+      if (typeof showToast === 'function') showToast('Faça login para salvar seu palpite.', 'warning');
+      return;
+    }
+    if (!eligible(session?.role)) {
+      if (typeof showToast === 'function') showToast('Sem permissão para registrar palpite.', 'warning');
+      return;
+    }
     const user = await Auth.getCurrentUser().catch(() => session);
-    _saveInFlight = true;
+    _saveInFlight.add(matchId);
     try {
       if (typeof showLoading === 'function') showLoading('Salvando palpite...');
-      await savePick(user, matchId, pick);
-      const verify = await loadUserPicks(user.id);
-      if (verify[matchId] !== pick) {
-        throw new Error('Palpite não confirmado no servidor. Tente novamente.');
+      const savedRow = await savePick(user, matchId, pick);
+      if (normalizeStoredPick(savedRow?.pick) !== pick) {
+        throw new Error('Palpite não confirmado. Tente novamente.');
       }
       if (typeof showToast === 'function') showToast(`Palpite ${formatScoreDisplay(pick)} salvo! (1 por jogo)`, 'success');
       await render();
     } catch (e) {
       console.error('[BolaoCopa] save:', e);
-      if (typeof showToast === 'function') showToast('Erro ao salvar palpite.', 'error');
+      if (typeof showToast === 'function') showToast(e?.message || 'Erro ao salvar palpite.', 'error');
     } finally {
-      _saveInFlight = false;
+      _saveInFlight.delete(matchId);
       if (typeof hideLoading === 'function') hideLoading();
     }
+  }
+
+  function refreshGridDeadlineState() {
+    const grid = document.getElementById('bolaoMatchGrid');
+    if (!grid) return;
+    grid.querySelectorAll('.bolao-match[data-match-id]').forEach((card) => {
+      const match = MATCHES.find((m) => m.id === card.dataset.matchId);
+      if (!match) return;
+      const open = isBeforeDeadline(match);
+      card.querySelectorAll('.bolao-score-input:not(.bolao-master-score)').forEach((inp) => {
+        inp.disabled = !open;
+        inp.readOnly = !open;
+      });
+      const btn = card.querySelector('.bolao-save-pick');
+      if (btn) btn.disabled = !open;
+      const status = card.querySelector('.bolao-match__status');
+      if (status) {
+        status.classList.toggle('is-open', open);
+        status.classList.toggle('is-closed', !open);
+      }
+    });
+  }
+
+  function scheduleDeadlineRefresh() {
+    if (_deadlineTimer) {
+      clearInterval(_deadlineTimer);
+      _deadlineTimer = null;
+    }
+    if (!MATCHES.some(isBeforeDeadline)) return;
+    _deadlineTimer = setInterval(() => {
+      const sec = document.getElementById(SECTION_ID);
+      if (!sec || sec.style.display === 'none') return;
+      if (!MATCHES.some(isBeforeDeadline)) {
+        clearInterval(_deadlineTimer);
+        _deadlineTimer = null;
+        void render();
+        return;
+      }
+      refreshGridDeadlineState();
+    }, 30000);
   }
 
   async function submitPick(matchId, pick) {
@@ -854,7 +924,7 @@ const BolaoCopa = (() => {
     ensureStyles();
     const existingNav = document.getElementById('navBolaoCopa');
     if (existingNav) {
-      existingNav.style.display = 'none';
+      if (!window.IS_PORTARIA) existingNav.style.display = 'none';
       refreshBolaoNavIcon(existingNav);
       wireBolaoNav(existingNav);
     } else {
@@ -884,7 +954,7 @@ const BolaoCopa = (() => {
     }
   }
 
-  function applyNavVisibility() {
+  async function applyNavVisibility() {
     const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     const hide = () => {
       document.querySelectorAll('.bolao-copa-nav, #navBolaoCopa').forEach((el) => { el.style.display = 'none'; });
@@ -895,14 +965,27 @@ const BolaoCopa = (() => {
       hide();
       return;
     }
-    canAccessBolao(session).then((show) => {
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'bolao-copa.js:applyNavVisibility',message:'nav visibility',data:{show,hasRoot:!!window.PARTNER_ROOT_ID,hasRazao:!!window.PARTNER_RAZAO_SOCIAL},timestamp:Date.now(),hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
+    let user = session;
+    try {
+      if (typeof Auth !== 'undefined' && typeof Auth.getCurrentUser === 'function') {
+        user = await Auth.getCurrentUser() || session;
+      }
+    } catch (_) { /* noop */ }
+    const role = String(user?.role || session?.role || '').toLowerCase();
+    if (window.IS_PORTARIA || role === 'portaria') {
+      document.querySelectorAll('.bolao-copa-nav, #navBolaoCopa').forEach((el) => { el.style.display = ''; });
+      const sec = document.getElementById(SECTION_ID);
+      if (sec) sec.style.display = '';
+      return;
+    }
+    try {
+      const show = await canAccessBolao(user);
       document.querySelectorAll('.bolao-copa-nav, #navBolaoCopa').forEach((el) => { el.style.display = show ? '' : 'none'; });
       const sec = document.getElementById(SECTION_ID);
       if (sec) sec.style.display = show ? '' : 'none';
-    }).catch(hide);
+    } catch (_) {
+      hide();
+    }
   }
 
   function bindWelcomeDelegation() {
@@ -939,6 +1022,7 @@ const BolaoCopa = (() => {
     getRecentWinners,
     checkAndCelebrate,
     canPick,
+    isBeforeDeadline,
     formatDeadline,
   };
 })();

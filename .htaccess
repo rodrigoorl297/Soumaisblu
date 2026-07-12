@@ -1,27 +1,87 @@
-# SOU+BLU — segurança básica (Apache / Locaweb)
+# SOU+BLU — Segurança e Performance (nível enterprise)
+# =====================================================
 
 AddDefaultCharset UTF-8
 
+# ── Compressão Gzip ────────────────────────────────
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/plain text/css application/json
+  AddOutputFilterByType DEFLATE application/javascript text/javascript
+  AddOutputFilterByType DEFLATE image/svg+xml application/xml
+</IfModule>
+
+# ── Rotas internas ─────────────────────────────────
 <IfModule mod_rewrite.c>
   RewriteEngine On
+
   # Rota curta /reg -> reg.html
   RewriteRule ^reg/?$ reg.html [L]
+
   # API MySQL compatível PostgREST — /api/rest/v1/{tabela}
   RewriteRule ^api/rest/v1/([a-zA-Z0-9_]+)/?$ api/rest-v1.php?table=$1 [QSA,L]
 </IfModule>
 
+# ── Bloqueio de arquivos sensíveis ─────────────────
 <IfModule mod_authz_core.c>
-  <FilesMatch "^(config\.(pix|db)\.local\.php|\.env|\.gitignore)$">
+  # Arquivos de configuração, scripts, docs e dados internos
+  <FilesMatch "\.(env|gitignore|md|ini|sh|ps1|bat|log|sql|example|yml|p12|pem)$">
+    Require all denied
+  </FilesMatch>
+
+  # Config PHP locais nunca acessíveis via browser
+  <FilesMatch "^config\..*\.php$">
+    Require all denied
+  </FilesMatch>
+
+  # JSONs internos da raiz
+  <FilesMatch "^(conn|verify-conn|verify-st|st1|st2)\.json$">
     Require all denied
   </FilesMatch>
 </IfModule>
 
-<IfModule mod_headers.c>
-  Header always set X-Content-Type-Options "nosniff"
-  Header always set X-Frame-Options "SAMEORIGIN"
-  Header always set Referrer-Policy "strict-origin-when-cross-origin"
-  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+# ── Listagem de diretórios desabilitada ─────────────
+Options -Indexes
+
+# ── Cache de Assets Estáticos ─────────────────────
+<IfModule mod_expires.c>
+  ExpiresActive On
+
+  # Imagens — 6 meses
+  ExpiresByType image/jpeg "access plus 6 months"
+  ExpiresByType image/png  "access plus 6 months"
+  ExpiresByType image/svg+xml "access plus 6 months"
+  ExpiresByType image/webp "access plus 6 months"
+
+  # JS e CSS com versão no query string — 1 ano
+  ExpiresByType text/javascript        "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType text/css               "access plus 1 year"
+
+  # HTML — sem cache (sempre atualizado)
+  ExpiresByType text/html "access plus 0 seconds"
 </IfModule>
 
-# Bloqueia listagem de diretórios
-Options -Indexes
+# ── Cabeçalhos de Segurança (nível enterprise) ─────
+<IfModule mod_headers.c>
+  # Anti-MIME-sniffing
+  Header always set X-Content-Type-Options "nosniff"
+
+  # Bloqueia iframe de outros domínios (anti-clickjacking)
+  Header always set X-Frame-Options "SAMEORIGIN"
+
+  # Controla referrer em cross-origin
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+  # Desabilita APIs sensíveis não utilizadas
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+
+  # Força HTTPS por 1 ano (HSTS) — ativar em produção
+  # Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+  # Content Security Policy — bloqueia XSS e injeção de scripts externos
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://*.supabase.co; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https:; frame-ancestors 'self'; object-src 'none'"
+
+  # Remove header que revela versão do servidor Apache
+  Header unset X-Powered-By
+  Header always unset X-Powered-By
+</IfModule>

@@ -8,6 +8,7 @@
     '001 - BANCO DO BRASIL',
     '237 - BRADESCO',
     '033 - SANTANDER',
+    '260 - NUBANK',
     '341 - ITAU',
     '104 - CAIXA',
   ];
@@ -73,6 +74,13 @@
     return ['master', 'fundador', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria'].includes(String(s.role || '').toLowerCase());
   }
 
+  function isCreditoPilotUser(user) {
+    if (!user) return false;
+    const name = String(user.name || '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    const email = String(user.email || '').toLowerCase();
+    return name.includes('higor') || email.includes('higor');
+  }
+
   function canViewEmployee() {
     const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (!s) return false;
@@ -127,10 +135,10 @@
             <option value="">Selecione o banco...</option>
             ${bankOptions()}
           </select>`)}
-          ${finGridRow('AGÊNCIA', `<input type="text" class="form-control" id="pc_agencia" placeholder="2805 (sem dígito)" required/>
-          <p class="pc-field-hint">Somente o número da agência (até 4 dígitos), sem o dígito verificador.</p>`)}
+          ${finGridRow('AGÊNCIA', `<input type="text" class="form-control" id="pc_agencia" placeholder="0000" required/>
+          <p class="pc-field-hint" id="pc_agencia_hint">Somente o número da agência (até 4 dígitos), sem o dígito verificador.</p>`)}
           ${finGridRow('CONTA CORRENTE', `<input type="text" class="form-control" id="pc_conta" placeholder="00000000-0" required/>
-          <p class="pc-field-hint">Número da conta com dígito (pode usar hífen).</p>`)}
+          <p class="pc-field-hint" id="pc_conta_hint">Número da conta com dígito (pode usar hífen).</p>`)}
           ${finGridRow('1ª CONTATO', `<input type="text" class="form-control mask-phone" id="pc_contato1" placeholder="(00) 00000-0000"/>`)}
           ${finGridRow('2ª CONTATO', `<input type="text" class="form-control mask-phone" id="pc_contato2" placeholder="(00) 00000-0000"/>`)}
           <tr class="pc-section-row"><td colspan="2">AVALISTA (OPCIONAL)</td></tr>
@@ -146,6 +154,57 @@
     </div>
   </form>
 </div>`;
+  }
+
+  function bankPreset(bancoVal) {
+    const b = String(bancoVal || '');
+    if (/260|nubank/i.test(b)) {
+      return {
+        agencia: '0001',
+        agenciaReadonly: true,
+        agenciaPlaceholder: '0001',
+        agenciaHint: 'Nubank: agência fixa 0001 (preenchida automaticamente).',
+        contaPlaceholder: '12345678-9',
+        contaHint: 'Conta Nubank com dígito (pode usar hífen). Veja no app: Perfil → Dados da conta.',
+      };
+    }
+    if (/033|santander/i.test(b)) {
+      return {
+        agencia: '',
+        agenciaReadonly: false,
+        agenciaPlaceholder: '2424',
+        agenciaHint: 'Santander: só o número da agência (até 4 dígitos), sem o dígito verificador.',
+        contaPlaceholder: '01011476-0',
+        contaHint: 'Conta com dígito (use hífen). Ex.: 01011476-0',
+      };
+    }
+    return {
+      agencia: '',
+      agenciaReadonly: false,
+      agenciaPlaceholder: '0000',
+      agenciaHint: 'Somente o número da agência (até 4 dígitos), sem o dígito verificador.',
+      contaPlaceholder: '00000000-0',
+      contaHint: 'Número da conta com dígito (pode usar hífen).',
+    };
+  }
+
+  function applyBankFields(bancoVal, opts = {}) {
+    const preset = bankPreset(bancoVal);
+    const ag = document.getElementById('pc_agencia');
+    const conta = document.getElementById('pc_conta');
+    const agHint = document.getElementById('pc_agencia_hint');
+    const contaHint = document.getElementById('pc_conta_hint');
+    if (ag) {
+      ag.placeholder = preset.agenciaPlaceholder;
+      ag.readOnly = preset.agenciaReadonly;
+      ag.style.background = preset.agenciaReadonly ? '#f9fafb' : '';
+      if (preset.agencia && (preset.agenciaReadonly || opts.forceAgencia)) {
+        ag.value = preset.agencia;
+      }
+    }
+    if (conta) conta.placeholder = preset.contaPlaceholder;
+    if (agHint) agHint.textContent = preset.agenciaHint;
+    if (contaHint) contaHint.textContent = preset.contaHint;
   }
 
   function _injectStyles() {
@@ -214,6 +273,21 @@
       ['pc_func_info', 'pc_avalista_info'].forEach(id => {
         const el = document.getElementById(id);
         if (el) { el.hidden = true; el.innerHTML = ''; }
+      });
+      applyBankFields('');
+    },
+
+    _wireBankFields() {
+      const sel = document.getElementById('pc_banco');
+      if (!sel) return;
+      sel.addEventListener('change', () => {
+        const ag = document.getElementById('pc_agencia');
+        const wasNubank = sel.dataset.prevBank === 'nubank';
+        if (ag && wasNubank && !/260|nubank/i.test(sel.value) && ag.value === '0001') {
+          ag.value = '';
+        }
+        sel.dataset.prevBank = /260|nubank/i.test(sel.value) ? 'nubank' : 'other';
+        applyBankFields(sel.value, { forceAgencia: /260|nubank/i.test(sel.value) });
       });
     },
 
@@ -287,6 +361,7 @@
       this.resetForm();
       this._wireValorInput();
       this._wireAutoLookups();
+      this._wireBankFields();
       if (typeof applyInputMasks === 'function') applyInputMasks(root);
     },
 
@@ -298,7 +373,74 @@
     renderEmployee(rootId = 'propostaCreditoEmployeeRoot') {
       if (!canViewEmployee()) return;
       this.ensureEmployeeSection();
-      this.renderShell(rootId);
+      const root = document.getElementById(rootId);
+      if (!root) return;
+      const user = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+      if (!isCreditoPilotUser(user)) {
+        root.innerHTML = `<div class="card card-padded" style="max-width:560px;"><p class="text-muted" style="margin:0;">Proposta de crédito em piloto — disponível apenas para usuários autorizados pelo financeiro.</p></div>`;
+        return;
+      }
+      _injectStyles();
+      root.innerHTML = `
+        <div style="max-width:920px;margin:0 auto;">
+          <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+            <button type="button" class="btn btn-primary btn-sm" id="pc_tab_nova">Nova solicitação</button>
+            <button type="button" class="btn btn-outline btn-sm" id="pc_tab_minhas">Minhas solicitações</button>
+          </div>
+          <div id="pc_employee_panel"></div>
+        </div>`;
+      root.querySelector('#pc_tab_nova')?.addEventListener('click', () => this._renderEmployeeNova('pc_employee_panel'));
+      root.querySelector('#pc_tab_minhas')?.addEventListener('click', () => this.renderMinhasSolicitacoes('pc_employee_panel'));
+      this._renderEmployeeNova('pc_employee_panel');
+    },
+
+    _renderEmployeeNova(panelId) {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      panel.innerHTML = '<div id="propostaCreditoFormHost"></div>';
+      this.renderShell('propostaCreditoFormHost');
+    },
+
+    async renderMinhasSolicitacoes(panelId = 'pc_employee_panel') {
+      const panel = document.getElementById(panelId);
+      if (!panel) return;
+      const user = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+      if (!user?.id) return;
+      panel.innerHTML = '<p class="text-muted">Carregando...</p>';
+      let rows = [];
+      try {
+        if (window.CreditoPropostasApi?.list) {
+          rows = await CreditoPropostasApi.list(user.id);
+        }
+      } catch (e) {
+        panel.innerHTML = `<p class="text-muted">Erro ao carregar: ${esc(e.message)}</p>`;
+        return;
+      }
+      if (!rows.length) {
+        panel.innerHTML = `<div class="card card-padded"><p class="text-muted" style="margin:0;">Nenhuma solicitação ainda. Use <strong>Nova solicitação</strong>.</p></div>`;
+        return;
+      }
+      const body = rows.slice(0, 40).map((r) => {
+        const et = window.CreditoFluxo?.etapaAtual ? CreditoFluxo.etapaAtual(r) : { label: r.status, hint: '' };
+        const cls = window.CreditoFluxo?.badgeClass ? CreditoFluxo.badgeClass(et.status || r.status) : 'ec-status-pendente';
+        const proto = r.protocolo || r.id;
+        const val = fmtMoney(r.valor_solicitado ?? r.valor ?? r.valorFinal);
+        return `<tr>
+          <td>${esc(proto)}</td>
+          <td>${esc(val)}</td>
+          <td><span class="ec-status-badge ${cls}">${esc(et.label)}</span></td>
+          <td class="text-muted" style="font-size:12px;">${esc(et.hint || '')}</td>
+        </tr>`;
+      }).join('');
+      panel.innerHTML = `
+        <div class="card card-padded">
+          <h4 style="margin:0 0 12px;font-weight:800;">Minhas solicitações de crédito</h4>
+          <div class="table-wrap"><table class="data-table" style="width:100%;font-size:13px;">
+            <thead><tr><th>Protocolo</th><th>Valor</th><th>Etapa</th><th>Próximo passo</th></tr></thead>
+            <tbody>${body}</tbody>
+          </table></div>
+          <p class="text-muted" style="font-size:12px;margin:12px 0 0;">Quando o financeiro liberar, use o menu <strong>Autorizar Pix</strong> no celular.</p>
+        </div>`;
     },
 
     ensureEmployeeSection() {
@@ -330,16 +472,11 @@
       this.ensureEmployeeSection();
       const nav = document.getElementById('navPropostaCredito');
       if (!nav) return;
-      let show = ['vendedor', 'backoffice', 'supervisor', 'rh'].includes(String(user?.role || '').toLowerCase());
-      if (show && window.__EMPLOYEE_PARTNER_ORG__ && typeof DB.getPartnerByUserId === 'function') {
-        const rootId = typeof getPartnerRootId === 'function' ? await getPartnerRootId(user) : null;
-        if (rootId) {
-          const prt = await DB.getPartnerByUserId(rootId).catch(() => null);
-          const meta = prt?.meta || {};
-          if (meta.credito_habilitado === false) show = false;
-        }
-      }
+      const show = isCreditoPilotUser(user);
       nav.style.display = show ? '' : 'none';
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'proposta-credito.js:applyEmployeeNavVisibility',message:'credito nav',data:{show,role:String(user?.role||''),name:String(user?.name||'').slice(0,40),pilot:isCreditoPilotUser(user)},timestamp:Date.now(),hypothesisId:'H-credito-nav',runId:'credito-pilot-higor'})}).catch(()=>{});
+      // #endregion
     },
 
     async buscarFuncionario(cpfArg, opts = {}) {
@@ -488,6 +625,10 @@
       if (event) event.preventDefault();
       const user = typeof Auth !== 'undefined' ? Auth.getSession() : null;
       if (!user?.id) return;
+      if (!isCreditoPilotUser(user)) {
+        if (typeof showToast === 'function') showToast('Proposta de crédito disponível apenas no piloto autorizado.', 'warning');
+        return;
+      }
 
       const cpf = digits(document.getElementById('pc_cpf_funcionario')?.value);
       const nome = document.getElementById('pc_func_nome')?.value?.trim()
@@ -648,11 +789,13 @@
         await CreditoPropostasApi.create(creditRow);
 
         if (typeof showToast === 'function') {
-          showToast(`Solicitação registrada! Protocolo: ${protocolo}`, 'success');
+          showToast(`Solicitação registrada! Protocolo: ${protocolo} — status: em análise.`, 'success');
         } else {
           alert(`Solicitação registrada!\nProtocolo: ${protocolo}`);
         }
-        this.resetForm();
+        const panel = document.getElementById('pc_employee_panel');
+        if (panel) await this.renderMinhasSolicitacoes('pc_employee_panel');
+        else this.resetForm();
         if (document.getElementById('pc_protocolo')) {
           document.getElementById('pc_protocolo').value = protocolo;
         }

@@ -25,7 +25,7 @@ function soublu_load_local_configs(): void
         require_once $stack;
     }
 
-    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php'] as $file) {
+    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php', 'config.whaticket.local.php'] as $file) {
         $path = $root . '/' . $file;
         if (is_file($path)) {
             require_once $path;
@@ -112,8 +112,14 @@ function soublu_pdo(bool $reset = false): PDO
         $pdo = null;
     }
     if ($pdo instanceof PDO) {
+        static $lastPingAt = 0;
+        $now = time();
+        if ($now - $lastPingAt < 25) {
+            return $pdo;
+        }
         try {
             $pdo->query('SELECT 1');
+            $lastPingAt = $now;
             return $pdo;
         } catch (Throwable $e) {
             if (!soublu_pdo_gone_away($e)) {
@@ -130,7 +136,6 @@ function soublu_pdo(bool $reset = false): PDO
     $options = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-        PDO::ATTR_PERSISTENT => true,
     ];
     if (defined('PDO::MYSQL_ATTR_CONNECT_TIMEOUT')) {
         $options[PDO::MYSQL_ATTR_CONNECT_TIMEOUT] = 5;

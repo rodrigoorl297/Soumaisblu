@@ -17,3 +17,26 @@ uploads/**/*
 
 # Cache local FonteData (CPF — não versionar nem enviar ao servidor)
 storage/fontedata_cache/
+
+# Arquivos temporários e pastas de teste da IA (Gemini)
+.gemini/
+scratch/
+temp_script_2/
+docker/
+scripts/
+*.log
+test_*.php
+check_*.php
+fix_*.php
+update_*.php
+*.txt
+*.json
+!composer.json
+!package.json
+
+# Migrações e scripts de reparo únicos da API
+api/migrate-*.php
+api/repair-*.php
+api/purge-*.php
+api/scan-*.php
+api/debug-session-log.php

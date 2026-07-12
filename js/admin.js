@@ -47,6 +47,7 @@ let IS_RH            = false;
 let IS_BACKOFFICE    = false;
 let IS_OPERACIONAL   = false;
 let IS_VENDEDOR_ADM  = false; // vendedor que acessa admin por privilégio
+let IS_PORTARIA      = false; // recepção / setor administrativo
 let IS_DIRETORIA     = false;
 let IS_JURIDICO      = false;
 let IS_OUVIDORIA     = false;
@@ -73,6 +74,7 @@ function syncFinanceiroRoleGlobals() {
   IS_BACKOFFICE = !!window.IS_BACKOFFICE;
   IS_OPERACIONAL = !!window.IS_OPERACIONAL;
   IS_VENDEDOR_ADM = !!window.IS_VENDEDOR_ADM;
+  IS_PORTARIA = !!window.IS_PORTARIA;
   IS_DIRETORIA = !!window.IS_DIRETORIA;
   IS_DESENVOLVEDOR = !!window.IS_DESENVOLVEDOR;
   IS_PARCEIRO = !!window.IS_PARCEIRO;
@@ -91,6 +93,21 @@ function employeesManagedInRhHub() {
   if (PARTNER_ROOT_ID || getEffectivePartnerRootId()) return false;
   return IS_MASTER || IS_FUNDA || IS_RH || IS_FINANCIAL || IS_GERENTE
     || IS_DESENVOLVEDOR || IS_DIRETORIA || IS_SUP_BACKOFFICE;
+}
+
+/** RH grava objeto com todos false quando nenhuma caixa está marcada — não deve zerar perfil Admin/Master. */
+function _effectiveAdminPerms(role, raw) {
+  const p = raw && typeof raw === 'object' ? { ...raw } : {};
+  const r = String(role || '').toLowerCase();
+  const privileged = new Set([
+    'master', 'fundador', 'gerente', 'gerencia', 'admin',
+    'financeiro', 'financial', 'rh', 'diretoria', 'desenvolvedor',
+  ]);
+  if (!privileged.has(r)) return p;
+  const keys = Object.keys(p);
+  if (!keys.length) return {};
+  if (keys.every((k) => p[k] === false)) return {};
+  return p;
 }
 
 function goToRhFuncionarios(editId) {
@@ -161,6 +178,23 @@ async function openPartnerTeamManage(partnerUserId) {
 }
 window.openPartnerTeamManage = openPartnerTeamManage;
 
+function _applyPortariaNavExtras() {
+  if (!IS_PORTARIA) return;
+  if (window.BolaoCopa && typeof BolaoCopa.ensureDom === 'function') {
+    try { BolaoCopa.ensureDom(); } catch (e) { console.warn('[admin] BolaoCopa.ensureDom', e); }
+  }
+  document.querySelectorAll(
+    '.leads-manager-nav, #navMonitoriaAtendimento, [href*="leads-manager"], [href*="leads-employee"]'
+  ).forEach((el) => {
+    el.style.display = 'none';
+  });
+  document.querySelectorAll('.bolao-copa-nav, #navBolaoCopa').forEach((el) => {
+    el.style.display = '';
+  });
+  const secBolao = document.getElementById('secBolaoCopa');
+  if (secBolao) secBolao.style.display = '';
+}
+
 /** Aplica visibilidade do menu lateral (Gestão / Relatórios) conforme permissões calculadas no boot. */
 function _wireLeadsManagerNav() {
   const href = typeof Auth !== 'undefined' && Auth.leadsManagerPageHref
@@ -178,12 +212,67 @@ function _wireLeadsManagerNav() {
   });
 }
 
+function _wireBeneficiosNav() {
+  const session = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+  const canAdmin = typeof Auth !== 'undefined' && typeof Auth.canManageBeneficios === 'function'
+    ? Auth.canManageBeneficios(session?.role)
+    : !!(IS_MASTER || IS_FUNDA || IS_FINANCIAL);
+  const _absBenefHref = (filename) => {
+    try {
+      if (typeof Auth !== 'undefined' && Auth.pageHrefFresh) return Auth.pageHrefFresh(filename);
+      if (typeof window.soubluPage === 'function') return window.soubluPage(filename);
+      const name = String(filename || '').replace(/^pages\//, '');
+      const inPages = /(^|\/)pages(\/|$)/i.test(String(window.location.pathname || '').replace(/\\/g, '/'));
+      const rel = inPages ? name : `pages/${name}`;
+      return new URL(rel, window.location.href).href;
+    } catch (_) {
+      return `/pages/${String(filename || '').replace(/^pages\//, '')}`;
+    }
+  };
+  const clubeHref = _absBenefHref('clube-beneficios.html?v=' + Date.now());
+  const adminHref = _absBenefHref('admin-beneficios.html');
+
+  const wire = (el, href, target) => {
+    if (!el || el.dataset.benefNavWired === '1') return;
+    el.dataset.benefNavWired = '1';
+    el.type = 'button';
+    el.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof _navigateToHub === 'function') _navigateToHub(href);
+      else window.location.replace(href);
+    };
+  };
+
+  const clubeBtn = document.getElementById('navClubeBeneficios')
+    || document.querySelector('.benefits-clube-nav');
+  const adminBtn = document.getElementById('navGestaoBeneficios')
+    || document.querySelector('.benefits-admin-nav');
+
+  if (clubeBtn) {
+    clubeBtn.style.display = '';
+    wire(clubeBtn, clubeHref, 'clube');
+  }
+  if (adminBtn) {
+    adminBtn.style.display = canAdmin ? 'flex' : 'none';
+    if (canAdmin) wire(adminBtn, adminHref, 'gestao');
+  }
+
+}
+
 function _applyAdminNavVisibility(cfg) {
   if (!cfg) return;
   if (window.SOUBLU_FINANCEIRO_PAGE) return;
   document.querySelectorAll('.master-only').forEach(el => {
     el.style.display = cfg.canMasterPanel ? '' : 'none';
   });
+  const canBeneficiosAdmin = typeof Auth.canManageBeneficios === 'function'
+    ? Auth.canManageBeneficios(Auth.getSession()?.role)
+    : (IS_MASTER || IS_FUNDA || IS_FINANCIAL);
+  document.querySelectorAll('.benefits-admin-nav').forEach(el => {
+    el.style.display = canBeneficiosAdmin ? 'flex' : 'none';
+  });
+  if (typeof _wireBeneficiosNav === 'function') _wireBeneficiosNav();
   document.querySelectorAll('.partner-dash-nav').forEach(el => {
     el.style.display = (cfg.canMasterPanel || cfg.canPartnerDashboard) ? '' : 'none';
   });
@@ -214,7 +303,7 @@ function _applyAdminNavVisibility(cfg) {
     el.style.display = cfg.canSupervisorPanel ? '' : 'none';
   });
   document.querySelectorAll('.meetings-nav').forEach(el => {
-    el.style.display = cfg._inPartnerOrg ? 'none' : '';
+    el.style.display = (cfg._inPartnerOrg || cfg.canMeetings === false) ? 'none' : '';
   });
   document.querySelectorAll('.rh-financial-only').forEach(el => {
     el.style.display = (cfg.canCadFunc && !employeesManagedInRhHub()) ? '' : 'none';
@@ -262,7 +351,7 @@ function _applyAdminNavVisibility(cfg) {
   }
   
   document.querySelectorAll('.leads-manager-nav').forEach(el => {
-    el.style.display = cfg.canLeadsManager ? 'flex' : 'none';
+    el.style.display = (cfg.canLeadsManager && !IS_PORTARIA) ? 'flex' : 'none';
   });
   const showTreinamentos = cfg.canTreinamentos !== false;
   document.querySelectorAll('.trainings-nav, .trainings-manage-nav, .trainings-rh-nav, .trainings-collab-nav').forEach(el => {
@@ -485,7 +574,13 @@ function _applyAdminNavVisibility(cfg) {
   });
   if (window.Contestacao && typeof Contestacao.applyNavVisibility === 'function') Contestacao.applyNavVisibility(cfg);
   if (window.FiscalParceiro && typeof FiscalParceiro.applyNavVisibility === 'function') FiscalParceiro.applyNavVisibility(cfg);
-  if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') BolaoCopa.applyNavVisibility();
+  if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
+    if (IS_PORTARIA) {
+      void BolaoCopa.applyNavVisibility().then(() => _applyPortariaNavExtras());
+    } else {
+      BolaoCopa.applyNavVisibility();
+    }
+  }
   if (window.Trainings && typeof Trainings.applyNavVisibility === 'function') Trainings.applyNavVisibility(cfg);
   if (window.MarketplaceBlu && typeof MarketplaceBlu.applyNavVisibility === 'function') MarketplaceBlu.applyNavVisibility(cfg);
   if (window.FornecedorFinanceiro && typeof FornecedorFinanceiro.applyNavVisibility === 'function') FornecedorFinanceiro.applyNavVisibility(cfg);
@@ -808,10 +903,35 @@ window.addEventListener('pageshow', (ev) => {
   _refreshAdminAfterBfcache();
 });
 
+/** Executa promise com timeout — evita painel branco quando API/MySQL trava. */
+async function _bootRace(promise, timeoutMs, label) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label || 'operação'} demorou demais (${timeoutMs}ms)`)),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 /** Executa tarefas de boot sem derrubar o painel se uma falhar (ex.: timeout Supabase). */
-async function _bootSettle(tasks) {
+async function _bootSettle(tasks, timeoutMs = 120000) {
   const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
-  const results = await Promise.allSettled(list);
+  const wrapped = list.map((t, i) => Promise.race([
+    Promise.resolve(t),
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error(`boot task ${i} timeout (${timeoutMs}ms)`)),
+      timeoutMs,
+    )),
+  ]));
+  const results = await Promise.allSettled(wrapped);
   results.forEach((r, i) => {
     if (r.status === 'rejected') console.warn('[admin boot task', i, ']', r.reason);
   });
@@ -832,13 +952,32 @@ function _bootShowLanding(sectionId) {
     if (stats && !stats.innerHTML.trim()) {
       stats.innerHTML = '<div class="text-muted text-center" style="padding:24px;">Carregando dashboard…</div>';
     }
+    const dash = document.getElementById('secDashboard');
+    if (dash) dash.style.display = '';
   }
   if (typeof hideLoading === 'function') hideLoading();
 }
 
+function _dashRetryHtml(msg) {
+  const text = msg || 'Não foi possível carregar o resumo agora.';
+  return `<div class="card card-padded text-center" style="padding:28px;margin:12px 0;">
+    <p class="text-muted" style="margin-bottom:14px;">${text}</p>
+    <button type="button" class="btn btn-primary btn-sm" onclick="renderDashboard()">Tentar novamente</button>
+  </div>`;
+}
+
+function _ensureDashPlaceholder(msg) {
+  const stats = document.getElementById('dashStats');
+  if (stats && !stats.innerHTML.trim()) {
+    stats.innerHTML = `<div class="text-muted text-center" style="padding:24px;">${msg || 'Carregando dashboard…'}</div>`;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   if (window.SOUBLU_FINANCEIRO_PAGE || window.SOUBLU_TREINAMENTOS_PAGE) return;
+  const _adminBootT0 = Date.now();
   _stripNavCacheBustParam();
+  if (typeof navigateTo === 'function') _bootShowLanding('secInicio');
   showLoading('Carregando painel...');
   let landingSection = 'secInicio';
   let _explicitLanding = false;
@@ -851,16 +990,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const db = await _requireDB();
     if (!db) throw new Error(_DB_LOAD_ERROR);
-    await db.init();
-    if (typeof refreshPartnerRootIdsCache === 'function') await refreshPartnerRootIdsCache();
+    await _bootRace(db.init(), 25000, 'Inicialização do banco');
+    if (typeof refreshPartnerRootIdsCache === 'function') {
+      await _bootRace(refreshPartnerRootIdsCache(), 15000, 'Cache de parceiros').catch(() => {});
+    }
     await Auth.requireLogin();
     Auth.requireAdmin();
-    await Auth.syncSessionFromDb();
+    try { sessionStorage.removeItem('soublu_portaria_loop_guard'); } catch (_) {}
+    await _bootRace(Auth.syncSessionFromDb(), 20000, 'Sincronização da sessão');
 
     const s = Auth.getSession();
     if (s) s.role = String(s.role || '').trim().toLowerCase();
     ADMIN_ID          = s.id;
-    const me = await Auth.getCurrentUser();
+    const me = await _bootRace(Auth.getCurrentUser(), 20000, 'Carregar usuário');
 
     IS_PARCEIRO       = (s.role === 'parceiro');
     PARTNER_ROOT_ID = await DB.getPartnerRootForUser(s.id).catch(() => null);
@@ -904,6 +1046,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     IS_BACKOFFICE     = (s.role === 'backoffice');
     IS_OPERACIONAL    = (s.role === 'operacional');
     IS_VENDEDOR_ADM   = (s.role === 'vendedor');
+    IS_PORTARIA       = (s.role === 'portaria');
+    window.IS_PORTARIA = IS_PORTARIA;
     IS_DIRETORIA      = (s.role === 'diretoria');
     IS_JURIDICO       = (s.role === 'juridico');
     IS_OUVIDORIA      = (s.role === 'ouvidoria');
@@ -931,7 +1075,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // RH          = master (feedbacks, funcionários)
     // SUPERVISOR  = propostas, chamados, clientes, ranking, loja (sem lista global de pontos)
     // VENDEDOR    = ranking    // canMasterPanel = perfis com visão global (sem saque para gerente/RH)
-    const p = s.permissions || {};
+    const p = _effectiveAdminPerms(s.role, {
+      ...(me?.permissions && typeof me.permissions === 'object' ? me.permissions : {}),
+      ...(s.permissions || {}),
+    });
     const canMasterPanel = p.canMasterPanel !== undefined ? !!p.canMasterPanel : (IS_MASTER || IS_GERENTE || IS_FINANCIAL || IS_RH || IS_DESENVOLVEDOR || IS_DIRETORIA);
     /** Saques: aprovação só Financeiro + Master SOU+BLU (parceiros não aprovam na rede). */
     const canSaques      = p.canSaques !== undefined ? !!p.canSaques : ((IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH) && !PARTNER_ROOT_ID);
@@ -987,12 +1134,39 @@ document.addEventListener('DOMContentLoaded', async () => {
       canPartnerDashboard, canLeadsManager, canTreinamentos, canTimIndicacao, canTimEsteira,
       canContestacao, canFiscalParceiro, canMarketplaceBlu, canFornecedorFinanceiro, canContaCorrente,
       canFinanceiroHub, canMonitoriaAtendimento, canJuridicoHub, canWhatsApp,
+      canMeetings: !_inPartnerOrg,
     };
+    if (IS_PORTARIA) {
+      Object.assign(_adminNavCfg, {
+        canMasterPanel: false, canSaques: false, canCadFunc: false, canProposta: false,
+        canClientes: false, canPartnerOpsHub: false, canRanking: false, canLoja: true,
+        canSimulacao: false, canChamados: true, canSupervisorPanel: false,
+        canPartnerDashboard: false, canLeadsManager: false, canTreinamentos: false,
+        canTimIndicacao: false, canTimEsteira: false, canContestacao: false,
+        canFiscalParceiro: false, canMarketplaceBlu: false, canFornecedorFinanceiro: false,
+        canContaCorrente: false, canFinanceiroHub: false, canMonitoriaAtendimento: false,
+        canJuridicoHub: false, canWhatsApp: false, canMeetings: false, canBolao: true,
+      });
+    }
     window.__ADMIN_NAV_CFG__ = _adminNavCfg;
     _applyAdminNavVisibility(_adminNavCfg);
+    if (IS_PORTARIA) _applyPortariaNavExtras();
     if (window.PainelSonhos && typeof PainelSonhos.applyAdminNav === 'function') {
       PainelSonhos.applyAdminNav(s.role);
     }
+    if (!_explicitLanding) {
+      if (canMasterPanel || canPartnerDashboard) {
+        landingSection = 'secDashboard';
+      } else if (window.PainelSonhos && PainelSonhos.shouldLandOnInicio(s.role, {
+        partnerOrg: !!PARTNER_ROOT_ID,
+        partnerLanding: !!PARTNER_ROOT_ID,
+        canMasterPanel,
+        canPartnerDashboard,
+      })) {
+        landingSection = 'secInicio';
+      }
+    }
+    _bootShowLanding(landingSection);
     if (landingSection === 'secRanking' && !canRanking) {
       landingSection = _inPartnerOrg
         ? (canPartnerDashboard ? 'secDashboard' : (canProposta ? 'secManageProposals' : 'secMyProfile'))
@@ -1039,27 +1213,30 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     initSidebarToggle(); initNav();
     _wireLeadsManagerNav();
+    _wireBeneficiosNav();
     if (window.RouletteUI) RouletteUI.ensureRouletteDOM();
 
     if (canMasterPanel) {
       landingSection = 'secDashboard';
       _bootShowLanding(landingSection);
-      const tasks = [
-        employeesManagedInRhHub() ? Promise.resolve() : renderEmployeesTable(),
-        renderAdminRanking(),
-        renderDashboard(),
+      const criticalTasks = [
+        _bootRace(renderDashboard(), 45000, 'Dashboard'),
+        employeesManagedInRhHub() ? Promise.resolve() : _bootRace(renderEmployeesTable(), 45000, 'Funcionários'),
+        _bootRace(renderAdminRanking(), 30000, 'Ranking'),
+      ];
+      const deferredTasks = [
         renderTeamBillingChart(),
         renderMasterPanel(),
-        Promise.resolve(),
         typeof renderMeetingsAdmin === 'function' ? renderMeetingsAdmin() : Promise.resolve(),
         renderBalanceHistory(),
         populateBalanceSelect(),
         renderProductsTable(),
         renderOrdersTable(),
       ];
-      if (canSupervisorPanel) tasks.push(renderFeedbackSection());
-      if (canSaques) tasks.push(renderWithdrawalsTable());
-      await _bootSettle(tasks);
+      if (canSupervisorPanel) deferredTasks.push(renderFeedbackSection());
+      if (canSaques) deferredTasks.push(renderWithdrawalsTable());
+      await _bootSettle(criticalTasks, 50000);
+      void _bootSettle(deferredTasks, 45000);
       try { updatePendingBadge(); } catch (_) { /* noop */ }
       try { if (typeof updateMeetingsBadge === 'function') updateMeetingsBadge(); } catch (_) { /* noop */ }
       if (canSaques) { try { updateWithdrawalsBadge(); } catch (_) { /* noop */ } }
@@ -1117,16 +1294,26 @@ document.addEventListener('DOMContentLoaded', async () => {
       landingSection = 'secManageProposals';
       await _bootSettle([renderEmployeesTable(), window.Proposals ? Proposals.renderAdminList() : Promise.resolve()]);
 
+    } else if (IS_PORTARIA) {
+      landingSection = 'secInicio';
+      await _bootSettle([
+        window.Tickets ? Promise.resolve().then(() => { try { Tickets.init(); } catch (_) { /* noop */ } }) : Promise.resolve(),
+      ]);
+
     } else {
       landingSection = employeesManagedInRhHub() ? 'secDashboard' : 'secEmployees';
-      await _bootSettle([employeesManagedInRhHub() ? Promise.resolve() : renderEmployeesTable()]);
+      _bootShowLanding(landingSection);
+      const _tailTasks = [employeesManagedInRhHub() ? Promise.resolve() : renderEmployeesTable()];
+      if (landingSection === 'secDashboard') _tailTasks.push(renderDashboard().catch(e => console.warn('[dashboard boot]', e)));
+      await _bootSettle(_tailTasks);
     }
 
     if (window.RouletteUI) await RouletteUI.renderRoulettePage().catch(() => {});
     if (window.BolaoCopa) {
       try {
         BolaoCopa.ensureDom();
-        BolaoCopa.applyNavVisibility();
+        await BolaoCopa.applyNavVisibility();
+        if (IS_PORTARIA) _applyPortariaNavExtras();
       } catch (e) { console.warn('[admin boot] BolaoCopa', e); }
     }
 
@@ -1174,6 +1361,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           try { await renderMyProfile(); } finally { hideLoading(); }
         }
         if (sec==='secClients')     await renderClientsTable();
+        if (sec==='secGestaoBeneficios' && window.BeneficiosAdmin?.init) await BeneficiosAdmin.init();
+        if (sec==='secClubeBeneficios' && window.BeneficiosClube?.init) await BeneficiosClube.init();
         if (sec==='secCreateProposal') { if(window.masterProposalManager) window.masterProposalManager.init(); }
         if (sec==='secManageProposals') { if(window.Proposals) await Proposals.renderAdminList(); }
         if (sec==='secPartnerOps') { if (window.PartnerOps) await PartnerOps.renderPanel(); }
@@ -1303,9 +1492,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch(e) {
     if (e.message==='AUTH_REDIRECT') return;
     console.error('[SOU+BLU Boot Error]', e);
-    showToast(`Erro: ${e.message || 'falha ao carregar'}`, 'error', 8000);
+    const bootMsg = String(e.message || 'falha ao carregar');
+    showToast(`Erro: ${bootMsg}`, 'error', 8000);
+    if (document.getElementById('secDashboard')?.classList.contains('active')) {
+      const stats = document.getElementById('dashStats');
+      if (stats) stats.innerHTML = _dashRetryHtml(bootMsg);
+    }
   } finally {
-    if (window.__ADMIN_NAV_CFG__) _applyAdminNavVisibility(window.__ADMIN_NAV_CFG__);
+    if (window.__ADMIN_NAV_CFG__) {
+      _applyAdminNavVisibility(window.__ADMIN_NAV_CFG__);
+      if (IS_PORTARIA) _applyPortariaNavExtras();
+    }
     if (Auth.getSession() && typeof navigateTo === 'function') {
       const _sess = Auth.getSession();
       if (landingSection === 'secRanking' && !window.__ADMIN_NAV_CFG__?.canRanking) {
@@ -1328,7 +1525,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           await Contestacao.render();
         } catch (e) { console.warn('[contestacao boot]', e); }
       }
-      _bootShowLanding(landingSection);
+      if (!document.querySelector('.section.active')) {
+        _bootShowLanding(landingSection || 'secInicio');
+      } else {
+        _bootShowLanding(landingSection);
+      }
       if (landingSection === 'secInicio' && window.PainelSonhos) {
         try {
           const root = document.getElementById('painelSonhosRoot');
@@ -1351,8 +1552,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
           const dash = document.getElementById('secDashboard');
           const stats = document.getElementById('dashStats');
-          if (dash && (!stats || !stats.innerHTML.trim())) await renderDashboard();
-        } catch (e) { console.warn('[dashboard finally]', e); }
+          if (dash && (!stats || !stats.innerHTML.trim())) {
+            await _bootRace(renderDashboard(), 45000, 'Dashboard');
+          }
+          if (stats && !stats.innerHTML.trim()) {
+            stats.innerHTML = _dashRetryHtml('O resumo não carregou. Verifique a conexão com o servidor.');
+          }
+        } catch (e) {
+          console.warn('[dashboard finally]', e);
+          const stats = document.getElementById('dashStats');
+          if (stats && !stats.innerHTML.trim()) {
+            stats.innerHTML = _dashRetryHtml(String(e.message || 'Falha ao carregar dashboard'));
+          }
+        }
       }
       if (landingSection === 'secManageTickets' && window.Tickets) {
         try { await Tickets.renderAdminList(); } catch (e) { console.warn('[tickets boot]', e); }
@@ -1439,14 +1651,15 @@ async function renderDashboard() {
 
 async function _renderDashboardBody() {
   const _fillDashErr = (msg) => {
-    const html = `<div class="text-muted text-center" style="padding:20px;">${msg}</div>`;
+    const html = _dashRetryHtml(msg);
     const _ds = document.getElementById('dashStats');
     if (_ds) _ds.innerHTML = html;
     const _dr = document.getElementById('dashRanking');
     const _do = document.getElementById('dashOrders');
-    if (_dr) _dr.innerHTML = html;
-    if (_do) _do.innerHTML = html;
+    if (_dr) _dr.innerHTML = '<div class="text-muted text-center" style="padding:20px;">Indisponível.</div>';
+    if (_do) _do.innerHTML = '<div class="text-muted text-center" style="padding:20px;">Indisponível.</div>';
   };
+  _ensureDashPlaceholder('Carregando dashboard…');
   try {
   const _fullOrg =
     IS_MASTER || IS_GERENTE || IS_FINANCIAL || IS_RH || IS_DIRETORIA || IS_FUNDA;
@@ -1462,8 +1675,8 @@ async function _renderDashboardBody() {
     if (Array.isArray(_allUsersCache) && _allUsersCache.length) {
       allUsersPts = _allUsersCache;
     } else {
-      allUsersPts = await DB.getAllUsers().catch(() => []);
-      _allUsersCache = allUsersPts;
+      allUsersPts = await _bootRace(DB.getAllUsers(), 35000, 'Lista de usuários').catch(() => []);
+      if (Array.isArray(allUsersPts) && allUsersPts.length) _allUsersCache = allUsersPts;
     }
     const internalUsers = typeof filterSouBluInternalUsers === 'function'
       ? filterSouBluInternalUsers(allUsersPts)
@@ -1483,7 +1696,8 @@ async function _renderDashboardBody() {
       _ordersForRole(),
       _transactionsForRole(),
       prodProm,
-      typeof DB.listProposals === 'function' ? DB.listProposals() : DB.list('proposals'),
+      typeof DB.listProposalsLite === 'function' ? DB.listProposalsLite({ limit: 1500 })
+        : (typeof DB.listProposals === 'function' ? DB.listProposals() : DB.list('proposals')),
     ]);
     emps = rEmps.status === 'fulfilled' ? (rEmps.value || []) : [];
     orders = rOrders.status === 'fulfilled' ? (rOrders.value || []) : [];
@@ -1671,9 +1885,10 @@ async function _renderDashboardBody() {
   }
   } catch (err) {
     console.warn('[renderDashboard]', err);
-    _fillDashErr('Não foi possível carregar o resumo. Atualize a página (F5).');
+    _fillDashErr('Não foi possível carregar o resumo. Atualize a página (Ctrl+F5) ou tente novamente.');
   }
 }
+window.renderDashboard = renderDashboard;
 
 /* ══════════════════════════════════════════════
    GRÁFICO DE FATURAMENTO POR EQUIPE (master only)
@@ -1758,11 +1973,6 @@ async function renderAdminPrizeStore() {
 window.renderAdminPrizeStore = renderAdminPrizeStore;
 
 function invalidateSouBluCaches() {
-  // #region agent log
-  if (typeof _dbgSessionLog === 'function') {
-    _dbgSessionLog('admin.js:invalidateSouBluCaches', 'cache cleared', { stack: (new Error()).stack?.split('\n').slice(1, 4).join(' | ') }, 'H-C-invalidate');
-  }
-  // #endregion
   if (typeof _cacheDel === 'function') {
     _cacheDel('users');
     _cacheDel('transactions');
@@ -1804,9 +2014,6 @@ function _startAdminLiveRefresh() {
       const key = typeof API_KEY !== 'undefined' ? API_KEY : '';
       await fetch(`${base}/api/rest-ping.php`, { headers: { 'X-API-Key': key } });
     } catch (e) {
-      if (typeof _dbgSessionLog === 'function') {
-        _dbgSessionLog('admin.js:keepalive', 'ping failed', { msg: String(e?.message || e).slice(0, 80) }, 'H-A-mysql-timeout');
-      }
     }
   };
   _adminPollTimer = setInterval(tick, 120000);
@@ -1825,9 +2032,11 @@ async function renderTeamBillingChart() {
   card.style.display = '';
 
   if (!_allProposalsCache) {
-    _allProposalsCache = typeof DB.listProposals === 'function'
-      ? await DB.listProposals().catch(() => [])
-      : await DB.list('proposals').catch(() => []);
+    _allProposalsCache = typeof DB.listProposalsLite === 'function'
+      ? await DB.listProposalsLite({ limit: 1500 }).catch(() => [])
+      : (typeof DB.listProposals === 'function'
+        ? await DB.listProposals().catch(() => [])
+        : await DB.list('proposals').catch(() => []));
   }
   if (!_allUsersCache?.length) _allUsersCache = await DB.getAllUsers().catch(() => []);
 
@@ -2169,6 +2378,12 @@ const _PARTNER_DOC_DEFS = [
 const _PARTNER_DOC_KEYS = _PARTNER_DOC_DEFS.map((d) => d.key);
 const _PARTNER_DOC_REQUIRED = _PARTNER_DOC_DEFS.filter((d) => d.required).map((d) => d.key);
 
+/** meta.attachments pode vir como [] do PHP (json_decode de {}); normaliza para objeto. */
+function _partnerAttachmentsMap(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  return { ...raw };
+}
+
 function _partnerDocDefaultLabel(key) {
   const def = _PARTNER_DOC_DEFS.find((d) => d.key === key);
   return def && !def.required
@@ -2470,16 +2685,18 @@ function _fillPartnerMetaForm(meta) {
     set('partnerPixType', meta.bank.pix_type || 'cnpj');
     set('partnerPixKey', meta.bank.pix_key || '');
   }
-  _partnerAttachments = { ...(meta.attachments || {}), _consultas: meta.consultas || {} };
+  const attMap = _partnerAttachmentsMap(meta.attachments);
+  _partnerAttachments = { ...attMap, _consultas: meta.consultas || {} };
   _PARTNER_DOC_KEYS.forEach((k) => {
     const lbl = document.getElementById(`partnerDocLabel_${k}`);
     const hid = document.getElementById(`partnerDoc_${k}`);
-    const url = meta.attachments?.[k];
+    const url = attMap[k];
     if (hid) hid.value = url || '';
     if (lbl) {
-      lbl.innerHTML = url
-        ? `<a href="${url}" target="_blank" rel="noopener">Ver anexo</a>`
-        : _partnerDocDefaultLabel(k);
+      const link = url && typeof partnerAttachmentLinkHtml === 'function'
+        ? partnerAttachmentLinkHtml(url)
+        : '';
+      lbl.innerHTML = link || _partnerDocDefaultLabel(k);
     }
   });
   const scoreEl = document.getElementById('partnerConsultaScoreResult');
@@ -2735,6 +2952,16 @@ function _resetPartnerAttachments() {
   });
 }
 
+async function _partnerPersistAttachment(partnerId, key, url) {
+  if (!partnerId || !key || !url) return;
+  const p = await DB.getPartner(partnerId).catch(() => null);
+  if (!p) return;
+  const meta = _parsePartnerJsonField(p.meta, {});
+  const att = _partnerAttachmentsMap(meta.attachments);
+  att[key] = url;
+  await DB.savePartner({ ...p, meta: { ...meta, attachments: att } });
+}
+
 async function _partnerUploadDoc(input, key) {
   const file = input?.files?.[0];
   if (!file) return;
@@ -2742,13 +2969,27 @@ async function _partnerUploadDoc(input, key) {
   if (lbl) lbl.textContent = 'Enviando…';
   try {
     const url = await uploadImage(file, 'partner-docs', `${key}_${Date.now()}`);
+    if (!url || (typeof _isInlineAttachmentUrl === 'function' && _isInlineAttachmentUrl(url))) {
+      throw new Error('O servidor não aceitou o arquivo. Use PDF/JPG/PNG.');
+    }
     _partnerAttachments[key] = url;
     const hid = document.getElementById(`partnerDoc_${key}`);
     if (hid) hid.value = url;
-    if (lbl) lbl.innerHTML = `<a href="${url}" target="_blank" rel="noopener">${file.name}</a>`;
-    showToast('Anexo enviado.', 'success');
+    if (lbl) {
+      const link = typeof partnerAttachmentLinkHtml === 'function'
+        ? partnerAttachmentLinkHtml(url)
+        : `<a href="${url}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation(); openAttachmentUrl(this.href); return false;">Ver anexo</a>`;
+      lbl.innerHTML = `${link} <span style="color:var(--color-success);">(${file.name})</span>`;
+    }
+    const partnerId = document.getElementById('partnerRecordId')?.value || '';
+    if (partnerId) {
+      await _partnerPersistAttachment(partnerId, key, url);
+      showToast('Documento salvo no cadastro do parceiro.', 'success');
+    } else {
+      showToast('Anexo enviado. Salve o parceiro para concluir.', 'success');
+    }
   } catch (e) {
-    if (lbl) lbl.textContent = 'Falha no upload';
+    if (lbl) lbl.innerHTML = '<span style="color:var(--color-danger);">Falha no upload</span>';
     showToast('Erro ao enviar anexo: ' + (e.message || ''), 'error');
   }
 }
@@ -3385,6 +3626,16 @@ async function savePartner() {
 
   const isActive = meta.status === 'ativo' && meta.compliance_aprovado;
   const prevPartner = recordId ? await DB.getPartner(recordId).catch(() => null) : null;
+  if (prevPartner?.meta) {
+    const prevAtt = _partnerAttachmentsMap(
+      typeof prevPartner.meta === 'string'
+        ? (() => { try { return JSON.parse(prevPartner.meta); } catch (_) { return {}; } })().attachments
+        : prevPartner.meta.attachments
+    );
+    Object.keys(prevAtt).forEach((k) => {
+      if (!meta.attachments[k] && prevAtt[k]) meta.attachments[k] = prevAtt[k];
+    });
+  }
   const wasActive = prevPartner?.meta?.status === 'ativo' && prevPartner?.active !== false;
 
   showLoading('Salvando parceiro...');
@@ -3552,6 +3803,7 @@ function _masterRoleHint(role) {
     fundador: 'Proprietário — acesso completo à plataforma.',
     supervisor: 'Líder de equipe de vendas — gerencia funcionários vinculados.',
     sup_backoffice: 'Coordena equipe de backoffice vinculada.',
+    portaria: 'Recepção — painel dos sonhos, bolão, loja e abertura de chamados.',
   };
   return hints[role] || 'Usuário cadastrado no sistema SOU+BLU.';
 }
@@ -3736,7 +3988,7 @@ function onMasterRoleChange(role) {
     financial:'Financeiro', financeiro:'Financeiro',
     supervisor:'Supervisor', sup_backoffice:'Backoffice',
     backoffice:'Backoffice', rh:'RH', vendedor:'Vendas',
-    desenvolvedor:'Desenvolvimento',
+    desenvolvedor:'Desenvolvimento', portaria:'Portaria',
     gerente:'Administração'
   };
   if (deptMap[role]) deptSel.value = deptMap[role];
@@ -3819,7 +4071,7 @@ async function saveMasterUser() {
         backoffice:'Backoffice', sup_backoffice:'Sup. Backoffice',
         gerente:'Gerente',
         fundador:'Fundador',
-        desenvolvedor:'Desenvolvimento / TI'
+        desenvolvedor:'Desenvolvimento / TI', portaria:'Portaria',
       }[role] || role;
       showToast(`${roleNome} "${name}" criado!`, 'success');
     }
@@ -3925,7 +4177,7 @@ function _roleProfileLabel(role) {
     financeiro: 'Financeiro', financial: 'Financeiro', supervisor: 'Supervisor',
     sup_backoffice: 'Sup. Backoffice', backoffice: 'Backoffice', rh: 'RH',
     operacional: 'Operacional', juridico: 'Jurídico', diretoria: 'Diretoria',
-    ouvidoria: 'Ouvidoria', parceiro: 'Parceiro',
+    ouvidoria: 'Ouvidoria', parceiro: 'Parceiro', portaria: 'Portaria',
   };
   return map[role] || 'Gestor';
 }
@@ -4137,6 +4389,9 @@ async function saveEmployee() {
     role = teamSel?.value || 'vendedor';
     if (role === 'financial') role = 'financeiro';
     dept = typeof PartnerPerms !== 'undefined' ? PartnerPerms.roleDept(role) : dept;
+  } else if (id) {
+    const existing = await DB.getUser(id, true).catch(() => null);
+    if (existing?.role) role = existing.role;
   }
   const teamAdmin = partnerRoot || (((IS_FINANCIAL || IS_RH) && !partnerRoot) ? null : ADMIN_ID);
   const cpfDigits = (document.getElementById('empCpf')?.value || '').replace(/\D/g, '');
@@ -4388,7 +4643,6 @@ async function deleteProduct(id){
 ══════════════════════════════════════════════ */
 const STATUS_OPT=['pendente','aprovado','enviado','entregue','cancelado'];
 async function renderOrdersTable(){
-  invalidateSouBluCaches();
   const q=(document.getElementById('orderSearch')?.value||'').toLowerCase();
   let orders = await _ordersForRole();
   orders = (orders || []).slice().sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
@@ -4491,7 +4745,6 @@ async function renderWithdrawalsTable(){
         .map(w => w.employee_id).filter(Boolean)
     )];
     await Promise.all(paidEmpIds.map(id => DB.syncPartnerWithdrawalDebits(id).catch(() => null)));
-    if (typeof invalidateSouBluCaches === 'function') invalidateSouBluCaches();
   }
   const cfgPix = window.SOUBLU_CONFIG || {};
   const gwConfigured = !!(

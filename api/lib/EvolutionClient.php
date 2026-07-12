@@ -38,7 +38,7 @@ final class EvolutionClient
         return true;
     }
 
-    public function request(string $method, string $path, ?array $body = null): array
+    public function request(string $method, string $path, ?array $body = null, int $timeoutSec = 0): array
     {
         if (!$this->isConfigured()) {
             throw new RuntimeException('Evolution API não configurada (config.evolution.local.php).');
@@ -49,11 +49,31 @@ final class EvolutionClient
             'Content-Type: application/json',
             'apikey: ' . $this->apiKey,
         ];
+        // Timeouts curtos: Evolution lenta satura o pool PHP da Locaweb e derruba login/propostas.
+        $isMediaFetch = str_contains($path, 'getBase64') || str_contains($path, 'downloadMedia');
+        $isMediaSend = str_contains($path, 'sendMedia')
+            || str_contains($path, 'sendWhatsAppAudio')
+            || str_contains($path, 'sendSticker');
+        $isProfileOp = str_contains($path, 'updateProfile') || str_contains($path, 'fetchPrivacySettings');
+        $isProfileFetch = str_contains($path, 'fetchProfile') || str_contains($path, 'fetchProfilePictureUrl');
+        $isFindChats = str_contains($path, 'findChats') || str_contains($path, 'findContacts');
+        $isConnProbe = str_contains($path, 'connectionState') || str_contains($path, 'fetchInstances');
+        $timeout = $timeoutSec > 0
+            ? $timeoutSec
+            : ($isMediaFetch || $isMediaSend || $isProfileOp
+                ? 20
+                : ($isFindChats ? 8 : ($isProfileFetch || $isConnProbe ? 5 : 8)));
         $opts = [
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => strtoupper($method),
             CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_TIMEOUT => 45,
+            CURLOPT_CONNECTTIMEOUT => 3,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_TCP_KEEPALIVE => 1,                  // reaproveita conexão TLS
+            CURLOPT_TCP_NODELAY => true,
+            CURLOPT_FORBID_REUSE => false,
+            CURLOPT_FRESH_CONNECT => false,
+            CURLOPT_ENCODING => '',                      // aceita gzip (resposta menor)
         ];
         if (defined('EVOLUTION_SSL_VERIFY') && EVOLUTION_SSL_VERIFY === false) {
             $opts[CURLOPT_SSL_VERIFYPEER] = false;
@@ -78,11 +98,19 @@ final class EvolutionClient
             $decoded = ['raw' => $raw];
         }
         if ($code >= 400) {
-            $msg = $decoded['message'] ?? $decoded['error'] ?? $raw;
+            $msg = $decoded['message']
+                ?? $decoded['error']
+                ?? ($decoded['response']['message'] ?? null)
+                ?? ($decoded['response']['error'] ?? null)
+                ?? $raw;
             if (is_array($msg)) {
                 $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
             }
-            throw new RuntimeException('Evolution HTTP ' . $code . ': ' . (string) $msg);
+            $msg = trim((string) $msg);
+            if ($msg === '' || stripos($msg, 'internal server error') !== false) {
+                $msg = 'Falha na Evolution API (HTTP ' . $code . '). Reconecte o WhatsApp e tente novamente.';
+            }
+            throw new RuntimeException('Evolution HTTP ' . $code . ': ' . $msg);
         }
         return $decoded;
     }
@@ -94,6 +122,7 @@ final class EvolutionClient
             'qrcode' => true,
             'integration' => 'WHATSAPP-BAILEYS',
             'webhook' => [
+                'enabled' => true,
                 'url' => $webhookUrl,
                 'byEvents' => false,
                 'base64' => true,
@@ -101,6 +130,8 @@ final class EvolutionClient
                     'MESSAGES_UPSERT',
                     'CONNECTION_UPDATE',
                     'QRCODE_UPDATED',
+                    'CONTACTS_UPDATE',
+                    'CONTACTS_UPSERT',
                 ],
             ],
         ]);
@@ -145,6 +176,8 @@ final class EvolutionClient
                     'MESSAGES_UPSERT',
                     'CONNECTION_UPDATE',
                     'QRCODE_UPDATED',
+                    'CONTACTS_UPDATE',
+                    'CONTACTS_UPSERT',
                 ],
             ],
         ]);
@@ -195,15 +228,71 @@ final class EvolutionClient
         throw $last ?? new RuntimeException('Falha ao buscar conversas.');
     }
 
-    public function fetchProfilePictureUrl(string $instanceName, string $number): array
+    public function fetchProfilePictureUrl(string $instanceName, string $numberOrJid): array
     {
-        $digits = preg_replace('/\D+/', '', $number) ?? '';
-        if ($digits === '') {
-            throw new InvalidArgumentException('Número inválido.');
+        $raw = trim($numberOrJid);
+        if ($raw === '') {
+            throw new InvalidArgumentException('Número ou JID inválido.');
         }
-        return $this->request('POST', '/chat/fetchProfilePictureUrl/' . rawurlencode($instanceName), [
-            'number' => $digits,
-        ]);
+        $payloads = [];
+        if (str_contains($raw, '@')) {
+            $payloads[] = ['number' => $raw];
+            $local = strtok($raw, '@') ?: '';
+            $digits = preg_replace('/\D+/', '', $local) ?? '';
+            if (strlen($digits) >= 10 && strlen($digits) <= 13) {
+                $payloads[] = ['number' => $digits];
+                $payloads[] = ['number' => $digits . '@s.whatsapp.net'];
+            }
+        } else {
+            $digits = preg_replace('/\D+/', '', $raw) ?? '';
+            if ($digits === '') {
+                throw new InvalidArgumentException('Número inválido.');
+            }
+            $payloads[] = ['number' => $digits];
+            $payloads[] = ['number' => $digits . '@s.whatsapp.net'];
+        }
+        $last = null;
+        foreach ($payloads as $body) {
+            try {
+                return $this->request('POST', '/chat/fetchProfilePictureUrl/' . rawurlencode($instanceName), $body);
+            } catch (Throwable $e) {
+                $last = $e;
+            }
+        }
+        throw $last ?? new RuntimeException('Falha ao buscar foto de perfil.');
+    }
+
+    /** Perfil completo do contato (nome, wid, foto) — funciona com @lid em Evolution recente. */
+    public function fetchProfile(string $instanceName, string $numberOrJid, int $timeoutSec = 0): array
+    {
+        $raw = trim($numberOrJid);
+        if ($raw === '') {
+            throw new InvalidArgumentException('Número ou JID inválido.');
+        }
+        $payloads = [['number' => $raw]];
+        if (str_contains($raw, '@')) {
+            $local = strtok($raw, '@') ?: '';
+            $digits = preg_replace('/\D+/', '', $local) ?? '';
+            if (strlen($digits) >= 10 && strlen($digits) <= 13) {
+                $payloads[] = ['number' => $digits];
+            }
+        } else {
+            $payloads[] = ['number' => $raw . '@s.whatsapp.net'];
+        }
+        $last = null;
+        foreach ($payloads as $body) {
+            try {
+                return $this->request(
+                    'POST',
+                    '/chat/fetchProfile/' . rawurlencode($instanceName),
+                    $body,
+                    $timeoutSec > 0 ? $timeoutSec : 0
+                );
+            } catch (Throwable $e) {
+                $last = $e;
+            }
+        }
+        throw $last ?? new RuntimeException('Falha ao buscar perfil.');
     }
 
     /** Mensagens recentes de uma conversa (espelho Evolution → CRM). */
@@ -225,25 +314,66 @@ final class EvolutionClient
         return $this->request('POST', '/chat/findMessages/' . rawurlencode($instanceName), $body);
     }
 
-    public function sendText(string $instanceName, string $number, string $text): array
+    /** @return list<string> Número E.164 ou JID completo (@lid / @s.whatsapp.net). */
+    private static function sendTargetVariants(string $numberOrJid): array
     {
-        $digits = preg_replace('/\D+/', '', $number) ?? '';
-        if ($digits === '') {
+        $raw = trim($numberOrJid);
+        if ($raw === '') {
             throw new InvalidArgumentException('Número inválido.');
         }
-        $payloads = [
-            ['number' => $digits, 'text' => $text],
-            ['number' => $digits, 'textMessage' => ['text' => $text]],
-        ];
+        $variants = [];
+        if (str_contains($raw, '@')) {
+            $variants[] = $raw;
+            $local = strtok($raw, '@') ?: '';
+            $digits = preg_replace('/\D+/', '', $local) ?? '';
+            if (strlen($digits) >= 10 && strlen($digits) <= 13) {
+                $variants[] = $digits;
+                $variants[] = $digits . '@s.whatsapp.net';
+            }
+        } else {
+            $digits = preg_replace('/\D+/', '', $raw) ?? '';
+            if ($digits === '') {
+                throw new InvalidArgumentException('Número inválido.');
+            }
+            $variants[] = $digits;
+            $variants[] = $digits . '@s.whatsapp.net';
+        }
+        return array_values(array_unique($variants));
+    }
+
+    public function sendText(string $instanceName, string $number, string $text): array
+    {
         $last = null;
-        foreach ($payloads as $body) {
-            try {
-                return $this->request('POST', '/message/sendText/' . rawurlencode($instanceName), $body);
-            } catch (Throwable $e) {
-                $last = $e;
+        foreach (self::sendTargetVariants($number) as $target) {
+            foreach ([
+                ['number' => $target, 'text' => $text],
+                ['number' => $target, 'textMessage' => ['text' => $text]],
+            ] as $body) {
+                try {
+                    return $this->request('POST', '/message/sendText/' . rawurlencode($instanceName), $body);
+                } catch (Throwable $e) {
+                    $last = $e;
+                }
             }
         }
         throw $last ?? new RuntimeException('Falha ao enviar mensagem.');
+    }
+
+    /** Apaga mensagem para todos no WhatsApp (requer wa_message_id). */
+    public function deleteMessageForEveryone(
+        string $instanceName,
+        string $waMessageId,
+        string $remoteJid,
+        bool $fromMe = true
+    ): array {
+        if ($waMessageId === '' || $remoteJid === '') {
+            throw new InvalidArgumentException('ID da mensagem ou JID inválido.');
+        }
+        return $this->request('DELETE', '/chat/deleteMessageForEveryone/' . rawurlencode($instanceName), [
+            'id' => $waMessageId,
+            'remoteJid' => $remoteJid,
+            'fromMe' => $fromMe,
+        ]);
     }
 
     /**
@@ -261,25 +391,29 @@ final class EvolutionClient
         ?string $caption = null,
         ?string $fileName = null
     ): array {
-        $digits = preg_replace('/\D+/', '', $number) ?? '';
-        if ($digits === '') {
-            throw new InvalidArgumentException('Número inválido.');
+        $last = null;
+        foreach (self::sendTargetVariants($number) as $target) {
+            $body = [
+                'number' => $target,
+                'mediatype' => $mediatype,
+                'media' => $media,
+            ];
+            if ($mimetype !== null && $mimetype !== '') {
+                $body['mimetype'] = $mimetype;
+            }
+            if ($caption !== null && $caption !== '') {
+                $body['caption'] = $caption;
+            }
+            if ($fileName !== null && $fileName !== '') {
+                $body['fileName'] = $fileName;
+            }
+            try {
+                return $this->request('POST', '/message/sendMedia/' . rawurlencode($instanceName), $body);
+            } catch (Throwable $e) {
+                $last = $e;
+            }
         }
-        $body = [
-            'number' => $digits,
-            'mediatype' => $mediatype,
-            'media' => $media,
-        ];
-        if ($mimetype !== null && $mimetype !== '') {
-            $body['mimetype'] = $mimetype;
-        }
-        if ($caption !== null && $caption !== '') {
-            $body['caption'] = $caption;
-        }
-        if ($fileName !== null && $fileName !== '') {
-            $body['fileName'] = $fileName;
-        }
-        return $this->request('POST', '/message/sendMedia/' . rawurlencode($instanceName), $body);
+        throw $last ?? new RuntimeException('Falha ao enviar mídia.');
     }
 
     /**
@@ -288,35 +422,46 @@ final class EvolutionClient
      */
     public function sendWhatsAppAudio(string $instanceName, string $number, string $audio, ?string $mimetype = null): array
     {
-        $digits = preg_replace('/\D+/', '', $number) ?? '';
-        if ($digits === '') {
-            throw new InvalidArgumentException('Número inválido.');
-        }
         if (trim($audio) === '') {
             throw new InvalidArgumentException('Áudio vazio.');
         }
-        $body = [
-            'number' => $digits,
-            'audio' => $audio,
-            'encoding' => true,
-        ];
-        if ($mimetype !== null && $mimetype !== '') {
-            $body['mimetype'] = $mimetype;
+        $last = null;
+        $encodingTries = [true, false];
+        foreach (self::sendTargetVariants($number) as $target) {
+            foreach ($encodingTries as $encoding) {
+                $body = [
+                    'number' => $target,
+                    'audio' => $audio,
+                    'encoding' => $encoding,
+                ];
+                if ($mimetype !== null && $mimetype !== '') {
+                    $body['mimetype'] = $mimetype;
+                }
+                try {
+                    return $this->request('POST', '/message/sendWhatsAppAudio/' . rawurlencode($instanceName), $body);
+                } catch (Throwable $e) {
+                    $last = $e;
+                }
+            }
         }
-        return $this->request('POST', '/message/sendWhatsAppAudio/' . rawurlencode($instanceName), $body);
+        throw $last ?? new RuntimeException('Falha ao enviar áudio.');
     }
 
     /** Envia figurinha (Evolution v2 — POST /message/sendSticker/{instance}). */
     public function sendSticker(string $instanceName, string $number, string $sticker): array
     {
-        $digits = preg_replace('/\D+/', '', $number) ?? '';
-        if ($digits === '') {
-            throw new InvalidArgumentException('Número inválido.');
+        $last = null;
+        foreach (self::sendTargetVariants($number) as $target) {
+            try {
+                return $this->request('POST', '/message/sendSticker/' . rawurlencode($instanceName), [
+                    'number' => $target,
+                    'sticker' => $sticker,
+                ]);
+            } catch (Throwable $e) {
+                $last = $e;
+            }
         }
-        return $this->request('POST', '/message/sendSticker/' . rawurlencode($instanceName), [
-            'number' => $digits,
-            'sticker' => $sticker,
-        ]);
+        throw $last ?? new RuntimeException('Falha ao enviar figurinha.');
     }
 
     /** Baixa mídia recebida (Evolution v2 — POST /chat/getBase64FromMediaMessage/{instance}). */
@@ -477,5 +622,80 @@ final class EvolutionClient
             }
         }
         return $out;
+    }
+
+    /** Garante instância realmente conectada antes de alterar perfil. */
+    public function requireOpenInstance(string $instanceName): array
+    {
+        $stateResp = $this->connectionState($instanceName);
+        $status = self::parseConnectionState($stateResp);
+        if ($status !== 'open') {
+            throw new RuntimeException('WhatsApp não está conectado. Escaneie o QR Code novamente.');
+        }
+        $owner = (string) (
+            $stateResp['instance']['owner']
+            ?? $stateResp['instance']['wuid']
+            ?? $stateResp['owner']
+            ?? $stateResp['wuid']
+            ?? ''
+        );
+        if ($owner === '') {
+            throw new RuntimeException('Sessão WhatsApp incompleta. Use "Reiniciar meu WhatsApp" e escaneie o QR de novo.');
+        }
+        return $stateResp;
+    }
+
+    public function updateProfileName(string $instanceName, string $name): array
+    {
+        $path = '/chat/updateProfileName/' . rawurlencode($instanceName);
+        $last = null;
+        foreach ([['name' => $name]] as $body) {
+            for ($try = 0; $try < 2; $try++) {
+                try {
+                    return $this->request('POST', $path, $body, 30);
+                } catch (Throwable $e) {
+                    $last = $e;
+                    if ($try === 0) {
+                        usleep(600000);
+                    }
+                }
+            }
+        }
+        throw $last ?? new RuntimeException('Falha ao atualizar nome do perfil.');
+    }
+
+    public function updateProfileStatus(string $instanceName, string $status): array
+    {
+        $path = '/chat/updateProfileStatus/' . rawurlencode($instanceName);
+        $last = null;
+        for ($try = 0; $try < 2; $try++) {
+            try {
+                return $this->request('POST', $path, ['status' => $status], 30);
+            } catch (Throwable $e) {
+                $last = $e;
+                if ($try === 0) {
+                    usleep(600000);
+                }
+            }
+        }
+        throw $last ?? new RuntimeException('Falha ao atualizar recado do perfil.');
+    }
+
+    public function updateProfilePicture(string $instanceName, string $picture): array
+    {
+        $path = '/chat/updateProfilePicture/' . rawurlencode($instanceName);
+        $payloads = [['picture' => $picture]];
+        if (str_starts_with($picture, 'data:image')) {
+            $payloads[] = ['picture' => preg_replace('/^data:image\/[^;]+;base64,/', '', $picture) ?? $picture];
+        }
+        $last = null;
+        foreach ($payloads as $body) {
+            try {
+                return $this->request('POST', $path, $body, 60);
+            } catch (Throwable $e) {
+                $last = $e;
+            }
+        }
+        throw $last ?? new RuntimeException('Falha ao atualizar foto do perfil.');
     }
 }

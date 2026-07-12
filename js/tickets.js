@@ -72,7 +72,13 @@ window.Tickets = {
       'vendedor', 'employee', 'backoffice', 'supervisor', 'sup_backoffice',
       'gerencia', 'gerente', 'master', 'fundador', 'financeiro', 'financial',
       'rh', 'operacional', 'juridico', 'diretoria', 'ouvidoria', 'desenvolvedor', 'admin',
+      'portaria',
     ].includes(role);
+  },
+
+  _isPortariaOnly: function() {
+    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+    return String(s?.role || '').toLowerCase() === 'portaria';
   },
 
   /** Formulário "Abrir chamado" dentro do admin (supervisores usam admin, não employee). */
@@ -414,11 +420,33 @@ window.Tickets = {
 
   renderAdminList: async function() {
     this.ensureOpenTicketPanel();
+    const portariaOnly = this._isPortariaOnly();
+    const navLbl = document.querySelector('#navManageTickets .nav-label');
+    if (navLbl) navLbl.textContent = portariaOnly ? 'Abrir Chamado' : 'Esteira Chamados';
+
+    const sec = document.getElementById('secManageTickets');
+    if (sec) {
+      const h2 = sec.querySelector('.page-header h2');
+      const sub = sec.querySelector('.page-header p');
+      if (h2) h2.textContent = portariaOnly ? ' Abrir Chamado' : ' Gestão de Chamados';
+      if (sub) {
+        sub.textContent = portariaOnly
+          ? 'Abra um chamado para o departamento desejado'
+          : 'Chamados direcionados ao seu departamento';
+      }
+    }
+
     if (this.canOpenTickets() && document.getElementById('ticketsList')) {
       await this.renderEmployeeList();
     }
 
     const tbody = document.getElementById('manageTicketsTbody');
+    const manageCard = tbody?.closest('.card');
+    if (portariaOnly) {
+      if (manageCard) manageCard.style.display = 'none';
+      return;
+    }
+    if (manageCard) manageCard.style.display = '';
     if (!tbody) return;
 
     const tickets = (await DB.list('tickets') || []).map((t) => this._normTicket(t));

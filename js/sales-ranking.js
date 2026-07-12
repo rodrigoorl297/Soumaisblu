@@ -77,7 +77,7 @@ window.SalesRanking = {
     if (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function') {
       return DB.proposalBillingDate(p);
     }
-    const raw = p.createdAt || p.created_at;
+    const raw = p.updatedAt || p.updated_at || p.createdAt || p.created_at;
     const d = raw ? new Date(raw) : new Date(0);
     return Number.isNaN(d.getTime()) ? new Date(0) : d;
   },
@@ -86,7 +86,7 @@ window.SalesRanking = {
     if (typeof DB !== 'undefined' && typeof DB.proposalDate === 'function') {
       return DB.proposalDate(p);
     }
-    const raw = p.createdAt || p.created_at;
+    const raw = p.updatedAt || p.updated_at || p.createdAt || p.created_at;
     const d = raw ? new Date(raw) : new Date(0);
     return Number.isNaN(d.getTime()) ? new Date(0) : d;
   },

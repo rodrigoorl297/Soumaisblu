@@ -126,3 +126,31 @@ function soublu_ensure_beneficios_tables(?PDO $pdo = null): array
     $done = true;
     return $applied;
 }
+
+function soublu_beneficios_tables_exist(?PDO $pdo = null): bool
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $pdo = $pdo ?? soublu_pdo();
+    $st = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
+    );
+    foreach ([
+        'beneficios_limites',
+        'beneficios_prestadores',
+        'beneficios_produtos',
+        'beneficios_vouchers',
+        'beneficios_fechamentos',
+    ] as $table) {
+        $st->execute([$table]);
+        if ((int) $st->fetchColumn() === 0) {
+            $cached = false;
+            return false;
+        }
+    }
+    $cached = true;
+    return true;
+}

@@ -22,27 +22,13 @@
    const CACHE_STALE_MAX = 86400000; // 24h — dados antigos ainda servem na tela
    const API_RETRY_MAX = 3;
    const API_RETRY_BASE_MS = 500;
+   const API_FETCH_TIMEOUT_MS = 25000;
    const _supaInflight = new Map();
    const _bgRefresh = new Set();
 
-   function _dbgSessionLog(location, message, data, hypothesisId) {
-     const payload = { sessionId: '97c411', location, message, data, timestamp: Date.now(), hypothesisId, runId: '97c411dbstable4' };
-     fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify(payload) }).catch(() => {});
-     if (typeof HOSTINGER_CONFIGURED !== 'undefined' && HOSTINGER_CONFIGURED && typeof API_BASE_URL !== 'undefined') {
-       fetch(`${API_BASE_URL}/api/debug-session-log.php`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-API-Key': typeof API_KEY !== 'undefined' ? API_KEY : '' }, body: JSON.stringify(payload) }).catch(() => {});
-     }
-   }
-
-   function _cacheAgeMs(key) {
-     try {
-       const raw = sessionStorage.getItem(`supa_cache_${key}`);
-       if (!raw) return null;
-       const e = JSON.parse(raw);
-       return e?.ts ? Date.now() - e.ts : null;
-     } catch (_) {
-       return null;
-     }
-   }
+   /** Debug ingest desligado em produção (evita spam localhost + /api/debug-session-log). */
+   function _dbgSessionLog() { /* noop */ }
+   if (typeof window !== 'undefined') window._dbgSessionLog = _dbgSessionLog;
 
    function _scheduleBgRefresh(cacheKey, method, table, body, params) {
      if (_bgRefresh.has(cacheKey)) return;
@@ -266,20 +252,26 @@
      }
 
      let res;
+     const ctrl = new AbortController();
+     const timer = setTimeout(() => ctrl.abort(), API_FETCH_TIMEOUT_MS);
      try {
        res = await fetch(url, {
          method,
          headers,
          body: body ? JSON.stringify(body) : undefined,
+         signal: ctrl.signal,
        });
      } catch (netErr) {
-       const netMsg = netErr && netErr.message ? netErr.message : 'rede';
+       const aborted = netErr && netErr.name === 'AbortError';
+       const netMsg = aborted ? 'tempo esgotado' : (netErr && netErr.message ? netErr.message : 'rede');
        const hint = HOSTINGER_CONFIGURED
          ? 'Confira se o site e a API (/api/rest/v1) estão no ar.'
          : 'Confira internet, bloqueador de anúncios ou status do Supabase.';
        const err = new Error(`Sem conexão com o servidor (${netMsg}). ${hint}`);
        err.status = 0;
        throw err;
+     } finally {
+       clearTimeout(timer);
      }
 
      if (!res.ok) {
@@ -306,10 +298,6 @@
        if (hit) return hit;
        const stale = _cacheGetAny(cacheKey);
        if (stale) {
-         const ageMs = _cacheAgeMs(cacheKey);
-         // #region agent log
-         _dbgSessionLog('config.js:supaReq', 'stale-while-revalidate', { table, ageMs }, 'H-B-cache-expire');
-         // #endregion
          _scheduleBgRefresh(cacheKey, method, table, body, params);
          return stale;
        }
@@ -327,17 +315,11 @@
          const data = await supaReqOnce(method, table, body, params);
          if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
          if (method !== 'GET') _cacheDel(table);
-         // #region agent log
-         if (attempt > 1) fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'config.js:supaReq',message:'api retry ok',data:{table,attempt},timestamp:Date.now(),hypothesisId:'db-stable',runId:'97c411dbstable3'})}).catch(()=>{});
-         // #endregion
          return data;
        } catch (e) {
          lastErr = e;
          const stale = cacheKey ? _cacheGetAny(cacheKey) : null;
          if (method === 'GET' && stale) {
-           // #region agent log
-           _dbgSessionLog('config.js:supaReq', 'stale cache fallback', { table, attempt }, 'H-A-mysql-timeout');
-           // #endregion
            return stale;
          }
          if (attempt < API_RETRY_MAX && _isTransientApiFailure(e.status, e)) {
@@ -351,9 +333,6 @@
        const stale = _cacheGetAny(cacheKey);
        if (stale) return stale;
      }
-     // #region agent log
-     _dbgSessionLog('config.js:supaReq', 'api failure no stale', { table, status: lastErr?.status, msg: String(lastErr?.message || '').slice(0, 120) }, 'H-D-hard-fail');
-     // #endregion
      throw lastErr || new Error('Falha ao comunicar com o servidor.');
      })();
 

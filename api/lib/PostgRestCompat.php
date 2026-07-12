@@ -11,24 +11,45 @@ final class PostgRestCompat
         'tim_referrals', 'contestations', 'partner_fiscal',
         'marketplace_services', 'marketplace_orders',
         'finance_suppliers', 'finance_expenses',
-        'finance_adiantamento', 'finance_reembolso',
+        'finance_adiantamento', 'finance_reembolso', 'finance_proposta_ops',
         'rh_companies', 'rh_resumes', 'rh_jobs', 'rh_employees',
         'rh_absence_justifications', 'rh_punishments', 'rh_dismissals',
         'rh_cbo', 'monitoria_atendimento',
         'bolao_copa_picks', 'bolao_copa_results',
+        'beneficios_limites', 'beneficios_prestadores', 'beneficios_produtos', 'beneficios_vouchers', 'beneficios_fechamentos',
     ];
 
-    /** Nome na API (snake_case) → coluna física no MySQL quando não há coluna duplicada. */
+    /** Nome na API (snake_case) → coluna física no MySQL. */
     private const COLUMN_ALIASES = [
         'proposals' => [
             'comissao_elegivel' => 'comissaoElegivel',
             'comissao_recebida' => 'comissaoRecebida',
             'valor_comissao_recebida' => 'valorComissaoRecebida',
         ],
+        'rh_resumes' => [
+            'vaga_id' => 'vaga',
+        ],
+        'rh_employees' => [
+            'emergencia_nome_1' => 'nome_emergencia_1',
+            'emergencia_contato_1' => 'contato_emergencia_1',
+            'emergencia_nome_2' => 'nome_emergencia_2',
+            'emergencia_contato_2' => 'contato_emergencia_2',
+        ],
+    ];
+
+    /** Coluna física → nome exposto na API (leitura). */
+    private const REVERSE_ALIASES = [
+        'rh_employees' => [
+            'nome_emergencia_1' => 'emergencia_nome_1',
+            'contato_emergencia_1' => 'emergencia_contato_1',
+            'nome_emergencia_2' => 'emergencia_nome_2',
+            'contato_emergencia_2' => 'emergencia_contato_2',
+        ],
     ];
 
     private const JSON_COLUMNS = [
-        'users' => ['attendance_data', 'login_days', 'payment_saved', 'vendor_tier_data'],
+        'users' => ['attendance_data', 'login_days', 'payment_saved', 'vendor_tier_data', 'permissions'],
+        'finance_proposta_ops' => ['data'],
         'transactions' => ['meta'],
         'tickets' => ['messages', 'thread'],
         'meetings' => ['target_roles', 'acknowledgements', 'participant_ids'],
@@ -49,13 +70,20 @@ final class PostgRestCompat
         'finance_expenses' => ['pix_snapshot', 'attachments'],
         'finance_adiantamento' => ['attachments'],
         'finance_reembolso' => ['attachments'],
-        'rh_employees' => ['change_history', 'fontedata_meta'],
+        'rh_employees' => ['change_history', 'fontedata_meta', 'attachments', 'permissions', 'audit_log'],
         'rh_resumes' => ['attachments', 'fontedata_meta'],
+        'rh_jobs' => ['attachments'],
         'rh_dismissals' => ['checklist'],
         'monitoria_atendimento' => ['evidence_attachments'],
+        'beneficios_limites' => ['distribuicao'],
+        'beneficios_vouchers' => ['detalhes_pedido'],
+        'beneficios_fechamentos' => ['voucher_ids'],
     ];
 
     private PDO $pdo;
+
+    /** @var array<string, list<string>> */
+    private array $tableColumnsCache = [];
 
     public function __construct(PDO $pdo)
     {
@@ -162,7 +190,14 @@ final class PostgRestCompat
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($bind);
         $rows = $stmt->fetchAll();
-        return array_map(fn ($r) => $this->hydrateRow($table, $r), $rows);
+        $mapped = array_map(fn ($r) => $this->hydrateRow($table, $r), $rows);
+        if ($table === 'users') {
+            $mapped = array_values(array_filter(
+                $mapped,
+                static fn (array $r): bool => trim((string) ($r['id'] ?? '')) !== ''
+            ));
+        }
+        return $mapped;
     }
 
     private function insert(string $table, array $body, array $params): array
@@ -174,6 +209,7 @@ final class PostgRestCompat
                 continue;
             }
             $row = $this->prepareRow($table, $item);
+            $row = $this->ensureAutoId($table, $row);
             if ($params['on_conflict']) {
                 $out[] = $this->upsert($table, $row, $params['on_conflict']);
             } else {
@@ -262,7 +298,7 @@ final class PostgRestCompat
                     $parts[] = "`{$col}` IS NULL";
                 } else {
                     $parts[] = "`{$col}` = :{$key}";
-                    $bind[$key] = $this->decodeFilterVal($f['val']);
+                    $bind[$key] = $this->normalizeFilterBind($f['col'], $this->decodeFilterVal($f['val']));
                 }
             } elseif ($f['op'] === 'ilike') {
                 $parts[] = "`{$col}` LIKE :{$key}";
@@ -289,7 +325,7 @@ final class PostgRestCompat
                 $key = 'p' . $i++;
                 if ($f['op'] === 'eq') {
                     $orParts[] = "`{$col}` = :{$key}";
-                    $bind[$key] = $this->decodeFilterVal($f['val']);
+                    $bind[$key] = $this->normalizeFilterBind($f['col'], $this->decodeFilterVal($f['val']));
                 }
             }
             if ($orParts) {
@@ -310,6 +346,26 @@ final class PostgRestCompat
     private function decodeFilterVal(string $v): string
     {
         return rawurldecode($v);
+    }
+
+    /** MySQL TINYINT(1): active=eq.true deve virar 1, não a string "true". */
+    private function normalizeFilterBind(string $col, string $val): string|int
+    {
+        static $boolCols = [
+            'active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial',
+            'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner',
+        ];
+        if (!in_array($col, $boolCols, true)) {
+            return $val;
+        }
+        $low = strtolower(trim($val));
+        if ($low === 'true' || $low === '1') {
+            return 1;
+        }
+        if ($low === 'false' || $low === '0') {
+            return 0;
+        }
+        return $val;
     }
 
     private function parseOrder(string $table, string $order): string
@@ -362,12 +418,71 @@ final class PostgRestCompat
         return self::COLUMN_ALIASES[$table][$col] ?? $col;
     }
 
+    /** @return list<string> */
+    private function tableColumns(string $table): array
+    {
+        if (!isset($this->tableColumnsCache[$table])) {
+            $stmt = $this->pdo->query('SHOW COLUMNS FROM `' . $table . '`');
+            $rows = $stmt ? $stmt->fetchAll(PDO::FETCH_ASSOC) : [];
+            $this->tableColumnsCache[$table] = array_values(array_filter(array_map(
+                static fn (array $r): string => (string) ($r['Field'] ?? ''),
+                $rows
+            )));
+        }
+        return $this->tableColumnsCache[$table];
+    }
+
+    private function filterRowToTable(string $table, array $row): array
+    {
+        if ($row === []) {
+            return [];
+        }
+        $allowed = array_flip($this->tableColumns($table));
+        $filtered = [];
+        foreach ($row as $k => $v) {
+            if (isset($allowed[$k])) {
+                $filtered[$k] = $v;
+            }
+        }
+        return $filtered;
+    }
+
+    /** Gera `id` quando o front não envia (tabelas benefícios exigem PK). */
+    private function ensureAutoId(string $table, array $row): array
+    {
+        static $prefixes = [
+            'beneficios_limites' => 'ben_lim_',
+            'beneficios_prestadores' => 'ben_pre_',
+            'beneficios_produtos' => 'ben_prd_',
+            'beneficios_vouchers' => 'ben_vou_',
+            'beneficios_fechamentos' => 'ben_fec_',
+        ];
+        if (!isset($prefixes[$table])) {
+            return $row;
+        }
+        $id = trim((string) ($row['id'] ?? ''));
+        if ($id !== '') {
+            return $row;
+        }
+        try {
+            $row['id'] = $prefixes[$table] . bin2hex(random_bytes(6));
+        } catch (Throwable $e) {
+            $row['id'] = $prefixes[$table] . dechex(time()) . dechex(random_int(0, 0xffffff));
+        }
+        return $row;
+    }
+
     private function prepareRow(string $table, array $item): array
     {
         if ($table === 'proposals' && isset($item['attachments']) && is_array($item['attachments'])) {
             require_once dirname(__DIR__) . '/lib/FileStorage.php';
             $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
             $item['attachments'] = soublu_attachments_normalize_for_api($item['attachments'], $uploadDir, true);
+        }
+        if ($table === 'partners' && isset($item['meta']) && is_array($item['meta'])) {
+            require_once dirname(__DIR__) . '/lib/FileStorage.php';
+            $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
+            $item['meta'] = soublu_partner_meta_normalize_for_api($item['meta'], $uploadDir, true);
         }
         $jsonCols = self::JSON_COLUMNS[$table] ?? [];
         $row = [];
@@ -384,7 +499,7 @@ final class PostgRestCompat
                 $row[$physical] = $v;
             }
         }
-        return $row;
+        return $this->filterRowToTable($table, $row);
     }
 
     private function hydrateRow(string $table, array $row): array
@@ -405,6 +520,16 @@ final class PostgRestCompat
             require_once dirname(__DIR__) . '/lib/FileStorage.php';
             $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
             $row['attachments'] = soublu_attachments_normalize_for_api($row['attachments'], $uploadDir, false);
+        }
+        if ($table === 'partners' && isset($row['meta']) && is_array($row['meta'])) {
+            require_once dirname(__DIR__) . '/lib/FileStorage.php';
+            $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
+            $row['meta'] = soublu_partner_meta_normalize_for_api($row['meta'], $uploadDir, false);
+        }
+        foreach (self::REVERSE_ALIASES[$table] ?? [] as $physical => $apiName) {
+            if (array_key_exists($physical, $row) && !array_key_exists($apiName, $row)) {
+                $row[$apiName] = $row[$physical];
+            }
         }
         return $row;
     }

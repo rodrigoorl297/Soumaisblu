@@ -1,6 +1,21 @@
-# Impede acesso direto a configs na pasta api
+# SOU+BLU — API: regras de acesso (nível enterprise)
+
+Options -Indexes
+
 <IfModule mod_authz_core.c>
+  # Configs locais nunca servidas ao browser
   <FilesMatch "\.(local|env)\.php$">
+    Require all denied
+  </FilesMatch>
+
+  # Documentação e exemplos internos bloqueados
+  <FilesMatch "\.(md|txt|example|log|sql)$">
+    Require all denied
+  </FilesMatch>
+
+  # Scripts de migração e diagnóstico: bloqueados ao browser
+  # (só funcionam via CLI ou com X-API-Key via backend)
+  <FilesMatch "^(migrate-|diag_|debug-|check_)">
     Require all denied
   </FilesMatch>
 </IfModule>

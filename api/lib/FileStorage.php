@@ -172,6 +172,41 @@ function soublu_file_sanitize_object_path(string $object): string
     return implode('/', array_map('soublu_file_sanitize_storage_segment', $segments));
 }
 
+/** Variantes de caminho MySQL achatado (PROP-id_grupo_tsimg_tsext/hash) → disco/Supabase aninhado. */
+function soublu_file_flat_mysql_variants(string $object): array
+{
+    $object = str_replace('\\', '/', $object);
+    $variants = [];
+    $add = static function (string $v) use (&$variants): void {
+        $v = trim($v, '/');
+        if ($v !== '' && !in_array($v, $variants, true)) {
+            $variants[] = $v;
+        }
+    };
+
+    if (preg_match('~^(PROP-\d+_[a-z0-9_]+_\d+)img_(\d+)([a-z0-9]+)/([^/]+)$~i', $object, $m)) {
+        $folder = $m[1];
+        $ts = $m[2];
+        $ext = $m[3];
+        $hash = $m[4];
+        $add($folder . '/img_' . $ts . '.' . $ext);
+        if (preg_match('~^(PROP-\d+)_(.+)_(\d+)$~i', $folder, $fm)) {
+            $propId = $fm[1];
+            $grupo = $fm[2];
+            $add($propId . '/' . $grupo . '/' . $ts . '_' . $hash);
+            $add($propId . '/' . $grupo . '/img_' . $ts . '.' . $ext);
+            $add($propId . '/' . $grupo . '/' . $hash);
+        }
+    }
+
+    if (preg_match('~^(PROP-\d+)_(.+?)_(\d+)([a-z0-9]+)\.([a-z0-9]+)$~i', $object, $m)) {
+        $add($m[1] . '/' . $m[2] . '/' . $m[3] . '_' . $m[4] . '.' . $m[5]);
+        $add($m[1] . '/' . $m[2] . '/' . $m[3] . '.' . $m[5]);
+    }
+
+    return $variants;
+}
+
 function soublu_file_object_variants(string $object): array
 {
     $object = str_replace('\\', '/', $object);
@@ -186,6 +221,9 @@ function soublu_file_object_variants(string $object): array
     $add(rawurldecode($object));
     $sanitized = soublu_file_sanitize_object_path($object);
     $add($sanitized);
+    foreach (soublu_file_flat_mysql_variants($object) as $flat) {
+        $add($flat);
+    }
     if (str_contains($object, ' ')) {
         $add(str_replace(' ', '%20', $object));
         $add(str_replace(' ', '_', $object));
@@ -638,6 +676,12 @@ function soublu_attach_extract_rel(mixed $val): string
     if ($s === '') {
         return '';
     }
+    if (preg_match('~[?&]path=([^&]+)~i', $s, $m)) {
+        $decoded = rawurldecode($m[1]);
+        if ($decoded !== '' && !str_contains($decoded, '..')) {
+            return ltrim(str_replace('\\', '/', $decoded), '/');
+        }
+    }
     if (preg_match('~/uploads/([^?]+)~i', $s, $m)) {
         return rawurldecode($m[1]);
     }
@@ -651,7 +695,102 @@ function soublu_attach_extract_rel(mixed $val): string
     if (preg_match('~^proposal-attachments/~i', $s)) {
         return ltrim($s, '/');
     }
+    if (preg_match('~^(?:partner-docs|ticket-docs|tim-docs|contestacao-docs|finance-docs|profile-photos|product-images|sonhos|misc|rh-demissao|rh-justificativa|rh-docs|monitoria-atendimento|partner-nf|whatsapp-media)/~i', $s)) {
+        return ltrim(str_replace('\\', '/', $s), '/');
+    }
     return '';
+}
+
+/**
+ * Garante meta.attachments como mapa string→URL (nunca lista JSON []).
+ *
+ * @return array<string, mixed>
+ */
+function soublu_partner_attachments_coerce_map(mixed $attachments): array
+{
+    if (!is_array($attachments) || $attachments === [] || array_is_list($attachments)) {
+        return [];
+    }
+    $out = [];
+    foreach ($attachments as $key => $val) {
+        if (!is_string($key) || $key === '_consultas') {
+            continue;
+        }
+        if (is_string($val) && $val !== '') {
+            $out[$key] = $val;
+        } elseif (is_array($val) && !empty($val['url'])) {
+            $out[$key] = (string) $val['url'];
+        }
+    }
+    return $out;
+}
+
+/**
+ * Normaliza URLs de anexos obrigatórios do parceiro (meta.attachments).
+ *
+ * @return array<string, mixed>
+ */
+function soublu_partner_attachments_normalize_for_api(array $attachments, string $uploadDir = '', bool $repair = false): array
+{
+    $attachments = soublu_partner_attachments_coerce_map($attachments);
+    if ($attachments === []) {
+        return $attachments;
+    }
+    if ($uploadDir === '') {
+        $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
+    }
+
+    foreach ($attachments as $key => $val) {
+        if (!is_string($key) || $key === '_consultas') {
+            continue;
+        }
+        $valStr = is_string($val) ? $val : (is_array($val) ? (string) ($val['url'] ?? '') : '');
+        if ($valStr === '') {
+            unset($attachments[$key]);
+            continue;
+        }
+        if (str_starts_with($valStr, 'data:') || str_starts_with($valStr, 'blob:')) {
+            if ($repair) {
+                unset($attachments[$key]);
+            }
+            continue;
+        }
+
+        $rel = soublu_attach_extract_rel($valStr);
+        if ($repair && $rel !== '') {
+            $fixed = soublu_attach_repair_value($uploadDir, $valStr, $rel);
+            if ($fixed && ($fixed['status'] ?? '') === 'ok') {
+                $newCaminho = (string) ($fixed['caminho'] ?? $rel);
+                if ($newCaminho !== '') {
+                    $rel = ltrim($newCaminho, '/');
+                }
+                $serveUrl = soublu_file_serve_url($rel);
+                if ($serveUrl !== '') {
+                    $attachments[$key] = $serveUrl;
+                } elseif (!empty($fixed['url'])) {
+                    $attachments[$key] = (string) $fixed['url'];
+                }
+                continue;
+            }
+        }
+
+        if ($rel !== '') {
+            $attachments[$key] = soublu_file_serve_url($rel);
+        }
+    }
+
+    return $attachments;
+}
+
+/**
+ * @return array<string, mixed>
+ */
+function soublu_partner_meta_normalize_for_api(array $meta, string $uploadDir = '', bool $repair = false): array
+{
+    if (isset($meta['attachments']) && is_array($meta['attachments'])) {
+        $meta['attachments'] = soublu_partner_attachments_normalize_for_api($meta['attachments'], $uploadDir, $repair);
+    }
+    return $meta;
 }
 
 /**

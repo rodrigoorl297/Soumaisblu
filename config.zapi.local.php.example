@@ -1,0 +1,22 @@
+<?php
+/**
+ * Configuração Z-API (WhatsApp).
+ * Copie para config.zapi.local.php na raiz do site e preencha.
+ */
+declare(strict_types=1);
+
+/** zapi | evolution — padrão recomendado: evolution (self-host gratuito). */
+define('WHATSAPP_PROVIDER', 'evolution');
+
+define('Z_API_ENABLED', true);
+define('Z_API_BASE_URL', 'https://api.z-api.io');
+define('Z_API_INSTANCE_ID', 'COLE_INSTANCE_ID');
+define('Z_API_TOKEN', 'COLE_TOKEN');
+
+/** Token de segurança da conta (painel Z-API → Segurança), se habilitado. */
+define('Z_API_CLIENT_TOKEN', '');
+
+/** Mesmo segredo usado no webhook (?secret=). */
+define('Z_API_WEBHOOK_SECRET', '');
+
+define('Z_API_SSL_VERIFY', true);

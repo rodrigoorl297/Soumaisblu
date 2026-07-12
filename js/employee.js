@@ -70,6 +70,78 @@ function _applyPartnerEmployeeUI() {
   if (typeof syncSidebarDividers === 'function') syncSidebarDividers();
 }
 
+function _applyPortariaEmployeeUI() {
+  const hideSections = ['secOrders', 'secRanking', 'secMeetings', 'secProposals', 'secSimulacao', 'secWhatsApp'];
+  hideSections.forEach((id) => {
+    document.querySelectorAll(`.nav-item[data-section="${id}"]`).forEach((el) => { el.style.display = 'none'; });
+    const sec = document.getElementById(id);
+    if (sec) { sec.style.display = 'none'; sec.classList.remove('active'); }
+  });
+  document.querySelectorAll('.nav-item').forEach((btn) => {
+    const onclick = String(btn.getAttribute('onclick') || '');
+    const href = String(btn.getAttribute('href') || '');
+    const label = String(btn.textContent || '');
+    if (onclick.includes('leads-employee') || href.includes('leads-employee') || label.includes('Atendimento de Leads')) {
+      btn.style.display = 'none';
+    }
+  });
+  document.querySelectorAll('.reports-section').forEach((el) => { el.style.display = 'none'; });
+}
+
+function _redirectPortariaToAdmin() {
+  try { sessionStorage.removeItem('soublu_prt_loop'); } catch (_) {}
+  const adminHref = typeof Auth !== 'undefined' && typeof Auth.adminPageHref === 'function'
+    ? Auth.adminPageHref()
+    : (typeof Auth !== 'undefined' && typeof Auth.resolveHref === 'function'
+      ? Auth.resolveHref('admin.html')
+      : 'admin.html');
+  window.location.replace(adminHref);
+  return true;
+}
+
+/** Redireciona perfis de gestão que caíram em employee.html (sessão antiga ou bookmark). */
+function _redirectAdminPanelFromEmployee(liveRole, urlParams) {
+  const role = String(liveRole || '').toLowerCase();
+  if (!role || typeof Auth === 'undefined' || !Auth.usesAdminPanel(role)) return false;
+  const previewId = urlParams?.get('preview');
+  const lojaMode = urlParams?.get('loja') === '1';
+  const perfilMode = urlParams?.get('perfil') === '1';
+  const saqueMode = urlParams?.get('saque') === '1' || urlParams?.get('sacar') === '1';
+  if (previewId || lojaMode || perfilMode || saqueMode) return false;
+  if (role === 'portaria' || (typeof Auth.isPortaria === 'function' && Auth.isPortaria())) {
+    return _redirectPortariaToAdmin();
+  }
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ec660'},body:JSON.stringify({sessionId:'5ec660',location:'employee.js:_redirectAdminPanelFromEmployee',message:'live role redirect',data:{role,target:role==='financeiro'||role==='financial'?'financeiro':'admin'},timestamp:Date.now(),hypothesisId:'RH-ROLE-SESSION',runId:'post-fix'})}).catch(()=>{});
+  // #endregion
+  if ((role === 'financeiro' || role === 'financial')
+    && typeof Auth.isFinanceiroOnly === 'function'
+    && Auth.isFinanceiroOnly()) {
+    window.location.replace(
+      typeof Auth.financeiroPageHrefFresh === 'function'
+        ? Auth.financeiroPageHrefFresh()
+        : Auth.financeiroPageHref()
+    );
+    return true;
+  }
+  window.location.replace(
+    typeof Auth.resolveHref === 'function' ? Auth.resolveHref('admin.html') : 'admin.html'
+  );
+  return true;
+}
+
+function _applyEmployeeLeadsNav(user) {
+  const role = String(user?.role || '').toLowerCase();
+  const showLeads = ['vendedor', 'backoffice', 'supervisor'].includes(role);
+  document.querySelectorAll('.nav-item').forEach((btn) => {
+    const onclick = String(btn.getAttribute('onclick') || '');
+    const href = String(btn.getAttribute('href') || '');
+    if (onclick.includes('leads-employee') || href.includes('leads-employee')) {
+      btn.style.display = showLeads ? '' : 'none';
+    }
+  });
+}
+
 function syncSidebarDividers() {
   const showReports = Array.from(document.querySelectorAll('.sidebar-nav button[data-section="secMeetings"], .sidebar-nav button[data-section="secRanking"]'))
     .some(el => el.style.display !== 'none');
@@ -88,10 +160,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof refreshPartnerRootIdsCache === 'function') await refreshPartnerRootIdsCache();
     await Auth.requireLogin();
 
+    const _urlParams = new URLSearchParams(window.location.search);
+    const _liveUser = await DB.getUser(Auth.getSession()?.id).catch(() => null);
+    const _liveRole = String(_liveUser?.role || Auth.getSession()?.role || '').toLowerCase();
+    if (_redirectAdminPanelFromEmployee(_liveRole, _urlParams)) return;
+
     // Verificar modo preview (master/admin visualizando como funcionário)
     const _s = Auth.getSession();
     // Ler ID da URL (?preview=...) — sessionStorage NÃO é compartilhado entre abas
-    const _urlParams = new URLSearchParams(window.location.search);
     const _previewId = _urlParams.get('preview');
     const _lojaMode  = _urlParams.get('loja') === '1';
     if (_lojaMode && _s && Auth.usesAdminPanel(_s.role)) {
@@ -100,6 +176,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     const _perfilMode = _urlParams.get('perfil') === '1';
     const _saqueMode = _urlParams.get('saque') === '1' || _urlParams.get('sacar') === '1';
+
+    if (_s && (String(_s.role || '').toLowerCase() === 'portaria'
+      || (typeof Auth.isPortaria === 'function' && Auth.isPortaria()))) {
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:portariaRedirect',message:'employee -> admin',data:{role:_s.role,target:'admin'},timestamp:Date.now(),hypothesisId:'H1-loop',runId:'portaria-loop'})}).catch(()=>{});
+      // #endregion
+      _redirectPortariaToAdmin();
+      return;
+    }
 
     if (_s && Auth.usesAdminPanel(_s.role)) {
       if (_previewId) {
@@ -151,6 +236,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (!currentUser) { Auth.logout(); return; }
     if (currentUser.role) currentUser.role = String(currentUser.role).trim().toLowerCase();
+    if (currentUser.role === 'portaria') {
+      _redirectPortariaToAdmin();
+      return;
+    }
 
     let partnerRootId = await DB.getPartnerRootForUser(currentUser.id).catch(() => null);
     if (!partnerRootId && currentUser?.partner_root_id) {
@@ -184,6 +273,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
       BolaoCopa.applyNavVisibility();
     }
+    _applyEmployeeLeadsNav(currentUser);
+    if (currentUser.role === 'portaria') _applyPortariaEmployeeUI();
 
     const _inPartnerOrg = typeof isUserInPartnerOrg === 'function'
       ? await isUserInPartnerOrg(currentUser)
@@ -282,6 +373,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         await PropostaCredito.applyEmployeeNavVisibility(currentUser);
       }
     }
+    if (window.PixAutorizarEmployee) {
+      await PixAutorizarEmployee.init(currentUser);
+    }
     if (window.Trainings) {
       try { await Trainings.updateBadge(); } catch (_) { /* noop */ }
       try { await Trainings.checkPendingOnLogin(); } catch (_) { /* noop */ }
@@ -316,10 +410,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (s==='secOrders')   await renderOrders();
         if (s==='secStore')    { await renderBalance(); await renderProducts(); }
-        if (s==='secProposals') { if(window.Proposals) await Proposals.renderEmployeeList(); }
+        if (s==='secProposals') {
+          if (window.Proposals) await Proposals.renderEmployeeList();
+          if (window.Clients && document.getElementById('clientsList')) await Clients.renderEmployeeList();
+        }
         if (s==='secPropostaCredito' && window.PropostaCredito) PropostaCredito.renderEmployee();
+        if (s==='secAutorizarPix' && window.PixAutorizarEmployee) PixAutorizarEmployee.render();
         if (s==='secSimulacao') { if (window.SimulacaoTroco) SimulacaoTroco.init(); }
         if (s==='secClients')   { if(window.Clients) await Clients.renderEmployeeList(); }
+        if (s==='secClubeBeneficios' && window.BeneficiosClube?.init) await BeneficiosClube.init();
         if (s==='secTickets')   {
           // #region agent log
           fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:secTickets',message:'nav chamados',data:{hasTickets:!!window.Tickets,role:currentUser?.role,navDisplay:document.getElementById('navTickets')?.style?.display||'default'},timestamp:Date.now(),hypothesisId:'A',runId:'chamados-nav-fix'})}).catch(()=>{});

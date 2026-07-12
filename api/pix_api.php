@@ -90,6 +90,20 @@ function pix_resolve_ca_bundle(): ?string
 
 final class PixKeyNormalizer
 {
+    public static function formatUuid(string $key): string
+    {
+        $k = trim($key);
+        if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $k)) {
+            return strtolower($k);
+        }
+        $hex = preg_replace('/[^0-9a-f]/i', '', $k) ?? '';
+        if (strlen($hex) !== 32) {
+            return $k;
+        }
+        return strtolower(substr($hex, 0, 8) . '-' . substr($hex, 8, 4) . '-' . substr($hex, 12, 4)
+            . '-' . substr($hex, 16, 4) . '-' . substr($hex, 20, 12));
+    }
+
     public static function inferType(string $key): string
     {
         $k = trim($key);
@@ -102,6 +116,10 @@ final class PixKeyNormalizer
         if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $k)) {
             return 'random';
         }
+        $hexOnly = preg_replace('/[^0-9a-f]/i', '', $k) ?? '';
+        if (preg_match('/^[0-9a-f]{32}$/i', $hexOnly)) {
+            return 'random';
+        }
         $digits = preg_replace('/\D+/', '', $k) ?? '';
         if (strlen($digits) === 14) {
             return 'cnpj';
@@ -112,7 +130,7 @@ final class PixKeyNormalizer
             }
             return 'cpf';
         }
-        if (strlen($digits) === 10 || strlen($digits) === 11) {
+        if (strlen($digits) === 10 || strlen($digits) === 11 || strlen($digits) === 12 || strlen($digits) === 13) {
             return 'phone';
         }
         return 'random';
@@ -130,7 +148,7 @@ final class PixKeyNormalizer
             $type = 'email';
         }
         if (in_array($type, ['aleatoria', 'chave_aleatoria', 'evp', 'random'], true)) {
-            return $key;
+            return self::formatUuid($key);
         }
 
         switch ($type) {
@@ -145,6 +163,8 @@ final class PixKeyNormalizer
                 return '+' . $digits;
             case 'email':
                 return strtolower($key);
+            case 'random':
+                return self::formatUuid($key);
             default:
                 return $key;
         }
@@ -175,30 +195,42 @@ final class PixKeyNormalizer
 
     public static function forEfiPay(string $pixKeyType, string $pixKey): string
     {
-        $type = strtolower(trim($pixKeyType));
         $key = trim($pixKey);
         if ($key === '') {
             return '';
         }
-        if ($type === '' || $type === 'pix') {
-            $type = self::inferType($key);
+        $hint = strtolower(trim($pixKeyType));
+        if ($hint === '' || $hint === 'pix') {
+            $hint = self::inferType($key);
         }
-        if ($type === 'cpf' && (str_contains($key, '@') || (preg_match('/\d/', $key) && strlen(preg_replace('/\D+/', '', $key) ?? '') !== 11))) {
-            $type = self::inferType($key);
+        if (in_array($hint, ['celular', 'telefone'], true)) {
+            $hint = 'phone';
         }
-        $normalized = self::normalize($type, $key);
-        if ($normalized === '' && $key !== '') {
-            $type = self::inferType($key);
+        if (in_array($hint, ['e-mail', 'mail'], true)) {
+            $hint = 'email';
+        }
+        if (in_array($hint, ['aleatoria', 'chave_aleatoria', 'evp'], true)) {
+            $hint = 'random';
+        }
+
+        $tryTypes = array_values(array_unique(array_filter([
+            $hint,
+            self::inferType($key),
+            'email',
+            'random',
+            'cnpj',
+            'cpf',
+            'phone',
+        ])));
+
+        foreach ($tryTypes as $type) {
             $normalized = self::normalize($type, $key);
-        }
-        if (!self::isValid($type, $normalized)) {
-            $inferred = self::inferType($key);
-            if ($inferred !== $type) {
-                $type = $inferred;
-                $normalized = self::normalize($type, $key);
+            if (self::isValid($type, $normalized)) {
+                return $normalized;
             }
         }
-        return self::isValid($type, $normalized) ? $normalized : '';
+
+        return '';
     }
 }
 
@@ -603,6 +635,72 @@ function pix_map_efi_status(string $efiStatus): string
     return 'processando';
 }
 
+/** Extrai motivo legível de resposta Efi (envio ou consulta). */
+function pix_extract_efi_error_detail(?array $remote): string
+{
+    if (!$remote || !is_array($remote)) {
+        return '';
+    }
+    $parts = [];
+    $status = strtoupper((string) ($remote['status'] ?? ''));
+    if ($status !== '' && $status !== 'REALIZADO' && $status !== 'EM_PROCESSAMENTO') {
+        $parts[] = $status;
+    }
+    foreach (['motivo', 'mensagem', 'message', 'descricao', 'detail'] as $k) {
+        $v = trim((string) ($remote[$k] ?? ''));
+        if ($v !== '' && !in_array($v, $parts, true)) {
+            $parts[] = $v;
+        }
+    }
+    $gn = $remote['gnExtras'] ?? $remote['gn_extras'] ?? null;
+    if (is_array($gn)) {
+        foreach (['erro', 'motivo', 'mensagem', 'codigo'] as $k) {
+            $v = trim((string) ($gn[$k] ?? ''));
+            if ($v !== '' && !in_array($v, $parts, true)) {
+                $parts[] = $v;
+            }
+        }
+    }
+    $pix = $remote['pix'] ?? null;
+    if (is_array($pix)) {
+        foreach (['status', 'motivo', 'mensagem'] as $k) {
+            $v = trim((string) ($pix[$k] ?? ''));
+            if ($v !== '' && !in_array($v, $parts, true)) {
+                $parts[] = $v;
+            }
+        }
+    }
+    return implode(' — ', $parts);
+}
+
+/** Aplica patch de status Efi no saque (pago, erro ou processando). */
+function pix_apply_efi_status_patch(array $remote, array $wd): array
+{
+    $mapped = pix_map_efi_status((string) ($remote['status'] ?? ''));
+    $e2e = (string) ($remote['endToEndId'] ?? $remote['e2eId'] ?? '');
+    $patch = [
+        'pix_status' => $mapped,
+        'pix_e2e_id' => $e2e !== '' ? $e2e : ($wd['pix_e2e_id'] ?? null),
+    ];
+    if ($mapped === 'pago') {
+        $patch['status'] = 'pago';
+        $patch['processed_at'] = gmdate('c');
+        $patch['pix_paid_at'] = gmdate('c');
+        $patch['pix_error'] = null;
+    } elseif ($mapped === 'erro') {
+        $detail = pix_extract_efi_error_detail($remote);
+        $patch['status'] = 'erro';
+        $patch['pix_error'] = $detail !== '' ? $detail : (string) ($remote['status'] ?? 'Rejeitado pelo banco');
+    } elseif ($mapped === 'estornado') {
+        $patch['status'] = 'erro';
+        $patch['pix_error'] = pix_extract_efi_error_detail($remote) ?: 'PIX estornado/devolvido';
+    } else {
+        $patch['status'] = 'processando';
+        $patch['pix_error'] = null;
+    }
+    return $patch;
+}
+
 function pix_format_brl(float $amountPoints, float $pointsToBrl): string
 {
     $brl = round($amountPoints * $pointsToBrl, 2);
@@ -746,7 +844,16 @@ function pix_send_payment(
     string $provider
 ): array {
     $id = (string) $wd['id'];
-    $idEnvio = EfiPayClient::sanitizeIdEnvio($id);
+    $baseIdEnvio = EfiPayClient::sanitizeIdEnvio($id);
+    $priorPix = strtolower((string) ($wd['pix_status'] ?? ''));
+    $priorFailed = in_array($priorPix, ['erro', 'nao_realizado', 'rejeitado', 'cancelado', 'estornado'], true)
+        || ((string) ($wd['status'] ?? '') === 'erro');
+    $storedEnvio = trim((string) ($wd['pix_id_envio'] ?? ''));
+    if ($priorFailed || $storedEnvio === '') {
+        $idEnvio = substr($baseIdEnvio . 'r' . dechex(time() % 0xfffff), 0, 35);
+    } else {
+        $idEnvio = $storedEnvio;
+    }
     $pointsToBrl = defined('POINTS_TO_BRL') ? (float) POINTS_TO_BRL : 1.0;
     $valor = pix_format_brl((float) ($wd['amount'] ?? 0), $pointsToBrl);
 
@@ -803,34 +910,38 @@ function pix_send_payment(
                 $infoPagador
             );
 
-            $efiStatus = (string) ($result['status'] ?? 'EM_PROCESSAMENTO');
-            $mapped = pix_map_efi_status($efiStatus);
-            $e2e = (string) ($result['e2eId'] ?? $result['endToEndId'] ?? '');
+            // #region agent log
+            @file_put_contents(dirname(__DIR__) . '/debug-97c411.log', json_encode([
+                'sessionId' => '97c411', 'hypothesisId' => 'H2', 'runId' => 'pix-send',
+                'location' => 'pix_api.php:pix_send_payment:efi-result',
+                'message' => 'Efi sendPix response',
+                'data' => [
+                    'withdrawal_id' => $id,
+                    'status' => $result['status'] ?? null,
+                    'recipient_type' => (string) ($wd['pix_key_type'] ?? ''),
+                    'recipient_masked' => substr((string) ($wd['pix_key'] ?? ''), 0, 6) . '…',
+                    'valor' => $valor,
+                    'detail' => pix_extract_efi_error_detail($result),
+                ],
+                'timestamp' => (int) round(microtime(true) * 1000),
+            ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+            // #endregion
 
-            $update = [
-                'pix_status' => $mapped === 'pago' ? 'pago' : 'processando',
-                'pix_id_envio' => $idEnvio,
-                'pix_e2e_id' => $e2e !== '' ? $e2e : null,
-                'pix_error' => null,
-            ];
-
-            if ($mapped === 'pago' && $e2e !== '') {
-                $update['status'] = 'pago';
-                $update['processed_at'] = gmdate('c');
-                $update['pix_paid_at'] = gmdate('c');
-            } else {
-                $update['status'] = 'processando';
-                $update['pix_status'] = 'processando';
-            }
+            $update = pix_apply_efi_status_patch($result, $wd);
+            $update['pix_id_envio'] = $idEnvio;
 
             $repo->update($id, $update);
 
+            $pixErr = (string) ($update['pix_error'] ?? '');
+            $isErr = ($update['pix_status'] ?? '') === 'erro';
+
             return [
-                'ok' => true,
+                'ok' => !$isErr,
                 'provider' => 'efipay',
                 'data' => $result,
                 'pix_status' => $update['pix_status'],
                 'withdrawal_id' => $id,
+                'error' => $isErr ? ($pixErr !== '' ? $pixErr : 'PIX recusado pelo banco') : null,
             ];
         }
 
@@ -1083,20 +1194,20 @@ if ($action === 'status') {
             );
             $remote = $client->getStatusByIdEnvio($idEnvio);
             if ($remote) {
-                $mapped = pix_map_efi_status((string) ($remote['status'] ?? ''));
-                $e2e = (string) ($remote['endToEndId'] ?? $remote['e2eId'] ?? '');
-                $patch = [
-                    'pix_status' => $mapped,
-                    'pix_e2e_id' => $e2e !== '' ? $e2e : ($wd['pix_e2e_id'] ?? null),
-                ];
-                if ($mapped === 'pago') {
-                    $patch['status'] = 'pago';
-                    $patch['processed_at'] = gmdate('c');
-                    $patch['pix_paid_at'] = gmdate('c');
-                } elseif ($mapped === 'erro') {
-                    $patch['status'] = 'erro';
-                    $patch['pix_error'] = (string) ($remote['status'] ?? 'Rejeitado');
-                }
+                // #region agent log
+                @file_put_contents(dirname(__DIR__) . '/debug-97c411.log', json_encode([
+                    'sessionId' => '97c411', 'hypothesisId' => 'H3', 'runId' => 'pix-status',
+                    'location' => 'pix_api.php:status:efi-remote',
+                    'message' => 'Efi status poll',
+                    'data' => [
+                        'withdrawal_id' => $withdrawalId,
+                        'status' => $remote['status'] ?? null,
+                        'detail' => pix_extract_efi_error_detail($remote),
+                    ],
+                    'timestamp' => (int) round(microtime(true) * 1000),
+                ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+                // #endregion
+                $patch = pix_apply_efi_status_patch($remote, $wd);
                 $wd = $repo->update($withdrawalId, $patch) ?? $wd;
             }
         } catch (Throwable $e) {

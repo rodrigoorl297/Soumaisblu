@@ -1,8 +1,0 @@
-<?php
-/**
- * FTP Locaweb — NÃO commitar. Copie de config.ftp.local.php.example
- */
-define('FTP_HOST', 'ftp.soumaisblu.com.br');
-define('FTP_USER', 'soumaisblu1');
-define('FTP_PASS', 'SUA_SENHA_FTP');
-define('FTP_REMOTE_ROOT', 'public_html');

@@ -83,7 +83,9 @@ function _rhNormProposal(p) {
     valor: (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function')
       ? DB.proposalAmount(p)
       : (p.valorFinal ?? p.valor_final ?? p.valor ?? 0),
-    created_at: p.created_at || p.createdAt || p.updated_at || '',
+    created_at: (typeof DB !== 'undefined' && typeof DB.proposalDate === 'function')
+      ? DB.proposalDate(p).toISOString()
+      : (p.updated_at || p.updatedAt || p.created_at || p.createdAt || ''),
   };
 }
 
@@ -279,7 +281,7 @@ async function renderRhRelatorioVendas(container, gen) {
         <thead>
           <tr>
             <th>Nº</th><th>Vendedor</th><th>Cliente</th><th>Produto</th><th>Convênio</th>
-            <th>Valor Final</th><th>Status</th><th>Data</th>
+            <th>Valor Final</th><th>Status</th><th>Data Atualização</th>
           </tr>
         </thead>
         <tbody id="rhVendasTbody">
@@ -342,7 +344,7 @@ async function renderRhRelatorioVendas(container, gen) {
     }
     _rhDownloadCsv(
       `relatorio-vendas-${new Date().toISOString().slice(0, 10)}.csv`,
-      ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Convênio', 'Valor Final', 'Status', 'Data'],
+      ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Convênio', 'Valor Final', 'Status', 'Data Atualização'],
       rows.map(p => [p.numero, p.vendorName, p.clientName, p.clientCpf, p.product, p.convenio, p.valor, p.status, p.created_at])
     );
   });

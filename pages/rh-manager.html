@@ -1340,7 +1340,7 @@
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label for="emp_cnpj_registro">Empresa Vinculada (CNPJ)</label>
-                  <select class="form-control" id="emp_cnpj_registro" required>
+                  <select class="form-control" id="emp_cnpj_registro">
                     <option value="">Selecione a empresa...</option>
                   </select>
                 </div>
@@ -1393,7 +1393,7 @@
                 </div>
                 <div class="form-group">
                   <label for="emp_cargo">Cargo</label>
-                  <select class="form-control" id="emp_cargo" required>
+                  <select class="form-control" id="emp_cargo">
                     <option value="">Selecione o cargo...</option>
                   </select>
                 </div>
@@ -1413,15 +1413,15 @@
               <div class="form-grid three-cols mt-md">
                 <div class="form-group">
                   <label for="emp_supervisor">Supervisor do Colaborador</label>
-                  <input type="text" class="form-control" id="emp_supervisor" placeholder="Nome do Supervisor" />
+                  <select class="form-control" id="emp_supervisor"><option value="">— Sem vínculo —</option></select>
                 </div>
                 <div class="form-group">
                   <label for="emp_responsavel_dpto">Responsável pelo Dpto</label>
-                  <input type="text" class="form-control" id="emp_responsavel_dpto" placeholder="Nome do Líder" />
+                  <select class="form-control" id="emp_responsavel_dpto"><option value="">— Sem vínculo —</option></select>
                 </div>
                 <div class="form-group">
                   <label for="emp_diretor_dpto">Diretor Dpto</label>
-                  <input type="text" class="form-control" id="emp_diretor_dpto" placeholder="Nome do Diretor" />
+                  <select class="form-control" id="emp_diretor_dpto"><option value="">— Sem vínculo —</option></select>
                 </div>
               </div>
 
@@ -1488,7 +1488,7 @@
                 </div>
                 <div class="form-group">
                   <label for="emp_role">Perfil / Função do Usuário</label>
-                  <select class="form-control" id="emp_role" required>
+                  <select class="form-control" id="emp_role" required onchange="if(typeof onEmpRoleChange === 'function') onEmpRoleChange()">
                     <option value="vendedor">Vendedor</option>
                     <option value="backoffice">Backoffice</option>
                     <option value="supervisor">Supervisor</option>
@@ -1497,6 +1497,7 @@
                     <option value="financeiro">Financeiro</option>
                     <option value="diretoria">Diretoria</option>
                     <option value="desenvolvedor">Desenvolvedor / TI</option>
+                    <option value="portaria">Portaria</option>
                   </select>
                 </div>
               </div>
@@ -1532,47 +1533,47 @@
               <div class="form-grid">
                 <div class="form-group">
                   <label>Anexo Ficha Entrevista RH</label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_entrevista_rh" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
                 <div class="form-group">
                   <label>Anexo Ficha RH</label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_ficha_rh" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
               </div>
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label>Anexo Documento RG</label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_rg" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
                 <div class="form-group">
                   <label>Anexo Exame Admissional</label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_exame_admissional" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
               </div>
               <div class="form-group mt-md">
                 <label>Anexo Contrato Trabalho <span class="text-muted">(Opcional)</span></label>
-                <input type="file" class="form-control" />
+                <input type="file" class="form-control" id="emp_anexo_contrato" accept=".pdf,.jpg,.jpeg,.png,.webp" />
               </div>
               
               <!-- Aditivos Contratuais -->
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 1 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_1" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 2 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_2" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
               </div>
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 3 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_3" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 4 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_4" accept=".pdf,.jpg,.jpeg,.png,.webp" />
                 </div>
               </div>
 
@@ -2007,7 +2008,6 @@
       </div>
       <div class="modal-body" style="max-height:78vh;overflow-y:auto;">
         <form id="form-punicao" onsubmit="salvarPunicao(event)">
-          <input type="hidden" id="punicao_employee_id"/>
 
           <div class="form-grid">
             <div class="form-group">
@@ -2040,15 +2040,11 @@
             </div>
           </div>
 
-          <div class="form-grid mt-md">
-            <div class="form-group">
-              <label for="punicao_cpf">CPF</label>
-              <input type="text" class="form-control mask-cpf" id="punicao_cpf" placeholder="000.000.000-00" required/>
-            </div>
-            <div class="form-group">
-              <label style="opacity:0;display:block;">Buscar</label>
-              <button type="button" class="btn btn-accent btn-full" onclick="buscarDadosPunicao()">BUSCAR DADOS</button>
-            </div>
+          <div class="form-group mt-md">
+            <label for="punicao_employee">Colaborador</label>
+            <select class="form-control" id="punicao_employee" required onchange="onPunicaoEmployeeChange()">
+              <option value="">Selecione o colaborador...</option>
+            </select>
           </div>
           <div id="punicao_emp_info" hidden></div>
 
@@ -2348,22 +2344,22 @@
 
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
   <script charset="UTF-8" src="../js/config.js?v=14"></script>
-  <script charset="UTF-8" src="../js/db.js?v=97c411rh2"></script>
+  <script charset="UTF-8" src="../js/db.js?v=rh-emp-del1"></script>
   <script charset="UTF-8" src="../js/fontedata.js?v=4"></script>
   <script charset="UTF-8" src="../js/auth.js?v=1781813000"></script>
-  <script charset="UTF-8" src="../js/ui.js?v=1781810513726"></script>
-  <script charset="UTF-8" src="../js/partners-ui.js?v=97c411tier1"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=partner-att-fix2"></script>
+  <script charset="UTF-8" src="../js/partners-ui.js?v=partner-att-fix2"></script>
   <script charset="UTF-8" src="../js/partners.js?v=97c411tier1"></script>
   <script charset="UTF-8" src="../js/cbo.js?v=1"></script>
-  <script charset="UTF-8" src="../js/sales-ranking.js?v=3"></script>
+  <script charset="UTF-8" src="../js/sales-ranking.js?v=4"></script>
   <script charset="UTF-8" src="../js/folha-pagamento.js?v=12"></script>
-  <script charset="UTF-8" src="../js/rh-relatorios.js?v=10"></script>
+  <script charset="UTF-8" src="../js/rh-relatorios.js?v=11"></script>
   <script charset="UTF-8" src="../js/painel-sonhos.js?v=19"></script>
   <script charset="UTF-8" src="../js/withdrawal-rules.js"></script>
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2"></script>
   <script charset="UTF-8" src="../js/profile.js?v=1781810513726"></script>
   <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
-  <script charset="UTF-8" src="../js/rh-manager.js?v=97c411rh2"></script>
-  <script charset="UTF-8" src="../js/rh-ops.js?v=12"></script>
+  <script charset="UTF-8" src="../js/rh-manager.js?v=rh-deptfix1"></script>
+  <script charset="UTF-8" src="../js/rh-ops.js?v=97c411pun1"></script>
 </body>
 </html>

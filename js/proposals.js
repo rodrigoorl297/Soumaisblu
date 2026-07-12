@@ -79,79 +79,70 @@ window.Proposals = {
     },
   ],
 
-  /** Entidades / categorias por convênio. */
+  /** Entidades / órgãos por convênio (planilha Margem / RMC / RCC). */
   _CONVENIO_ENTIDADES: {
     FEDERAL: ['SIAPE'],
     ESTADUAL: [
-      // GO
-      'GOVERNO DE GOIÁS',
-      // AL
-      'GOVERNO DE ALAGOAS',
-      'TRIBUNAL DE JUSTIÇA DE ALAGOAS',
-      // BA
+      'GOVERNO DE ALAGOAS - AL',
+      'TRIBUNAL DE JUSTIÇA DE ALAGOAS - AL',
       'PREFEITURA DE ALAGOINHAS - BA',
-      // CE
       'PREFEITURA DE JUAZEIRO DO NORTE - CE',
       'PREFEITURA DE SOBRAL - CE',
-      // MA
-      'GOVERNO DO MARANHÃO',
+      'GOVERNO DO ESPÍRITO SANTO - ES',
+      'GOVERNO DE GOIÁS - GO',
+      'PREF DE ÁGUAS LINDAS DE GOIÁS - GO',
+      'PREF DE PLANALTINA - GO',
+      'PREF DE PLANALTINA - PREVPLAN - GO',
+      'GOVERNO DO MARANHÃO - MA',
       'PREFEITURA DE AÇAILÂNDIA - MA',
       'PREFEITURA DE IMPERATRIZ - MA',
       'PREFEITURA DE PAÇO DO LUMIAR - MA',
       'PREFEITURA DE SÃO LUIS - MA',
-      // MS
       'PREFEITURA DE CAMPO GRANDE - MS',
-      'SAPE - MS',
-      // PB
-      'GOVERNO DA PARAÍBA - PBPREV',
-      'GOVERNO DA PARAÍBA - UEPB',
+      'PREFEITURA DE ANANINDEUA - PA',
+      'GOVERNO DA PARAÍBA - PB',
+      'GOVERNO DA PARAÍBA - PBPREV - PB',
+      'GOVERNO DA PARAÍBA - UEPB - PB',
+      'PREF DE CAMPINA GRANDE - IPSEM - PB',
       'PREFEITURA DE JOÃO PESSOA - PB',
       'PREFEITURA DE SANTA RITA - PB',
-      'PREF DE CAMPINA GRANDE - IPSEM - PB',
-      // PE
-      'GOVERNO DE PERNAMBUCO',
+      'GOVERNO DE PERNAMBUCO - PE',
       'PREFEITURA DE RECIFE - PE',
-      // PI
-      'GOVERNO DO PIAUÍ',
+      'GOVERNO DO PIAUÍ - PI',
       'PREFEITURA DE PICOS - PI',
-      // RN
-      'GOVERNO DO RIO GRANDE DO NORTE',
+      'GOVERNO DO PARANÁ - PR',
+      'PREFEITURA DE ARAPONGAS - PR',
+      'GOVERNO DO RIO GRANDE DO NORTE - RN',
       'PREFEITURA DE NATAL - RN',
-      // SE
-      'PREFEITURA DE ARACAJU - SE',
-      // PA
-      'PREFEITURA DE ANANINDEUA - PA',
-      // RO
       'PREFEITURA DE PORTO VELHO - IPAM - RO',
-      // TO
-      'GOVERNO DO TOCANTINS',
+      'PREFEITURA DE GRAVATAÍ - RS',
+      'PREFEITURA DE SANTA MARIA - RS',
+      'PREFEITURA DE SAPUCAIA - RS',
+      'GOVERNO DE SANTA CATARINA - SC',
+      'PREFEITURA DE ARACAJU - SE',
+      'GOVERNO DO TOCANTINS - TO',
       'PREFEITURA DE ARAGUAÍNA - TO',
       'PREFEITURA DE PALMAS - TO',
       'PREV PALMAS - TO',
-      // ES
-      'GOVERNO DO ESPÍRITO SANTO',
-      // MG
-      'GOVERNO DE MINAS GERAIS - CBMMG',
-      'GOVERNO DE MINAS GERAIS - IPSEMG',
-      'GOVERNO DE MINAS GERAIS - IPSM',
-      'GOVERNO DE MINAS GERAIS - PMMG',
-      'GOVERNO DE MINAS GERAIS - SEPLAG',
+      'GOVERNO DE MINAS GERAIS - CBMMG - MG',
+      'GOVERNO DE MINAS GERAIS - IPSEMG - MG',
+      'GOVERNO DE MINAS GERAIS - IPSM - MG',
+      'GOVERNO DE MINAS GERAIS - PMMG - MG',
+      'GOVERNO DE MINAS GERAIS - SEPLAG - MG',
       'PREFEITURA DE BELO HORIZONTE - MG',
       'PREFEITURA DE CONTAGEM - MG',
       'PREFEITURA DE CONTAGEM - FUNEC - MG',
-      'PREFEITURA DE CONTAGEM - PREVICOR - MG',
-      'PREFEITURA DE CONTAGEM - TRANSCO - MG',
+      'PREFEITURA DE CONTAGEM - PREVICON - MG',
+      'PREFEITURA DE CONTAGEM - TRANSCON - MG',
       'PREFEITURA DE JUIZ DE FORA - MG',
       'PREFEITURA DE UBERABA - MG',
-      // RJ
       'PREFEITURA DE DUQUE DE CAXIAS - RJ',
-      'PREFEITURA DE DUQUE DE CAXIAS - IMPI - RJ',
+      'PREFEITURA DE DUQUE DE CAXIAS - IPM - RJ',
       'PREFEITURA DE MACAÉ - RJ',
       'PREFEITURA DE SÃO GONÇALO - RJ',
       'PREFEITURA DO RIO DE JANEIRO - RJ',
-      // SP
-      'GOVERNO DE SÃO PAULO',
-      'GOVERNO DE SÃO PAULO - SPPREV',
+      'GOVERNO DE SÃO PAULO - SP',
+      'GOVERNO DE SÃO PAULO - SPPREV - SP',
       'PREFEITURA DE BAURU - SP',
       'PREFEITURA DE CAJAMAR - SP',
       'PREFEITURA DE CAMPINAS - SP',
@@ -159,23 +150,10 @@ window.Proposals = {
       'PREFEITURA DE ITU - SP',
       'PREFEITURA DE RIBEIRÃO PRETO - SP',
       'PREFEITURA DE SANTOS - SP',
-      'PREFEITURA DE SÃO JOSE DO RIO PRETO - SP',
+      'PREFEITURA DE SÃO JOSÉ DO RIO PRETO - SP',
       'PREFEITURA DE SÃO PAULO - SP',
       'PREFEITURA DE SÃO PAULO - IPREM - SP',
       'PREFEITURA DE TAUBATÉ - SP',
-      // PR
-      'GOVERNO DO PARANÁ',
-      'PREFEITURA DE ARAPONGAS - PR',
-      // RS
-      'PREFEITURA DE GRAVATAÍ - RS',
-      'PREFEITURA DE SANTA MARIA - RS',
-      'PREFEITURA DE SAPUCAIA - RS',
-      // SC
-      'GOVERNO DE SANTA CATARINA',
-      // GO extra
-      'PREF DE ÁGUAS LINDAS DE GOIÁS - GO',
-      'PREF DE PLANALTINA - GO',
-      'PREF DE PLANALTINA - PREVPLAN - GO',
     ],
     MUNICIPAL: [
       'PREF SP', 'PREF RJ', 'PREF BH', 'PREF SÃO LUIS', 'PREF CAMPO GRANDE',
@@ -245,6 +223,25 @@ window.Proposals = {
 
   _getConvenioEntidadesMap: function() {
     return this._CONVENIO_ENTIDADES;
+  },
+
+  _groupEntidadesByUf: function(opts) {
+    const groups = {};
+    (opts || []).forEach((o) => {
+      const m = String(o).match(/ - ([A-Z]{2})$/);
+      const uf = m ? m[1] : '—';
+      if (!groups[uf]) groups[uf] = [];
+      groups[uf].push(o);
+    });
+    const ufs = Object.keys(groups).sort((a, b) => {
+      if (a === '—') return 1;
+      if (b === '—') return -1;
+      return a.localeCompare(b, 'pt-BR');
+    });
+    ufs.forEach((uf) => {
+      groups[uf].sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+    });
+    return { groups, ufs };
   },
 
   _normalizeConvenioKey: function(convenio) {
@@ -392,9 +389,21 @@ window.Proposals = {
 
     const emptyOpt = conv === 'INSS'
       ? 'Selecione a categoria'
-      : 'Selecione a entidade';
-    sel.innerHTML = `<option value="">${emptyOpt}</option>` +
-      opts.map(o => `<option value="${this._escAttr(o)}">${this._escHtml(o)}</option>`).join('');
+      : 'Selecione o órgão / entidade';
+    const { groups, ufs } = this._groupEntidadesByUf(opts);
+    let html = `<option value="">${emptyOpt}</option>`;
+    ufs.forEach((uf) => {
+      const items = groups[uf] || [];
+      const renderOpt = (o) => `<option value="${this._escAttr(o)}">${this._escHtml(o)}</option>`;
+      if (uf === '—' || ufs.length === 1) {
+        html += items.map(renderOpt).join('');
+      } else {
+        html += `<optgroup label="${this._escAttr(uf)}">`;
+        html += items.map(renderOpt).join('');
+        html += '</optgroup>';
+      }
+    });
+    sel.innerHTML = html;
     if (current) {
       if (!opts.includes(current)) {
         sel.insertAdjacentHTML('beforeend',
@@ -408,7 +417,87 @@ window.Proposals = {
   _employeeList: { page: 1, pageSize: 20, total: 0 },
   _employeeEditCache: {},
   _adminEditCache: {},
+  _adminListCache: null,
+  _adminListCacheAt: 0,
+  _ADMIN_LIST_CACHE_TTL: 120000,
   _searchDebounce: null,
+
+  _propPerfLog: function() { /* noop — debug desligado */ },
+
+  _withTimeout: function(promise, ms, label) {
+    const lim = Math.max(5000, parseInt(ms, 10) || 45000);
+    const tag = label || 'operação';
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Tempo esgotado (${tag}). Verifique a internet e tente novamente.`)), lim);
+      }),
+    ]);
+  },
+
+  /** Anexos só quando há upload novo — evita migração pesada em PCs lentos. */
+  async _resolveAttachmentsForSaveQuick(proposalId, proposal) {
+    if (this._hasPendingAnexoUploads()) {
+      return this._withTimeout(
+        this._prepareAttachmentsForSave(proposalId, proposal),
+        90000,
+        'Preparar anexos',
+      );
+    }
+    if (proposal?.attachments && this._hasProposalAttachments(proposal.attachments)) {
+      return this._parseAttachments(proposal.attachments);
+    }
+    return this._parseAttachments(proposal?.attachments);
+  },
+
+  _findAdminTableRow: function(id) {
+    if (!id) return null;
+    const tbody = document.getElementById('manageProposalsTbody');
+    if (!tbody) return null;
+    const sid = String(id);
+    const esc = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(sid) : sid.replace(/"/g, '');
+    let row = tbody.querySelector(`tr[data-prop-id="${esc}"]`);
+    if (!row) {
+      row = [...tbody.querySelectorAll('tr[data-prop-id]')].find((tr) => tr.getAttribute('data-prop-id') === sid);
+    }
+    return row || null;
+  },
+
+  _patchAdminTableRow: function(proposal) {
+    const p = this._normProposal(proposal) || proposal;
+    if (!p?.id) return false;
+    const row = this._findAdminTableRow(p.id);
+    if (!row) return false;
+    const fmtR = (v) => (v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—');
+    const setCol = (name, html) => {
+      const el = row.querySelector(`[data-col="${name}"]`);
+      if (el) el.innerHTML = html;
+    };
+    setCol('protocolo', p.protocolo ? this._escHtml(p.protocolo) : '—');
+    setCol('valor', fmtR(p.valor));
+    setCol('valorFinal', `<strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong>`);
+    const stage = this._vendorStage(p);
+    const statusLabel = this._proposalDisplayStatus(p);
+    const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
+    setCol('status', `<span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>`);
+    row.classList.add('proposal-row--saved-flash');
+    setTimeout(() => row.classList.remove('proposal-row--saved-flash'), 1800);
+    return true;
+  },
+
+  _hasPendingAnexoUploads: function() {
+    return this._getAllAnexoFieldDefs().some(({ id }) => !!document.getElementById(id)?.files?.[0]);
+  },
+
+  _attachmentAlreadyOnStorage: function(att, key) {
+    const caminho = String(att[key + '_caminho'] || '').trim();
+    const url = String(att[key] || '').trim();
+    if (caminho && /proposal-attachments\//i.test(caminho)) return true;
+    if (/file\.php/i.test(url)) return true;
+    if (/\/storage\/v1\/object\//i.test(url)) return true;
+    if (caminho && !this._isLocawebProposalUploadUrl(caminho)) return true;
+    return false;
+  },
 
   /** Tabelas financeiras (valor final = valor bruto × pct). */
   _TABELA_GROUPS: [
@@ -562,8 +651,16 @@ window.Proposals = {
     const set = new Set();
     if (!Array.isArray(proposals) || typeof PartnerOps === 'undefined') return set;
     const index = await PartnerOps._getIndex().catch(() => []);
+    const allPartnerIds = new Set();
+    (index || []).forEach(e => {
+      if (e?.allIds) e.allIds.forEach(id => allPartnerIds.add(String(id)));
+    });
+    if (!allPartnerIds.size) return set;
     proposals.forEach(p => {
-      if (index.some(e => PartnerOps._proposalBelongsToIndex(p, e))) set.add(String(p.id));
+      const ids = typeof DB._proposalVendorIds === 'function'
+        ? DB._proposalVendorIds(p)
+        : [p.vendorId, p.vendor_id, p.employee_id];
+      if (ids.some(id => id && allPartnerIds.has(String(id)))) set.add(String(p.id));
     });
     return set;
   },
@@ -581,13 +678,21 @@ window.Proposals = {
     return vids.some(id => id && teamIds.has(String(id)));
   },
 
+  _isSoubluProposalAdmin: function() {
+    const r = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
+    if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
+    return ['fundador', 'desenvolvedor', 'gerente', 'gerencia', 'financeiro', 'financial', 'rh', 'diretoria', 'supervisor', 'juridico'].includes(r);
+  },
+
   _canPartnerManageProposals: function() {
     if (typeof window === 'undefined' || !window.PARTNER_ROOT_ID) return true;
+    if (this._isSoubluProposalAdmin()) return true;
     if (typeof partnerOrgCan !== 'function') return false;
     const r = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
     if (r === 'parceiro') return partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas');
-    const roles = ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'];
-    if (!roles.includes(r)) return false;
+    if (typeof isPartnerOrgStaffRole === 'function' && isPartnerOrgStaffRole(r)) {
+      return partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas');
+    }
     return partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas');
   },
 
@@ -665,7 +770,8 @@ window.Proposals = {
       if (fileBtn) {
         e.preventDefault();
         this._resolveAnexoRootFromEl(fileBtn);
-        fileBtn.parentElement?.querySelector('input[type="file"]')?.click();
+        const slot = fileBtn.closest('.prop-folder__slot');
+        (slot?.querySelector('input[type="file"]') || fileBtn.parentElement?.querySelector('input[type="file"]'))?.click();
         return;
       }
       const addBtn = e.target.closest('.prop-folder__add');
@@ -779,6 +885,37 @@ window.Proposals = {
     wrap.dataset.slot = String(slotIndex);
     wrap.innerHTML = this._folderSlotRowHtml(slot.id, slot.label);
     slotsEl.appendChild(wrap);
+  },
+
+  /** Expande slots no DOM sem recriar inputs (preserva arquivo já selecionado pelo vendedor). */
+  _expandAnexoSlotsDom: function() {
+    const root = document.getElementById(this._folderRootId);
+    if (!root) return;
+    this._getFolderDefs().forEach((def) => {
+      const slots = this._folderDynamicSlots[def.key] || [];
+      const folder = root.querySelector(`.prop-folder[data-folder-key="${def.key}"]`);
+      if (!folder) return;
+      const existing = folder.querySelectorAll('.prop-folder__slot-wrap').length;
+      for (let i = existing; i < slots.length; i++) {
+        this._appendSlotToFolderEl(folder, slots[i], i + 1);
+      }
+    });
+  },
+
+  _syncAnexoUploadFormFromAttachments: function(att) {
+    const uploadWrap = document.getElementById(this._folderRootId)?.closest('[id$="AnexosUpload"]');
+    if (!uploadWrap || uploadWrap.style.display === 'none') return;
+    this._syncAnexoSlotsFromAttachments(att);
+    const root = document.getElementById(this._folderRootId);
+    if (!root) return;
+    if (root.children.length && !this._hasPendingAnexoUploads()) {
+      this._expandAnexoSlotsDom();
+    } else if (!root.children.length) {
+      this._renderAnexoFolders();
+    } else {
+      this._expandAnexoSlotsDom();
+    }
+    this._markSavedAttachmentsOnUploadForm(att);
   },
 
   _renderAnexoFolders: function() {
@@ -1091,19 +1228,29 @@ window.Proposals = {
 
   _initAdminProposalFilters: async function() {
     const selHeader = document.getElementById('proposalVendorFilterHeader');
-    if (!selHeader || selHeader.dataset.loaded) return;
+    if (!selHeader) return;
+    if (selHeader.dataset.loaded === '1' && selHeader.options.length > 2) return;
     try {
       const session = Auth.getSession();
       const scopeAdmin = this._proposalVendorScopeAdmin(session);
       const vendors = await DB.getVendorsForSelect(scopeAdmin);
+      const opts = (vendors || [])
+        .filter(v => v && v.id)
+        .map(v => {
+          const label = String(v.name || v.email || v.id || '').toUpperCase();
+          return `<option value="${this._escAttr(v.id)}">${this._escHtml(label)}</option>`;
+        })
+        .join('');
       selHeader.innerHTML = '<option value="">VENDEDOR</option>' +
         '<option value="todos">TODOS OS VENDEDORES</option>' +
-        (vendors || []).map(v => `<option value="${this._escAttr(v.id)}">${this._escHtml(v.name.toUpperCase())}</option>`).join('');
+        opts;
       selHeader.title = 'Filtrar por vendedor';
       if (this._adminList.vendorId) selHeader.value = this._adminList.vendorId;
-      selHeader.dataset.loaded = '1';
+      if ((vendors || []).length) selHeader.dataset.loaded = '1';
+      else delete selHeader.dataset.loaded;
     } catch (e) {
       console.warn('[Proposals] vendor filter:', e);
+      delete selHeader.dataset.loaded;
     }
   },
 
@@ -1439,14 +1586,16 @@ window.Proposals = {
     const r = String(raw || '').trim();
     if (!r) return '';
     if (/^(data:|blob:)/i.test(r)) return this._toDisplayUrl(r);
+    const rel = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(r);
+    if (rel) {
+      const served = this._fileServeUrl(rel);
+      if (served) return served;
+    }
     if (this._isImageUrl(r, nome)) {
       if (/supabase\.co\/storage/i.test(r)) return r.replace(/ /g, '%20');
-      const rel = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(r);
       if (rel) {
         const supa = this._allSupabasePublicUrls(rel);
         if (supa[0]) return supa[0];
-        const served = this._fileServeUrl(rel);
-        if (served) return served;
       }
       if (this._isDirectUploadsUrl(r)) return r.replace(/ /g, '%20');
     }
@@ -1580,7 +1729,53 @@ window.Proposals = {
   _isValidAttachmentUrl: function(url) {
     if (!url || typeof url !== 'string') return false;
     const s = url.trim();
-    return /^https?:\/\//i.test(s) || /^data:/i.test(s) || /^blob:/i.test(s);
+    return /^https?:\/\//i.test(s) || /^data:/i.test(s) || /^blob:/i.test(s)
+      || /^\/?api\/file\.php/i.test(s) || /^\/uploads\//i.test(s)
+      || /^proposal-attachments\//i.test(s);
+  },
+
+  _ensureAttachmentViewerModal: function() {
+    if (document.getElementById('attachmentViewerModal')) return;
+    const tpl = document.createElement('template');
+    tpl.innerHTML = '<div class="modal-overlay" id="attachmentViewerModal"><div class="modal" style="max-width:900px;"><div class="modal-header"><h3 id="attachmentViewerTitle">Anexo</h3><button class="modal-close" onclick="Proposals.closeAttachmentViewer()"></button></div><div class="modal-body" style="max-height:80vh;overflow:auto;padding:16px;"><div id="attachmentViewerBody" style="min-height:200px;"></div></div><div class="modal-footer"><button type="button" class="btn btn-outline btn-sm" id="attachmentViewerOpenExternal">Abrir em nova aba</button><button class="btn btn-ghost" onclick="Proposals.closeAttachmentViewer()">Fechar</button></div></div></div>';
+    const node = tpl.content.firstElementChild;
+    if (node) document.body.appendChild(node);
+  },
+
+  _openAttachmentViewerModal: function(modal) {
+    if (!modal) return;
+    modal.classList.add('modal-stack-front');
+    if (typeof openModal === 'function') openModal('attachmentViewerModal');
+    else modal.classList.add('open');
+  },
+
+  _resolveWorkingViewerUrl: async function(displayUrl, urls, raw, caminho) {
+    const candidates = [];
+    const add = (u) => {
+      const v = String(u || '').trim();
+      if (v && !candidates.includes(v)) candidates.push(v);
+    };
+    add(displayUrl);
+    (urls || []).forEach(add);
+    const rel = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(raw);
+    if (rel) {
+      add(this._fileServeUrl(rel));
+      this._allSupabasePublicUrls(rel).forEach(add);
+    }
+    if (/supabase\.co\/storage/i.test(String(raw || ''))) {
+      add(String(raw).replace(/ /g, '%20'));
+    }
+    for (const u of candidates) {
+      if (/file\.php/i.test(u)) {
+        const verified = await this._verifyAttachmentServeUrl(u);
+        if (verified) return verified;
+        continue;
+      }
+      if (/^(data:|blob:)/i.test(u) || /^https?:\/\//i.test(u)) {
+        return String(u).replace(/ /g, '%20');
+      }
+    }
+    return candidates[0] || displayUrl || '';
   },
 
   _hasProposalAttachments: function(att) {
@@ -1618,12 +1813,7 @@ window.Proposals = {
           if (cacheObj) cacheObj.attachments = proposal.attachments;
         }
         render(proposal);
-        const uploadWrap = document.getElementById(this._folderRootId)?.closest('[id$="AnexosUpload"]');
-        if (uploadWrap && uploadWrap.style.display !== 'none') {
-          this._syncAnexoSlotsFromAttachments(proposal.attachments);
-          this._renderAnexoFolders();
-        }
-        this._markSavedAttachmentsOnUploadForm(proposal.attachments);
+        this._syncAnexoUploadFormFromAttachments(proposal.attachments);
       } catch (err) {
         console.warn('[Proposals] anexos:', err);
         if (!this._hasProposalAttachments(proposal?.attachments) && attEl) {
@@ -1672,6 +1862,8 @@ window.Proposals = {
   _markSavedAttachmentsOnUploadForm: function(att) {
     const defs = this._getAllAnexoFieldDefs();
     defs.forEach(({ id, grupo }) => {
+      const inp = document.getElementById(id);
+      if (inp?.files?.[0]) return;
       const doc = this._findSavedAttachmentForGrupo(att, grupo);
       const lbl = document.getElementById(id + 'Label');
       if (!lbl) return;
@@ -1746,6 +1938,7 @@ window.Proposals = {
       if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
       const v = out[k];
       if (typeof v !== 'string' || !this._isLocawebProposalUploadUrl(v)) return;
+      if (this._attachmentAlreadyOnStorage(out, k)) return;
       jobs.push((async () => {
         try {
           const res = await fetch(v.replace(/ /g, '%20'), { cache: 'no-store' });
@@ -1797,14 +1990,22 @@ window.Proposals = {
   },
 
   _prepareAttachmentsForSave: async function(proposalId, proposal) {
-    if (this._attachmentLoadPromises[proposalId]) {
-      try { await this._attachmentLoadPromises[proposalId]; } catch { /* ignore */ }
-    }
+    const t0 = Date.now();
     let base = this._parseAttachments(proposal?.attachments);
+    const hasBase = this._hasProposalAttachments(base);
+    const hasNewFiles = this._hasPendingAnexoUploads();
+
+    if (this._attachmentLoadPromises[proposalId] && (hasNewFiles || !hasBase)) {
+      try { await this._attachmentLoadPromises[proposalId]; } catch { /* ignore */ }
+      base = this._parseAttachments(proposal?.attachments);
+    }
+
     if (!this._hasProposalAttachments(base)) {
       try {
-        const full = await DB.getProposal(proposalId);
-        if (full?.attachments) base = this._parseAttachments(full.attachments);
+        const attRow = typeof DB.getProposalAttachments === 'function'
+          ? await DB.getProposalAttachments(proposalId)
+          : await DB.getProposal(proposalId);
+        if (attRow?.attachments) base = this._parseAttachments(attRow.attachments);
       } catch (e) {
         console.warn('[Proposals] anexos save:', e);
       }
@@ -1815,12 +2016,29 @@ window.Proposals = {
     });
     const needsLocawebMigrate = Object.keys(base).some((k) => {
       if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
+      if (this._attachmentAlreadyOnStorage(base, k)) return false;
       return typeof base[k] === 'string' && this._isLocawebProposalUploadUrl(base[k]);
     });
-    if (needsDataUpload) base = await this._uploadPendingDataAttachments(proposalId, base);
-    if (needsLocawebMigrate) base = await this._migrateLocawebAttachmentsToSupabase(proposalId, base);
+    let msData = 0;
+    let msMigrate = 0;
+    let msCollect = 0;
+    if (needsDataUpload) {
+      const t1 = Date.now();
+      base = await this._uploadPendingDataAttachments(proposalId, base);
+      msData = Date.now() - t1;
+    }
+    if (needsLocawebMigrate) {
+      const t2 = Date.now();
+      base = await this._migrateLocawebAttachmentsToSupabase(proposalId, base);
+      msMigrate = Date.now() - t2;
+    }
+    const t3 = Date.now();
     const uploaded = await this._collectAttachments(proposalId);
+    msCollect = Date.now() - t3;
     const merged = { ...base, ...uploaded };
+    this._propPerfLog('proposals.js:_prepareAttachmentsForSave', 'attachments prepared', {
+      msTotal: Date.now() - t0, msData, msMigrate, msCollect, needsDataUpload, needsLocawebMigrate, hasNewFiles, hasBase,
+    }, 'A');
     return this._validateAttachmentsBeforeSave(merged);
   },
 
@@ -1855,7 +2073,7 @@ window.Proposals = {
     }
   },
 
-  openAttachment: function(cacheIdxOrUrl, nome, caminhoOpt) {
+  openAttachment: async function(cacheIdxOrUrl, nome, caminhoOpt) {
     let raw = '';
     let urls = [];
     let name = nome || 'Anexo';
@@ -1878,61 +2096,76 @@ window.Proposals = {
       name = nome || name;
     }
 
-    const displayUrl = this._isImageUrl(raw, name)
+    const initialUrl = this._isImageUrl(raw, name)
       ? (this._attachmentPreviewUrl(raw, caminho, urls, name) || this._pickViewerUrl(urls, raw, caminho))
       : this._pickViewerUrl(urls, raw, caminho);
-    if (!displayUrl) {
+    if (!initialUrl) {
       alert('Anexo indisponível ou inválido.');
       return;
     }
 
-    const fallbackChain = this._attachmentFallbackChain(urls, displayUrl);
-    const fbAttrs = this._attachmentFallbackAttrs(fallbackChain);
-    const fbAttrStr = Object.keys(fbAttrs).map((k) => `${k}="${fbAttrs[k]}"`).join(' ');
-    const onErr = this._attachmentOnErrorHandler();
-
+    this._ensureAttachmentViewerModal();
     const modal = document.getElementById('attachmentViewerModal');
     const titleEl = document.getElementById('attachmentViewerTitle');
     const bodyEl = document.getElementById('attachmentViewerBody');
     const openExtEl = document.getElementById('attachmentViewerOpenExternal');
+    const parentModalOpen = !!document.querySelector('.modal-overlay.open:not(#attachmentViewerModal)');
+
+    let finalUrl = initialUrl;
+    try {
+      finalUrl = await this._resolveWorkingViewerUrl(initialUrl, urls, raw, caminho) || initialUrl;
+    } catch (_) { /* keep initial */ }
+
+
+    const fallbackChain = this._attachmentFallbackChain(urls, finalUrl);
+    const fbAttrs = this._attachmentFallbackAttrs(fallbackChain);
+    const fbAttrStr = Object.keys(fbAttrs).map((k) => `${k}="${fbAttrs[k]}"`).join(' ');
+    const onErr = this._attachmentOnErrorHandler();
 
     if (titleEl) titleEl.textContent = name;
 
     this._revokeAttachmentBlobUrl();
-    if (String(displayUrl).startsWith('blob:')) {
-      this._lastAttachmentBlobUrl = displayUrl;
+    if (String(finalUrl).startsWith('blob:')) {
+      this._lastAttachmentBlobUrl = finalUrl;
     }
 
-    const finalUrl = displayUrl;
+    const _openExternal = () => {
+      const a = document.createElement('a');
+      a.href = finalUrl;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    };
 
     if (!modal) {
-      const w = window.open(finalUrl, '_blank', 'noopener,noreferrer');
-      if (!w) alert('Não foi possível abrir o anexo. Verifique se pop-ups estão permitidos.');
+      _openExternal();
       return;
     }
 
-    if (typeof openModal === 'function') openModal('attachmentViewerModal');
-    else modal.classList.add('open');
+    this._openAttachmentViewerModal(modal);
 
     if (openExtEl) {
       openExtEl.onclick = () => {
-        const w = window.open(finalUrl, '_blank', 'noopener,noreferrer');
-        if (!w) alert('Não foi possível abrir em nova aba.');
+        _openExternal();
       };
     }
 
     if (bodyEl) {
-      const kind = this._guessAttachmentKind(raw || displayUrl, name);
+      const kind = this._guessAttachmentKind(raw || finalUrl, name);
       bodyEl.innerHTML = this._renderAttachmentViewerBody(kind, finalUrl, name, fbAttrStr, onErr);
     }
   },
 
   closeAttachmentViewer: function() {
     this._revokeAttachmentBlobUrl();
+    const modal = document.getElementById('attachmentViewerModal');
     const bodyEl = document.getElementById('attachmentViewerBody');
     if (bodyEl) bodyEl.innerHTML = '';
+    if (modal) modal.classList.remove('modal-stack-front');
     if (typeof closeModal === 'function') closeModal('attachmentViewerModal');
-    else document.getElementById('attachmentViewerModal')?.classList.remove('open');
+    else modal?.classList.remove('open');
   },
 
   _isImageUrl: function(url, nome) {
@@ -2117,6 +2350,41 @@ window.Proposals = {
     const raw = p?.createdAt || p?.created_at;
     if (!raw) return '—';
     try { return new Date(raw).toLocaleDateString('pt-BR'); } catch { return '—'; }
+  },
+
+  _clientsByCpfMap: function(clients) {
+    const map = {};
+    for (const c of clients || []) {
+      const cpf = String(c.cpf || c.id || '').replace(/\D/g, '');
+      if (cpf) map[cpf] = c;
+    }
+    return map;
+  },
+
+  _proposalClientPhone: function(p, clientsByCpf) {
+    const cpf = String(p?.clientCpf || p?.client_cpf || '').replace(/\D/g, '');
+    const client = cpf && clientsByCpf ? clientsByCpf[cpf] : null;
+    const meta = p?.meta && typeof p.meta === 'object' ? p.meta : {};
+    const phone = client?.phone1 || client?.phone2 || meta.phone1 || meta.client_phone
+      || p.client_phone || p.clientPhone || p.phone1 || '';
+    return String(phone || '').trim();
+  },
+
+  _proposalClientEmail: function(p, clientsByCpf) {
+    const cpf = String(p?.clientCpf || p?.client_cpf || '').replace(/\D/g, '');
+    const client = cpf && clientsByCpf ? clientsByCpf[cpf] : null;
+    const meta = p?.meta && typeof p.meta === 'object' ? p.meta : {};
+    return String(
+      client?.email || meta.email || meta.client_email || p.client_email || p.clientEmail || ''
+    ).trim();
+  },
+
+  _formatPhoneDisplay: function(phone) {
+    const d = String(phone || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+    if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+    return String(phone || '').trim();
   },
 
   _matchProposalSearch: function(p, q) {
@@ -2542,6 +2810,17 @@ window.Proposals = {
 
   updateAnexosLabel: function() {},  // compatibilidade
 
+  _parseBrMoneyInput: function(raw) {
+    const s = String(raw ?? '').trim();
+    if (!s) return NaN;
+    const clean = s.replace(/[^\d,.-]/g, '');
+    if (!clean) return NaN;
+    if (clean.includes(',')) {
+      return parseFloat(clean.replace(/\./g, '').replace(',', '.'));
+    }
+    return parseFloat(clean);
+  },
+
   calcAdminValorFinal: function() {
     const fmtR = v => 'R$ ' + parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
     const bruto  = parseFloat(document.getElementById('managePropValorBruto')?.value?.replace(/[^\d,]/g,'').replace(',','.')) || 0;
@@ -2824,11 +3103,31 @@ window.Proposals = {
       const vendorUser = { id: user.id, name: me?.name || user.name || '' };
 
       const raw = await DB.getProposals(user.id, vendorUser);
+      // getProposals já filtra por vendor_id/employee_id e por CPF dos clientes do vendedor.
+      // Não aplicar _ownsProposal de novo — isso escondia propostas com vendor_id vazio/errado.
       let proposals = this._rowsFromProposalQuery(raw)
-        .map(p => this._normProposal(p))
-        .filter(p => this._ownsProposal(p, vendorUser));
+        .map(p => this._normProposal(p));
 
       proposals = this._sortProposalsNewestFirst(proposals);
+
+      let clientsByCpf = {};
+      if (typeof DB.getClients === 'function') {
+        try {
+          const clients = await DB.getClients({ supervisorId: user.id, pageSize: 2000 });
+          clientsByCpf = this._clientsByCpfMap(clients);
+        } catch (_) { /* noop */ }
+      }
+      const pageCpfs = [...new Set(
+        proposals.map((p) => String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '')).filter(Boolean)
+      )];
+      const missingCpfs = pageCpfs.filter((cpf) => !clientsByCpf[cpf]);
+      if (missingCpfs.length && typeof DB.getClientByCpf === 'function') {
+        await Promise.all(missingCpfs.slice(0, 25).map(async (cpf) => {
+          const c = await DB.getClientByCpf(cpf).catch(() => null);
+          if (c) clientsByCpf[cpf] = c;
+        }));
+      }
+
 
       this._employeeList.total = proposals.length;
       const startEmp = (this._employeeList.page - 1) * this._employeeList.pageSize;
@@ -2847,6 +3146,15 @@ window.Proposals = {
         const statusLabel = this._proposalDisplayStatus(p);
         const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
         const safeId = this._escAttr(p.id);
+        const phone = this._formatPhoneDisplay(this._proposalClientPhone(p, clientsByCpf));
+        const email = this._proposalClientEmail(p, clientsByCpf);
+        const protoParts = [];
+        if (p.protocolo) protoParts.push(`<strong>Nº Protocolo:</strong> ${this._escHtml(p.protocolo)}`);
+        if (phone) protoParts.push(`<strong>Telefone:</strong> ${this._escHtml(phone)}`);
+        if (email) protoParts.push(`<strong>E-mail:</strong> ${this._escHtml(email)}`);
+        const protoPhoneHtml = protoParts.length
+          ? `<div style="font-size:14px;margin-top:4px;">${protoParts.join(' | ')}</div>`
+          : '';
         html += `
           <div class="card" style="padding: 16px; margin-bottom: 12px;">
              <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px;">
@@ -2856,9 +3164,9 @@ window.Proposals = {
                 </div>
                 <span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>
              </div>
-             <div style="margin-bottom:4px; font-size:14px;"><strong>Cliente:</strong> ${p.clientName} (CPF: ${p.clientCpf})</div>
+             <div style="margin-bottom:4px; font-size:14px;"><strong>Cliente:</strong> ${this._escHtml(p.clientName)} (CPF: ${this._escHtml(p.clientCpf)})</div>
              <div style="font-size:14px;"><strong>Produto:</strong> ${this._escHtml(p.product || '—')} | <strong>Convênio:</strong> ${this._escHtml(p.convenio || '—')} | <strong>Entidade:</strong> ${this._escHtml(p.entidade || '—')}</div>
-             ${p.protocolo ? `<div style="font-size:14px;margin-top:4px;"><strong>Nº Protocolo:</strong> ${this._escHtml(p.protocolo)}</div>` : ''}
+             ${protoPhoneHtml}
              <div style="display:flex; gap:20px; margin-top:10px; background:var(--color-surface-2); padding:10px; border-radius:8px; flex-wrap:wrap;">
                <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Proposta</span><br><strong>${fmtR(p.valor)}</strong></div>
                <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Desconto</span><br><strong style="color:var(--color-danger);">− ${fmtR(p.desconto)}</strong></div>
@@ -2880,7 +3188,9 @@ window.Proposals = {
   },
 
   /** Lista filtrada da gestão (sem paginação) — usada na tabela e na exportação CSV. */
-  _fetchAdminProposalsFiltered: async function() {
+  _fetchAdminProposalsFiltered: async function(opts = {}) {
+    const forceRefresh = !!(opts && opts.forceRefresh);
+    const t0 = Date.now();
     const q = this._getProposalSearchQuery();
     const session = Auth.getSession();
     const isVendorSession = session?.role === 'vendedor';
@@ -2910,31 +3220,66 @@ window.Proposals = {
 
     const partnerRoot = !isVendorSession && typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
     const propOpts = partnerRoot ? { partnerRootId: partnerRoot } : {};
-    const [, rawRows] = await Promise.all([
-      this._initAdminProposalFilters(),
-      isVendorSession
-        ? DB.getProposals(session.id, { id: session.id, name: session.name })
-        : DB.getProposals(null, null, propOpts),
-    ]);
+    const canUseCache = !forceRefresh && !partnerRoot && !isVendorSession && !q && !vendorId
+      && (!statusFilter || statusFilter === 'todos')
+      && this._adminListCache && (opts.fromCache || (Date.now() - this._adminListCacheAt) < this._ADMIN_LIST_CACHE_TTL);
+
+    let rawRows;
+    const filterInit = this._initAdminProposalFilters();
+    if (canUseCache) {
+      rawRows = this._adminListCache;
+      await filterInit;
+    } else {
+      const [, fetched] = await Promise.all([
+        filterInit,
+        isVendorSession
+          ? DB.getProposals(session.id, { id: session.id, name: session.name })
+          : DB.getProposals(null, null, propOpts),
+      ]);
+      rawRows = fetched;
+      if (!partnerRoot && !isVendorSession && !q && !vendorId && (!statusFilter || statusFilter === 'todos')) {
+        this._adminListCache = Array.isArray(rawRows) ? rawRows.slice() : [];
+        this._adminListCacheAt = Date.now();
+      }
+    }
 
     let proposals = this._rowsFromProposalQuery(rawRows).map(p => this._normProposal(p));
     if (isVendorSession) {
-      proposals = proposals.filter(p => this._ownsProposal(p, { id: session.id, name: session.name }));
-    } else if (!partnerRoot) {
+      // getProposals(session.id) já restringe ao vendedor; não filtrar de novo.
+    } else if (window.PARTNER_ROOT_ID) {
       proposals = await this._filterProposalsToPartnerOrg(proposals);
-    }
-    if (!window.PARTNER_ROOT_ID && !this._canSeePartnerProposalsInAdminList()) {
+    } else if (!this._canSeePartnerProposalsInAdminList()) {
       proposals = await this._filterProposalsExcludePartnerOrg(proposals);
-    }
-    if (window.PARTNER_ROOT_ID) {
-      proposals = await this._filterProposalsToPartnerOrg(proposals);
     }
     proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
     proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
     proposals = this._sortProposalsNewestFirst(proposals);
 
+    this._propPerfLog('proposals.js:_fetchAdminProposalsFiltered', 'list fetched', {
+      ms: Date.now() - t0, count: proposals.length, partnerRoot: !!window.PARTNER_ROOT_ID, fromCache: !!canUseCache,
+    }, 'B');
+
     return { proposals, q, vendorId, statusFilter, isVendorSession };
+  },
+
+  _mergeAdminListCacheRow: function(proposal) {
+    if (!proposal?.id) return;
+    const norm = this._normProposal(proposal) || proposal;
+    if (!Array.isArray(this._adminListCache)) {
+      this._adminListCache = [norm];
+      this._adminListCacheAt = Date.now();
+      return;
+    }
+    const idx = this._adminListCache.findIndex((p) => String(p.id) === String(norm.id));
+    if (idx >= 0) this._adminListCache[idx] = { ...this._adminListCache[idx], ...norm };
+    else this._adminListCache.unshift(norm);
+    this._adminListCacheAt = Date.now();
+  },
+
+  _invalidateAdminListCache: function() {
+    this._adminListCache = null;
+    this._adminListCacheAt = 0;
   },
 
   _proposalExportRow: function(p) {
@@ -3018,7 +3363,7 @@ window.Proposals = {
     }
   },
 
-  renderAdminList: async function() {
+  renderAdminList: async function(opts = {}) {
     const tbody = document.getElementById('manageProposalsTbody');
     if (!tbody) return;
 
@@ -3026,10 +3371,12 @@ window.Proposals = {
     const finGestao = this._isFinanceiroGestao();
     const emptyMsg = (q) => `<tr><td colspan="${colspan}" style="text-align:center;color:var(--color-text-muted);padding:24px;">${q ? 'Nenhuma proposta encontrada para esta busca.' : 'Nenhuma proposta cadastrada.'}</td></tr>`;
 
-    tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--color-text-muted);padding:24px;">Carregando propostas...</td></tr>`;
+    if (!opts.soft) {
+      tbody.innerHTML = `<tr><td colspan="${colspan}" style="text-align:center;color:var(--color-text-muted);padding:24px;">Carregando propostas...</td></tr>`;
+    }
 
     try {
-      const { proposals: allFiltered, q, vendorId } = await this._fetchAdminProposalsFiltered();
+      const { proposals: allFiltered, q, vendorId } = await this._fetchAdminProposalsFiltered(opts);
 
       this._adminList.total = allFiltered.length;
       let proposals = allFiltered.slice(
@@ -3073,22 +3420,22 @@ window.Proposals = {
         const partnerBadge = isPartnerRow
           ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
           : '';
-        const canEditRow = partnerRoot ? this._canPartnerManageProposals() : true;
+        const canEditRow = this._isSoubluProposalAdmin() || !partnerRoot || this._canPartnerManageProposals();
         const comissaoCell = finGestao && window.FinPropostas?.operacaoChipsHtml
           ? `<td class="fin-comissao-col" style="cursor:pointer;" onclick="FinPropostas.openProposalDrawer('${safeId}','dados')" title="Abrir operações financeiras">${FinPropostas.operacaoChipsHtml(p, { baixa: baixaMap[String(p.id)], prejuizo: prejuizoMap[String(p.id)], debito: debitoMap[String(p.id)] })}</td>`
           : '';
         const finAction = finGestao ? this._finComissaoActionBtn(p.id) : '';
-        html += `<tr${rowClass ? ` class="${rowClass}"` : ''}${finGestao ? ` style="cursor:pointer;" onclick="if(!event.target.closest('.client-actions,.fin-comissao-col'))FinPropostas.openProposalDrawer('${safeId}','dados')"` : ''}>
+        html += `<tr data-prop-id="${safeId}"${rowClass ? ` class="${rowClass}"` : ''}${finGestao ? ` style="cursor:pointer;" onclick="if(!event.target.closest('.client-actions,.fin-comissao-col'))FinPropostas.openProposalDrawer('${safeId}','dados')"` : ''}>
             <td>${partnerBadge}<strong>${p.numero || p.id}</strong></td>
             <td>${p.vendorName || '—'}</td>
             <td>${p.clientName || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.clientCpf || ''}</div></td>
             <td>${this._escHtml(p.product || '—')}${subStatus ? ` <div style="font-size:11px;color:var(--color-text-muted);">${this._escHtml(subStatus)}</div>` : ''}</td>
             <td>${p.convenio || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.entidade || ''}</div></td>
-            <td>${p.protocolo ? this._escHtml(p.protocolo) : '—'}</td>
-            <td>${fmtR(p.valor)}</td>
-            <td><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></td>
+            <td data-col="protocolo">${p.protocolo ? this._escHtml(p.protocolo) : '—'}</td>
+            <td data-col="valor">${fmtR(p.valor)}</td>
+            <td data-col="valorFinal"><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></td>
             <td>${this._propDateStr(p)}</td>
-            <td><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
+            <td data-col="status"><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
             ${comissaoCell}
             <td class="td-proposal-actions" onclick="event.stopPropagation()">${finAction}${this.actionsRowHtml(p.id, {
               canEdit: canEditRow,
@@ -3364,10 +3711,14 @@ window.Proposals = {
     let proposal = this._employeeEditCache[id] ? { ...this._employeeEditCache[id] } : await DB.getProposal(id);
     if (!proposal) return;
     if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
-      try {
-        const full = await DB.getProposal(id);
-        if (full?.attachments) proposal.attachments = full.attachments;
-      } catch (_) { /* noop */ }
+      if (!this._employeeEditCache[id]) {
+        try {
+          const attRow = typeof DB.getProposalAttachments === 'function'
+            ? await DB.getProposalAttachments(id)
+            : await DB.getProposal(id);
+          if (attRow?.attachments) proposal.attachments = attRow.attachments;
+        } catch (_) { /* noop */ }
+      }
     }
     const norm = this._normProposal(proposal);
     if (!this._ownsProposal(norm, user)) {
@@ -3418,15 +3769,20 @@ window.Proposals = {
     });
 
     if (typeof showLoading === 'function') showLoading('Salvando proposta…');
+    const saveT0 = Date.now();
     try {
       await this._saveProposalClientData(proposal, 'emp');
+      const tClient = Date.now();
       await DB.saveProposal(proposal, { skipHydrate: true });
+      this._propPerfLog('proposals.js:employeeSave', 'save done', {
+        msTotal: Date.now() - saveT0, msClient: tClient - saveT0, msDb: Date.now() - tClient,
+      }, 'C');
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._employeeEditCache[id];
       if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
       else alert('Proposta atualizada!');
       closeModal('employeeProposalModal');
-      this.renderEmployeeList();
+      void this.renderEmployeeList();
     } catch (e) {
       console.error('[employeeSave]', e);
       this._proposalSaveErrorNotify(e);
@@ -3488,10 +3844,11 @@ window.Proposals = {
     const proposal = this._normProposal(raw);
     if (!proposal) return;
 
-    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
+      const canManage = this._canPartnerManageProposals();
       if (!belongs) viewOnly = true;
-      else if (!this._canPartnerManageProposals()) viewOnly = true;
+      else if (!canManage) viewOnly = true;
     }
 
     const sv = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val || ''; };
@@ -3532,7 +3889,12 @@ window.Proposals = {
     }
     sv('managePropNumeroEdit', proposal.numero);
     const valEl = document.getElementById('managePropValorEdit');
-    if (valEl) valEl.value = proposal.valor || '';
+    if (valEl) {
+      const v = proposal.valor;
+      valEl.value = (v != null && v !== '' && !isNaN(parseFloat(v)))
+        ? parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : '';
+    }
 
     const client = proposal.clientCpf ? await this._lookupClientByCpf(String(proposal.clientCpf).replace(/\D/g, '')) : null;
     const detailEl = document.getElementById('managePropClientDetail');
@@ -3634,9 +3996,14 @@ window.Proposals = {
     const gv = id => document.getElementById(id)?.value || '';
     const id = gv('managePropId');
     let proposal = this._adminEditCache[id] ? { ...this._adminEditCache[id] } : await DB.getProposal(id);
-    if (!proposal) return;
+    if (!proposal) {
+      const msg = 'Proposta não encontrada. Feche o modal e abra novamente.';
+      if (typeof showToast === 'function') showToast(msg, 'error');
+      else alert(msg);
+      return;
+    }
     proposal = this._normProposal(proposal) || proposal;
-    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
       if (!belongs) {
         const msg = 'Propostas internas SOU+BLU são somente leitura para a rede parceira.';
@@ -3651,11 +4018,21 @@ window.Proposals = {
         return;
       }
     }
-    if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
-      try {
-        const full = await DB.getProposal(id);
-        if (full?.attachments) proposal.attachments = full.attachments;
-      } catch (_) { /* noop */ }
+    if (typeof showLoading === 'function') showLoading('Salvando…');
+    const saveBtn = document.querySelector('#manageProposalModal .btn-primary[onclick*="adminSave"], #manageProposalModal button[onclick*="adminSave"]');
+    const saveBtnText = saveBtn?.innerText;
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Salvando…'; }
+    try {
+    const pendingAtt = this._hasPendingAnexoUploads();
+    if (pendingAtt && (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments))) {
+      if (!this._adminEditCache[id]) {
+        try {
+          const attRow = typeof DB.getProposalAttachments === 'function'
+            ? await DB.getProposalAttachments(id)
+            : await DB.getProposal(id);
+          if (attRow?.attachments) proposal.attachments = attRow.attachments;
+        } catch (_) { /* noop */ }
+      }
     }
 
     const role = user?.role || '';
@@ -3680,19 +4057,30 @@ window.Proposals = {
       const novoNumero = gv('managePropNumeroEdit');
       const novoValor  = document.getElementById('managePropValorEdit')?.value;
       if (novoNumero) proposal.numero = novoNumero;
-      if (novoValor !== '' && novoValor != null && !isNaN(parseFloat(novoValor))) {
-        proposal.valor = parseFloat(novoValor);
-        if (!proposal.tabela) proposal.valorFinal = proposal.valor;
+      if (novoValor !== '' && novoValor != null) {
+        const parsedValor = this._parseBrMoneyInput(novoValor);
+        if (!isNaN(parsedValor)) {
+          proposal.valor = parsedValor;
+          if (!proposal.tabela) proposal.valorFinal = proposal.valor;
+        }
       }
     }
 
     // ── Tabela / Valor Final (definido pelo Financeiro) ──────────────
-    const novaTabela = gv('managePropTabela');
-    if (novaTabela) {
-      const pct = this._tabelaPct[novaTabela] ?? 1;
-      proposal.tabela     = novaTabela;
-      proposal.valorFinal = parseFloat(((proposal.valor||0) * pct).toFixed(2));
-      proposal.desconto   = parseFloat(((proposal.valor||0) - proposal.valorFinal).toFixed(2));
+    const tabelaEl = document.getElementById('managePropTabela');
+    let novaTabela = '';
+    if (tabelaEl) {
+      novaTabela = tabelaEl.value;
+      if (novaTabela) {
+        const pct = this._tabelaPct[novaTabela] ?? 1;
+        proposal.tabela     = novaTabela;
+        proposal.valorFinal = parseFloat(((proposal.valor||0) * pct).toFixed(2));
+        proposal.desconto   = parseFloat(((proposal.valor||0) - proposal.valorFinal).toFixed(2));
+      } else {
+        proposal.tabela = '';
+        proposal.valorFinal = proposal.valor || 0;
+        proposal.desconto = 0;
+      }
     }
 
     proposal.compraDivida    = gv('managePropDivida');
@@ -3746,16 +4134,34 @@ window.Proposals = {
     }
 
     this._setFolderContext('managePropAnexosFolders', 'manageProp');
-    try {
-      proposal.attachments = await this._prepareAttachmentsForSave(id, proposal);
-    } catch (e) {
-      console.error('[adminSave] anexo', e);
-      alert('Erro ao processar anexo: ' + (e.message || 'tente de novo. Arquivos muito grandes podem falhar no modo local.'));
-      return;
-    }
+      if (pendingAtt) {
+        try {
+          proposal.attachments = await this._resolveAttachmentsForSaveQuick(id, proposal);
+        } catch (e) {
+          console.error('[adminSave] anexo', e);
+          if (!pendingAtt) {
+            try {
+              const attRow = typeof DB.getProposalAttachments === 'function'
+                ? await DB.getProposalAttachments(id)
+                : await DB.getProposal(id);
+              if (attRow?.attachments && this._hasProposalAttachments(attRow.attachments)) {
+                proposal.attachments = this._parseAttachments(attRow.attachments);
+                if (typeof showToast === 'function') {
+                  showToast('Anexos mantidos do servidor; demais alterações serão salvas.', 'warning', 5000);
+                }
+              } else {
+                throw e;
+              }
+            } catch (_) {
+              throw e;
+            }
+          } else {
+            throw e;
+          }
+        }
+      }
 
-    if (typeof showLoading === 'function') showLoading('Salvando…');
-    try {
+    const saveT0 = Date.now();
       const becamePaid = String(oldStatus || '').toUpperCase() !== 'PAGO' && String(newStatus || '').toUpperCase() === 'PAGO';
       if (becamePaid && typeof DB.awardRouletteOnProposalPaid === 'function') {
         await DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null);
@@ -3769,19 +4175,41 @@ window.Proposals = {
           showToast('Proposta salva parcialmente — falha ao gravar cadastro do cliente: ' + cm, 'warning', 8000);
         }
       }
-      await DB.saveProposal(proposal, { skipHydrate: true });
+      const tClient = Date.now();
+      const toSave = { ...proposal };
+      if (!pendingAtt) delete toSave.attachments;
+      const saved = await this._withTimeout(
+        DB.saveProposal(toSave, { skipHydrate: true }),
+        45000,
+        'Salvar proposta',
+      );
+      proposal = saved
+        ? (this._normProposal({ ...proposal, ...saved }) || { ...proposal, ...saved })
+        : proposal;
+      this._propPerfLog('proposals.js:adminSave', 'save done', {
+        msTotal: Date.now() - saveT0, msClient: tClient - saveT0, msDb: Date.now() - tClient,
+      }, 'C');
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._adminEditCache[id];
+      this._mergeAdminListCacheRow(proposal);
       if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
       else alert('Proposta atualizada!');
       const modal = document.getElementById('manageProposalModal');
       if (modal) modal.classList.remove('open');
-      this.renderAdminList();
+      const patched = this._patchAdminTableRow(proposal);
+      this._propPerfLog('proposals.js:adminSave', 'ui refresh', { patched, id: proposal.id }, 'D');
+      if (!patched) {
+        void this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
+      }
     } catch (e) {
       console.error('[adminSave]', e);
       this._proposalSaveErrorNotify(e);
     } finally {
       if (typeof hideLoading === 'function') hideLoading();
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        if (saveBtnText) saveBtn.innerText = saveBtnText;
+      }
     }
   },
 

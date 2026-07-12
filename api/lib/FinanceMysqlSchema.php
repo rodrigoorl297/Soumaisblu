@@ -72,6 +72,10 @@ function soublu_ensure_finance_modulos_tables(?PDO $pdo = null): array
 
 function soublu_finance_modulos_tables_exist(?PDO $pdo = null): bool
 {
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
     $pdo = $pdo ?? soublu_pdo();
     $st = $pdo->prepare(
         'SELECT COUNT(*) FROM information_schema.TABLES
@@ -80,8 +84,10 @@ function soublu_finance_modulos_tables_exist(?PDO $pdo = null): bool
     foreach (['finance_adiantamento', 'finance_reembolso'] as $table) {
         $st->execute([$table]);
         if ((int) $st->fetchColumn() === 0) {
+            $cached = false;
             return false;
         }
     }
+    $cached = true;
     return true;
 }

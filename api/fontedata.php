@@ -1,9 +1,9 @@
 <?php
 /**
- * Proxy FonteData — CPF (cliente/funcionário) e CNPJ (parceiro).
- * GET ?cpf=... | ?cnpj=...&consulta=... | ?consulta=tj-certidao&cpf_cnpj=...
- * Certidão TJ: {FONTE_DATA_API_BASE}/tj-certidao?cpf_cnpj=
- * Header: X-FonteData-Token
+ * Proxy FonteData — CPF/CNPJ e consultas (path-style, conforme https://fontedata.com/docs).
+ * GET ?cpf=... | ?cnpj=...&consulta=... | ?consulta=ccd-pf&cpf=...
+ * Ex.: GET /api/v1/consulta/ccd-pf/{cpf} — Certidão negativa civil (PF)
+ * Header interno: X-FonteData-Token
  */
 declare(strict_types=1);
 
@@ -69,6 +69,7 @@ $consultaParam = trim((string) ($_GET['consulta'] ?? ''));
 $cnpjEndpoints = [
     'consulta-cnpj-receita',
     'score-credito-quod',
+    'ccd-pj',
 ];
 
 $cpfEndpoints = [
@@ -77,42 +78,93 @@ $cpfEndpoints = [
     'receita-federal-pf',
     'pis-trabalho',
     'cadastro-rf-pf',
+    'ccd-pf',
+];
+
+$docConsultas = [
+    'tj-certidao',
+    'trf-certidao',
+    'ccd-pf',
+    'ccd-pj',
+    'mpf-certidao',
+];
+
+$consultaAliases = [
+    'certidao-civil' => 'ccd-pf',
+    'certidao_civil' => 'ccd-pf',
+    'certidao-civil-pj' => 'ccd-pj',
 ];
 
 $dataNascimento = trim((string) ($_GET['data_nascimento'] ?? $_GET['dataNascimento'] ?? ''));
 
-function fontedata_append_cpf_query(string $url, string $dataNascimento): string
-{
-    if ($dataNascimento === '') {
-        return $url;
-    }
-    $dn = rawurlencode($dataNascimento);
-    return $url . '&data_nascimento=' . $dn . '&dataNascimento=' . $dn;
+if (isset($consultaAliases[$consultaParam])) {
+    $consultaParam = $consultaAliases[$consultaParam];
 }
 
-/** Certidão TJ — usa FONTE_DATA_API_BASE (mesmo host das demais consultas). */
-if ($consultaParam === 'tj-certidao') {
-    $doc = $cpfCnpj !== '' ? $cpfCnpj : ($cnpj !== '' ? $cnpj : $cpf);
-    if (strlen($doc) !== 11 && strlen($doc) !== 14) {
+/** Monta URL FonteData — query (?cpf=) ou path (/endpoint/doc) conforme o endpoint. */
+function fontedata_query_param_for(string $endpoint): ?string
+{
+    static $map = [
+        'ccd-pf' => 'cpf',
+        'ccd-pj' => 'cnpj',
+        'cadastro-rf-pf' => 'cpf',
+        'dados-cadastrais-basicos' => 'cpf',
+        'cadastro-pf-basica' => 'cpf',
+        'receita-federal-pf' => 'cpf',
+        'pis-trabalho' => 'cpf',
+        'tj-certidao' => 'cpf_cnpj',
+        'trf-certidao' => 'cpf_cnpj',
+        'mpf-certidao' => 'cpf_cnpj',
+    ];
+    return $map[$endpoint] ?? null;
+}
+
+function fontedata_build_url(string $base, string $endpoint, string $doc, string $dataNascimento = ''): string
+{
+    $param = fontedata_query_param_for($endpoint);
+    if ($param !== null) {
+        $url = rtrim($base, '/') . '/' . rawurlencode($endpoint) . '?' . $param . '=' . rawurlencode($doc);
+        if ($dataNascimento !== '') {
+            $url .= '&' . http_build_query([
+                'data_nascimento' => $dataNascimento,
+                'dataNascimento' => $dataNascimento,
+            ]);
+        }
+        return $url;
+    }
+    $url = rtrim($base, '/') . '/' . rawurlencode($endpoint) . '/' . rawurlencode($doc);
+    if ($dataNascimento !== '') {
+        $url .= '?' . http_build_query([
+            'data_nascimento' => $dataNascimento,
+            'dataNascimento' => $dataNascimento,
+        ]);
+    }
+    return $url;
+}
+
+$doc = '';
+$consulta = '';
+$endpoint = '';
+
+if ($consultaParam !== '' && in_array($consultaParam, $docConsultas, true)) {
+    $doc = $cpfCnpj !== '' ? $cpfCnpj : ($cpf !== '' ? $cpf : $cnpj);
+    if ($consultaParam === 'ccd-pf' && strlen($doc) !== 11) {
         http_response_code(400);
-        echo json_encode(['ok' => false, 'error' => 'Informe CPF (11) ou CNPJ (14) para Certidão TJ'], JSON_UNESCAPED_UNICODE);
+        echo json_encode(['ok' => false, 'error' => 'Informe CPF (11 dígitos) para certidão civil (ccd-pf).'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    $url = $base . '/tj-certidao?cpf_cnpj=' . rawurlencode($doc);
-    $consulta = 'tj-certidao';
-    // #region agent log
-    $logPath = dirname(__DIR__) . '/debug-97c411.log';
-    $logHost = parse_url($url, PHP_URL_HOST) ?: 'unknown';
-    @file_put_contents($logPath, json_encode([
-        'sessionId' => '97c411',
-        'location' => 'fontedata.php:tj-certidao',
-        'message' => 'tj-certidao request',
-        'data' => ['host' => $logHost],
-        'timestamp' => (int) round(microtime(true) * 1000),
-        'hypothesisId' => 'certidao-host',
-        'runId' => 'calc-fix',
-    ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-    // #endregion
+    if ($consultaParam === 'ccd-pj' && strlen($doc) !== 14) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'Informe CNPJ (14 dígitos) para certidão civil (ccd-pj).'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    if (strlen($doc) !== 11 && strlen($doc) !== 14) {
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'Informe CPF (11) ou CNPJ (14) para esta consulta.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
+    $consulta = $consultaParam;
+    $url = fontedata_build_url($base, $consultaParam, $doc, $dataNascimento);
 } elseif ($cnpj !== '') {
     if (strlen($cnpj) !== 14) {
         http_response_code(400);
@@ -125,7 +177,9 @@ if ($consultaParam === 'tj-certidao') {
         echo json_encode(['ok' => false, 'error' => 'Consulta CNPJ não permitida'], JSON_UNESCAPED_UNICODE);
         exit;
     }
-    $url = $base . '/' . rawurlencode($consulta) . '?cnpj=' . rawurlencode($cnpj);
+    $endpoint = $consulta;
+    $doc = $cnpj;
+    $url = fontedata_build_url($base, $consulta, $cnpj);
 } elseif ($cpf !== '') {
     if (strlen($cpf) !== 11) {
         http_response_code(400);
@@ -144,10 +198,8 @@ if ($consultaParam === 'tj-certidao') {
         }
         $consulta = $endpoint;
     }
-    $url = fontedata_append_cpf_query(
-        $base . '/' . rawurlencode($endpoint) . '?cpf=' . rawurlencode($cpf),
-        $dataNascimento
-    );
+    $doc = $cpf;
+    $url = fontedata_build_url($base, $consulta, $cpf, $dataNascimento);
 } else {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => 'Informe cpf ou cnpj'], JSON_UNESCAPED_UNICODE);
@@ -160,12 +212,12 @@ if (!is_dir($cacheDir)) {
 }
 
 $cacheKey = '';
-if (($consulta ?? '') === 'tj-certidao') {
-    $cacheKey = 'tj-certidao_' . ($doc ?? '');
+if ($doc !== '' && $consulta !== '') {
+    $cacheKey = $consulta . '_' . $doc . ($dataNascimento !== '' ? '_' . preg_replace('/\D/', '', $dataNascimento) : '');
 } elseif ($cnpj !== '') {
-    $cacheKey = 'cnpj_' . ($consulta ?? 'consulta-cnpj-receita') . '_' . $cnpj;
+    $cacheKey = 'cnpj_' . ($consulta ?: 'consulta-cnpj-receita') . '_' . $cnpj;
 } elseif ($cpf !== '') {
-    $ep = $endpoint ?? $consulta ?? 'dados-cadastrais-basicos';
+    $ep = $endpoint ?: $consulta ?: 'dados-cadastrais-basicos';
     $cacheKey = 'cpf_' . $ep . '_' . $cpf . ($dataNascimento !== '' ? '_' . preg_replace('/\D/', '', $dataNascimento) : '');
 }
 
@@ -177,9 +229,11 @@ if ($cacheKey !== '') {
             $decoded = json_decode($cachedData, true);
             if (is_array($decoded) && empty($decoded['error'])) {
                 header('X-FonteData-Cache: HIT');
-                $out = ['ok' => true, 'data' => $decoded, 'consulta' => $consulta ?? $endpoint ?? ''];
-                if (($consulta ?? '') === 'tj-certidao') {
-                    $out['cpf_cnpj'] = $doc ?? null;
+                $out = ['ok' => true, 'data' => $decoded, 'consulta' => $consulta ?: $endpoint];
+                if ($doc !== '') {
+                    $out['cpf_cnpj'] = $doc;
+                    if (strlen($doc) === 11) $out['cpf'] = $doc;
+                    if (strlen($doc) === 14) $out['cnpj'] = $doc;
                 } elseif ($cnpj !== '') {
                     $out['cnpj'] = $cnpj;
                 } else {
@@ -192,10 +246,29 @@ if ($cacheKey !== '') {
     }
 }
 
+$slowConsultas = ['ccd-pf', 'ccd-pj', 'tj-certidao', 'trf-certidao', 'mpf-certidao'];
+$curlTimeout = in_array($consulta ?: $endpoint, $slowConsultas, true) ? 120 : 60;
+
 $ch = curl_init($url);
+// #region agent log
+@file_put_contents(dirname(__DIR__) . '/debug-97c411.log', json_encode([
+    'sessionId' => '97c411',
+    'location' => 'fontedata.php:request',
+    'message' => 'fontedata upstream url',
+    'data' => [
+        'consulta' => $consulta ?: $endpoint,
+        'url_pattern' => fontedata_query_param_for($consulta ?: $endpoint) ? 'query' : 'path',
+        'host' => parse_url($url, PHP_URL_HOST) ?: 'unknown',
+    ],
+    'timestamp' => (int) round(microtime(true) * 1000),
+    'hypothesisId' => 'H1-ccd-query',
+    'runId' => 'ccd-query-fix',
+], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
+// #endregion
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_TIMEOUT => 60,
+    CURLOPT_CONNECTTIMEOUT => 30,
+    CURLOPT_TIMEOUT => $curlTimeout,
     CURLOPT_HTTPHEADER => [
         'Accept: application/json',
         'X-API-Key: ' . $apiKey,
@@ -223,8 +296,12 @@ if ($body === false || $err !== '') {
         'runId' => 'calc-fix-v2',
     ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
     // #endregion
+    $isTimeout = stripos($err, 'timed out') !== false || stripos($err, 'timeout') !== false;
+    $msg = $isTimeout
+        ? 'A consulta demorou demais. Certidões podem levar até 2 minutos — tente novamente.'
+        : 'Falha ao contactar FonteData: ' . $err;
     http_response_code(502);
-    echo json_encode(['ok' => false, 'error' => 'Falha ao contactar FonteData: ' . $err], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => false, 'error' => $msg], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -244,6 +321,12 @@ if (isset($decoded['error'])) {
     exit;
 }
 
+if (!empty($decoded['mensagem']) && ($code < 200 || $code >= 300)) {
+    http_response_code($code >= 400 ? $code : 502);
+    echo json_encode(['ok' => false, 'error' => (string) $decoded['mensagem'], 'raw' => $decoded], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 if ($code < 200 || $code >= 300) {
     http_response_code($code ?: 502);
     echo json_encode(['ok' => false, 'error' => 'FonteData HTTP ' . $code], JSON_UNESCAPED_UNICODE);
@@ -254,9 +337,11 @@ if (isset($cacheFile) && is_array($decoded) && empty($decoded['error'])) {
     @file_put_contents($cacheFile, json_encode($decoded, JSON_UNESCAPED_UNICODE));
 }
 
-$out = ['ok' => true, 'data' => $decoded, 'consulta' => $consulta ?? $endpoint ?? ''];
-if (($consulta ?? '') === 'tj-certidao') {
-    $out['cpf_cnpj'] = $doc ?? null;
+$out = ['ok' => true, 'data' => $decoded, 'consulta' => $consulta ?: $endpoint];
+if ($doc !== '') {
+    $out['cpf_cnpj'] = $doc;
+    if (strlen($doc) === 11) $out['cpf'] = $doc;
+    if (strlen($doc) === 14) $out['cnpj'] = $doc;
 } elseif ($cnpj !== '') {
     $out['cnpj'] = $cnpj;
 } else {

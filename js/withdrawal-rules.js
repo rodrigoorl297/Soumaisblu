@@ -227,8 +227,8 @@ const WithdrawalRules = {
     if (!p.holder_name) return { ok: false, msg: 'Informe o nome do titular.' };
     if (typeof DB !== 'undefined' && typeof DB.normalizePixPayment === 'function') {
       const norm = DB.normalizePixPayment(p.pix_key_type, p.pix_key);
-      if (!norm.pix_key || !this.isValidPixKey(norm.pix_key_type, norm.pix_key)) {
-        return { ok: false, msg: this.pixKeyValidationMessage(p.pix_key_type || norm.pix_key_type) };
+      if (!norm.pix_key) {
+        return { ok: false, msg: 'Chave PIX inválida. Use CPF, CNPJ, e-mail, celular ou chave aleatória.' };
       }
       p.pix_key_type = norm.pix_key_type;
       p.pix_key = norm.pix_key;

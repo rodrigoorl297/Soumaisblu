@@ -132,18 +132,30 @@ const FonteData = {
       qs.set('dataNascimento', dn);
     }
 
+    const slowConsultas = ['ccd-pf', 'ccd-pj', 'tj-certidao', 'trf-certidao', 'mpf-certidao'];
+    const ep = consulta || 'dados-cadastrais-basicos';
+    const timeoutMs = Number(opts.timeoutMs) || (slowConsultas.includes(ep) ? 130000 : 60000);
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
     try {
       const res = await fetch(`${url}?${qs.toString()}`, {
         method: 'GET',
         headers: { 'X-FonteData-Token': token },
+        signal: controller ? controller.signal : undefined,
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.ok) {
         return { ok: false, error: json.error || `Erro ${res.status}`, raw: json.raw || json.data || null };
       }
-      return { ok: true, raw: json.data, consulta: consulta || 'dados-cadastrais-basicos', cpf };
+      return { ok: true, raw: json.data, consulta: ep, cpf };
     } catch (e) {
+      if (e && e.name === 'AbortError') {
+        return { ok: false, error: 'Consulta expirou — tente novamente.' };
+      }
       return { ok: false, error: e.message || 'Falha na consulta' };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
   },
 
@@ -366,7 +378,16 @@ const FonteData = {
     return '';
   },
 
-  /** Certidão TJ — Cível, Criminal e Fiscal (proxy fontedata.php → FONTE_DATA_API_BASE/tj-certidao). */
+  /** Certidão negativa civil (PF) — FonteData ccd-pf. Docs: https://fontedata.com/docs */
+  async lookupCertidaoCivil(cpfDigits) {
+    const cpf = String(cpfDigits || '').replace(/\D/g, '');
+    if (cpf.length !== 11) {
+      return { ok: false, error: 'CPF inválido (11 dígitos).' };
+    }
+    return this.lookupCpfConsulta(cpf, 'ccd-pf');
+  },
+
+  /** Certidão TJ — Cível, Criminal e Fiscal (FonteData tj-certidao). */
   async lookupTjCertidao(docDigits) {
     const doc = String(docDigits || '').replace(/\D/g, '');
     if (doc.length !== 11 && doc.length !== 14) {
@@ -382,6 +403,7 @@ const FonteData = {
       const qs = new URLSearchParams({
         consulta: 'tj-certidao',
         cpf_cnpj: doc,
+        cpf: doc.length === 11 ? doc : '',
         cnpj: doc.length === 14 ? doc : '',
       });
       const res = await fetch(`${url}?${qs.toString()}`, {

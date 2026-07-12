@@ -24,6 +24,11 @@ if ($bucket === 'proposal-attachments') {
     if ($sub !== '' && (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub))) {
         soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
     }
+} elseif (in_array($bucket, ['partner-docs', 'ticket-docs', 'tim-docs', 'contestacao-docs', 'finance-docs', 'rh-demissao', 'rh-justificativa', 'rh-docs', 'monitoria-atendimento', 'partner-nf'], true)) {
+    $sub = trim(str_replace('\\', '/', $rawPath), '/');
+    if ($sub !== '' && (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub))) {
+        soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
+    }
 } else {
     $sub = preg_replace('/[^a-zA-Z0-9_-]/', '', $rawPath);
 }
@@ -33,10 +38,10 @@ if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
 }
 
 $file = $_FILES['file'];
-$maxMb = match ($bucket) {
-    'whatsapp-media' => 16,
-    'proposal-attachments' => 50,
-    'tim-docs', 'contestacao-docs', 'finance-docs', 'ticket-docs' => 25,
+$maxMb = match (true) {
+    $bucket === 'whatsapp-media' => 16,
+    $bucket === 'proposal-attachments' => 50,
+    in_array($bucket, ['tim-docs', 'contestacao-docs', 'finance-docs', 'ticket-docs', 'rh-docs', 'rh-justificativa', 'rh-demissao'], true) => 25,
     default => 5,
 };
 if ($file['size'] > $maxMb * 1024 * 1024) {
@@ -108,6 +113,19 @@ if ($bucket === 'proposal-attachments') {
 }
 
 $base = defined('UPLOAD_DIR') ? UPLOAD_DIR : (dirname(__DIR__) . '/uploads');
+if (!is_dir($base) && !mkdir($base, 0755, true)) {
+    soublu_json(['ok' => false, 'error' => 'Não foi possível criar pasta uploads.'], 500);
+}
+if (in_array($bucket, ['partner-docs', 'ticket-docs', 'tim-docs', 'contestacao-docs', 'finance-docs', 'rh-demissao', 'rh-justificativa', 'rh-docs', 'monitoria-atendimento', 'partner-nf'], true) && $sub !== '') {
+    $parts = array_values(array_filter(explode('/', $sub), static fn ($s) => $s !== ''));
+    if (count($parts) > 1) {
+        $last = (string) end($parts);
+        if (preg_match('/\.[a-z0-9]{1,16}$/i', $last)) {
+            array_pop($parts);
+            $sub = implode('/', $parts);
+        }
+    }
+}
 $dir = rtrim($base, '/\\') . '/' . $bucket;
 if ($sub !== '') {
     $dir .= '/' . $sub;
@@ -124,6 +142,8 @@ if (!move_uploaded_file($file['tmp_name'], $dest)) {
 
 $site = defined('SITE_URL') ? rtrim((string) SITE_URL, '/') : '';
 $publicPath = '/uploads/' . $bucket . ($sub !== '' ? '/' . $sub : '') . '/' . $name;
-$url = $site !== '' ? $site . $publicPath : $publicPath;
+$relServe = $bucket . ($sub !== '' ? '/' . $sub : '') . '/' . $name;
+$serveUrl = soublu_file_serve_url($relServe);
+$url = $serveUrl !== '' ? $serveUrl : ($site !== '' ? $site . $publicPath : $publicPath);
 
-soublu_json(['ok' => true, 'url' => $url, 'path' => $publicPath]);
+soublu_json(['ok' => true, 'url' => $url, 'path' => $publicPath, 'caminho' => $relServe]);

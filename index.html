@@ -15,11 +15,12 @@
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
   <script src="js/db-connect.js?v=97c411dbstable4"></script>
   <script src="js/config.js?v=97c411dbstable4" defer></script>
-  <script src="js/db.js?v=97c411pix1" defer></script>
+  <script src="js/db.js?v=97c411save4" defer></script>
   <script src="js/br-holidays.js?v=1781704178" defer></script>
   <script src="js/attendance-penalty.js?v=1781704178" defer></script>
   <script src="js/vendor-tier-points.js?v=1781704178" defer></script>
-  <script src="js/auth.js?v=97c411login1" defer></script>
+  <script>(function(g){if(!g||!g.location)return;var SK='soublu_session',LK='soublu_prt_loop';function role(){try{var r=g.sessionStorage.getItem(SK)||g.localStorage.getItem(SK);return r?String(JSON.parse(r).role||'').toLowerCase():'';}catch(e){return'';}}function inP(){return/(^|\/)pages(\/|$)/i.test(String(g.location.pathname||'').replace(/\\/g,'/'));}function adm(){var rel=inP()?'admin.html':'pages/admin.html';try{return new URL(rel,g.location.href).href;}catch(e){return rel;}}var rl=role();if(rl!=='portaria')return;var p=String(g.location.pathname||'');if(/employee\.html/i.test(p)){var n=parseInt(g.sessionStorage.getItem(LK)||'0',10)+1;if(n>12)return;g.sessionStorage.setItem(LK,String(n));g.location.replace(adm());return;}if(/admin\.html/i.test(p)){g.sessionStorage.removeItem(LK);g.SOUBLU_PORTARIA_BOOT=true;}})(window);</script>
+  <script src="js/auth.js?v=97c411port4" defer></script>
 </head>
 <body class="login-body">
 <div class="login-wrapper">

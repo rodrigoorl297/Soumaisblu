@@ -156,6 +156,69 @@
         <input type="hidden" id="${prefix}PropostaId" value="${esc(p.id)}"/>`);
     },
 
+    async _loadProposalById(propId) {
+      const id = String(propId || '').trim();
+      if (!id) return null;
+      if (this._drawerProposal && String(this._drawerProposal.id) === id) {
+        return this._drawerProposal;
+      }
+      if (this._proposal && String(this._proposal.id) === id) {
+        return this._proposal;
+      }
+      if (typeof DB.getProposal === 'function') {
+        const full = await DB.getProposal(id).catch(() => null);
+        if (full) return full;
+      }
+      const props = await DB.getProposals().catch(() => []);
+      return (props || []).find((x) => String(x.id) === id) || null;
+    },
+
+    async _findProposalByQuery(q) {
+      const raw = String(q || '').trim();
+      if (!raw) return null;
+      const ql = raw.toLowerCase();
+      const qCpf = raw.replace(/\D/g, '');
+      const matchLocal = (p) => {
+        const num = String(p.numero || p.id || '').toLowerCase();
+        const cpf = String(p.client_cpf || p.clientCpf || '').replace(/\D/g, '');
+        const cli = String(p.client_name || p.clientName || '').toLowerCase();
+        return num === ql || num.includes(ql)
+          || (qCpf.length >= 4 && cpf.includes(qCpf))
+          || cli.includes(ql);
+      };
+
+      // Busca direta na API (não depende do limite de 800 da lista).
+      if (DB.online && typeof supaReq === 'function') {
+        const tries = [];
+        tries.push(`?select=*&numero=eq.${encodeURIComponent(raw)}&limit=5`);
+        if (/^[a-zA-Z0-9_-]{6,}$/.test(raw)) {
+          tries.push(`?select=*&id=eq.${encodeURIComponent(raw)}&limit=1`);
+        }
+        if (qCpf.length >= 11) {
+          tries.push(`?select=*&clientCpf=eq.${encodeURIComponent(qCpf)}&limit=10`);
+          tries.push(`?select=*&client_cpf=eq.${encodeURIComponent(qCpf)}&limit=10`);
+        } else if (qCpf.length >= 4) {
+          tries.push(`?select=*&clientCpf=like.*${encodeURIComponent(qCpf)}*&limit=20`);
+          tries.push(`?select=*&client_cpf=like.*${encodeURIComponent(qCpf)}*&limit=20`);
+        }
+        if (raw.length >= 3 && !/^\d+$/.test(raw)) {
+          tries.push(`?select=*&clientName=ilike.*${encodeURIComponent(raw)}*&limit=20`);
+          tries.push(`?select=*&client_name=ilike.*${encodeURIComponent(raw)}*&limit=20`);
+          tries.push(`?select=*&numero=ilike.*${encodeURIComponent(raw)}*&limit=20`);
+        }
+        for (const params of tries) {
+          try {
+            const rows = await supaReq('GET', 'proposals', null, params);
+            const hit = (rows || []).find(matchLocal) || (rows || [])[0];
+            if (hit) return hit;
+          } catch { /* tenta próximo filtro */ }
+        }
+      }
+
+      const props = await DB.getProposals().catch(() => []);
+      return (props || []).find(matchLocal) || null;
+    },
+
     async buscarProposta(prefix) {
       const q = document.getElementById(`${prefix}PropostaBusca`)?.value?.trim();
       if (!q) {
@@ -164,17 +227,7 @@
       }
       showLoading('Buscando proposta...');
       try {
-        const props = await DB.getProposals().catch(() => []);
-        const ql = q.toLowerCase();
-        const found = (props || []).find((p) => {
-          const num = String(p.numero || p.id || '').toLowerCase();
-          const cpf = String(p.client_cpf || p.clientCpf || '').replace(/\D/g, '');
-          const qCpf = q.replace(/\D/g, '');
-          const cli = String(p.client_name || p.clientName || '').toLowerCase();
-          return num === ql || num.includes(ql)
-            || (qCpf.length >= 4 && cpf.includes(qCpf))
-            || cli.includes(ql);
-        });
+        const found = await this._findProposalByQuery(q);
         if (!found) {
           showToast('Proposta não encontrada.', 'warning');
           return;
@@ -264,6 +317,67 @@
       if (!rootId && String(vendor.role || '').toLowerCase() === 'parceiro') rootId = vendor.id;
       if (!rootId) return null;
       return DB.getPartnerByUserId(rootId).catch(() => null);
+    },
+
+    _parseProposalMeta(proposal) {
+      const raw = proposal?.meta;
+      if (typeof DB !== 'undefined' && typeof DB._parseProposalJsonField === 'function') {
+        return DB._parseProposalJsonField(raw);
+      }
+      if (raw && typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
+      if (typeof raw === 'string' && raw.trim()) {
+        try { return JSON.parse(raw); } catch { return {}; }
+      }
+      return {};
+    },
+
+    async _resolveComissaoCreditTarget(proposal, origemParceiro, pagoParceiro) {
+      const eq = await this._resolveEquipe(proposal);
+      const vendorId = eq.vendedorId;
+      if (!vendorId) return { targetId: null, label: null, eq, vendorId: null, partnerId: null };
+
+      // Crédito automático só para origem parceiro + pago comissão parceiro = SIM (conta do parceiro).
+      // Nunca credita vendedor automaticamente — evita o bug de comissão indevida.
+      if (origemParceiro !== 'SIM' || pagoParceiro !== 'SIM') {
+        return { targetId: null, label: null, eq, vendorId, partnerId: null };
+      }
+
+      const users = await DB.getUsers().catch(() => []);
+      const vendor = users.find((u) => String(u.id) === String(vendorId)) || null;
+      const partnerId = vendor?.partner_root_id
+        || (String(vendor?.role || '').toLowerCase() === 'parceiro' ? vendor.id : null);
+      const partner = partnerId ? users.find((u) => String(u.id) === String(partnerId)) : null;
+      return {
+        targetId: partner?.id || null,
+        label: partner?.id ? 'parceiro' : null,
+        eq,
+        vendorId,
+        partnerId: partner?.id || null,
+      };
+    },
+
+    async _sumComissaoContaCreditada(proposal, targetId) {
+      const proposalRef = String(proposal?.numero || proposal?.id || '');
+      const metaAmt = parseFloat(this._parseProposalMeta(proposal).comissao_conta_creditada);
+      let txSum = 0;
+      if (targetId && typeof DB.getTransactions === 'function') {
+        const txs = await DB.getTransactions(targetId).catch(() => []);
+        for (const t of txs || []) {
+          if (String(t.type || '').toLowerCase() !== 'credit') continue;
+          let meta = t.meta;
+          if (typeof meta === 'string') {
+            try { meta = JSON.parse(meta); } catch { meta = {}; }
+          }
+          meta = meta && typeof meta === 'object' ? meta : {};
+          if (meta.kind !== 'conta_credito_proposta') continue;
+          if (String(meta.proposal_ref || '') !== proposalRef) continue;
+          const amt = parseFloat(t.amount);
+          if (Number.isFinite(amt)) txSum += amt;
+        }
+        txSum = Math.round(txSum * 100) / 100;
+      }
+      const fromMeta = Number.isFinite(metaAmt) && metaAmt >= 0 ? metaAmt : 0;
+      return Math.max(fromMeta, txSum);
     },
 
     async _preencherBaixaComissao(proposal, prefix = 'fpd') {
@@ -374,16 +488,22 @@
       const origemParceiro = val(`${prefix}OrigemParceiro`);
       const pagoParceiro = val(`${prefix}PagoParceiro`);
       if (recebida !== 'SIM' || divergencia === 'SIM') return 'NÃO';
-      if (origemParceiro === 'SIM' && pagoParceiro !== 'SIM') return 'NÃO';
-      if (recebida === 'SIM') return 'SIM';
-      return '';
+      // Comissão automática só para propostas de parceiro — vendedores exigem definição manual.
+      if (origemParceiro !== 'SIM') return '';
+      if (pagoParceiro !== 'SIM') return 'NÃO';
+      return 'SIM';
     },
 
     _updateAptoComissao(prefix = 'fpd') {
       if (this._drawerAptoOverride) return;
       const apto = this._computeAptoComissao(prefix);
       const el = document.getElementById(`${prefix}AptoComissao`);
-      if (el && apto) el.value = apto;
+      if (!el) return;
+      if (apto === '') {
+        el.value = '';
+        return;
+      }
+      if (apto) el.value = apto;
     },
 
     async _preencherEquipePrejuizo(proposal, prefix = 'prej') {
@@ -567,8 +687,7 @@
         showToast('Selecione uma proposta.', 'warning');
         return;
       }
-      const props = await DB.getProposals().catch(() => []);
-      const p = props.find((x) => String(x.id) === String(propId));
+      const p = await this._loadProposalById(propId);
       if (!p) {
         showToast('Proposta não encontrada.', 'error');
         return;
@@ -586,28 +705,89 @@
         valor_comissao_recebida: valorComissao != null && !Number.isNaN(valorComissao) ? valorComissao : null,
       };
 
+      const origemParceiro = val(`${prefix}OrigemParceiro`) || null;
+      const pagoParceiro = val(`${prefix}PagoParceiro`) || null;
+      const aptoComissao = val(`${prefix}AptoComissao`) || null;
+      const sess = Auth.getSession();
+      const proposalNumero = p.numero || p.id;
+
       const op = {
         id: DB._genId ? DB._genId('fpo') : 'fpo' + Date.now(),
         type: 'baixa_comissao',
         proposal_id: propId,
-        proposal_numero: p.numero || p.id,
+        proposal_numero: proposalNumero,
         comissao_recebida: dados.comissaoRecebida,
         valor_comissao: dados.valorComissaoRecebida,
         divergencia_tabela: val(`${prefix}Divergencia`) || null,
         protocolo_divergencia: val(`${prefix}Protocolo`)?.trim() || '',
-        origem_parceiro: val(`${prefix}OrigemParceiro`) || null,
-        pago_comissao_parceiro: val(`${prefix}PagoParceiro`) || null,
+        origem_parceiro: origemParceiro,
+        pago_comissao_parceiro: pagoParceiro,
         origem_vendedor: val(`${prefix}OrigemVendedor`) || null,
-        apto_comissao: val(`${prefix}AptoComissao`) || null,
+        apto_comissao: aptoComissao,
         created_at: new Date().toISOString(),
-        created_by: Auth.getSession()?.id || 'admin',
+        created_by: sess?.id || 'admin',
       };
 
       showLoading('Salvando baixa de comissão...');
       try {
+        let creditInfo = null;
+        const shouldCredit = aptoComissao === 'SIM'
+          && valorComissao != null
+          && Number.isFinite(valorComissao)
+          && valorComissao > 0
+          && typeof DB.applyContaCorrenteMovement === 'function'
+          && origemParceiro === 'SIM'
+          && pagoParceiro === 'SIM';
+
+        if (shouldCredit) {
+          try {
+            const target = await this._resolveComissaoCreditTarget(p, origemParceiro, pagoParceiro);
+            if (!target.targetId) {
+              creditInfo = { ok: false, msg: 'Parceiro não encontrado para crédito.' };
+            } else {
+              const previouslyCredited = await this._sumComissaoContaCreditada(p, target.targetId);
+              const delta = Math.round((valorComissao - previouslyCredited) * 100) / 100;
+
+              if (delta > 0) {
+                const reason = `Baixa comissão — proposta ${proposalNumero} (${target.label})`;
+                const res = await DB.applyContaCorrenteMovement(
+                  target.targetId,
+                  'credito_proposta',
+                  delta,
+                  reason,
+                  sess?.id || 'admin',
+                  proposalNumero
+                );
+                creditInfo = {
+                  targetId: target.targetId,
+                  label: target.label,
+                  delta,
+                  previouslyCredited,
+                  newTotal: Math.round((previouslyCredited + delta) * 100) / 100,
+                  ok: !!res?.ok,
+                  balance: res?.balance ?? null,
+                };
+                op.conta_credito = creditInfo;
+              }
+            }
+          } catch (creditErr) {
+            creditInfo = { ok: false, msg: creditErr?.message || 'Falha no crédito' };
+            op.conta_credito = creditInfo;
+          }
+        }
+
+        const prevMeta = this._parseProposalMeta(p);
+        const metaPatch = { ...prevMeta };
+        if (creditInfo?.ok) {
+          metaPatch.comissao_conta_creditada = creditInfo.newTotal;
+          metaPatch.comissao_conta_creditada_em = new Date().toISOString();
+          metaPatch.comissao_conta_creditada_para = creditInfo.targetId;
+        }
+
         const updated = {
           ...p,
           ...dados,
+          meta: metaPatch,
           updatedAt: new Date().toISOString(),
           obs: typeof DB._appendProposalObsLine === 'function'
             ? DB._appendProposalObsLine(p.obs, `[BAIXA COMISSÃO] ${new Date().toLocaleString('pt-BR')}`)
@@ -618,7 +798,13 @@
         await saveOp(op);
         this._baixaOpsByProposal = null;
         this._drawerProposal = updated;
-        showToast('Baixa de comissão registrada.', 'success');
+        if (creditInfo?.ok) {
+          showToast(`Baixa registrada. ${fmtMoney(creditInfo.delta)} creditado na conta corrente.`, 'success');
+        } else if (creditInfo && !creditInfo.ok) {
+          showToast('Baixa registrada, mas o crédito em conta corrente falhou.', 'warning');
+        } else {
+          showToast('Baixa de comissão registrada.', 'success');
+        }
         if (prefix === 'fpd') {
           await this._renderDrawerTab('historico');
           if (window.Proposals?.renderAdminList) await Proposals.renderAdminList();
@@ -658,8 +844,7 @@
       if (!status) { showToast('Selecione o status (procedente/improcedente).', 'warning'); return; }
       if (!descricao) { showToast('Informe a descrição do erro.', 'warning'); return; }
 
-      const props = await DB.getProposals().catch(() => []);
-      const p = props.find((x) => String(x.id) === String(propId));
+      const p = await this._loadProposalById(propId);
       if (!p) { showToast('Proposta não encontrada.', 'error'); return; }
 
       const eq = this._equipeIds || await this._resolveEquipe(p);
@@ -767,8 +952,7 @@
       }
       if (!parceiroNome) { showToast('Informe o parceiro.', 'warning'); return; }
 
-      const props = await DB.getProposals().catch(() => []);
-      const p = props.find((x) => String(x.id) === String(propId));
+      const p = await this._loadProposalById(propId);
       if (!p) { showToast('Proposta não encontrada.', 'error'); return; }
 
       const totalDebito = valorEstorno + custas;

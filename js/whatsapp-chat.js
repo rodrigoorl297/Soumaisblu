@@ -1,10 +1,23 @@
-﻿/* SOU+BLU — Painel WhatsApp (Evolution API, estilo WhatsApp Web) */
+/* SOU+BLU — Painel WhatsApp (Evolution API, estilo WhatsApp Web) */
 const WhatsAppChat = (() => {
-  const POLL_CONNECT_MS = 12000;
-  const POLL_MSG_MS = 15000;
-  const POLL_CHATS_MS = 25000;
+  /* Polls conservadores — events ~3s (cursor leve); chats/msg lentos; status skip_qr MySQL-fast. */
+  const POLL_CONNECT_MS = 8000;
+  const POLL_MSG_MS = 12000;
+  const POLL_CHATS_MS = 45000;
+  const POLL_EVENTS_MS = 12000;
+  const EVENTS_CHATS_MIN_GAP_MS = 10000;
+  const AVATAR_WARM_MAX = 6;
+  const AVATAR_WARM_GAP_MS = 350;
+  const AVATAR_IO_MARGIN = '120px';
+  const AVATAR_FETCH_PARALLEL = 3;
+  /** Repair sob demanda: poucos em paralelo para não saturar Evolution/PHP. */
+  const MEDIA_REPAIR_MAX = 5;
+  const MEDIA_REPAIR_GAP_MS = 280;
+  const RECORD_TIMESLICE_MS = 250;
+  const MIN_RECORD_MS = 400;
 
   let _configured = null;
+  let _provider = 'evolution';
   let _syncEnabled = false;
   let _contactsMax = 30;
   let _status = 'close';
@@ -14,84 +27,78 @@ const WhatsAppChat = (() => {
   let _chatFilter = '';
   let _listFilter = 'all';
   let _activeChatId = null;
-  const CRM_SHELL_VER = '9';
-  const THREAD_SHELL_VER = '2';
+  const CRM_SHELL_VER = '10';
+  const THREAD_SHELL_VER = '10';
   let _messages = [];
   let _msgFingerprint = '';
   let _pollConnect = null;
   let _pollMsg = null;
   let _pollChats = null;
+  let _pollEvents = null;
+  let _eventsSince = 0;
   let _connectPollN = 0;
   let _connectPollStarted = 0;
+  let _lastEventsChatsLoad = 0;
   let _userId = null;
   let _qr = null;
   let _syncing = false;
   let _emojiOpen = false;
-  let _emojiCategory = 'smileys';
+  let _emojiPickerLoading = false;
   let _kanbanMode = false;
-  let _kanbanStages = [
-    { id: 'novo', name: 'Novo Contato' },
-    { id: 'atendimento', name: 'Atendimento' },
-    { id: 'proposta', name: 'Proposta' },
-    { id: 'contrato', name: 'Contrato' },
-    { id: 'cancelado', name: 'Cancelado' },
-  ];
+  function getKanbanStages() {
+    try {
+      const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+      const key = 'wa_cols_v3_' + ((session && session.id) || 'x');
+      const r = localStorage.getItem(key);
+      if (r) {
+        const parsed = JSON.parse(r);
+        if (parsed && Array.isArray(parsed) && parsed.length >= 2) {
+          return parsed;
+        }
+      }
+    } catch(e) {}
+    return [
+      { id: 'novo',         name: 'Novo contato',  color: '#8696a0' },
+      { id: 'em_contato',   name: 'Em contato',    color: '#2f81f7' },
+      { id: 'apresentacao', name: 'Apresentação',  color: '#a371f7' },
+      { id: 'negociacao',   name: 'Negociação',    color: '#e3b341' },
+      { id: 'ganho',        name: 'Ganho',         color: '#3fb950' },
+      { id: 'perdido',      name: 'Perdido',       color: '#f85149' }
+    ];
+  }
+  let _kanbanStages = getKanbanStages();
   let _monitorUserId = '';
-  let _mediaRecorder = null;
-  let _audioChunks = [];
+  let _waRecorder = null;
   let _recording = false;
-  let _recordStream = null;
+  let _recordStarting = false;
+  let _recordStopRequested = false;
+  let _recordStartedAt = 0;
+  let _recordMode = 'idle';
+  let _recordCancelled = false;
+  let _recordTimerId = null;
+  let _pendingAudioBlob = null;
+  let _pendingAudioMime = '';
+  let _previewObjectUrl = null;
+  let _previewAudioEl = null;
+  let _previewPlaying = false;
+  let _audioContext = null;
+  let _analyserNode = null;
+  let _waveAnimId = null;
+  let _micClickTs = 0;
   let _mirrorMode = true;
-
-  const EMOJI_RECENT_KEY = 'soublu_wa_recent_emoji';
-  const EMOJI_CATEGORIES = [
-    { id: 'recent', icon: '🕐', title: 'Recentes' },
-    { id: 'smileys', icon: '😀', title: 'Rostos e pessoas' },
-    { id: 'gestures', icon: '👋', title: 'Gestos' },
-    { id: 'hearts', icon: '❤️', title: 'Corações' },
-    { id: 'animals', icon: '🐶', title: 'Animais' },
-    { id: 'food', icon: '🍕', title: 'Comida' },
-    { id: 'objects', icon: '⚽', title: 'Objetos' },
-    { id: 'symbols', icon: '✅', title: 'Símbolos' },
-  ];
-  const EMOJI_SETS = {
-    smileys: ['😀','😃','😄','😁','😆','😅','🤣','😂','🙂','🙃','😉','😊','😇','🥰','😍','🤩','😘','😗','😚','😙','🥲','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤮','🥵','🥶','🥴','😵','🤯','🤠','🥳','🥸','😎','🤓','🧐','😕','😟','🙁','☹️','😮','😯','😲','😳','🥺','😦','😧','😨','😰','😥','😢','😭','😱','😖','😣','😞','😓','😩','😫','🥱','😤','😡','😠','🤬','😈','👿','💀','☠️','💩','🤡','👹','👺','👻','👽','👾','🤖'],
-    gestures: ['👋','🤚','🖐️','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🤝','🙏','✍️','💅','🤳','💪','🦾','🦿','🦵','🦶','👂','🦻','👃','🧠','🫀','🫁','🦷','🦴','👀','👁️','👅','👄','💋','🫦'],
-    hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','♥️','🫶','💑','💏','👩‍❤️‍👨','👨‍❤️‍👨','👩‍❤️‍👩'],
-    animals: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐻‍❄️','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🙈','🙉','🙊','🐔','🐧','🐦','🐤','🦆','🦅','🦉','🦇','🐺','🐗','🐴','🦄','🐝','🪱','🐛','🦋','🐌','🐞','🐜','🪰','🪲','🪳','🦟','🦗','🕷️','🦂','🐢','🐍','🦎','🦖','🦕','🐙','🦑','🦐','🦞','🦀','🐡','🐠','🐟','🐬','🐳','🐋','🦈','🐊','🐅','🐆','🦓','🦍','🦧','🐘','🦛','🦏','🐪','🐫','🦒','🦘','🦬','🐃','🐂','🐄','🐎','🐖','🐏','🐑','🦙','🐐','🦌','🐕','🐩','🦮','🐕‍🦺','🐈','🐈‍⬛','🪶','🐓','🦃','🦤','🦚','🦜','🦢','🦩','🕊️','🐇','🦝','🦨','🦡','🦫','🦦','🦥','🐁','🐀','🐿️','🦔'],
-    food: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶️','🫑','🌽','🥕','🫒','🧄','🧅','🥔','🍠','🥐','🥯','🍞','🥖','🥨','🧀','🥚','🍳','🧈','🥞','🧇','🥓','🥩','🍗','🍖','🦴','🌭','🍔','🍟','🍕','🫓','🥪','🥙','🧆','🌮','🌯','🫔','🥗','🥘','🫕','🥫','🍝','🍜','🍲','🍛','🍣','🍱','🥟','🦪','🍤','🍙','🍚','🍘','🍥','🥠','🥮','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','🌰','🥜','🍯','🥛','🍼','☕','🫖','🍵','🧃','🥤','🧋','🍶','🍺','🍻','🥂','🍷','🥃','🍸','🍹','🧉','🍾','🧊'],
-    objects: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🥅','⛳','🪁','🏹','🎣','🤿','🥊','🥋','🎽','🛹','🛼','🛷','⛸️','🥌','🎿','⛷️','🏂','🪂','🏋️','🤼','🤸','⛹️','🤺','🤾','🏌️','🏇','🧘','🏄','🏊','🤽','🚣','🧗','🚵','🚴','🏆','🥇','🥈','🥉','🏅','🎖️','🏵️','🎗️','🎫','🎟️','🎪','🤹','🎭','🩰','🎨','🎬','🎤','🎧','🎼','🎹','🥁','🪘','🎷','🎺','🪗','🎸','🪕','🎻','🎲','♟️','🎯','🎳','🎮','🎰','🧩'],
-    symbols: ['✅','❌','❓','❗','‼️','⁉️','💯','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🟤','🔶','🔷','🔸','🔹','🔺','🔻','💠','🔘','🔳','🔲','▪️','▫️','◾','◽','◼️','◻️','🟥','🟧','🟨','🟩','🟦','🟪','⬛','⬜','🟫','🔈','🔇','🔉','🔊','🔔','🔕','📣','📢','💤','💢','💬','💭','🗯️','♨️','💈','🛑','🚫','⛔','📛','☢️','☣️','⚠️','🚸','🔱','⚜️','🔰','♻️','✳️','❇️','©️','®️','™️','#️⃣','*️⃣','0️⃣','1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟','🔠','🔡','🔢','🔣','🔤','🅰️','🆎','🅱️','🆑','🆒','🆓','ℹ️','🆔','Ⓜ️','🆕','🆖','🅾️','🆗','🅿️','🆘','🆙','🆚','🈁','🈂️','🈷️','🈶','🈯','🉐','🈹','🈚','🈲','🉑','🈸','🈴','🈳','㊗️','㊙️','🈺','🈵'],
-  };
-
-  function kanbanStageId(chat) {
-    const raw = chat?.kanban_stage || 'novo';
-    const legacy = {
-      novo_contato: 'novo',
-      em_atendimento: 'atendimento',
-      negociacao: 'proposta',
-      finalizado: 'cancelado',
-    };
-    return legacy[raw] || raw;
-  }
-
-  function getRecentEmojis() {
-    try {
-      const raw = localStorage.getItem(EMOJI_RECENT_KEY);
-      const list = raw ? JSON.parse(raw) : [];
-      return Array.isArray(list) ? list.slice(0, 24) : [];
-    } catch (_) {
-      return [];
-    }
-  }
-
-  function pushRecentEmoji(emoji) {
-    const list = getRecentEmojis().filter(e => e !== emoji);
-    list.unshift(emoji);
-    try {
-      localStorage.setItem(EMOJI_RECENT_KEY, JSON.stringify(list.slice(0, 24)));
-    } catch (_) { /* noop */ }
-  }
+  let _connectInFlight = null;
+  let _qrFetchPromise = null;
+  let _lastConnectError = '';
+  let _profilePic = null;
+  let _profileName = '';
+  let _profileLoadPromise = null;
+  let _profilePicRequested = false;
+  let _sessionLive = false;
+  let _serverChatsCount = 0;
+  let _lastSendAt = 0;
+  /** Etapas salvas localmente aguardando confirmação do servidor (race refresh/poll). */
+  let _pendingKanbanStages = {};
+  const KANBAN_PENDING_MS = 45000;
 
   function insertEmojiAtCursor(emoji) {
     const input = document.getElementById('waMsgInput');
@@ -105,8 +112,6 @@ const WhatsAppChat = (() => {
     input.selectionEnd = pos;
     input.dispatchEvent(new Event('input', { bubbles: true }));
     input.focus();
-    pushRecentEmoji(emoji);
-    renderEmojiPanel();
   }
 
   function closeEmojiPanel() {
@@ -115,7 +120,54 @@ const WhatsAppChat = (() => {
     document.getElementById('waEmojiBtn')?.classList.remove('is-active');
   }
 
-  function toggleEmojiPanel() {
+  async function ensureEmojiPicker() {
+    const mount = document.getElementById('waEmojiMount');
+    if (!mount || mount.dataset.mounted === '1') return;
+    if (_emojiPickerLoading) return;
+    _emojiPickerLoading = true;
+    const t0 = Date.now();
+    try {
+      if (!window.WaEmojiMart?.mount) {
+        await new Promise((resolve, reject) => {
+          const existing = document.querySelector('script[data-wa-emoji-mart]');
+          if (existing) {
+            existing.addEventListener('load', resolve, { once: true });
+            existing.addEventListener('error', reject, { once: true });
+            return;
+          }
+          const s = document.createElement('script');
+          s.type = 'module';
+          s.src = '../js/wa-emoji-mart.js';
+          s.dataset.waEmojiMart = '1';
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+        let tries = 0;
+        while (!window.WaEmojiMart?.mount && tries < 40) {
+          await new Promise((r) => setTimeout(r, 50));
+          tries++;
+        }
+      }
+      if (!window.WaEmojiMart?.mount) throw new Error('Emoji Mart indisponível');
+      const dark = document.documentElement.classList.contains('dark')
+        || window.matchMedia?.('(prefers-color-scheme: dark)')?.matches;
+      await window.WaEmojiMart.mount(mount, {
+        theme: dark ? 'dark' : 'light',
+        onSelect: (native) => insertEmojiAtCursor(native),
+      });
+      mount.dataset.mounted = '1';
+      if (typeof window._dbgSessionLog === 'function') {
+        window._dbgSessionLog('whatsapp-chat.js:ensureEmojiPicker', 'emoji mart loaded', {
+          ms: Date.now() - t0,
+        }, 'H-emoji-mart');
+      }
+    } finally {
+      _emojiPickerLoading = false;
+    }
+  }
+
+  async function toggleEmojiPanel() {
     const panel = document.getElementById('waEmojiPanel');
     const btn = document.getElementById('waEmojiBtn');
     if (!panel) return;
@@ -123,32 +175,36 @@ const WhatsAppChat = (() => {
     panel.classList.toggle('is-open', _emojiOpen);
     btn?.classList.toggle('is-active', _emojiOpen);
     if (_emojiOpen) {
-      if (!panel.dataset.rendered) {
-        renderEmojiPanel();
-        panel.dataset.rendered = '1';
-      } else {
-        renderEmojiPanel();
+      try {
+        await ensureEmojiPicker();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast('Não foi possível carregar emojis.', 'error');
+        closeEmojiPanel();
       }
     }
   }
 
-  function renderEmojiPanel() {
-    const grid = document.getElementById('waEmojiGrid');
-    const title = document.getElementById('waEmojiTitle');
-    if (!grid) return;
-    const recent = getRecentEmojis();
-    if (_emojiCategory === 'recent' && !recent.length) {
-      _emojiCategory = 'smileys';
+  let _twemojiPromise = null;
+  function ensureTwemoji() {
+    if (window.twemoji) return Promise.resolve(window.twemoji);
+    if (!_twemojiPromise) {
+      _twemojiPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js';
+        s.crossOrigin = 'anonymous';
+        s.onload = () => resolve(window.twemoji);
+        s.onerror = reject;
+        document.head.appendChild(s);
+      });
     }
-    const cat = EMOJI_CATEGORIES.find(c => c.id === _emojiCategory) || EMOJI_CATEGORIES[1];
-    if (title) title.textContent = cat.title;
-    const emojis = _emojiCategory === 'recent' ? recent : (EMOJI_SETS[_emojiCategory] || []);
-    grid.innerHTML = emojis.map(e =>
-      `<button type="button" class="wa-emoji-item" data-emoji="${esc(e)}" title="${esc(e)}">${e}</button>`
-    ).join('');
-    document.querySelectorAll('.wa-emoji-tab').forEach(tab => {
-      tab.classList.toggle('is-active', tab.dataset.cat === _emojiCategory);
-    });
+    return _twemojiPromise;
+  }
+
+  function applyTwemoji(root) {
+    if (!root) return;
+    ensureTwemoji().then((tw) => {
+      tw.parse(root, { folder: 'svg', ext: '.svg', className: 'wa-twemoji' });
+    }).catch(() => { /* noop */ });
   }
 
   function bindEmojiEvents() {
@@ -160,22 +216,106 @@ const WhatsAppChat = (() => {
       e.stopPropagation();
       toggleEmojiPanel();
     });
-    panel?.addEventListener('click', (e) => {
-      const item = e.target.closest('.wa-emoji-item');
-      if (item?.dataset.emoji) {
-        insertEmojiAtCursor(item.dataset.emoji);
-        return;
-      }
-      const tab = e.target.closest('.wa-emoji-tab');
-      if (tab?.dataset.cat) {
-        _emojiCategory = tab.dataset.cat;
-        renderEmojiPanel();
-      }
-    });
     document.addEventListener('click', (e) => {
       if (!_emojiOpen) return;
       if (e.target.closest('#waEmojiPanel') || e.target.closest('#waEmojiBtn')) return;
       closeEmojiPanel();
+    });
+    panel?.addEventListener('click', (e) => e.stopPropagation());
+  }
+
+  function kanbanStageId(chat) {
+    const raw = chat?.kanban_stage || 'novo';
+    const legacy = {
+      'novo_contato': 'novo',
+      'atendimento': 'em_contato',
+      'em_atendimento': 'em_contato',
+      'proposta': 'negociacao',
+      'negociacao': 'negociacao',
+      'contrato': 'ganho',
+      'cancelado': 'perdido',
+      'finalizado': 'perdido'
+    };
+    return legacy[raw] || raw;
+  }
+
+  function normalizeKanbanStage(stage) {
+    return kanbanStageId({ kanban_stage: stage || 'novo' });
+  }
+
+  function prunePendingKanbanStages() {
+    const now = Date.now();
+    Object.keys(_pendingKanbanStages).forEach((id) => {
+      if (now - (_pendingKanbanStages[id]?.ts || 0) > KANBAN_PENDING_MS) {
+        delete _pendingKanbanStages[id];
+      }
+    });
+  }
+
+  function setPendingKanbanStage(chatId, stage) {
+    if (!chatId) return;
+    _pendingKanbanStages[chatId] = { stage: normalizeKanbanStage(stage), ts: Date.now() };
+  }
+
+  function clearPendingKanbanStage(chatId, serverStage) {
+    const pending = _pendingKanbanStages[chatId];
+    if (!pending) return;
+    if (!serverStage || normalizeKanbanStage(serverStage) === pending.stage) {
+      delete _pendingKanbanStages[chatId];
+    }
+  }
+
+  function resolveKanbanStage(chatId, serverStage, prevStage) {
+    prunePendingKanbanStages();
+    const server = normalizeKanbanStage(serverStage || 'novo');
+    const pending = _pendingKanbanStages[chatId];
+    if (pending) {
+      if (server === pending.stage) {
+        delete _pendingKanbanStages[chatId];
+        return server;
+      }
+      return pending.stage;
+    }
+    const prev = normalizeKanbanStage(prevStage || 'novo');
+    if (prev !== server && prev !== 'novo') {
+      return prev;
+    }
+    return server;
+  }
+
+  function applyIncomingChats(prevChats, incoming) {
+    const inc = incoming || [];
+    if (!inc.length) return prevChats || [];
+    const prevById = {};
+    (prevChats || []).forEach((c) => {
+      if (c?.id) prevById[c.id] = c;
+    });
+    return inc.map((c) => {
+      if (!c?.id) return c;
+      const prev = prevById[c.id];
+      const stage = resolveKanbanStage(c.id, c.kanban_stage, prev?.kanban_stage);
+      if (stage === normalizeKanbanStage(c.kanban_stage || 'novo')) {
+        return c;
+      }
+      return { ...c, kanban_stage: stage };
+    });
+  }
+
+  function mergeChatsList(prevChats, incoming) {
+    const inc = incoming || [];
+    if (!inc.length && (prevChats || []).length) return prevChats;
+    const prevById = {};
+    (prevChats || []).forEach((c) => {
+      if (c?.id) prevById[c.id] = c;
+    });
+    return (incoming || []).map((c) => {
+      if (!c?.id) return c;
+      const prev = prevById[c.id];
+      const stage = resolveKanbanStage(c.id, c.kanban_stage, prev?.kanban_stage);
+      if (stage === normalizeKanbanStage(c.kanban_stage || 'novo')) {
+        return c;
+      }
+      return { ...c, kanban_stage: stage };
     });
   }
 
@@ -190,10 +330,33 @@ const WhatsAppChat = (() => {
     _phone = null;
     _rebindRequired = false;
     _syncing = false;
+    _sessionLive = false;
+    _serverChatsCount = 0;
+    _pendingKanbanStages = {};
+    _profilePic = null;
+    _profileName = null;
+    _profilePicRequested = false;
+    try {
+      _avatarLoadedIds.clear();
+      _avatarMissingIds.clear();
+      _avatarFetchQueue.length = 0;
+      _avatarFetchInflight = 0;
+    } catch (_) { /* sets podem ainda não existir no boot */ }
+    try { window._waContactCache = {}; } catch (_) { /* noop */ }
+  }
+
+  function isComposeConnected() {
+    return isEffectivelyOpen();
   }
 
   function isEffectivelyOpen() {
-    return _status === 'open' && !_rebindRequired;
+    if (_rebindRequired) return false;
+    if (_status === 'connecting') return false;
+    return _status === 'open' && _sessionLive;
+  }
+
+  function canLoadWaChats() {
+    return isEffectivelyOpen() || _status === 'connecting';
   }
 
   function bindSessionUser() {
@@ -202,9 +365,36 @@ const WhatsAppChat = (() => {
     const prev = sessionStorage.getItem('soublu_wa_active_uid');
     if (prev && prev !== uid) {
       hardResetLocalState();
+      _rebindRequired = true;
+      stopPollers();
+      if (typeof showToast === 'function') {
+        showToast('Sessão trocada. Conecte o WhatsApp deste usuário.', 'info');
+      }
+    }
+    if (_userId && _userId !== uid) {
+      hardResetLocalState();
+      _rebindRequired = true;
+      stopPollers();
     }
     sessionStorage.setItem('soublu_wa_active_uid', uid);
     _userId = uid;
+    _monitorUserId = '';
+    return true;
+  }
+
+  function assertResponseUser(data) {
+    if (!data || data.user_id == null || data.user_id === '') return true;
+    const sid = _userId || (typeof Auth !== 'undefined' ? Auth.getSession()?.id : null);
+    if (!sid) return true;
+    if (String(data.user_id) !== String(sid)) {
+      hardResetLocalState();
+      _rebindRequired = true;
+      if (typeof showToast === 'function') {
+        showToast('Sessão trocou. Recarregue a página.', 'warning');
+      }
+      try { location.reload(); } catch (_) { /* noop */ }
+      return false;
+    }
     return true;
   }
 
@@ -215,12 +405,6 @@ const WhatsAppChat = (() => {
       hardResetLocalState();
       _rebindRequired = true;
       notifyKanbanState();
-      // #region agent log
-      try {
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:resetSession', message: 'reset session done', data: { clearData: !!clearData, rebindRequired: true }, timestamp: Date.now(), hypothesisId: 'isolate' }) }).catch(() => {});
-      } catch (_) {}
-      // #endregion
-      await refreshStatus({ refreshQr: true });
       if (typeof showToast === 'function') {
         showToast(clearData ? 'WhatsApp reiniciado. Escaneie o QR com seu número.' : 'Sessão WhatsApp encerrada.', 'success');
       }
@@ -263,7 +447,10 @@ const WhatsAppChat = (() => {
       'Content-Type': 'application/json',
     };
 
-    const url = apiUrl(action, method === 'GET' ? { user_id: userId, ...(opts.query || {}) } : { user_id: userId });
+    // apikey também vai na URL: alguns servidores (Apache/Locaweb) removem
+    // o header X-API-Key antes do PHP, causando "Não autorizado".
+    const baseParams = { user_id: userId, apikey: key };
+    const url = apiUrl(action, { ...baseParams, ...(opts.query || {}) });
     const init = { method, headers };
 
     if (method !== 'GET' && opts.body) {
@@ -276,6 +463,9 @@ const WhatsAppChat = (() => {
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
       throw new Error(data.error || `Erro HTTP ${res.status}`);
+    }
+    if (!assertResponseUser(data)) {
+      throw new Error('Sessão trocou. Recarregue a página.');
     }
     return data;
   }
@@ -290,13 +480,14 @@ const WhatsAppChat = (() => {
   }
 
   async function ensureSchema() {
-    if (sessionStorage.getItem('soublu_wa_schema') === '1') return;
+    const schemaVer = 'wa85';
+    if (sessionStorage.getItem(`soublu_wa_schema_${schemaVer}`) === '1') return;
     const c = cfg();
     try {
-      await fetch(`${apiBase()}/api/migrate-whatsapp.php`, {
+      await fetch(`${apiBase()}/api/migrate-whatsapp.php?force=1&apikey=${encodeURIComponent(c.API_KEY || '')}`, {
         headers: { 'X-API-Key': c.API_KEY || '', apikey: c.API_KEY || '' },
       });
-      sessionStorage.setItem('soublu_wa_schema', '1');
+      sessionStorage.setItem(`soublu_wa_schema_${schemaVer}`, '1');
     } catch (_) { /* noop */ }
   }
 
@@ -332,14 +523,171 @@ const WhatsAppChat = (() => {
     return d.length >= 10 && d.length <= 13;
   }
 
+  function _normStr(s) {
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function _lookupContactName(phone) {
+    if (!phone) return '';
+    const digits = String(phone).replace(/\D/g, '');
+    if (!digits) return '';
+    // Tenta cruzar com clientes do sistema (DB)
+    try {
+      if (typeof DB !== 'undefined') {
+        const cached = window._waContactCache || (window._waContactCache = {});
+        if (cached[digits] !== undefined) return cached[digits];
+        // Busca síncrona no localStorage (clientes)
+        const clientsRaw = localStorage.getItem('soublu_clients');
+        if (clientsRaw) {
+          const clients = JSON.parse(clientsRaw);
+          const match = (clients || []).find(c => {
+            const cp = String(c.cpf || c.phone1 || c.phone2 || '').replace(/\D/g, '');
+            const p1 = String(c.phone1 || '').replace(/\D/g, '');
+            const p2 = String(c.phone2 || '').replace(/\D/g, '');
+            return p1 === digits || p2 === digits ||
+              p1.slice(-9) === digits.slice(-9) || p2.slice(-9) === digits.slice(-9);
+          });
+          if (match) { cached[digits] = match.name || ''; return cached[digits]; }
+        }
+      }
+    } catch (_) { /* noop */ }
+    return '';
+  }
+
   function displayContactName(chat) {
     const name = String(chat?.contact_name || '').trim();
-    if (name.length >= 3 && !/^\d{10,}$/.test(name.replace(/\D/g, ''))) {
+    const phone = String(chat?.contact_phone || '').replace(/\D/g, '');
+    const lower = name.toLowerCase();
+    if (['você', 'voce', 'you', 'contato', 'contact'].includes(lower)) {
+      // nome genérico do WhatsApp — tentar outras fontes
+    } else if (name.length >= 3 && !/^\d{10,}$/.test(name.replace(/\D/g, ''))) {
       return name;
     }
-    const phone = String(chat?.contact_phone || '').replace(/\D/g, '');
+    // Tenta cruzar com base de clientes/leads do sistema
+    const fromBase = _lookupContactName(phone);
+    if (fromBase) return fromBase;
+    // Fallback: número formatado
     if (isPlausiblePhone(phone)) return fmtPhone(phone);
     return 'Contato';
+  }
+
+  function priorityMeta(dealTags) {
+    const raw = String(dealTags || '').toLowerCase();
+    if (raw.includes('urgente') || raw.includes('urgent')) {
+      return { priority: 'Urgente', priorityClass: 'priority-urgente' };
+    }
+    if (raw.includes('alta') || raw.includes('high')) {
+      return { priority: 'Alta', priorityClass: 'priority-alta' };
+    }
+    if (raw.includes('baixa') || raw.includes('low')) {
+      return { priority: 'Baixa', priorityClass: 'priority-baixa' };
+    }
+    if (raw.includes('média') || raw.includes('media') || raw.includes('medium')) {
+      return { priority: 'Média', priorityClass: 'priority-media' };
+    }
+    return { priority: 'Média', priorityClass: 'priority-media' };
+  }
+
+  function chatDedupePhoneTail(digits) {
+    let d = String(digits || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length > 11 && d.startsWith('55')) d = d.slice(2);
+    if (d.length >= 11) return d.slice(-11);
+    return d.length >= 10 ? d : '';
+  }
+
+  function chatDedupeKey(chat) {
+    let phone = String(chat?.contact_phone || '').replace(/\D/g, '');
+    if (phone.length < 10) {
+      const m = String(chat?.remote_jid || '').toLowerCase().match(/^(\d{10,15})@/);
+      if (m) phone = m[1];
+    }
+    const tail = chatDedupePhoneTail(phone);
+    if (tail) return `p:${tail}`;
+    const name = String(chat?.contact_name || '').trim().toLowerCase();
+    if (name.length >= 3 && !/^\d{10,}$/.test(name.replace(/\D/g, ''))) {
+      return `n:${name}`;
+    }
+    return `id:${chat?.id || ''}`;
+  }
+
+  function chatDedupeKeys(chat) {
+    const keys = [chatDedupeKey(chat)];
+    let phone = String(chat?.contact_phone || '').replace(/\D/g, '');
+    if (phone.length < 10) {
+      const m = String(chat?.remote_jid || '').toLowerCase().match(/^(\d{10,15})@/);
+      if (m) phone = m[1];
+    }
+    const tail = chatDedupePhoneTail(phone);
+    if (tail) keys.push(`p:${tail}`);
+    const name = String(chat?.contact_name || '').trim().toLowerCase();
+    if (name.length >= 3 && !/^\d{10,}$/.test(name.replace(/\D/g, ''))) {
+      keys.push(`n:${name}`);
+    }
+    return [...new Set(keys)];
+  }
+
+  function chatDedupeScore(chat) {
+    let score = 0;
+    const phone = String(chat?.contact_phone || '').replace(/\D/g, '');
+    if (phone.length >= 10) score += 8;
+    const jid = String(chat?.remote_jid || '').toLowerCase();
+    if (jid && !jid.endsWith('@lid')) score += 4;
+    const name = String(chat?.contact_name || '').trim();
+    if (name.length >= 3 && !/^\d{10,}$/.test(name.replace(/\D/g, ''))) score += 2;
+    score += (Date.parse(chat?.last_message_at || chat?.created_at || '') || 0) / 1e12;
+    return score;
+  }
+
+  function dedupeChatsByPhone(chats) {
+    const byCanon = new Map();
+    const keyToCanon = new Map();
+    (chats || []).forEach((c) => {
+      if (!c?.id) return;
+      const keys = chatDedupeKeys(c);
+      let canon = null;
+      for (const k of keys) {
+        if (keyToCanon.has(k)) {
+          canon = keyToCanon.get(k);
+          break;
+        }
+      }
+      if (!canon) canon = keys[0];
+      keys.forEach((k) => keyToCanon.set(k, canon));
+      const existing = byCanon.get(canon);
+      if (!existing || chatDedupeScore(c) >= chatDedupeScore(existing)) {
+        byCanon.set(canon, c);
+      }
+    });
+    return Array.from(byCanon.values());
+  }
+
+  async function loadOwnProfile(force = false) {
+    if (!force && _profilePic) {
+      return { name: _profileName, pictureUrl: _profilePic };
+    }
+    if (_profileLoadPromise && !force) return _profileLoadPromise;
+    const run = (async () => {
+      try {
+        const prof = await withTimeout(
+          api('fetch_profile', { query: { quick: '1' } }),
+          15000,
+          'Carregar perfil'
+        );
+        const name = String(prof?.profile?.name || '').trim();
+        const pic = String(prof?.profile?.pictureUrl || '').trim();
+        if (name) _profileName = name;
+        if (pic) _profilePic = pic;
+        notifyKanbanState();
+        return { name: _profileName, pictureUrl: _profilePic };
+      } catch (_) {
+        return { name: _profileName, pictureUrl: _profilePic };
+      } finally {
+        _profileLoadPromise = null;
+      }
+    })();
+    _profileLoadPromise = run;
+    return run;
   }
 
   function humanPreview(preview) {
@@ -368,19 +716,162 @@ const WhatsAppChat = (() => {
     return '?';
   }
 
-  function avatarSrc(chat) {
-    const u = chat?.contact_avatar_url;
-    return u ? mediaSrc(u) : '';
+  function avatarProxyUrl(chatId) {
+    if (!chatId) return '';
+    const c = cfg();
+    const uid = _userId || (typeof Auth !== 'undefined' ? Auth.getSession()?.id : '') || '';
+    if (!uid) return '';
+    const key = encodeURIComponent(c.API_KEY || '');
+    return `${apiBase()}/api/whatsapp_api.php?action=avatar_image&chat_id=${encodeURIComponent(chatId)}&user_id=${encodeURIComponent(uid)}&apikey=${key}`;
   }
+
+  function avatarSrc(chat) {
+    const chatId = chat?.id;
+    if (chatId) return avatarProxyUrl(chatId);
+    const u = chat?.contact_avatar_url;
+    if (!u) return '';
+    return mediaSrc(u);
+  }
+
+  let _avatarObserver = null;
+  let _avatarFetchInflight = 0;
+  const _avatarFetchQueue = [];
+  const _avatarLoadedIds = new Set();
+  const _avatarMissingIds = new Set();
 
   function avatarHtml(chat, className) {
     const cls = className || 'wa-avatar';
-    const init = initials(chat?.contact_name, chat?.contact_phone);
-    const src = avatarSrc(chat);
-    if (!src) {
+    const label = displayContactName(chat);
+    const init = initials(label, chat?.contact_phone);
+    const chatId = chat?.id || '';
+    if (!chatId || _avatarMissingIds.has(chatId)) {
       return `<span class="${cls} wa-avatar-fallback">${esc(init)}</span>`;
     }
-    return `<span class="${cls} wa-avatar-wrap"><img class="wa-avatar-img" src="${esc(src)}" alt="" loading="lazy" onerror="this.style.display='none';this.parentElement.classList.add('wa-avatar-wrap--fallback');"/><span class="wa-avatar-fallback">${esc(init)}</span></span>`;
+    const proxy = avatarProxyUrl(chatId);
+    return `<span class="${cls} wa-avatar-wrap wa-avatar-lazy" data-chat-id="${esc(chatId)}">` +
+      `<img class="wa-avatar-img wa-avatar-img--pending" alt="" width="40" height="40" loading="lazy" decoding="async" data-avatar-src="${esc(proxy)}"/>` +
+      `<span class="wa-avatar-fallback">${esc(init)}</span></span>`;
+  }
+  function ensureAvatarObserver() {
+    if (_avatarObserver || typeof IntersectionObserver === 'undefined') return _avatarObserver;
+    const root = document.getElementById('waInboxList')
+      || document.getElementById('waChatList')
+      || null;
+    _avatarObserver = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        const wrap = entry.target;
+        _avatarObserver?.unobserve(wrap);
+        queueAvatarElementLoad(wrap);
+      });
+    }, { root, rootMargin: AVATAR_IO_MARGIN, threshold: 0.01 });
+    return _avatarObserver;
+  }
+
+  function queueAvatarElementLoad(wrap) {
+    if (!wrap || wrap.dataset.avatarLoaded === '1') return;
+    _avatarFetchQueue.push(wrap);
+    drainAvatarFetchQueue();
+  }
+
+  function drainAvatarFetchQueue() {
+    while (_avatarFetchInflight < AVATAR_FETCH_PARALLEL && _avatarFetchQueue.length) {
+      const wrap = _avatarFetchQueue.shift();
+      if (wrap) loadAvatarElement(wrap);
+    }
+  }
+
+  function loadAvatarElement(wrap, immediate) {
+    if (!wrap || wrap.dataset.avatarLoaded === '1') return;
+    const chatId = wrap.dataset.chatId || '';
+    if (chatId && _avatarMissingIds.has(chatId)) {
+      wrap.classList.add('wa-avatar-wrap--fallback');
+      wrap.dataset.avatarLoaded = '1';
+      return;
+    }
+    const img = wrap.querySelector('.wa-avatar-img');
+    if (!img) return;
+    const src = img.dataset.avatarSrc || img.getAttribute('data-avatar-src') || '';
+    if (!src) {
+      wrap.classList.add('wa-avatar-wrap--fallback');
+      wrap.dataset.avatarLoaded = '1';
+      if (chatId) _avatarMissingIds.add(chatId);
+      return;
+    }
+    if (img.src && img.src === src) return;
+    if (chatId && _avatarLoadedIds.has(chatId) && img.complete && img.naturalWidth > 1) {
+      wrap.classList.add('wa-avatar-wrap--loaded');
+      wrap.dataset.avatarLoaded = '1';
+      return;
+    }
+    _avatarFetchInflight++;
+    const markMissing = () => {
+      wrap.classList.add('wa-avatar-wrap--fallback');
+      wrap.dataset.avatarLoaded = '1';
+      if (chatId) _avatarMissingIds.add(chatId);
+      try { img.removeAttribute('src'); } catch (_) { /* noop */ }
+    };
+    const done = () => {
+      _avatarFetchInflight = Math.max(0, _avatarFetchInflight - 1);
+      drainAvatarFetchQueue();
+    };
+    img.addEventListener('load', () => {
+      // Placeholder 1x1 do backend = sem foto real.
+      if (!img.naturalWidth || img.naturalWidth <= 1) {
+        markMissing();
+        done();
+        return;
+      }
+      img.classList.remove('wa-avatar-img--pending');
+      wrap.classList.add('wa-avatar-wrap--loaded');
+      wrap.dataset.avatarLoaded = '1';
+      if (chatId) {
+        _avatarLoadedIds.add(chatId);
+        _avatarMissingIds.delete(chatId);
+      }
+      done();
+    }, { once: true });
+    img.addEventListener('error', () => {
+      markMissing();
+      done();
+    }, { once: true });
+    img.src = src;
+    if (immediate && typeof img.decode === 'function') {
+      img.decode().catch(() => {});
+    }
+  }
+
+  function bindLazyAvatars(root) {
+    const scope = root || document;
+    const nodes = scope.querySelectorAll?.('.wa-avatar-lazy:not([data-avatar-bound])') || [];
+    if (!nodes.length) return;
+    const obs = ensureAvatarObserver();
+    let bound = 0;
+    nodes.forEach((el) => {
+      el.dataset.avatarBound = '1';
+      bound++;
+      if (obs) obs.observe(el);
+      else queueAvatarElementLoad(el);
+    });
+    if (bound && typeof window._dbgSessionLog === 'function') {
+      window._dbgSessionLog('whatsapp-chat.js:bindLazyAvatars', 'avatars queued', {
+        bound,
+        hasObserver: !!obs,
+      }, 'H-avatar-lazy');
+    }
+  }
+
+  function loadThreadAvatarNow(chat) {
+    const avatar = document.getElementById('waThreadAvatar');
+    if (!avatar || !chat?.id) return;
+    const init = initials(displayContactName(chat), chat?.contact_phone);
+    avatar.className = 'wa-thread-avatar wa-avatar-wrap wa-avatar-lazy';
+    avatar.dataset.chatId = chat.id;
+    avatar.dataset.avatarBound = '1';
+    avatar.innerHTML =
+      `<img class="wa-avatar-img wa-avatar-img--pending" alt="" width="40" height="40" decoding="async" data-avatar-src="${esc(avatarProxyUrl(chat.id))}"/>` +
+      `<span class="wa-avatar-fallback">${esc(init)}</span>`;
+    loadAvatarElement(avatar, true);
   }
 
   function openMediaLightbox(src) {
@@ -413,6 +904,13 @@ const WhatsAppChat = (() => {
     if (!box || box.dataset.mediaBound === '1') return;
     box.dataset.mediaBound = '1';
     box.addEventListener('click', (e) => {
+      const delBtn = e.target.closest('[data-delete-msg]');
+      if (delBtn?.dataset?.deleteMsg) {
+        e.preventDefault();
+        e.stopPropagation();
+        deleteMessage(delBtn.dataset.deleteMsg);
+        return;
+      }
       const img = e.target.closest('.wa-bubble__img');
       if (img?.src) {
         e.preventDefault();
@@ -432,70 +930,427 @@ const WhatsAppChat = (() => {
     });
   }
 
-  async function stopAudioRecord() {
-    if (!_mediaRecorder || _mediaRecorder.state === 'inactive') return;
-    _mediaRecorder.stop();
+  function formatRecordTime(ms) {
+    const sec = Math.max(0, Math.floor(ms / 1000));
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${String(s).padStart(2, '0')}`;
   }
 
-  async function toggleAudioRecord() {
-    if (_recording) {
-      await stopAudioRecord();
+  function dbgAudioLog(location, message, data, hypothesisId) {
+    if (typeof window._dbgSessionLog === 'function') {
+      window._dbgSessionLog(location, message, data, hypothesisId || 'H-audio-rec');
+    }
+  }
+
+  function pickAudioMimeType() {
+    const candidates = [
+      'audio/webm;codecs=opus',
+      'audio/ogg;codecs=opus',
+      'audio/webm',
+      'audio/ogg',
+      'audio/mp4',
+    ];
+    if (typeof MediaRecorder === 'undefined' || typeof MediaRecorder.isTypeSupported !== 'function') {
+      return '';
+    }
+    for (const c of candidates) {
+      if (MediaRecorder.isTypeSupported(c)) return c;
+    }
+    return '';
+  }
+
+  function normalizeAudioMime(type, fileName) {
+    let mime = String(type || '').split(';')[0].trim().toLowerCase();
+    if (!mime.startsWith('audio/')) mime = mimeFromName(fileName || '');
+    if (!mime.startsWith('audio/')) return 'audio/webm';
+    return mime;
+  }
+
+  function audioExtFromMime(mime) {
+    const m = normalizeAudioMime(mime, '');
+    if (m.includes('ogg')) return 'ogg';
+    if (m.includes('mpeg') || m === 'audio/mp3') return 'mp3';
+    if (m.includes('mp4') || m.includes('m4a') || m.includes('aac')) return 'm4a';
+    if (m.includes('wav')) return 'wav';
+    return 'webm';
+  }
+
+  function cleanupRecordStream() {
+    try {
+      if (_waRecorder) _waRecorder.destroy();
+    } catch (_) { /* noop */ }
+    _waRecorder = null;
+    stopWaveform();
+    try {
+      if (_audioContext && _audioContext.state !== 'closed') _audioContext.close();
+    } catch (_) { /* noop */ }
+    _audioContext = null;
+    _analyserNode = null;
+  }
+
+  function stopWaveform() {
+    if (_waveAnimId) {
+      cancelAnimationFrame(_waveAnimId);
+      _waveAnimId = null;
+    }
+    const wave = document.getElementById('waRecordWave');
+    if (wave) wave.innerHTML = '';
+  }
+
+  function startWaveform(stream) {
+    stopWaveform();
+    const wave = document.getElementById('waRecordWave');
+    if (!wave || typeof window.AudioContext === 'undefined' && typeof window.webkitAudioContext === 'undefined') return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      _audioContext = new Ctx();
+      const source = _audioContext.createMediaStreamSource(stream);
+      _analyserNode = _audioContext.createAnalyser();
+      _analyserNode.fftSize = 32;
+      source.connect(_analyserNode);
+      const bars = 12;
+      wave.innerHTML = Array.from({ length: bars }, () => '<span class="wa-record-wave__bar"></span>').join('');
+      const barEls = wave.querySelectorAll('.wa-record-wave__bar');
+      const buf = new Uint8Array(_analyserNode.frequencyBinCount);
+      const tick = () => {
+        if (!_recording || !_analyserNode) return;
+        _analyserNode.getByteFrequencyData(buf);
+        barEls.forEach((el, i) => {
+          const v = buf[i] || 0;
+          const h = Math.max(4, Math.round((v / 255) * 28));
+          el.style.height = `${h}px`;
+        });
+        _waveAnimId = requestAnimationFrame(tick);
+      };
+      tick();
+    } catch (_) { /* noop */ }
+  }
+
+  function stopRecordTimer() {
+    if (_recordTimerId) {
+      clearInterval(_recordTimerId);
+      _recordTimerId = null;
+    }
+  }
+
+  function updateRecordTimerUi() {
+    const el = document.getElementById('waRecordTimer');
+    if (!el || !_recordStartedAt) return;
+    el.textContent = formatRecordTime(Date.now() - _recordStartedAt);
+  }
+
+  function startRecordTimer() {
+    stopRecordTimer();
+    updateRecordTimerUi();
+    _recordTimerId = setInterval(updateRecordTimerUi, 200);
+  }
+
+  function setRecordPanelMode(mode) {
+    _recordMode = mode;
+    const panel = document.getElementById('waRecordPanel');
+    const bar = document.getElementById('waComposeBar');
+    const live = document.getElementById('waRecordLive');
+    const preview = document.getElementById('waRecordPreview');
+    if (panel) panel.classList.toggle('is-hidden', mode === 'idle');
+    if (bar) bar.classList.toggle('is-hidden-when-rec', mode !== 'idle');
+    if (live) live.classList.toggle('is-hidden', mode !== 'recording');
+    if (preview) preview.classList.toggle('is-hidden', mode !== 'preview');
+    updateComposeMode();
+  }
+
+  function cleanupPreviewAudio() {
+    try {
+      if (_previewAudioEl) {
+        _previewAudioEl.pause();
+        _previewAudioEl.src = '';
+      }
+    } catch (_) { /* noop */ }
+    _previewAudioEl = null;
+    _previewPlaying = false;
+    if (_previewObjectUrl) {
+      try { URL.revokeObjectURL(_previewObjectUrl); } catch (_) { /* noop */ }
+    }
+    _previewObjectUrl = null;
+    _pendingAudioBlob = null;
+    _pendingAudioMime = '';
+    const playBtn = document.getElementById('waRecordPlay');
+    if (playBtn) playBtn.classList.remove('is-playing');
+  }
+
+  function finishRecordingUi() {
+    _recording = false;
+    _recordStarting = false;
+    _recordStartedAt = 0;
+    stopRecordTimer();
+    document.getElementById('waMicBtn')?.classList.remove('is-recording');
+    if (_recordMode === 'recording') setRecordPanelMode('idle');
+    updateComposeMode();
+  }
+
+  function cancelAudioRecord() {
+    _recordCancelled = true;
+    _recordStopRequested = true;
+    cleanupPreviewAudio();
+    try { _waRecorder?.cancel(); } catch (_) { /* noop */ }
+    finishRecordingUi();
+    cleanupRecordStream();
+    setRecordPanelMode('idle');
+    dbgAudioLog('whatsapp-chat.js:cancelAudioRecord', 'recording cancelled', {}, 'H-audio-cancel');
+  }
+
+  function discardPendingAudio() {
+    cleanupPreviewAudio();
+    setRecordPanelMode('idle');
+    dbgAudioLog('whatsapp-chat.js:discardPendingAudio', 'preview discarded', {}, 'H-audio-discard');
+  }
+
+  async function sendPendingAudio() {
+    if (!_pendingAudioBlob || !_pendingAudioBlob.size) {
+      if (typeof showToast === 'function') showToast('Nenhum áudio para enviar.', 'warning');
+      return;
+    }
+    if (_pendingAudioBlob.size < 200) {
+      if (typeof showToast === 'function') showToast('Áudio vazio. Grave pelo menos 1 segundo.', 'warning');
+      return;
+    }
+    const mime = normalizeAudioMime(_pendingAudioMime, '');
+    const ext = audioExtFromMime(mime);
+    const file = new File([_pendingAudioBlob], `audio-${Date.now()}.${ext}`, { type: mime });
+    const blobSize = _pendingAudioBlob.size;
+    dbgAudioLog('whatsapp-chat.js:sendPendingAudio', 'sending audio', { bytes: blobSize, mime, ext }, 'H-audio-send');
+    try {
+      await sendMedia(file);
+      cleanupPreviewAudio();
+      setRecordPanelMode('idle');
+      if (typeof showToast === 'function') showToast('Áudio enviado.', 'success');
+    } catch (e) {
+      // Mantém o preview para o usuário tentar de novo.
+      if (typeof showToast === 'function') showToast(e?.message || 'Falha ao enviar áudio gravado.', 'error');
+    }
+  }
+
+  function togglePreviewPlayback() {
+    if (!_pendingAudioBlob) return;
+    if (!_previewAudioEl) {
+      _previewObjectUrl = URL.createObjectURL(_pendingAudioBlob);
+      _previewAudioEl = new Audio(_previewObjectUrl);
+      _previewAudioEl.onended = () => {
+        _previewPlaying = false;
+        document.getElementById('waRecordPlay')?.classList.remove('is-playing');
+      };
+    }
+    const playBtn = document.getElementById('waRecordPlay');
+    if (_previewPlaying) {
+      _previewAudioEl.pause();
+      _previewPlaying = false;
+      playBtn?.classList.remove('is-playing');
+      return;
+    }
+    _previewAudioEl.play().then(() => {
+      _previewPlaying = true;
+      playBtn?.classList.add('is-playing');
+    }).catch(() => {
+      if (typeof showToast === 'function') showToast('Não foi possível reproduzir o áudio.', 'error');
+    });
+  }
+
+  function showAudioPreview(blob, mime, elapsedMs) {
+    _pendingAudioBlob = blob;
+    _pendingAudioMime = mime;
+    const dur = elapsedMs || (_recordStartedAt ? Date.now() - _recordStartedAt : 0);
+    _recordStartedAt = 0;
+    const durEl = document.getElementById('waPreviewDur');
+    if (durEl) durEl.textContent = formatRecordTime(dur);
+    setRecordPanelMode('preview');
+    try {
+      const tmpUrl = URL.createObjectURL(blob);
+      const tmp = new Audio(tmpUrl);
+      tmp.onloadedmetadata = () => {
+        if (durEl && Number.isFinite(tmp.duration) && tmp.duration > 0) {
+          durEl.textContent = formatRecordTime(tmp.duration * 1000);
+        }
+        URL.revokeObjectURL(tmpUrl);
+      };
+      tmp.onerror = () => URL.revokeObjectURL(tmpUrl);
+    } catch (_) { /* noop */ }
+    dbgAudioLog('whatsapp-chat.js:showAudioPreview', 'preview ready', { bytes: blob.size, mime, dur }, 'H-audio-preview');
+  }
+
+  function requestStopAudioRecord() {
+    _recordStopRequested = true;
+    if (_recording || _recordStarting) stopAudioRecord();
+  }
+
+  async function stopAudioRecord() {
+    if (!_recording && !_recordStarting) return;
+    if (!_waRecorder) {
+      finishRecordingUi();
+      return;
+    }
+    try {
+      const result = await _waRecorder.stop();
+      _waRecorder = null;
+      _recording = false;
+      _recordStarting = false;
+      document.getElementById('waMicBtn')?.classList.remove('is-recording');
+      stopRecordTimer();
+      stopWaveform();
+      const cancelled = _recordCancelled;
+      _recordCancelled = false;
+      dbgAudioLog('whatsapp-chat.js:onstop', 'recorder stopped', {
+        bytes: result.blob?.size || 0,
+        elapsed: result.elapsed,
+        cancelled,
+        mime: result.mime,
+      }, 'H-audio-stop');
+      if (cancelled) {
+        finishRecordingUi();
+        return;
+      }
+      if (!result.blob?.size) {
+        finishRecordingUi();
+        if (typeof showToast === 'function') showToast('Áudio vazio. Grave pelo menos 1 segundo.', 'warning');
+        return;
+      }
+      if (result.elapsed < MIN_RECORD_MS) {
+        finishRecordingUi();
+        if (typeof showToast === 'function') showToast('Gravação muito curta. Tente novamente.', 'warning');
+        return;
+      }
+      showAudioPreview(result.blob, result.mime, result.elapsed);
+    } catch (e) {
+      finishRecordingUi();
+      cleanupRecordStream();
+      if (typeof showToast === 'function') showToast('Não foi possível finalizar a gravação.', 'error');
+    }
+  }
+
+  async function startAudioRecord() {
+    if (_recording || _recordStarting) {
+      if (_recordStarting && typeof showToast === 'function') {
+        showToast('Aguarde, solicitando acesso ao microfone…', 'info');
+      }
+      return;
+    }
+    if (!isEffectivelyOpen()) {
+      if (typeof showToast === 'function') showToast('Conecte o WhatsApp antes de gravar áudio.', 'warning');
       return;
     }
     if (!_activeChatId) {
       if (typeof showToast === 'function') showToast('Selecione uma conversa primeiro.', 'warning');
       return;
     }
-    if (!navigator.mediaDevices?.getUserMedia) {
-      if (typeof showToast === 'function') showToast('Microfone não suportado neste navegador.', 'error');
+    if (!window.isSecureContext) {
+      if (typeof showToast === 'function') showToast('Microfone exige HTTPS. Abra o site com https://', 'error');
       return;
     }
+    if (typeof window.WaAudioRecorder !== 'function') {
+      if (typeof showToast === 'function') showToast('Módulo de áudio não carregou. Recarregue com Ctrl+F5.', 'error');
+      return;
+    }
+    _recordStopRequested = false;
+    _recordCancelled = false;
+    _recordStarting = true;
+    document.getElementById('waMicBtn')?.classList.add('is-recording');
+    setRecordPanelMode('recording');
+    const timerEl = document.getElementById('waRecordTimer');
+    if (timerEl) timerEl.textContent = '0:00';
     try {
-      _recordStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-        ? 'audio/webm;codecs=opus'
-        : (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus') ? 'audio/ogg;codecs=opus' : '');
-      _mediaRecorder = mime ? new MediaRecorder(_recordStream, { mimeType: mime }) : new MediaRecorder(_recordStream);
-      _audioChunks = [];
-      _mediaRecorder.ondataavailable = (ev) => { if (ev.data?.size) _audioChunks.push(ev.data); };
-      _mediaRecorder.onstop = async () => {
-        try {
-          if (_recordStream) _recordStream.getTracks().forEach((t) => t.stop());
-        } catch (_) { /* noop */ }
-        _recordStream = null;
-        _recording = false;
-        document.getElementById('waMicBtn')?.classList.remove('is-recording');
-        updateComposeMode();
-        const blob = new Blob(_audioChunks, { type: _mediaRecorder?.mimeType || 'audio/webm' });
-        if (!blob.size) return;
-        const ext = (blob.type || '').includes('ogg') ? 'ogg' : 'webm';
-        const file = new File([blob], `audio-${Date.now()}.${ext}`, { type: blob.type || 'audio/webm' });
-        await sendMedia(file);
-      };
-      _mediaRecorder.start();
+      _waRecorder = new window.WaAudioRecorder();
+      const started = await _waRecorder.start();
+      if (_recordStopRequested || _recordCancelled) {
+        try { _waRecorder.cancel(); } catch (_) { /* noop */ }
+        cleanupRecordStream();
+        _recordStarting = false;
+        finishRecordingUi();
+        return;
+      }
+      _recordStartedAt = Date.now();
       _recording = true;
-      document.getElementById('waMicBtn')?.classList.add('is-recording');
-      if (typeof showToast === 'function') showToast('Gravando áudio… Toque no microfone para enviar.', 'info');
+      _recordStarting = false;
+      startRecordTimer();
+      if (started.stream) startWaveform(started.stream);
+      dbgAudioLog('whatsapp-chat.js:startAudioRecord', 'recording started', {
+        mime: started.mime || 'default',
+        recordRtc: typeof window.RecordRTC === 'function',
+      }, 'H-audio-start');
+      if (_recordStopRequested) await stopAudioRecord();
     } catch (e) {
-      _recording = false;
-      if (typeof showToast === 'function') showToast('Não foi possível acessar o microfone.', 'error');
+      finishRecordingUi();
+      cleanupRecordStream();
+      const denied = e && (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError');
+      if (typeof showToast === 'function') {
+        showToast(
+          denied ? 'Permissão do microfone negada. Libere nas configurações do navegador.' : (e?.message || 'Não foi possível acessar o microfone.'),
+          'error'
+        );
+      }
     }
   }
 
+  function micUnavailableReason() {
+    if (!isEffectivelyOpen()) return 'Conecte o WhatsApp antes de gravar áudio.';
+    if (!_activeChatId) return 'Selecione uma conversa primeiro.';
+    return '';
+  }
+
+  function onMicClick(ev) {
+    if (ev) {
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    const now = Date.now();
+    if (now - _micClickTs < 150) return;
+    _micClickTs = now;
+    const reason = micUnavailableReason();
+    if (reason) {
+      if (typeof showToast === 'function') showToast(reason, 'warning');
+      return;
+    }
+    dbgAudioLog('whatsapp-chat.js:onMicClick', 'toggle audio record', {
+      recording: _recording,
+      recordStarting: _recordStarting,
+      recordMode: _recordMode,
+    }, 'H-mic-click');
+    toggleAudioRecord();
+  }
+
+  function toggleAudioRecord() {
+    if (_recordMode === 'preview') {
+      if (typeof showToast === 'function') showToast('Envie ou descarte o áudio gravado antes de gravar de novo.', 'info');
+      return;
+    }
+    if (_recording || _recordStarting) requestStopAudioRecord();
+    else startAudioRecord();
+  }
+
   async function loadChatAvatar(chatId, silent) {
-    if (!chatId || _status !== 'open') return;
+    if (!chatId || !isEffectivelyOpen()) return;
+    const chat = _chats.find((c) => c.id === chatId);
+    if (_activeChatId === chatId) loadThreadAvatarNow(chat || { id: chatId });
     try {
       const data = await api('contact_avatar', { method: 'POST', body: { chat_id: chatId } });
       if (data.chats) {
         _chats = data.chats;
         renderChatList();
         notifyKanbanState();
-        if (_activeChatId === chatId) renderThreadHeader();
+        bindLazyAvatars(document.getElementById('waChatList'));
+        bindLazyAvatars(document.getElementById('waInboxList'));
+      }
+      if (_activeChatId === chatId) {
+        const updated = _chats.find((c) => c.id === chatId);
+        if (updated) loadThreadAvatarNow(updated);
       }
       if (!silent && data.avatar_url && typeof showToast === 'function') {
         showToast('Foto do contato atualizada.', 'success');
       }
     } catch (_) { /* noop */ }
+  }
+
+  /** @deprecated — substituído por Intersection Observer + avatar_image sob demanda */
+  function warmMissingAvatars(_chatsIgnored) {
+    /* noop */
   }
 
   function msgFingerprint(msgs) {
@@ -548,23 +1403,125 @@ const WhatsAppChat = (() => {
     const msgId = audioEl.dataset.msgId || '';
     const repaired = await repairMessageMedia(msgId);
     if (repaired) {
-      audioEl.src = repaired;
+      audioEl.src = mediaSrc(repaired);
       audioEl.load();
+      const idx = _messages.findIndex((x) => String(x.id) === String(msgId));
+      if (idx >= 0) _messages[idx] = { ..._messages[idx], media_url: repaired };
     }
+  }
+
+  async function onMediaImgError(imgEl) {
+    if (!imgEl || imgEl.dataset.repairTried === '1') return;
+    imgEl.dataset.repairTried = '1';
+    const msgId = imgEl.dataset.msgId || '';
+    const repaired = await repairMessageMedia(msgId);
+    if (repaired) {
+      imgEl.src = mediaSrc(repaired);
+      const idx = _messages.findIndex((x) => String(x.id) === String(msgId));
+      if (idx >= 0) {
+        _messages[idx] = { ..._messages[idx], media_url: repaired };
+      }
+    } else {
+      imgEl.replaceWith(Object.assign(document.createElement('span'), {
+        className: 'wa-bubble__text',
+        textContent: imgEl.alt === 'Figurinha' ? '[Figurinha]' : '[Imagem]',
+      }));
+    }
+  }
+
+  /** Queue leve de repair — serializado com gap (protege pool PHP). */
+  let _repairQueue = Promise.resolve();
+  function enqueueMediaRepair(messageId) {
+    return new Promise((resolve) => {
+      _repairQueue = _repairQueue.then(async () => {
+        await new Promise((r) => setTimeout(r, MEDIA_REPAIR_GAP_MS));
+        const url = await repairMessageMedia(messageId);
+        resolve(url);
+      }).catch(() => resolve(''));
+    });
+  }
+
+  function scheduleThreadMediaRepair() {
+    const repairTypes = new Set(['sticker', 'audio', 'video', 'image']);
+    const missingMedia = _messages.filter((m) => {
+      const type = String(m.message_type || '').toLowerCase();
+      return repairTypes.has(type) && !m.media_url && m.id && !m._pending;
+    });
+    if (!missingMedia.length) return;
+    Promise.all(missingMedia.slice(0, MEDIA_REPAIR_MAX).map((m) => enqueueMediaRepair(m.id))).then((urls) => {
+      let patched = false;
+      urls.forEach((url, i) => {
+        if (!url) return;
+        const msg = missingMedia[i];
+        const idx = _messages.findIndex((x) => x.id === msg.id);
+        if (idx >= 0) {
+          _messages[idx] = { ..._messages[idx], media_url: url };
+          patched = true;
+        }
+      });
+      if (patched) {
+        _msgFingerprint = msgFingerprint(_messages);
+        renderMessages();
+      }
+    }).catch(() => {});
+  }
+
+  function addOptimisticBubble(body, messageType, mediaUrl) {
+    const pendingId = `pending_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    const msg = {
+      id: pendingId,
+      direction: 'out',
+      message_type: messageType || 'text',
+      body: body || '',
+      media_url: mediaUrl || null,
+      created_at: new Date().toISOString(),
+      _pending: true,
+    };
+    _messages.push(msg);
+    _msgFingerprint = msgFingerprint(_messages);
+    renderMessages();
+    return pendingId;
+  }
+
+  function mergeSentMessage(apiMsg, pendingId) {
+    if (!apiMsg) return false;
+    const idx = _messages.findIndex((m) => m.id === pendingId);
+    if (idx >= 0) {
+      _messages[idx] = { ...apiMsg };
+    } else {
+      _messages.push(apiMsg);
+    }
+    _msgFingerprint = msgFingerprint(_messages);
+    renderMessages();
+    return true;
+  }
+
+  function removeOptimisticBubble(pendingId) {
+    _messages = _messages.filter((m) => m.id !== pendingId);
+    _msgFingerprint = msgFingerprint(_messages);
+    renderMessages();
   }
 
   async function uploadMedia(file) {
     const c = cfg();
     const fd = new FormData();
     fd.append('file', file);
-    const res = await fetch(`${apiBase()}/api/upload.php?bucket=whatsapp-media`, {
-      method: 'POST',
-      headers: { 'X-API-Key': c.API_KEY || '', apikey: c.API_KEY || '' },
-      body: fd,
-    });
+    let res;
+    try {
+      res = await fetch(`${apiBase()}/api/upload.php?bucket=whatsapp-media&apikey=${encodeURIComponent(c.API_KEY || '')}`, {
+        method: 'POST',
+        headers: { 'X-API-Key': c.API_KEY || '', apikey: c.API_KEY || '' },
+        body: fd,
+      });
+    } catch (netErr) {
+      throw new Error(`Falha no upload do áudio: ${netErr?.message || 'sem conexão'}`);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data.ok === false) {
-      throw new Error(data.error || `Erro HTTP ${res.status}`);
+      throw new Error(data.error || `Upload falhou (HTTP ${res.status})`);
+    }
+    if (!data.path && !data.caminho) {
+      throw new Error('Upload concluído sem caminho do arquivo.');
     }
     return data;
   }
@@ -575,30 +1532,127 @@ const WhatsAppChat = (() => {
     return document.activeElement === input || String(input.value || '').length > 0;
   }
 
-  function notifyKanbanState() {
+  function applyProfilePicFromStatus(data) {
+    if (!data?.profile_pic) return;
+    const pic = String(data.profile_pic);
+    if (!/^https?:\/\//i.test(pic)) return;
+    if (!pic.includes('whatsapp_api.php')) {
+      const c = cfg();
+      const uid = _userId || (typeof Auth !== 'undefined' ? Auth.getSession()?.id : '') || '';
+      _profilePic = `${apiBase()}/api/whatsapp_api.php?action=profile_image&user_id=${encodeURIComponent(uid)}&apikey=${encodeURIComponent(c.API_KEY || '')}`;
+    } else {
+      _profilePic = pic;
+    }
+    notifyKanbanState();
+  }
+
+  function notifyKanbanState(extra = {}) {
     try {
       window.dispatchEvent(new CustomEvent('wa:state-changed', {
-        detail: { status: _status, hasQr: !!_qr },
+        detail: {
+          status: _status,
+          hasQr: !!_qr,
+          configured: _configured,
+          error: _lastConnectError || extra.error || '',
+          rebindRequired: _rebindRequired,
+          connecting: !!_connectInFlight,
+          profilePic: _profilePic,
+          profileName: _profileName,
+          ...extra,
+        },
       }));
     } catch (_) { /* noop */ }
+  }
+
+  function withTimeout(promise, ms, label) {
+    const lim = Math.max(5000, parseInt(ms, 10) || 55000);
+    const tag = label || 'operação';
+    return Promise.race([
+      Promise.resolve(promise),
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error(`Tempo esgotado (${tag}). Verifique a internet e tente novamente.`)), lim);
+      }),
+    ]);
   }
 
   function stopPollers() {
     if (_pollConnect) { clearInterval(_pollConnect); _pollConnect = null; }
     if (_pollMsg) { clearInterval(_pollMsg); _pollMsg = null; }
     if (_pollChats) { clearInterval(_pollChats); _pollChats = null; }
+    if (_pollEvents) { clearInterval(_pollEvents); _pollEvents = null; }
     _connectPollN = 0;
     _connectPollStarted = 0;
+  }
+
+  function startEventsPoll() {
+    if (_pollEvents) clearInterval(_pollEvents);
+    if (!_sessionLive) return;
+    _eventsSince = 0;
+    _pollEvents = setInterval(() => {
+      if (!_sessionLive || !isEffectivelyOpen()) return;
+      api('events', { query: { since: String(_eventsSince) } }).then(async (data) => {
+        if (!data || !data.changed) return;
+        _eventsSince = Number(data.ts) || Date.now();
+        if (Date.now() - _lastSendAt < 3000) return;
+        if (Date.now() - _lastEventsChatsLoad < EVENTS_CHATS_MIN_GAP_MS) return;
+        _lastEventsChatsLoad = Date.now();
+        await loadChats(true, { force: false });
+        if (_activeChatId && !isUserTyping()) {
+          await loadMessages(_activeChatId, true);
+        }
+        notifyKanbanState();
+      }).catch(() => {});
+    }, POLL_EVENTS_MS);
+  }
+
+  async function pullChats(silent, force) {
+    if (!canLoadWaChats() || (_status !== 'open' && !_phone)) return;
+    try {
+      await loadChats(!!silent, { force: !!force });
+      if (force && _syncEnabled && _chats.length === 0) {
+        await loadContacts(!!silent, true);
+      }
+      notifyKanbanState();
+    } catch (e) {
+      console.error('[WhatsAppChat.pullChats]', e);
+      if (!silent && typeof showToast === 'function') {
+        showToast(e.message || 'Erro ao carregar conversas.', 'warning');
+      }
+    }
   }
 
   function startConnectPoll() {
     if (_pollConnect) clearInterval(_pollConnect);
     _connectPollN = 0;
     _connectPollStarted = Date.now();
-    _pollConnect = setInterval(() => {
+    const tick = () => {
       _connectPollN += 1;
-      const needQr = _connectPollN === 1 || !_qr || (_connectPollN % 6 === 0);
-      refreshStatus({ skipQr: true, refreshQr: needQr }).then(async (data) => {
+      
+      // Enquanto o QR não estiver em tela, ocasionalmente permita que /status devolva o QR.
+      // skip_qr=1 impede buscar/devolver QR no servidor; por isso usamos a cada ~18s.
+      const wantQr = !_qr;
+      const fetchQrThisTick = wantQr && (_connectPollN === 1 || _connectPollN % 3 === 0);
+      refreshStatus({ skipQr: !fetchQrThisTick, refreshQr: false }).then(async () => {
+        if (_status === 'open' && _sessionLive) {
+          if (_pollConnect) { clearInterval(_pollConnect); _pollConnect = null; }
+          _qr = null;
+          // Fecha o QR imediatamente — pullChats pode demorar e deixava o modal aberto.
+          if (typeof window.WA !== 'undefined' && WA.closeQrModal) WA.closeQrModal();
+          notifyKanbanState({ connecting: false });
+          if (typeof showToast === 'function') {
+            showToast('WhatsApp conectado! Carregando conversas…', 'success');
+          }
+          await loadOwnProfile(true);
+          startChatsPoll();
+          startMsgPoll();
+          startEventsPoll();
+          await pullChats(true, false);
+          notifyKanbanState();
+          if (_chats.length > 0 && typeof showToast === 'function') {
+            showToast(`${_chats.length} conversa(s) carregada(s).`, 'success');
+          }
+          return;
+        }
         if (_status !== 'connecting') return;
         const elapsed = Date.now() - _connectPollStarted;
         const qrStale = !_qr || elapsed > 120000;
@@ -613,8 +1667,12 @@ const WhatsAppChat = (() => {
             await connect();
           } catch (_) { /* noop */ }
         }
-      }).catch(() => {});
-    }, POLL_CONNECT_MS);
+      }).catch((e) => {
+        console.error('[WhatsAppChat.connectPoll]', e);
+      });
+    };
+    tick();
+    _pollConnect = setInterval(tick, POLL_CONNECT_MS);
   }
 
   function startMsgPoll() {
@@ -628,7 +1686,11 @@ const WhatsAppChat = (() => {
 
   function startChatsPoll() {
     if (_pollChats) clearInterval(_pollChats);
-    _pollChats = setInterval(() => loadChats(true).catch(() => {}), POLL_CHATS_MS);
+    _pollChats = setInterval(() => {
+      if (!isEffectivelyOpen()) return;
+      // Sem force_sync no tick — mirror/enrich só no load inicial / pull forçado.
+      loadChats(true, { force: false }).catch(() => {});
+    }, POLL_CHATS_MS);
   }
 
   function updateComposeMode() {
@@ -636,14 +1698,71 @@ const WhatsAppChat = (() => {
     const sendBtn = document.getElementById('waSendBtn');
     const micBtn = document.getElementById('waMicBtn');
     const hasText = !!(input?.value || '').trim();
-    sendBtn?.classList.toggle('is-hidden', !hasText);
-    micBtn?.classList.toggle('is-hidden', hasText);
+    const connected = isEffectivelyOpen();
+    const chatOpen = !!_activeChatId;
+    const showMic = chatOpen && connected && (_recordMode === 'idle' ? !hasText : true);
+    sendBtn?.classList.toggle('is-hidden', !hasText || _recordMode !== 'idle');
+    if (micBtn) {
+      if (showMic && _recordMode === 'idle') micBtn.classList.remove('is-hidden');
+      else if (_recordMode === 'idle') micBtn.classList.add('is-hidden');
+      const unavailable = !connected || !chatOpen;
+      micBtn.classList.toggle('is-unavailable', unavailable);
+      micBtn.setAttribute('aria-disabled', unavailable ? 'true' : 'false');
+      micBtn.removeAttribute('disabled');
+    }
+  }
+
+  function bindComposeDelegation() {
+    const compose = document.getElementById('waCompose');
+    if (!compose || compose.dataset.delegateBound === '1') return;
+    compose.dataset.delegateBound = '1';
+
+    compose.addEventListener('click', (e) => {
+      if (e.target.closest('#waRecordCancel')) {
+        e.preventDefault();
+        cancelAudioRecord();
+        return;
+      }
+      if (e.target.closest('#waRecordStop')) {
+        e.preventDefault();
+        requestStopAudioRecord();
+        return;
+      }
+      if (e.target.closest('#waRecordDiscard')) {
+        e.preventDefault();
+        discardPendingAudio();
+        return;
+      }
+      if (e.target.closest('#waRecordPlay')) {
+        e.preventDefault();
+        togglePreviewPlayback();
+        return;
+      }
+      if (e.target.closest('#waRecordSend')) {
+        e.preventDefault();
+        sendPendingAudio();
+        return;
+      }
+    });
+  }
+
+  function bindMicEvents() {
+    bindComposeDelegation();
+  }
+
+  function bindRecordPanelEvents() {
+    bindComposeDelegation();
   }
 
   function bindComposeEvents() {
     const input = document.getElementById('waMsgInput');
     const btn = document.getElementById('waSendBtn');
-    if (!input || input.dataset.bound === '1') return;
+    bindComposeDelegation();
+    bindMicEvents();
+    if (!input || input.dataset.bound === '1') {
+      updateComposeMode();
+      return;
+    }
     input.dataset.bound = '1';
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
@@ -657,9 +1776,6 @@ const WhatsAppChat = (() => {
       updateComposeMode();
     });
     btn?.addEventListener('click', () => WhatsAppChat.sendMessage());
-    document.getElementById('waMicBtn')?.addEventListener('click', () => {
-      toggleAudioRecord();
-    });
     const attachBtn = document.getElementById('waAttachBtn');
     const fileInput = document.getElementById('waFileInput');
     attachBtn?.addEventListener('click', () => {
@@ -669,7 +1785,9 @@ const WhatsAppChat = (() => {
     fileInput?.addEventListener('change', () => {
       const file = fileInput.files?.[0];
       fileInput.value = '';
-      if (file) WhatsAppChat.sendMedia(file);
+      if (file) {
+        Promise.resolve(WhatsAppChat.sendMedia(file)).catch(() => { /* toast já exibido */ });
+      }
     });
     bindEmojiEvents();
     updateComposeMode();
@@ -726,29 +1844,54 @@ const WhatsAppChat = (() => {
     return `
             <footer id="waCompose" class="wa-compose is-hidden">
               <div id="waEmojiPanel" class="wa-emoji-panel" role="dialog" aria-label="Emojis">
-                <div class="wa-emoji-panel__tabs">
-                  ${EMOJI_CATEGORIES.map(c => `<button type="button" class="wa-emoji-tab${c.id === 'smileys' ? ' is-active' : ''}" data-cat="${c.id}" title="${esc(c.title)}">${c.icon}</button>`).join('')}
-                </div>
-                <div class="wa-emoji-panel__head"><span id="waEmojiTitle">Rostos e pessoas</span></div>
-                <div id="waEmojiGrid" class="wa-emoji-panel__grid"></div>
+                <div id="waEmojiMount" class="wa-emoji-mount"></div>
               </div>
-              <div class="wa-compose__bar">
+              <div class="wa-compose__bar" id="waComposeBar" style="position: relative; display: flex; align-items: center; gap: 8px;">
+                <button type="button" id="waEmojiBtn" class="wa-compose-icon-btn wa-emoji-btn" title="Emoji" aria-label="Emoji">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                </button>
+                
                 <button type="button" id="waAttachBtn" class="wa-compose-icon-btn" title="Anexar" aria-label="Anexar">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
                 </button>
                 <input type="file" id="waFileInput" class="wa-file-input" accept="image/jpeg,image/png,image/gif,image/webp,audio/mpeg,audio/ogg,audio/mp4,audio/aac,audio/wav,audio/webm,.webp,.mp3,.ogg,.m4a,.aac,.wav,.webm" hidden/>
-                <div class="wa-compose__input-wrap">
+                
+                <div class="wa-compose__input-wrap" style="flex: 1;">
                   <textarea id="waMsgInput" rows="1" placeholder="Digite uma mensagem"></textarea>
                 </div>
-                <button type="button" id="waEmojiBtn" class="wa-compose-icon-btn wa-emoji-btn" title="Emoji" aria-label="Emoji">
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                </button>
-                <button type="button" id="waMicBtn" class="wa-compose-icon-btn wa-mic-btn" title="Mensagem de voz" aria-label="Mensagem de voz">
+                
+                <button type="button" id="waMicBtn" class="wa-compose-icon-btn wa-mic-btn" title="Mensagem de voz" aria-label="Mensagem de voz" onclick="WhatsAppChat.onMicClick(event)">
                   <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/></svg>
                 </button>
                 <button type="button" id="waSendBtn" class="wa-send-btn is-hidden" title="Enviar" aria-label="Enviar">
                   <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
                 </button>
+              </div>
+              <div id="waRecordPanel" class="wa-record-panel is-hidden" aria-live="polite">
+                <div id="waRecordLive" class="wa-record-live">
+                  <button type="button" id="waRecordCancel" class="wa-record-btn wa-record-btn--cancel" title="Cancelar gravação" aria-label="Cancelar">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+                  </button>
+                  <span class="wa-record-dot" aria-hidden="true"></span>
+                  <span id="waRecordTimer" class="wa-record-timer">0:00</span>
+                  <div id="waRecordWave" class="wa-record-wave" aria-hidden="true"></div>
+                  <button type="button" id="waRecordStop" class="wa-record-btn wa-record-btn--stop" title="Parar gravação" aria-label="Parar">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  </button>
+                </div>
+                <div id="waRecordPreview" class="wa-record-preview is-hidden">
+                  <button type="button" id="waRecordDiscard" class="wa-record-btn wa-record-btn--cancel" title="Descartar" aria-label="Descartar">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+                  </button>
+                  <button type="button" id="waRecordPlay" class="wa-record-preview__play" title="Ouvir" aria-label="Ouvir gravação">
+                    <svg class="wa-record-play-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                    <svg class="wa-record-pause-icon" width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+                    <span id="waPreviewDur" class="wa-record-preview__dur">0:00</span>
+                  </button>
+                  <button type="button" id="waRecordSend" class="wa-send-btn wa-record-preview__send" title="Enviar áudio" aria-label="Enviar áudio">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                  </button>
+                </div>
               </div>
             </footer>`;
   }
@@ -765,7 +1908,7 @@ const WhatsAppChat = (() => {
               <span id="waThreadSubtitle" class="wa-thread-subtitle"></span>
             </div>
           </header>
-          <div id="waThreadBody" class="wa-thread-body">
+          <div id="waThreadBody" class="wa-thread-body" style="position: relative;">
             <div id="waWelcome" class="wa-welcome is-hidden"></div>
             <div id="waMessages" class="wa-messages is-hidden"></div>
             ${composeFooterHtml()}
@@ -880,18 +2023,38 @@ const WhatsAppChat = (() => {
 
     if (_kanbanMode) {
       const threadWrap = document.getElementById('waCrmThreadWrap');
-      const showThread = _status === 'open' && !!_activeChatId;
+      const showThread = isEffectivelyOpen() && !!_activeChatId;
       threadWrap?.classList.toggle('is-hidden', !showThread);
       root.classList.toggle('wa-thread-only--active', showThread);
       return;
     }
 
-    root.classList.toggle('wa-crm--connected', _status === 'open');
+    root.classList.toggle('wa-crm--connected', isEffectivelyOpen());
     root.classList.toggle('wa-crm--chat-open', !!_activeChatId);
   }
 
   function activeChat() {
     return _chats.find(c => c.id === _activeChatId) || null;
+  }
+
+  async function promptRenameContact(chat) {
+    if (!chat || !chat.id) return;
+    const current = displayContactName(chat);
+    const input = window.prompt('Novo nome para este contato:', current);
+    if (input === null) return; // cancelou
+    const newName = input.trim();
+    if (newName === '' || newName === current) return;
+    try {
+      const data = await api('update_contact', { method: 'POST', body: { chat_id: chat.id, name: newName } });
+      const idx = _chats.findIndex(c => String(c.id) === String(chat.id));
+      if (idx >= 0) _chats[idx] = { ..._chats[idx], contact_name: data.contact_name || newName };
+      if (Array.isArray(data.chats)) _chats = data.chats;
+      renderChatList();
+      renderThreadHeader();
+      if (typeof showToast === 'function') showToast('Contato renomeado.', 'success');
+    } catch (e) {
+      if (typeof showToast === 'function') showToast(e.message || 'Erro ao renomear.', 'error');
+    }
   }
 
   function renderThreadHeader() {
@@ -908,19 +2071,47 @@ const WhatsAppChat = (() => {
     }
 
     const name = displayContactName(chat);
-    if (title) title.textContent = name;
-    if (subtitle) subtitle.textContent = isPlausiblePhone(chat.contact_phone) ? fmtPhone(chat.contact_phone) : '';
+    if (title) {
+      title.textContent = name;
+      title.title = 'Clique para renomear o contato';
+      title.style.cursor = 'pointer';
+      title.onclick = () => promptRenameContact(chat);
+    }
+    if (subtitle) {
+      let subText = isPlausiblePhone(chat.contact_phone) ? fmtPhone(chat.contact_phone) : '';
+      const stageId = kanbanStageId(chat);
+      
+      let optionsHtml = '';
+      _kanbanStages.forEach(s => {
+        const sel = s.id === stageId ? ' selected' : '';
+        optionsHtml += `<option value="${s.id}"${sel}>${esc(s.name)}</option>`;
+      });
+
+      subtitle.innerHTML = `
+        <span style="display:inline-flex; align-items:center; gap: 8px; flex-wrap: wrap;">
+          <span>${esc(subText)}</span>
+          <span style="display:inline-flex; align-items:center; gap: 4px; background: rgba(47,129,247,0.15); border: 1px solid rgba(47,129,247,0.3); border-radius: 6px; padding: 2px 8px; font-size: 11px; font-weight: 600; color: #2f81f7;">
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="margin-right:2px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+            <select onchange="WhatsAppChat.updateChatStage('${esc(chat.id)}', this.value)" style="background:none; border:none; color:inherit; font-family:inherit; font-size:inherit; font-weight:inherit; padding:0; margin:0; outline:none; cursor:pointer;">
+              ${optionsHtml}
+            </select>
+          </span>
+        </span>
+      `;
+    }
     if (avatar) {
       const chat = _chats.find(c => c.id === _activeChatId);
-      const src = chat ? avatarSrc(chat) : '';
-      if (src) {
-        avatar.className = 'wa-thread-avatar wa-avatar-wrap';
-        avatar.innerHTML = `<img class="wa-avatar-img" src="${esc(src)}" alt="" onerror="this.style.display='none';this.parentElement.classList.add('wa-avatar-wrap--fallback');"/><span class="wa-avatar-fallback">${esc(initials(chat?.contact_name, chat?.contact_phone))}</span>`;
-      } else {
+      if (chat) loadThreadAvatarNow(chat);
+      else {
         avatar.className = 'wa-thread-avatar wa-avatar-fallback';
-        avatar.textContent = initials(chat?.contact_name, chat?.contact_phone);
+        avatar.textContent = '?';
       }
     }
+  }
+
+  function bubbleDeleteBtn(m) {
+    if (m.direction !== 'out' || !m.id) return '';
+    return `<button type="button" class="wa-msg-delete" data-delete-msg="${esc(m.id)}" title="Apagar mensagem" aria-label="Apagar mensagem">×</button>`;
   }
 
   function renderMessages() {
@@ -929,7 +2120,7 @@ const WhatsAppChat = (() => {
     const compose = document.getElementById('waCompose');
     if (!box) return;
 
-    if (!_activeChatId || _status !== 'open') {
+    if (!_activeChatId || !isEffectivelyOpen()) {
       if (!_kanbanMode) welcome?.classList.remove('is-hidden');
       box.classList.add('is-hidden');
       compose?.classList.add('is-hidden');
@@ -939,6 +2130,11 @@ const WhatsAppChat = (() => {
     welcome?.classList.add('is-hidden');
     box.classList.remove('is-hidden');
     compose?.classList.remove('is-hidden');
+    updateComposeMode();
+
+    const prevScrollTop = box.scrollTop;
+    const prevScrollHeight = box.scrollHeight;
+    const wasNearBottom = !prevScrollHeight || (prevScrollHeight - prevScrollTop - box.clientHeight) < 80;
 
     let html = '';
     if (!_messages.length) {
@@ -947,23 +2143,25 @@ const WhatsAppChat = (() => {
       _messages.forEach(m => {
         const type = String(m.message_type || 'text').toLowerCase();
         const src = mediaSrc(m.media_url);
+        const mid = esc(m.id || '');
         if (type === 'sticker' && src) {
           const cls = m.direction === 'out' ? 'wa-bubble wa-bubble--out wa-bubble--sticker' : 'wa-bubble wa-bubble--in wa-bubble--sticker';
-          html += `<div class="${cls}"><img class="wa-bubble__sticker" src="${esc(src)}" alt="Figurinha" loading="lazy"/><span class="wa-bubble__time wa-bubble__time--sticker">${esc(fmtTime(m.created_at))}</span></div>`;
+          html += `<div class="${cls}">${bubbleDeleteBtn(m)}<img class="wa-bubble__sticker" src="${esc(src)}" alt="Figurinha" loading="lazy" data-msg-id="${mid}" onerror="WhatsAppChat._onMediaImgError(this)"/><span class="wa-bubble__time wa-bubble__time--sticker">${esc(fmtTime(m.created_at))}</span></div>`;
           return;
         }
-        const cls = m.direction === 'out' ? 'wa-bubble wa-bubble--out' : 'wa-bubble wa-bubble--in';
+        const clsBase = m.direction === 'out' ? 'wa-bubble wa-bubble--out' : 'wa-bubble wa-bubble--in';
+        const cls = clsBase + (m._pending ? ' wa-bubble--pending' : '');
         let content = '';
         if (type === 'sticker') {
-          content = `<span class="wa-bubble__text">${esc(m.body || '[Figurinha]')}</span>`;
+          content = `<span class="wa-bubble__text wa-bubble__pending-media" data-msg-id="${mid}">${esc(m.body || '[Figurinha]')}</span>`;
         } else if (type === 'image' && src) {
           const dlName = `imagem-${m.id || Date.now()}.jpg`;
-          content = `<div class="wa-bubble__media"><img class="wa-bubble__img" src="${esc(src)}" alt="Imagem" loading="lazy"/><button type="button" class="wa-media-dl" data-download-media data-src="${esc(src)}" data-name="${esc(dlName)}" title="Baixar">↓</button></div>`;
+          content = `<div class="wa-bubble__media"><img class="wa-bubble__img" src="${esc(src)}" alt="Imagem" loading="lazy" data-msg-id="${mid}" onerror="WhatsAppChat._onMediaImgError(this)"/><button type="button" class="wa-media-dl" data-download-media data-src="${esc(src)}" data-name="${esc(dlName)}" title="Baixar">↓</button></div>`;
           if (m.body && m.body !== '[Imagem]') {
             content += `<span class="wa-bubble__text">${esc(m.body)}</span>`;
           }
         } else if (type === 'image') {
-          content = `<span class="wa-bubble__text">${esc(m.body || '[Imagem]')}</span>`;
+          content = `<span class="wa-bubble__text wa-bubble__pending-media" data-msg-id="${mid}">${esc(m.body || '[Imagem]')}</span>`;
         } else if (type === 'video' && src) {
           content = `<div class="wa-bubble__media"><video class="wa-bubble__video" controls preload="metadata" src="${esc(src)}"></video><button type="button" class="wa-media-dl" data-download-media data-src="${esc(src)}" data-name="video-${esc(m.id || 'msg')}.mp4" title="Baixar">↓</button></div>`;
           if (m.body && m.body !== '[Vídeo]') {
@@ -973,41 +2171,25 @@ const WhatsAppChat = (() => {
           content = `<span class="wa-bubble__text">${esc(m.body || '[Vídeo]')}</span>`;
         } else if (type === 'audio' && src) {
           const mime = mimeFromMediaUrl(src);
-          const mid = esc(m.id);
           const dlName = `audio-${m.id || Date.now()}.${(mime || '').includes('ogg') ? 'ogg' : 'webm'}`;
           content = `<div class="wa-bubble__media"><audio class="wa-bubble__audio" controls preload="metadata" src="${esc(src)}"${mime && mime.startsWith('audio/') ? ` type="${esc(mime)}"` : ''} data-msg-id="${mid}" onerror="WhatsAppChat._onAudioError(this)"></audio><button type="button" class="wa-media-dl" data-download-media data-src="${esc(src)}" data-name="${esc(dlName)}" title="Baixar">↓</button></div>`;
         } else if (type === 'audio') {
-          content = `<span class="wa-bubble__text">${esc(m.body || '[Áudio]')}</span>`;
+          content = `<span class="wa-bubble__text wa-bubble__pending-media" data-msg-id="${mid}">${esc(m.body || '[Áudio]')}</span>`;
         } else {
           content = `<span class="wa-bubble__text">${esc(m.body || '')}</span>`;
         }
-        html += `<div class="${cls}"><div class="wa-bubble__inner">${content}<span class="wa-bubble__time">${esc(fmtTime(m.created_at))}</span></div></div>`;
+        html += `<div class="${cls}">${bubbleDeleteBtn(m)}<div class="wa-bubble__inner">${content}<span class="wa-bubble__time">${esc(fmtTime(m.created_at))}</span></div></div>`;
       });
     }
     box.innerHTML = html;
-    box.scrollTop = box.scrollHeight;
-    bindMediaEvents();
-    // Lazy-repair media missing from Evolution mirror (stickers, audio, video)
-    const repairTypes = new Set(['sticker', 'audio', 'video']);
-    const missingMedia = _messages.filter(m => repairTypes.has(String(m.message_type || '').toLowerCase()) && !m.media_url && m.id);
-    if (missingMedia.length) {
-      Promise.all(missingMedia.slice(0, 8).map(m => repairMessageMedia(m.id))).then((urls) => {
-        let patched = false;
-        urls.forEach((url, i) => {
-          if (!url) return;
-          const msg = missingMedia[i];
-          const idx = _messages.findIndex(x => x.id === msg.id);
-          if (idx >= 0) {
-            _messages[idx] = { ..._messages[idx], media_url: url };
-            patched = true;
-          }
-        });
-        if (patched) {
-          _msgFingerprint = msgFingerprint(_messages);
-          renderMessages();
-        }
-      }).catch(() => {});
+    applyTwemoji(box);
+    if (wasNearBottom) {
+      box.scrollTop = box.scrollHeight;
+    } else {
+      box.scrollTop = Math.max(0, prevScrollTop + (box.scrollHeight - prevScrollHeight));
     }
+    bindMediaEvents();
+    scheduleThreadMediaRepair();
   }
 
   function renderThread() {
@@ -1018,72 +2200,148 @@ const WhatsAppChat = (() => {
   async function refreshStatus(opts = {}) {
     const skipQr = !!opts.skipQr;
     const refreshQr = !!opts.refreshQr;
+    const skipSideEffects = !!opts.skipSideEffects;
+    const wantProfile = !!opts.wantProfile || (!_profilePic && !_profilePicRequested);
     const query = {};
     if (skipQr) query.skip_qr = '1';
     if (refreshQr) query.refresh_qr = '1';
+    if (wantProfile) {
+      query.profile_pic = '1';
+      _profilePicRequested = true;
+    }
     const data = await api('status', { query });
     _configured = !!data.configured;
     const prev = _status;
-    _status = data.status || 'close';
+    const incomingStatus = data.status || 'close';
+    if (_qr && incomingStatus === 'open' && !data.session_live) {
+      _status = 'connecting';
+    } else {
+      _status = incomingStatus;
+    }
     _phone = data.phone || null;
-    _rebindRequired = !!data.rebind_required;
+    _sessionLive = !!data.session_live;
+    _serverChatsCount = Number(data.chats_count) || 0;
+    // #region agent log
+    if (typeof window._dbgSessionLog === 'function') {
+      window._dbgSessionLog('whatsapp-chat.js:refreshStatus', 'status applied', {
+        incoming: incomingStatus,
+        applied: _status,
+        sessionLive: _sessionLive,
+        rebind: !!(data.rebind_required || data.disconnected || data.session_locked),
+        hasPhone: !!_phone,
+        chatsCount: _serverChatsCount,
+        fastPath: !!data.fast_path,
+        effectivelyOpen: (_status === 'open' && _sessionLive && !(data.rebind_required || data.disconnected || data.session_locked)),
+        userTail: String(data.user_id || _userId || '').slice(-8),
+      }, 'H-C-clientstatus');
+    }
+    // #endregion
+    applyProfilePicFromStatus(data);
+    const serverLocked = !!(data.rebind_required || data.disconnected || data.session_locked);
+    if (_status === 'open' && !serverLocked) {
+      _rebindRequired = false;
+    } else {
+      _rebindRequired = serverLocked;
+      if (_rebindRequired) {
+        _status = 'close';
+        _qr = null;
+      }
+    }
+    if (_rebindRequired || (_status !== 'open' && serverLocked)) {
+      _chats = [];
+      _messages = [];
+      _msgFingerprint = '';
+      _activeChatId = null;
+    }
     if (data.qr) {
       _qr = data.qr;
-    } else if (refreshQr || !skipQr) {
+    } else if (refreshQr) {
+      if (data.status === 'open' && _sessionLive) _qr = null;
+    } else if (!skipQr && data.status !== 'connecting' && _status !== 'connecting') {
       _qr = null;
     }
-
-    if (isEffectivelyOpen() && prev !== 'open' && _syncEnabled) {
+    if (!skipSideEffects && isEffectivelyOpen() && prev !== 'open' && _syncEnabled) {
       await loadContacts(true, true);
     }
 
-    renderHeadActions();
-    renderQrScreen();
-    renderChatList();
-    if (!isUserTyping()) renderThread();
-    setCrmMode();
+    if (!skipSideEffects) {
+      renderHeadActions();
+      renderQrScreen();
+      renderChatList();
+      if (!isUserTyping()) renderThread();
+      setCrmMode();
+      updateComposeMode();
+    }
 
-    if (isEffectivelyOpen()) {
+    if (!skipSideEffects && isEffectivelyOpen()) {
       if (_pollConnect) { clearInterval(_pollConnect); _pollConnect = null; }
       _connectPollN = 0;
       _connectPollStarted = 0;
       const justOpened = prev !== 'open';
-      await loadChats(true, justOpened ? { force: true } : {});
+      await pullChats(true, justOpened && _serverChatsCount === 0);
       startChatsPoll();
+      startMsgPoll();
+      startEventsPoll();
+    } else if (!skipSideEffects && _phone && !_rebindRequired && _configured) {
+      await pullChats(true, _chats.length === 0);
+      startChatsPoll();
+    } else if (!skipSideEffects) {
+      stopPollers();
+      if (_status === 'connecting') startConnectPoll();
     }
     notifyKanbanState();
     return data;
   }
 
   async function loadChats(silent, opts = {}) {
-    const query = { monitor_user_id: _monitorUserId };
-    if (_status === 'open' && !_rebindRequired) {
+    if (!canLoadWaChats()) {
+      if (!isEffectivelyOpen() && _status !== 'connecting') {
+        _chats = [];
+        if (!silent) {
+          renderChatList();
+          notifyKanbanState();
+        }
+        return;
+      }
+    }
+    const query = {};
+    // MySQL-first: mirror leve só se servidor vazio; force_sync só no refresh manual (evita prune destrutivo).
+    if (opts.force) {
       query.mirror = '1';
-      if (opts.force) query.force_sync = '1';
+      query.force_sync = '1';
+      query.enrich = '1';
+    } else if (_serverChatsCount === 0 && (_status === 'open' || _phone)) {
+      query.mirror = '1';
     }
     const data = await api('chats', { query });
     if (data.user_id && data.user_id !== _userId) {
       hardResetLocalState();
       throw new Error('Sessão trocou. Recarregue a página.');
     }
-    _chats = data.chats || [];
+    if (data.rebind_required || data.disconnected || data.session_locked) {
+      _rebindRequired = true;
+      _status = 'close';
+      _chats = [];
+      stopPollers();
+      render();
+      notifyKanbanState();
+      return;
+    }
+    _chats = dedupeChatsByPhone(applyIncomingChats(_chats, data.chats || []));
+    const _dedupedCount = _chats.length;
+    if (typeof window._dbgSessionLog === 'function' && data.chats?.length) {
+      window._dbgSessionLog('whatsapp-chat.js:loadChats', 'chats deduped', {
+        raw: data.chats.length,
+        deduped: _dedupedCount,
+        removed: Math.max(0, data.chats.length - _dedupedCount),
+      }, 'H-dedupe-ui');
+    }
+    _serverChatsCount = _chats.length;
+    if (!silent) {
+      window._waContactCache = {};
+    }
     renderChatList();
     notifyKanbanState();
-    // #region agent log
-    if (!silent) {
-      try {
-        const samples = (_chats || []).slice(0, 8).map(c => ({
-          idTail: String(c.id || '').slice(-8),
-          name: c.contact_name || null,
-          phoneTail: String(c.contact_phone || '').slice(-4),
-          hasAvatar: !!c.contact_avatar_url,
-          jidTail: String(c.remote_jid || '').slice(-15),
-        }));
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:loadChats', message: 'chats loaded', data: { count: (_chats || []).length, mirror: !!query.mirror, status: _status, rebindRequired: _rebindRequired, force: !!opts.force, samples }, timestamp: Date.now(), hypothesisId: 'H4-client-names' }) }).catch(() => {});
-        fetch(`${apiBase()}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:loadChats', message: 'chats loaded', data: { count: (_chats || []).length, mirror: !!query.mirror, status: _status, rebindRequired: _rebindRequired }, timestamp: Date.now(), hypothesisId: 'mirror-rt', runId: 'mirror-rt' }) }).catch(() => {});
-      } catch (_) {}
-    }
-    // #endregion
   }
 
   async function loadContacts(silent, force) {
@@ -1091,14 +2349,10 @@ const WhatsAppChat = (() => {
     _syncing = true;
     try {
       const data = await api('sync_contacts', { method: 'POST', body: force ? { force: true } : {} });
-      _chats = data.chats || [];
+      _chats = dedupeChatsByPhone(applyIncomingChats(_chats, data.chats || []));
+      window._waContactCache = {};
       renderChatList();
       notifyKanbanState();
-      // #region agent log
-      try {
-        fetch(`${apiBase()}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:loadContacts', message: 'sync contacts', data: { synced: data.synced, skipped: data.skipped, total: (_chats || []).length, force: !!force, error: data.error || null }, timestamp: Date.now(), hypothesisId: 'wa-sync', runId: 'phase2-sync' }) }).catch(() => {});
-      } catch (_) {}
-      // #endregion
       if (!silent && data.synced > 0 && typeof showToast === 'function') {
         showToast(`${data.synced} conversa(s) espelhada(s) do WhatsApp.`, 'success');
       } else if (!silent && data.skipped && typeof showToast === 'function') {
@@ -1114,35 +2368,27 @@ const WhatsAppChat = (() => {
   }
 
   async function loadMessages(chatId, silent) {
-    const query = { chat_id: chatId, monitor_user_id: _monitorUserId };
-    if (isEffectivelyOpen() && _mirrorMode) query.mirror = '1';
+    const query = { chat_id: chatId };
+    // Mirror de mensagens só na abertura do chat (não no poll silencioso).
+    if (!silent && isEffectivelyOpen() && _mirrorMode) query.mirror = '1';
     const data = await api('messages', { query });
     const newMsgs = data.messages || [];
     if (data.chat?.id) {
       const idx = _chats.findIndex(c => c.id === data.chat.id);
       if (idx >= 0) {
-        _chats[idx] = { ..._chats[idx], ...data.chat };
+        const merged = { ..._chats[idx], ...data.chat };
+        merged.kanban_stage = resolveKanbanStage(
+          data.chat.id,
+          data.chat.kanban_stage,
+          _chats[idx].kanban_stage
+        );
+        _chats[idx] = merged;
       }
     }
     const fp = msgFingerprint(newMsgs);
     const changed = fp !== _msgFingerprint;
     _messages = newMsgs;
     _msgFingerprint = fp;
-    // #region agent log
-    try {
-      const dirs = { in: 0, out: 0 };
-      const stickers = { withMedia: 0, missing: 0 };
-      (newMsgs || []).forEach(m => {
-        if (m.direction === 'out') dirs.out += 1;
-        else dirs.in += 1;
-        if (String(m.message_type || '').toLowerCase() === 'sticker') {
-          if (m.media_url) stickers.withMedia += 1;
-          else stickers.missing += 1;
-        }
-      });
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:loadMessages', message: 'messages loaded', data: { chatId, count: newMsgs.length, dirs, stickers, contactName: data.chat?.contact_name || null, changed }, timestamp: Date.now(), hypothesisId: 'fromMe-mirror' }) }).catch(() => {});
-    } catch (_) {}
-    // #endregion
     if (!silent) _activeChatId = chatId;
     setCrmMode();
     if (!silent || (changed && !isUserTyping())) {
@@ -1152,32 +2398,184 @@ const WhatsAppChat = (() => {
     }
   }
 
-  async function connect() {
-    if (typeof showLoading === 'function') showLoading('Gerando QR Code...');
+  async function connect(opts = {}) {
+    const force = !!opts.force;
+    if (_connectInFlight && !force) return _connectInFlight;
+    _lastConnectError = '';
+    notifyKanbanState({ connecting: true });
+    const useOverlay = !_kanbanMode && !opts.silent;
+    if (useOverlay && typeof showLoading === 'function') showLoading('Gerando QR Code...');
+    const run = (async () => {
+      try {
+        if (_configured === false) {
+          throw new Error('WhatsApp não configurado no servidor. Peça ao administrador para configurar a Evolution API.');
+        }
+        // Após reset/rebind, força QR limpo (não reaproveitar sessão fantasma).
+        const forceQr = force || !!_rebindRequired || _status === 'close' || !_sessionLive;
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ec660'},body:JSON.stringify({sessionId:'5ec660',location:'whatsapp-chat.js:connect',message:'connect request',data:{forceQr:!!forceQr,rebind:!!_rebindRequired,status:_status,sessionLive:!!_sessionLive},timestamp:Date.now(),hypothesisId:'H-F-qr'})}).catch(()=>{});
+        // #endregion
+        const data = await withTimeout(api('connect', { method: 'POST', body: { force_qr: !!forceQr } }), 90000, 'Gerar QR Code');
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ec660'},body:JSON.stringify({sessionId:'5ec660',location:'whatsapp-chat.js:connect:result',message:'connect response',data:{ok:!!data?.ok,status:data?.status||'',qrLen:data?.qr?String(data.qr).length:0},timestamp:Date.now(),hypothesisId:'H-F-qr'})}).catch(()=>{});
+        // #endregion
+        _rebindRequired = false;
+        _status = data.status || 'connecting';
+        if (data.phone) _phone = data.phone;
+        if (data.qr) _qr = data.qr;
+        renderHeadActions();
+        if (_status === 'open') {
+          _qr = null;
+          renderQrScreen();
+          stopPollers();
+          await refreshStatus({ skipQr: true });
+          notifyKanbanState();
+          if (typeof showToast === 'function' && !_kanbanMode) showToast('WhatsApp conectado.', 'success');
+          return { ok: true, qr: null, status: 'open' };
+        }
+        renderQrScreen();
+        startConnectPoll();
+        notifyKanbanState();
+        if (!data.qr) {
+          _lastConnectError = '';
+          try {
+            // Não usar skip_qr aqui: se a Evolution ainda não devolveu o QR no /connect,
+            // precisamos permitir que o /status busque/devolva o QR (cache ou servidor).
+            const st = await withTimeout(refreshStatus({ refreshQr: false, skipQr: false }), 45000, 'Buscar QR');
+            if (st?.qr) _qr = st.qr;
+            notifyKanbanState();
+          } catch (_) { /* status poll continua em background */ }
+        }
+        if (!data.qr && !_qr && typeof showToast === 'function' && !_kanbanMode) {
+          showToast('QR ainda não retornou. Aguarde ou clique em Gerar QR Code novamente.', 'warning');
+        } else if (data.qr && typeof showToast === 'function' && !_kanbanMode) {
+          showToast('Escaneie o QR Code no celular.', 'info');
+        }
+        return { ok: true, qr: _qr || data.qr || null, status: _status };
+      } catch (e) {
+        console.error('[WhatsAppChat.connect]', e);
+        _lastConnectError = e.message || 'Erro ao conectar.';
+        const el = document.getElementById('waCrmQrScreen');
+        if (el && !_kanbanMode) {
+          el.classList.remove('is-hidden');
+          el.innerHTML = `<div class="wa-crm__qr-card"><div class="wa-alert">${esc(_lastConnectError)}</div><button type="button" class="btn btn-primary" onclick="WhatsAppChat.connect()">Tentar novamente</button></div>`;
+        }
+        if (typeof showToast === 'function' && !_kanbanMode) showToast(_lastConnectError, 'error');
+        notifyKanbanState({ error: _lastConnectError });
+        return { ok: false, error: _lastConnectError };
+      } finally {
+        _connectInFlight = null;
+        if (useOverlay && typeof hideLoading === 'function') hideLoading();
+        notifyKanbanState({ connecting: false });
+      }
+    })();
+    _connectInFlight = run;
+    return run;
+  }
+
+  /** Busca QR — freshReset só em "Reiniciar meu WhatsApp". Uma requisição por vez. */
+  async function fetchQrForModal(force, opts = {}) {
+    if (_qrFetchPromise && !opts.freshReset) {
+      return _qrFetchPromise;
+    }
+    if (opts.freshReset && _qrFetchPromise) {
+      try { await _qrFetchPromise; } catch (_) { /* noop */ }
+      _qrFetchPromise = null;
+    }
+    const run = (async () => {
+    const freshReset = !!opts.freshReset;
+    _lastConnectError = '';
+    notifyKanbanState({ connecting: true });
+    const QR_TIMEOUT_MS = 120000;
     try {
-      const data = await api('connect', { method: 'POST' });
+      if (_configured === false) {
+        throw new Error('WhatsApp não configurado no servidor.');
+      }
+      if (_configured === null) {
+        const cfg = await api('config');
+        _configured = !!cfg.configured;
+        if (!_configured) throw new Error('WhatsApp não configurado no servidor.');
+      }
+      if (freshReset) {
+        await api('reset_session', { method: 'POST', body: { clear_data: true } });
+        hardResetLocalState();
+        _rebindRequired = true;
+        notifyKanbanState();
+      }
+      const tryQr = async (label) => {
+        const data = await withTimeout(
+          api('qr', { method: 'POST', body: { force_qr: !!force } }),
+          QR_TIMEOUT_MS,
+          label
+        );
+        if (data.status === 'open' && !data.qr && data.session_live) {
+          _sessionLive = true;
+          _status = 'open';
+          _qr = null;
+          stopPollers();
+          await refreshStatus({ skipQr: true });
+          await pullChats(true, false);
+          notifyKanbanState({ connecting: false });
+          return { ok: true, status: 'open', alreadyConnected: true };
+        }
+        const qr = data.qr || null;
+        if (qr) {
+          _qr = qr;
+          _status = data.status || 'connecting';
+          _rebindRequired = false;
+          startConnectPoll();
+          notifyKanbanState({ connecting: false });
+          return { ok: true, qr, status: _status };
+        }
+        return null;
+      };
+      if (!freshReset && !force && _qr) {
+        startConnectPoll();
+        notifyKanbanState({ connecting: false });
+        return { ok: true, qr: _qr, status: _status || 'connecting' };
+      }
+      let hit = await tryQr('Gerar QR');
+      if (hit) return hit;
+      if (!force) {
+        hit = await tryQr('Gerar QR (retry)');
+        if (hit) return hit;
+      }
+      const data = await withTimeout(
+        api('connect', { method: 'POST', body: { force_qr: !!force } }),
+        QR_TIMEOUT_MS,
+        'Conectar'
+      );
+      _rebindRequired = false;
       _status = data.status || 'connecting';
       if (data.qr) _qr = data.qr;
-      renderHeadActions();
-      renderQrScreen();
+      if (data.status === 'open' && !data.qr) {
+        _sessionLive = true;
+        _qr = null;
+        stopPollers();
+        await refreshStatus({ skipQr: true });
+        await pullChats(true, false);
+        notifyKanbanState({ connecting: false });
+        return { ok: true, status: 'open', alreadyConnected: true };
+      }
       startConnectPoll();
-      notifyKanbanState();
-      if (!data.qr && typeof showToast === 'function') {
-        showToast('QR não retornou. Clique em Atualizar QR.', 'warning');
-      } else if (typeof showToast === 'function') {
-        showToast('Escaneie o QR Code no celular.', 'info');
+      const qr = data.qr || _qr;
+      if (qr) {
+        notifyKanbanState({ connecting: false });
+        return { ok: true, qr, status: _status };
       }
+      const st = await withTimeout(refreshStatus({ refreshQr: true, skipSideEffects: true }), QR_TIMEOUT_MS, 'Buscar QR');
+      const qr2 = st?.qr || _qr || null;
+      notifyKanbanState({ connecting: false });
+      if (qr2) return { ok: true, qr: qr2, status: st?.status || _status };
+      return { ok: false, error: 'QR não retornou. Clique em Recarregar QR Code ou reinicie a sessão.' };
     } catch (e) {
-      console.error('[WhatsAppChat.connect]', e);
-      const el = document.getElementById('waCrmQrScreen');
-      if (el) {
-        el.classList.remove('is-hidden');
-        el.innerHTML = `<div class="wa-crm__qr-card"><div class="wa-alert">${esc(e.message || 'Erro ao conectar.')}</div><button type="button" class="btn btn-primary" onclick="WhatsAppChat.connect()">Tentar novamente</button></div>`;
-      }
-      if (typeof showToast === 'function') showToast(e.message || 'Erro ao gerar QR.', 'error');
-    } finally {
-      if (typeof hideLoading === 'function') hideLoading();
+      _lastConnectError = e.message || 'Erro ao gerar QR Code.';
+      notifyKanbanState({ connecting: false, error: _lastConnectError });
+      return { ok: false, error: _lastConnectError };
     }
+    })();
+    _qrFetchPromise = run.finally(() => { _qrFetchPromise = null; });
+    return _qrFetchPromise;
   }
 
   async function simulateScan() {
@@ -1194,16 +2592,38 @@ const WhatsAppChat = (() => {
   }
 
   async function disconnect() {
-    await api('disconnect', { method: 'POST' });
-    _status = 'close';
-    _chats = [];
-    _messages = [];
-    _msgFingerprint = '';
-    _activeChatId = null;
-    _qr = null;
-    stopPollers();
-    render();
-    if (typeof showToast === 'function') showToast('WhatsApp desconectado.', 'success');
+    if (typeof showLoading === 'function') showLoading('Desconectando...');
+    try {
+      await api('disconnect', { method: 'POST' });
+      hardResetLocalState();
+      _rebindRequired = true;
+      stopPollers();
+      notifyKanbanState();
+      render();
+      await refreshStatus({ skipQr: true }).catch(() => {});
+      if (typeof showToast === 'function') showToast('WhatsApp desconectado com sucesso.', 'success');
+    } catch (e) {
+      if (typeof showToast === 'function') showToast('Erro ao desconectar.', 'error');
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  }
+
+  async function deleteMessage(messageId) {
+    if (!messageId || !_activeChatId) return;
+    if (!confirm('Apagar esta mensagem?\n\nEla será removida do painel e, quando possível, também no WhatsApp do destinatário.')) return;
+    try {
+      const data = await api('delete_message', { method: 'POST', body: { message_id: messageId } });
+      _messages = _messages.filter((m) => m.id !== messageId);
+      _msgFingerprint = msgFingerprint(_messages);
+      renderMessages();
+      await loadChats(true);
+      if (typeof showToast === 'function') {
+        showToast(data.revoked_whatsapp ? 'Mensagem apagada no WhatsApp.' : 'Mensagem removida do painel.', 'success');
+      }
+    } catch (e) {
+      if (typeof showToast === 'function') showToast(e.message || 'Erro ao apagar mensagem.', 'error');
+    }
   }
 
   async function sendMessage() {
@@ -1214,45 +2634,91 @@ const WhatsAppChat = (() => {
     input.value = '';
     input.style.height = 'auto';
     updateComposeMode();
+    const chatId = _activeChatId;
+    _lastSendAt = Date.now();
+    const pendingId = addOptimisticBubble(text, 'text');
+    let retried = false;
+    const doSend = async () => {
+      const data = await api('send', { method: 'POST', body: { chat_id: chatId, text } });
+      if (data.message) {
+        mergeSentMessage(data.message, pendingId);
+      } else {
+        removeOptimisticBubble(pendingId);
+        await loadMessages(chatId, true);
+      }
+    };
     try {
-      await api('send', { method: 'POST', body: { chat_id: _activeChatId, text } });
-      await loadMessages(_activeChatId, true);
-      await loadChats(true);
-      // #region agent log
-      try {
-        fetch(`${apiBase()}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:sendMessage', message: 'wa send ok', data: { chatId: _activeChatId, textLen: text.length }, timestamp: Date.now(), hypothesisId: 'wa-p1', runId: 'phase1' }) }).catch(() => {});
-      } catch (_) {}
-      // #endregion
+      await doSend();
     } catch (e) {
+      removeOptimisticBubble(pendingId);
+      const msg = String(e.message || '');
+      if (!retried && /desconectad|disconnected|rebind|qr code/i.test(msg)) {
+        retried = true;
+        try {
+          await refreshStatus({ skipQr: true });
+          if (_status === 'open') {
+            _lastSendAt = Date.now();
+            const retryPendingId = addOptimisticBubble(text, 'text');
+            try {
+              const data = await api('send', { method: 'POST', body: { chat_id: chatId, text } });
+              if (data.message) {
+                mergeSentMessage(data.message, retryPendingId);
+              } else {
+                removeOptimisticBubble(retryPendingId);
+                await loadMessages(chatId, true);
+              }
+            } catch (retryErr) {
+              removeOptimisticBubble(retryPendingId);
+              throw retryErr;
+            }
+            return;
+          }
+        } catch (_) { /* falhou novamente */ }
+      }
       input.value = text;
       updateComposeMode();
-      if (typeof showToast === 'function') showToast(e.message || 'Erro ao enviar.', 'error');
+      if (typeof showToast === 'function') showToast(msg || 'Erro ao enviar.', 'error');
     }
   }
 
   async function sendMedia(file) {
-    if (!_activeChatId || !file) return;
+    if (!isEffectivelyOpen()) {
+      if (typeof showToast === 'function') showToast('Conecte o WhatsApp antes de enviar arquivos.', 'warning');
+      throw new Error('WhatsApp desconectado.');
+    }
+    if (!_activeChatId || !file) {
+      throw new Error('Selecione uma conversa e um arquivo.');
+    }
     const name = file.name || '';
     const isSticker = (file.type === 'image/webp' || /\.webp$/i.test(name));
     const isImage = !isSticker && (file.type || '').startsWith('image/');
-    const isAudio = (file.type || '').startsWith('audio/');
+    const isAudio = (file.type || '').startsWith('audio/') || /\.(webm|ogg|m4a|aac|mp3|wav)$/i.test(name);
     if (!isSticker && !isImage && !isAudio) {
       if (typeof showToast === 'function') showToast('Envie imagem (JPG, PNG…), figurinha (WEBP) ou áudio.', 'warning');
-      return;
+      throw new Error('Tipo de arquivo não suportado.');
     }
+    if (isAudio && (!file.size || file.size < 200)) {
+      if (typeof showToast === 'function') showToast('Áudio vazio. Grave pelo menos 1 segundo.', 'warning');
+      throw new Error('Áudio vazio.');
+    }
+    const audioMime = isAudio ? normalizeAudioMime(file.type, file.name) : '';
+    const chatId = _activeChatId;
     const caption = !isSticker ? (document.getElementById('waMsgInput')?.value || '').trim() : '';
-    if (typeof showLoading === 'function') showLoading(isSticker ? 'Enviando figurinha...' : 'Enviando arquivo...');
-    try {
-      const uploaded = await uploadMedia(file);
+    const previewBody = isSticker ? '[Figurinha]' : (isImage ? (caption || '[Imagem]') : '[Áudio]');
+    const previewType = isSticker ? 'sticker' : (isImage ? 'image' : 'audio');
+    if (typeof showLoading === 'function') showLoading(isSticker ? 'Enviando figurinha...' : (isAudio ? 'Enviando áudio...' : 'Enviando arquivo...'));
+    let retried = false;
+    let pendingId = '';
+    const doSend = async (uploaded) => {
       const mediaPath = String(uploaded.path || '').replace(/^\/uploads\//, '').replace(/^\//, '');
       const mediaType = isSticker ? 'sticker' : (isImage ? 'image' : 'audio');
-      await api('send', {
+      const data = await api('send', {
         method: 'POST',
         body: {
-          chat_id: _activeChatId,
+          chat_id: chatId,
           media_type: mediaType,
           media_url: mediaPath,
-          mimetype: file.type || mimeFromName(file.name),
+          mimetype: isAudio ? audioMime : (file.type || mimeFromName(file.name)),
           file_name: file.name,
           caption,
           text: caption,
@@ -1260,38 +2726,81 @@ const WhatsAppChat = (() => {
       });
       const input = document.getElementById('waMsgInput');
       if (input) { input.value = ''; input.style.height = 'auto'; updateComposeMode(); }
-      await loadMessages(_activeChatId, true);
-      await loadChats(true);
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:sendMedia', message: 'send media ok', data: { mediaType, fileType: file.type || '', size: file.size || 0, chatId: _activeChatId }, timestamp: Date.now(), hypothesisId: 'media-send' }) }).catch(() => {});
-      // #endregion
+      if (data.message) {
+        mergeSentMessage(data.message, pendingId);
+      } else {
+        removeOptimisticBubble(pendingId);
+        await loadMessages(chatId, true);
+      }
+    };
+    try {
+      _lastSendAt = Date.now();
+      pendingId = addOptimisticBubble(previewBody, previewType);
+      const uploaded = await uploadMedia(file);
+      try {
+        await doSend(uploaded);
+      } catch (e) {
+        const msg = String(e.message || '');
+        if (!retried && /desconectad|disconnected/i.test(msg)) {
+          retried = true;
+          await refreshStatus({ skipQr: true });
+          if (_status === 'open') {
+            await doSend(uploaded);
+            return;
+          }
+        }
+        throw e;
+      }
     } catch (e) {
+      if (pendingId) removeOptimisticBubble(pendingId);
       if (typeof showToast === 'function') {
         const msg = String(e.message || '');
-        const hint = /audio|campo|property/i.test(msg)
-          ? (msg.includes('audio') ? 'Falha ao enviar áudio. Verifique microfone e conexão.' : msg)
+        const hint = /audio|campo|property|ogg|webm/i.test(msg)
+          ? (msg || 'Falha ao enviar áudio. Verifique microfone e conexão.')
           : (msg || 'Erro ao enviar arquivo.');
         showToast(hint, 'error');
       }
+      throw e;
     } finally {
       if (typeof hideLoading === 'function') hideLoading();
     }
   }
 
-  async function openChatByPhone(phone, name) {
-    const data = await api('open_chat', { method: 'POST', body: { phone, name: name || '' } });
-    await loadChats(true);
-    if (data.chat?.id) {
-      if (_kanbanMode && window.WA?.openChat) {
-        WA.openChat(data.chat.id);
-        return;
-      }
-      _activeChatId = data.chat.id;
-      await loadMessages(data.chat.id, false);
-      startMsgPoll();
-      setCrmMode();
-      renderChatList();
+  async function openChatByPhone(phone, name, firstMessage) {
+    if (!isEffectivelyOpen()) {
+      throw new Error('Conecte o WhatsApp antes de iniciar uma conversa.');
     }
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (digits.length < 10) {
+      throw new Error('Informe um telefone válido com DDD.');
+    }
+    const data = await api('open_chat', { method: 'POST', body: { phone: digits, name: name || '' } });
+    if (data.chat?.id) {
+      const idx = _chats.findIndex((c) => String(c.id) === String(data.chat.id));
+      if (idx >= 0) _chats[idx] = { ..._chats[idx], ...data.chat };
+      else _chats.unshift(data.chat);
+    }
+    await pullChats(true, false);
+    const chatId = data.chat?.id;
+    if (!chatId) return data;
+    const msg = String(firstMessage || '').trim();
+    if (msg) {
+      await api('send', { method: 'POST', body: { chat_id: chatId, text: msg } });
+      await loadMessages(chatId, true);
+      await pullChats(true, false);
+    }
+    if (_kanbanMode && window.WA?.openChat) {
+      WA.openChat(chatId);
+      notifyKanbanState();
+      return data;
+    }
+    _activeChatId = chatId;
+    await loadMessages(chatId, false);
+    startMsgPoll();
+    setCrmMode();
+    renderChatList();
+    notifyKanbanState();
+    return data;
   }
 
   function renderHeadActions() {
@@ -1303,9 +2812,9 @@ const WhatsAppChat = (() => {
     </button>`;
 
     let statusHtml = '';
-    if (!_configured) {
+    if (_configured === false) {
       statusHtml = '<span class="wa-crm__status-pill wa-crm__status-pill--off"><span class="wa-crm__status-dot"></span>Off</span>';
-    } else if (_status === 'open') {
+    } else if (isEffectivelyOpen()) {
       statusHtml = `
         <span class="wa-crm__status-pill"><span class="wa-crm__status-dot"></span>Conectado</span>
         ${_syncEnabled ? `<button type="button" class="btn btn-ghost btn-sm" title="Espelhar conversas do WhatsApp (até ${_contactsMax})" onclick="WhatsAppChat.loadContacts(false,true)">↻</button>` : ''}
@@ -1329,7 +2838,7 @@ const WhatsAppChat = (() => {
     const threadWrap = document.getElementById('waCrmThreadWrap');
     if (!el) return;
 
-    if (_status === 'open') {
+    if (isEffectivelyOpen()) {
       el.classList.add('is-hidden');
       threadWrap?.classList.remove('is-hidden');
       return;
@@ -1338,45 +2847,64 @@ const WhatsAppChat = (() => {
     threadWrap?.classList.add('is-hidden');
     el.classList.remove('is-hidden');
 
-    if (!_configured) {
-      el.innerHTML = `<div class="wa-crm__qr-card"><h3>WhatsApp não configurado</h3><p>Crie <code>config.evolution.local.php</code> no servidor.</p></div>`;
+    if (_configured === false) {
+      el.innerHTML = `<div class="wa-crm__qr-card"><h3>WhatsApp não configurado</h3><p>Crie <code>config.${_provider === 'whaticket' ? 'whaticket' : 'evolution'}.local.php</code> no servidor.</p></div>`;
       return;
     }
 
+    const qrHint = _provider === 'whaticket'
+      ? '<p class="text-muted" style="font-size:12px;margin-top:8px">Motor WhaTicket: o QR pode levar alguns segundos via bridge Socket.IO.</p>'
+      : '';
     const qr = _qr || '';
     el.innerHTML = `
       <div class="wa-crm__qr-card">
         <h3>Use o WhatsApp no SOU+BLU</h3>
         <p>Escaneie o QR Code para conectar seu número.</p>
         <div class="wa-qr-wrap">${qr ? `<img src="${esc(qr)}" alt="QR Code" class="wa-qr-img"/>` : '<p class="text-muted">Gerando QR...</p>'}</div>
+        ${qrHint}
         <button type="button" class="btn btn-primary" onclick="WhatsAppChat.connect()">Atualizar QR Code</button>
       </div>`;
   }
 
   function filteredChats() {
-    let list = _chats;
+    let list = dedupeChatsByPhone(_chats);
     if (_listFilter === 'unread') {
       list = list.filter(c => Number(c.unread_count) > 0);
     }
-    const q = _chatFilter.trim().toLowerCase();
+    const q = _normStr(_chatFilter);
     if (!q) return list;
     return list.filter(c => {
-      const name = String(c.contact_name || '').toLowerCase();
-      const phone = String(c.contact_phone || '').toLowerCase();
-      const preview = String(c.last_message_preview || '').toLowerCase();
+      const name = _normStr(displayContactName(c));
+      const phone = String(c.contact_phone || '').replace(/\D/g, '');
+      const preview = _normStr(c.last_message_preview || '');
       return name.includes(q) || phone.includes(q) || preview.includes(q);
     });
   }
 
   
   async function updateChatStage(chatId, stageId) {
+    const norm = normalizeKanbanStage(stageId);
+    setPendingKanbanStage(chatId, norm);
     const c = _chats.find(x => x.id === chatId);
-    if(c) c.kanban_stage = stageId;
+    if (c) c.kanban_stage = norm;
     renderChatList();
+    renderThreadHeader();
+    notifyKanbanState();
     try {
-      await api('update_stage', { method: 'POST', body: { chat_id: chatId, stage: stageId, monitor_user_id: _monitorUserId } });
-    } catch(e) {
-      console.error(e);
+      const data = await api('update_stage', {
+        method: 'POST',
+        body: { chat_id: chatId, stage: norm },
+      });
+      const saved = normalizeKanbanStage(data?.kanban_stage || data?.stage || norm);
+      clearPendingKanbanStage(chatId, saved);
+      const row = _chats.find(x => x.id === chatId);
+      if (row) row.kanban_stage = saved;
+      renderChatList();
+      renderThreadHeader();
+      notifyKanbanState();
+    } catch (e) {
+      console.error('[updateChatStage]', e);
+      if (typeof showToast === 'function') showToast('Erro ao salvar etapa do funil.', 'error');
     }
   }
 
@@ -1399,9 +2927,9 @@ const WhatsAppChat = (() => {
     const newBlock = document.getElementById('waNewChatBlock');
     if (!el) return;
 
-    if (newBlock && _status !== 'open') newBlock.classList.remove('is-open');
+    if (newBlock && !isEffectivelyOpen()) newBlock.classList.remove('is-open');
 
-    if (_status !== 'open') {
+    if (!isEffectivelyOpen()) {
       el.innerHTML = '<div class="wa-crm__empty">Conecte o WhatsApp para ver seus contatos.</div>';
       return;
     }
@@ -1418,14 +2946,35 @@ const WhatsAppChat = (() => {
           </div>
           <div class="wa-kanban-col__body">`;
           
-        stageChats.forEach(c => {
+          stageChats.forEach(c => {
           const unreadN = Number(c.unread_count) || 0;
           const hasUnread = unreadN > 0;
           const unreadCls = hasUnread ? ' wa-chat-item--has-unread' : '';
           const unread = hasUnread ? `<span class="wa-unread">${unreadN}</span>` : '';
           const preview = c.last_message_preview ? esc(humanPreview(c.last_message_preview)) : '<span class="wa-chat-item__phone">Toque para conversar</span>';
+          
+          let dealValHTML = '';
+          if (c.deal_value && Number(c.deal_value) > 0) {
+              dealValHTML = `<div class="wa-deal-val" onclick="WhatsAppCRM.editDealValue('${esc(c.id)}', '${c.deal_value}')" title="Clique para editar valor">💰 R$ ${Number(c.deal_value).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</div>`;
+          }
+          
+          let dealTagsHTML = '';
+          if (c.deal_tags && c.deal_tags.trim() !== '') {
+              const tags = c.deal_tags.split(',').map(t => t.trim()).filter(Boolean);
+              const tagChips = tags.map((t) => (window.WATags && WATags.chipHtml) ? WATags.chipHtml(t) : `<span class="wa-tag-chip">${esc(t)}</span>`).join('');
+              dealTagsHTML = `<div class="wa-deal-tags">${tagChips}</div>`;
+          }
+          
+          let nextActionHTML = '';
+          if (c.next_action_at) {
+              const d = new Date(c.next_action_at);
+              if (!isNaN(d)) {
+                 nextActionHTML = `<div class="wa-deal-date" onclick="WhatsAppCRM.editNextAction('${esc(c.id)}', '${esc(c.next_action_at)}')">📅 ${d.toLocaleDateString('pt-BR')}</div>`;
+              }
+          }
+
           html += `
-              <div class="wa-chat-item${unreadCls}" draggable="true" ondragstart="WhatsAppChatDragStart(event, '${esc(c.id)}')">
+              <div class="wa-chat-item${unreadCls} wa-kanban-card" draggable="true" ondragstart="WhatsAppChatDragStart(event, '${esc(c.id)}')">
                 <div class="wa-chat-item__content-wrap" onclick="WhatsAppChat.selectChat('${esc(c.id)}')">
                   ${avatarHtml(c, 'wa-chat-item__avatar')}
                   <div class="wa-chat-item__body">
@@ -1439,19 +2988,19 @@ const WhatsAppChat = (() => {
                     </div>
                   </div>
                 </div>
-                <div class="wa-chat-item__actions">
-                  <button type="button" class="wa-action-icon ico-note" title="Anotações" onclick="if(typeof showToast==='function') showToast('Anotações em breve', 'info')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-                  </button>
-                  <button type="button" class="wa-action-icon ico-sched" title="Agendamentos" onclick="if(typeof showToast==='function') showToast('Agendamentos em breve', 'info')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="12" cy="16" r="2" fill="currentColor" opacity=".4"/></svg>
-                  </button>
-                  <button type="button" class="wa-action-icon ico-chat" title="Abrir conversa" onclick="WhatsAppChat.selectChat('${esc(c.id)}')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                  </button>
-                  <button type="button" class="wa-action-icon ico-deal" title="Proposta / Venda" onclick="if(typeof showToast==='function') showToast('Propostas em breve', 'info')">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                  </button>
+                
+                ${(dealValHTML || dealTagsHTML || nextActionHTML) ? `
+                <div class="wa-deal-info-wrap">
+                    ${dealValHTML}
+                    ${dealTagsHTML}
+                    ${nextActionHTML}
+                </div>
+                ` : ''}
+
+                <div class="wa-chat-item__actions wa-deal-actions">
+                  <button type="button" class="wa-action-icon" title="Definir Valor (R$)" onclick="WhatsAppCRM.editDealValue('${esc(c.id)}', '${c.deal_value||''}')">💰</button>
+                  <button type="button" class="wa-action-icon" title="Agendar Retorno" onclick="WhatsAppCRM.editNextAction('${esc(c.id)}', '${esc(c.next_action_at||'')}')">📅</button>
+                  <button type="button" class="wa-action-icon" title="Abrir conversa" onclick="WhatsAppChat.selectChat('${esc(c.id)}')">💬</button>
                 </div>
               </div>`;
         });
@@ -1460,6 +3009,7 @@ const WhatsAppChat = (() => {
       });
       html += '</div>';
       el.innerHTML = html;
+      bindLazyAvatars(el);
       return;
     }
     if (!list.length) {
@@ -1477,9 +3027,30 @@ const WhatsAppChat = (() => {
       const active = c.id === _activeChatId ? ' wa-chat-item--active' : '';
       const unreadCls = hasUnread ? ' wa-chat-item--has-unread' : '';
       const unread = hasUnread ? `<span class="wa-unread">${unreadN}</span>` : '';
-      const preview = c.last_message_preview ? esc(humanPreview(c.last_message_preview)) : '<span class="wa-chat-item__phone">Toque para conversar</span>';
+      const rawPreview = c.last_message_preview ? humanPreview(c.last_message_preview) : '';
+      const previewHtml = rawPreview
+        ? `<span class="wa-chat-item__preview">${esc(rawPreview)}</span>`
+        : `<span class="wa-chat-item__preview wa-chat-item__preview--muted">Toque para conversar</span>`;
+        
+      const stageId = kanbanStageId(c);
+      const stage = _kanbanStages.find(s => s.id === stageId) || _kanbanStages[0];
+      
+      let optionsHtml = '';
+      _kanbanStages.forEach(s => {
+        const sel = s.id === stageId ? ' selected' : '';
+        optionsHtml += `<option value="${s.id}"${sel}>${esc(s.name)}</option>`;
+      });
+      
+      const tagHtml = `<div class="wa-chat-item__tags" style="margin-top: 6px;">
+        <select class="wa-kanban-tag" style="background-color: ${stage.color}15; color: ${stage.color}; border: 1px solid ${stage.color}40; border-radius: 4px; padding: 2px 4px; font-size: 11px; font-weight: 500; cursor: pointer; height: auto;" onclick="event.stopPropagation()" onchange="WhatsAppChat.updateChatStage('${esc(c.id)}', this.value)">
+          ${optionsHtml}
+        </select>
+      </div>`;
+      const prio = priorityMeta(c.deal_tags);
+
       html += `
-        <button type="button" class="wa-chat-item${active}${unreadCls}" onclick="WhatsAppChat.selectChat('${esc(c.id)}')">
+        <button type="button" class="wa-chat-item wa-chat-item--has-priority${active}${unreadCls}" onclick="WhatsAppChat.selectChat('${esc(c.id)}')">
+          <span class="wa-chat-item__priority-bar ${prio.priorityClass}" title="Prioridade: ${esc(prio.priority)}"></span>
           ${avatarHtml(c, 'wa-chat-item__avatar')}
           <div class="wa-chat-item__body">
             <div class="wa-chat-item__top">
@@ -1487,13 +3058,15 @@ const WhatsAppChat = (() => {
               <span class="wa-chat-item__time">${esc(fmtTime(c.last_message_at))}</span>
             </div>
             <div class="wa-chat-item__bottom">
-              <span class="wa-chat-item__preview">${esc(humanPreview(c.last_message_preview))}</span>
+              ${previewHtml}
               ${unread}
             </div>
+            ${tagHtml}
           </div>
         </button>`;
     });
     el.innerHTML = html;
+    bindLazyAvatars(el);
   }
 
   function render() {
@@ -1516,30 +3089,36 @@ const WhatsAppChat = (() => {
     try {
       const cfgData = await api('config');
       _configured = !!cfgData.configured;
+      _provider = String(cfgData.provider || 'evolution');
       _syncEnabled = !!cfgData.sync_enabled;
       _mirrorMode = cfgData.mirror_mode !== false;
-      _contactsMax = Number(cfgData.contacts_max) || (_mirrorMode ? 150 : 500);
-      await refreshStatus();
-      if (_configured && _status !== 'open') {
-        if (!_qr) await refreshStatus({ refreshQr: true });
-        if (!_qr) await connect();
-      } else if (_qr && _status !== 'open') {
+      _contactsMax = Number(cfgData.contacts_max) || (_mirrorMode ? 60 : 500);
+      await refreshStatus({ wantProfile: true });
+      // Confiar só no servidor: NÃO forçar _sessionLive com dados locais stale.
+      if (_status === 'open' && !_sessionLive) {
+        _status = 'close';
+      }
+      if (_qr && _status !== 'open' && !_rebindRequired) {
         _status = 'connecting';
       }
+      if (_rebindRequired) {
+        stopPollers();
+        _chats = [];
+        _messages = [];
+        _phone = null;
+        _sessionLive = false;
+        _status = 'close';
+      }
       if (isEffectivelyOpen()) {
+        loadOwnProfile(false).catch(() => {});
         startMsgPoll();
         startChatsPoll();
-        if (_syncEnabled) {
-          await loadContacts(true, true);
-          await loadChats(true, { force: true });
-        }
-      } else if (_status === 'connecting') startConnectPoll();
+        startEventsPoll();
+        await pullChats(true, _chats.length === 0);
+      } else if (_status === 'connecting') {
+        startConnectPoll();
+      }
       notifyKanbanState();
-      // #region agent log
-      try {
-        fetch(`${apiBase()}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'whatsapp-chat.js:init', message: 'wa init ok', data: { configured: _configured, status: _status, hasQr: !!_qr, chats: (_chats || []).length, syncEnabled: _syncEnabled }, timestamp: Date.now(), hypothesisId: 'wa-p1', runId: 'phase1' }) }).catch(() => {});
-      } catch (_) {}
-      // #endregion
     } catch (e) {
       console.error('[WhatsAppChat]', e);
       notifyKanbanState();
@@ -1566,10 +3145,15 @@ const WhatsAppChat = (() => {
     init,
     canAccess,
     connect,
+    fetchQrForModal,
     simulateScan,
     disconnect,
     resetSession,
+    hardResetLocalState,
     refreshStatus,
+    isEffectivelyOpen,
+    pullChats,
+    loadChats: pullChats,
     loadContacts: async (silent, force) => {
       if (!_syncEnabled) {
         if (typeof showToast === 'function') showToast('Importação desativada no servidor.', 'info');
@@ -1603,11 +3187,12 @@ const WhatsAppChat = (() => {
       renderChatList();
       renderThreadHeader();
       await loadMessages(id, false);
+      bindMicEvents();
+      updateComposeMode();
+      scheduleThreadMediaRepair();
       startMsgPoll();
       const chat = _chats.find(c => c.id === id);
-      if (chat && !chat.contact_avatar_url) {
-        loadChatAvatar(id, true).catch(() => {});
-      }
+      if (chat) loadThreadAvatarNow(chat);
     },
     openNewChat: async () => {
       const phone = document.getElementById('waNewPhone')?.value || '';
@@ -1623,13 +3208,39 @@ const WhatsAppChat = (() => {
     },
     openChatByPhone,
     sendMessage,
+    fetchProfile: function() {
+      return withTimeout(api('fetch_profile', { query: { quick: '1' } }), 15000, 'Carregar perfil');
+    },
+    updateProfile: function(data) {
+      return api('update_profile', { method: 'POST', body: data });
+    },
+    updateContactName: async function(chatId, name) {
+      const data = await api('update_contact', { method: 'POST', body: { chat_id: chatId, name } });
+      if (data && data.ok) {
+        const idx = _chats.findIndex(c => String(c.id) === String(chatId));
+        if (idx >= 0) _chats[idx] = { ..._chats[idx], contact_name: data.contact_name };
+        if (Array.isArray(data.chats)) _chats = data.chats;
+        renderChatList();
+        renderThreadHeader();
+      }
+      return data;
+    },
     sendMedia,
+    onMicClick,
+    toggleAudioRecord,
+    startAudioRecord,
+    stopAudioRecord,
     avatarHtml,
     displayContactName,
+    dedupeChatsByPhone,
+    loadOwnProfile,
     humanPreview,
     fmtPhone,
     loadChatAvatar,
+    bindLazyAvatars,
+    avatarProxyUrl,
     _onAudioError: onAudioError,
+    _onMediaImgError: onMediaImgError,
     initKanbanMode: () => {
       _kanbanMode = true;
       ensureThreadShell();
@@ -1647,7 +3258,21 @@ const WhatsAppChat = (() => {
       setCrmMode();
     },
     _getState() {
-      return { status: _status, chats: _chats, qr: _qr, userId: _userId, configured: _configured, phone: _phone, rebindRequired: _rebindRequired };
+      return {
+        status: _status,
+        sessionLive: _sessionLive,
+        serverChatsCount: _serverChatsCount,
+        chats: _chats,
+        qr: _qr,
+        userId: _userId,
+        configured: _configured,
+        phone: _phone,
+        rebindRequired: _rebindRequired,
+        profilePic: _profilePic,
+        profileName: _profileName,
+        connectError: _lastConnectError,
+        connecting: !!_connectInFlight,
+      };
     },
   };
 })();
@@ -1656,4 +3281,142 @@ window.WhatsAppChat = WhatsAppChat;
 window.openClientWhatsApp = (phone, name) => {
   if (typeof navigateTo === 'function') navigateTo('secWhatsApp');
   return WhatsAppChat.openChatByPhone(phone, name);
+};
+
+// Shared tag colors + inbox chip helpers
+window.WATags = (function () {
+  const PRESETS = {
+    urgente: '#b91c1c',
+    urgent: '#b91c1c',
+    alta: '#ea0038',
+    high: '#ea0038',
+    'média': '#f59e0b',
+    media: '#f59e0b',
+    medium: '#f59e0b',
+    baixa: '#25d366',
+    low: '#25d366',
+    lead: '#2563eb',
+    hot: '#dc2626',
+    vip: '#9333ea',
+    follow: '#d97706',
+    closed: '#16a34a',
+  };
+  const LS_KEY = 'wa_tag_colors';
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  }
+
+  function normKey(tag) {
+    return String(tag || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function loadCustomColors() {
+    try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; }
+    catch (e) { return {}; }
+  }
+
+  function getColor(tag) {
+    const raw = String(tag || '').trim();
+    if (!raw) return '#3b4a54';
+    const customs = loadCustomColors();
+    if (customs[raw]) return customs[raw];
+    const key = normKey(raw);
+    if (customs[key]) return customs[key];
+    if (PRESETS[key]) return PRESETS[key];
+    for (const [k, v] of Object.entries(PRESETS)) {
+      if (key.includes(k)) return v;
+    }
+    return '#3b4a54';
+  }
+
+  function parse(raw) {
+    if (!raw) return [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.map((t) => String(t).trim()).filter(Boolean);
+    } catch (e) { /* comma-separated */ }
+    return String(raw).split(',').map((t) => t.trim()).filter(Boolean);
+  }
+
+  function chipHtml(tag, extraClass) {
+    const color = getColor(tag);
+    const cls = 'wa-tag-chip' + (extraClass ? ' ' + extraClass : '');
+    return '<span class="' + cls + '" style="--tag-color:' + esc(color) + '" title="' + esc(tag) + '">' + esc(tag) + '</span>';
+  }
+
+  function inboxHtml(chatId, dealTags) {
+    const tags = parse(dealTags);
+    if (!tags.length) return '';
+    const chips = tags.map((t) => chipHtml(t)).join('');
+    return '<div class="wa-contact__tags">' + chips + '</div>';
+  }
+
+  return {
+    PRESETS,
+    parse,
+    getColor,
+    chipHtml,
+    inboxHtml,
+  };
+})();
+
+// Advanced Kanban CRM Logic
+window.WhatsAppCRM = {
+    async updateDeal(chatId, data) {
+        try {
+            // Monta a URL da API a partir do estado interno do módulo
+            const state = WhatsAppChat._getState();
+            const cfg = window.SOUBLU_CONFIG || {};
+            const apiBase = (cfg.API_BASE || '').replace(/\/$/, '');
+            const apiUrl = apiBase
+                ? `${apiBase}/api/whatsapp_api.php`
+                : '/api/whatsapp_api.php';
+            const uid = state.userId || cfg.USER_ID || '';
+            const key = cfg.API_KEY || '';
+
+            const formData = new FormData();
+            formData.append('action', 'update_deal_info');
+            formData.append('chat_id', chatId);
+            formData.append('user_id', uid);
+            formData.append('apikey', key);
+            if (data.deal_value !== undefined) formData.append('deal_value', data.deal_value);
+            if (data.deal_tags !== undefined) formData.append('deal_tags', data.deal_tags);
+            if (data.next_action_at !== undefined) formData.append('next_action_at', data.next_action_at);
+
+            const res = await fetch(apiUrl, { method: 'POST', body: formData });
+            const json = await res.json();
+            if (json.ok) {
+                if (typeof showToast === 'function') showToast('Salvo com sucesso!', 'success');
+                WhatsAppChat.pullChats(true, false);
+            } else {
+                if (typeof showToast === 'function') showToast(json.error || 'Erro ao salvar', 'error');
+            }
+        } catch (e) {
+            console.error('[WhatsAppCRM.updateDeal]', e);
+            if (typeof showToast === 'function') showToast('Erro de conexão ao salvar.', 'error');
+        }
+    },
+    
+    editDealValue(chatId, currentVal) {
+        const val = prompt('Digite o valor do negócio (ex: 1500.50) ou deixe em branco para remover:', currentVal || '');
+        if (val !== null) {
+            this.updateDeal(chatId, { deal_value: val.replace(',','.') });
+        }
+    },
+    
+    editDealTags() {
+        // Etiquetas UI removida — dados deal_tags permanecem no backend
+    },
+    
+    editNextAction(chatId, currentDate) {
+        let def = '';
+        if (currentDate) {
+            def = currentDate.replace(' ', 'T').slice(0, 16);
+        }
+        const dt = prompt('Data de Retorno (AAAA-MM-DD HH:MM) ou deixe em branco:', def);
+        if (dt !== null) {
+            this.updateDeal(chatId, { next_action_at: dt.replace('T',' ') });
+        }
+    }
 };

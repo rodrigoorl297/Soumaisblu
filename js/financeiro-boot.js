@@ -26,8 +26,8 @@
 
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'financeiro-sections.html?v=12'
-      : 'pages/financeiro-sections.html?v=12';
+      ? 'financeiro-sections.html?v=97c411att3'
+      : 'pages/financeiro-sections.html?v=97c411att3';
     return typeof Auth !== 'undefined' && Auth.resolveHref
       ? Auth.resolveHref(rel)
       : rel;
@@ -286,7 +286,7 @@
   async function renderSection(sectionId, tab) {
     if (typeof syncFinanceiroRoleGlobals === 'function') syncFinanceiroRoleGlobals();
     if (tab && window.FornecedorFinanceiro) FornecedorFinanceiro.tab = tab;
-    if (tab && window.EsteiraCredito) EsteiraCredito.tab = tab;
+    if (tab && window.EsteiraCredito) EsteiraCredito.tab = tab === 'ccb' ? 'propostas' : tab;
     if (tab && window.FinPropostas && ['prejuizo', 'debitar'].includes(tab)) {
       FinPropostas.tab = tab;
     }
@@ -349,10 +349,6 @@
     const fn = renders[sectionId];
     if (fn) await fn();
 
-    if (sectionId === 'secEsteiraCredito' && tab === 'ccb') {
-      const adminSec = document.getElementById('cprAdminSection');
-      if (adminSec) adminSec.style.display = '';
-    }
     if (sectionId === 'secEsteiraCredito' && tab === 'solicitar' && window.EsteiraCredito) {
       EsteiraCredito.tab = 'solicitar';
     }

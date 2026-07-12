@@ -76,8 +76,17 @@ window.Clients = {
     this._paintEmployeeList(listEl, this._employeeListCache);
   },
 
+  repaintEmployeeList: function() {
+    return this._repaintEmployeeList();
+  },
+
   init: function() {
     this._bindCpfLookup();
+    const empSearch = document.getElementById('employeeClientSearch');
+    if (empSearch && !empSearch.dataset.bound) {
+      empSearch.dataset.bound = '1';
+      empSearch.addEventListener('input', () => this._repaintEmployeeList());
+    }
   },
 
   _setCpfStatus: function(msg, type) {
@@ -245,12 +254,38 @@ window.Clients = {
     return this._cpfDigits(cpf).replace(/'/g, '');
   },
 
+  viewDetails: async function(cpf) {
+    const digits = this._cpfDigits(cpf);
+    let client = typeof DB.getClientByCpf === 'function' ? await DB.getClientByCpf(digits) : null;
+    if (!client && typeof DB.get === 'function') {
+      client = await DB.get('clients', digits || cpf).catch(() => null);
+    }
+    if (!client) {
+      this._notify('Cliente não encontrado.', 'error');
+      return;
+    }
+    const show = (v) => {
+      const s = String(v ?? '').trim();
+      return s || '—';
+    };
+    const lines = [
+      `Nome: ${show(client.name)}`,
+      `CPF: ${show(client.cpf)}`,
+      `E-mail: ${show(client.email)}`,
+      `Celular: ${show(client.phone1)}`,
+      `Celular 2: ${show(client.phone2)}`,
+      `RG: ${show(client.rg)}`,
+      `Endereço: ${show(client.address)}`,
+    ];
+    alert(lines.join('\n'));
+  },
+
   /** Botões de ação em linha (ícones) — tabela admin e cards do vendedor */
   actionsRowHtml(cpf, opts = {}) {
     const k = this._escCpf(cpf);
     const employee = !!opts.employee;
     const onEdit = employee ? `Clients.edit('${k}')` : `editClientAdmin('${k}')`;
-    const onView = employee ? '' : `viewClientDetails('${k}')`;
+    const onView = employee ? `Clients.viewDetails('${k}')` : `viewClientDetails('${k}')`;
     const showDelete = this.mayDeleteClients();
     const onDelete = `Clients.deleteClient('${k}')`;
     const pen = '<svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>';
@@ -278,6 +313,32 @@ window.Clients = {
     }
     const role = String(u.role || '').toLowerCase();
     return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
+  },
+
+  /** Vendedor pode editar clientes da própria lista; exclusão continua restrita. */
+  async canEdit(client, user) {
+    const c = client;
+    const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
+    if (!c || !u?.id) return false;
+    if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) {
+      return true;
+    }
+    const role = String(u.role || '').toLowerCase();
+    // Vendedores: liberar edição (a lista já é filtrada pelos clientes deles).
+    if (role === 'vendedor') return true;
+    if (role === 'gerente' || role === 'gerencia') return true;
+    const ownerId = String(c.supervisorId || c.supervisor_id || '');
+    if (ownerId && ownerId === String(u.id)) return true;
+    if (role === 'parceiro' || role === 'parceiro_vendedor') {
+      if (ownerId === String(u.id)) return true;
+      if (typeof PARTNER_ROOT_ID !== 'undefined' && PARTNER_ROOT_ID && typeof DB.getPartnerTeamIds === 'function') {
+        try {
+          const set = await DB.getPartnerTeamIds(PARTNER_ROOT_ID);
+          if (set.has(ownerId) || set.has(String(u.id))) return true;
+        } catch (_) { /* noop */ }
+      }
+    }
+    return this.canDelete(c, u);
   },
 
   async canDelete(client, user) {
@@ -337,7 +398,7 @@ window.Clients = {
     const me = typeof Auth !== 'undefined'
       ? ((await Auth.getCurrentUser()) || Auth.getSession())
       : null;
-    if (!(await this.canDelete(client, me))) {
+    if (!(await this.canEdit(client, me))) {
       this._notify('Sem permissão para editar este cliente.', 'warning');
       return;
     }
@@ -518,7 +579,13 @@ window.Clients = {
       }
 
       const session = Auth.getSession();
-      const supervisorId = session?.id || '';
+      // Em edição, preserva o dono original do cadastro (não trocar supervisorId).
+      const prevOwner = existing
+        ? String(existing.supervisorId || existing.supervisor_id || '')
+        : '';
+      const supervisorId = isEdit && prevOwner
+        ? prevOwner
+        : (session?.id || '');
       const clientData = {
         id: cpf,
         cpf: cpf,

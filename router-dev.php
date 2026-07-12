@@ -26,12 +26,18 @@ if ($uri === '/api/rest-v1.php' || str_starts_with($uri, '/api/rest-v1.php')) {
 
 $path = __DIR__ . str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $uri);
 if ($uri !== '/' && is_file($path)) {
+    if (pathinfo($path, PATHINFO_EXTENSION) === 'html') {
+        header('Cache-Control: no-cache, no-store, must-revalidate');
+        header('Pragma: no-cache');
+        header('Expires: 0');
+    }
     return false;
 }
 
 if (preg_match('#^/([a-zA-Z0-9_-]+\.html)$#', $uri, $m)) {
     $pagesPath = __DIR__ . DIRECTORY_SEPARATOR . 'pages' . DIRECTORY_SEPARATOR . $m[1];
     if (is_file($pagesPath)) {
+        header('Cache-Control: no-cache, no-store, must-revalidate');
         header('Location: /pages/' . $m[1]);
         return true;
     }

@@ -41,6 +41,19 @@
     }
   };
 
+  /** URL absoluta para HTML em /pages/ — ignora <base> na raiz do site. */
+  window.soubluPage = function (filename) {
+    var name = String(filename || '').replace(/^\/+/, '').replace(/^pages\//, '');
+    var p = String(location.pathname || '').replace(/\\/g, '/');
+    var inPages = /(^|\/)pages(\/|$)/i.test(p);
+    var rel = inPages ? name : 'pages/' + name;
+    try {
+      return new URL(rel, location.href).href;
+    } catch (e) {
+      return '/' + rel.replace(/^\//, '');
+    }
+  };
+
   function fixLogoImages() {
     document.querySelectorAll('img[data-soublu-logo], img[src*="images/logo"]').forEach(function (img) {
       var raw = img.getAttribute('data-soublu-logo') || img.getAttribute('src') || 'images/logo.png';

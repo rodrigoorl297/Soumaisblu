@@ -40,7 +40,10 @@ function _rhFindUserForEmployee(emp, users) {
 
 async function _rhEmployeesWithLogin() {
   const users = await DB.getAllUsers();
-  const fromRh = (_allEmployees || [])
+  const companyEmps = typeof window._rhCompanyEmployees === 'function'
+    ? window._rhCompanyEmployees(_allEmployees || [])
+    : (_allEmployees || []).filter(e => !e.demitido && e.status !== 'demitido');
+  const fromRh = companyEmps
     .filter(e => !e.demitido && e.status !== 'demitido')
     .map(emp => {
       const u = _rhFindUserForEmployee(emp, users);

@@ -91,12 +91,16 @@ const Auth = {
   folhaPagamentoPageHref() { return this.pageHref('folha-pagamento.html'); },
   treinamentosPageHref() { return this.pageHref('treinamentos.html'); },
   treinamentosPageHrefFresh() { return this.pageHrefFresh('treinamentos.html'); },
+  clubeBeneficiosPageHref() { return this.pageHref('clube-beneficios.html'); },
+  adminBeneficiosPageHref() { return this.pageHref('admin-beneficios.html'); },
+  clubeBeneficiosPageHrefFresh() { return this.pageHrefFresh('clube-beneficios.html'); },
+  adminBeneficiosPageHrefFresh() { return this.pageHrefFresh('admin-beneficios.html'); },
 
   /** Roles que entram no painel admin (gestão). Vendedor → área do colaborador. */
   ADMIN_PANEL_ROLES: [
     'master', 'fundador', 'desenvolvedor', 'gerente', 'financeiro', 'financial',
     'supervisor', 'sup_backoffice', 'parceiro', 'rh', 'gerencia', 'operacional', 'juridico',
-    'diretoria', 'backoffice', 'ouvidoria', 'admin',
+    'diretoria', 'backoffice', 'ouvidoria', 'admin', 'portaria',
   ],
 
   isParceiro() {
@@ -104,8 +108,19 @@ const Auth = {
     return !!(s && s.role === 'parceiro');
   },
 
+  isPortaria() {
+    const s = this.getSession();
+    return !!(s && String(s.role || '').toLowerCase() === 'portaria');
+  },
+
   usesAdminPanel(role) {
-    return this.ADMIN_PANEL_ROLES.includes(String(role || ''));
+    return this.ADMIN_PANEL_ROLES.includes(String(role || '').toLowerCase());
+  },
+
+  /** Gestão Benefícios (admin-beneficios) — somente master/fundador e financeiro. */
+  canManageBeneficios(role) {
+    const r = String(role || '').toLowerCase();
+    return r === 'master' || r === 'fundador' || r === 'financeiro' || r === 'financial';
   },
 
   /** Painel Master (Dashboard + Painel Master) — master e fundador. */
@@ -117,16 +132,16 @@ const Auth = {
   isFinanceiroOnly() {
     const s = this.getSession();
     const role = String(s?.role || '').toLowerCase();
-    return role === 'financeiro' || role === 'financial';
+    return (role === 'financeiro' || role === 'financial') && !this.isMaster();
   },
 
   defaultAppHref() {
     const s = this.getSession();
     if (!s) return this.loginPageHref();
     const role = String(s.role || '').toLowerCase();
-    // Financeiro was originally redirected, but now they go to admin.html
     if (role === 'juridico') return this.juridicoManagerPageHref();
-    return this.usesAdminPanel(s.role) ? this.adminPageHref() : this.employeePageHref();
+    if (role === 'portaria' || this.usesAdminPanel(role)) return this.adminPageHref();
+    return this.employeePageHref();
   },
 
   requireMasterPanel() {
@@ -148,6 +163,7 @@ const Auth = {
       id: user.id,
       role,
       name: user.name,
+      email: user.email,
       adminId: user.admin_id || user.id,
       loginAt: loginAt || Date.now(),
     };
@@ -203,10 +219,11 @@ const Auth = {
       return { ok:false, msg: user.lead_lock_reason || 'Sua conta está bloqueada por não atingir a meta diária de leads. Aguarde aprovação do gerente.' };
     }
 
+    this.clearWaSessionStorage();
     const session = this._sessionFromUser(user, Date.now());
     this._writeSession(session);
     if (typeof AttendancePenalty !== 'undefined' && AttendancePenalty.onLogin) {
-      try { await AttendancePenalty.onLogin(user); } catch (e) { console.warn('[Auth] attendance:', e); }
+      // try { await AttendancePenalty.onLogin(user); } catch (e) { console.warn('[Auth] attendance:', e); }
     }
     if (typeof VendorTierPoints !== 'undefined' && VendorTierPoints.onLogin) {
       try { await VendorTierPoints.onLogin(user); } catch (e) { console.warn('[Auth] vendor tier:', e); }
@@ -214,7 +231,58 @@ const Auth = {
     return { ok:true, user };
   },
 
+  /** Remove caches locais do WhatsApp CRM (evita vazamento entre logins). */
+  clearWaSessionStorage() {
+    try {
+      const keys = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && (k.startsWith('soublu_wa_') || k === 'soublu_wa_active_uid')) keys.push(k);
+      }
+      keys.forEach((k) => sessionStorage.removeItem(k));
+    } catch (_) { /* noop */ }
+    try {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('soublu_wa_')) keys.push(k);
+      }
+      keys.forEach((k) => localStorage.removeItem(k));
+    } catch (_) { /* noop */ }
+    try { delete window._waContactCache; } catch (_) { /* noop */ }
+  },
+
+  /** Desconecta a sessão WhatsApp do user atual (fire-and-forget). */
+  _disconnectWhatsAppBestEffort(userId) {
+    if (!userId) return;
+    try {
+      const c = window.SOUBLU_CONFIG || {};
+      const base = String(c.API_BASE_URL || c.SITE_URL || location.origin || '').replace(/\/+$/, '');
+      const key = c.API_KEY || '';
+      if (!base || !key) return;
+      const url = `${base}/api/whatsapp_api.php?action=disconnect&user_id=${encodeURIComponent(userId)}&apikey=${encodeURIComponent(key)}`;
+      const body = JSON.stringify({ user_id: userId });
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+      } else {
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-API-Key': key, apikey: key },
+          body,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (_) { /* noop */ }
+  },
+
   logout() {
+    const s = this.getSession();
+    const uid = s?.id || null;
+    if (uid) this._disconnectWhatsAppBestEffort(uid);
+    if (typeof WhatsAppChat !== 'undefined' && typeof WhatsAppChat.hardResetLocalState === 'function') {
+      try { WhatsAppChat.hardResetLocalState(); } catch (_) { /* noop */ }
+    }
     this._clear();
     window.location.replace(this.loginPageHref());
   },
@@ -266,9 +334,6 @@ const Auth = {
   },
 
   async requireLogin() {
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'auth.js:requireLogin',message:'requireLogin start',data:{path:location.pathname,hasSession:!!this.getSession()},timestamp:Date.now(),hypothesisId:'login-auth',runId:'97c411login'})}).catch(()=>{});
-    // #endregion
     const ok = await this.isLoggedIn();
     if (!ok) {
       this._clear();
@@ -278,7 +343,7 @@ const Auth = {
     await this.syncSessionFromDb();
     const u = await DB.getUser(this.getSession()?.id).catch(() => null);
     if (typeof AttendancePenalty !== 'undefined' && AttendancePenalty.onLogin && u) {
-      try { await AttendancePenalty.onLogin(u); } catch (e) { console.warn('[Auth] attendance:', e); }
+      // try { await AttendancePenalty.onLogin(u); } catch (e) { console.warn('[Auth] attendance:', e); }
     }
     if (typeof VendorTierPoints !== 'undefined' && VendorTierPoints.onLogin && u) {
       try {
@@ -288,9 +353,6 @@ const Auth = {
         ]);
       } catch (e) { console.warn('[Auth] vendor tier:', e); }
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'auth.js:requireLogin',message:'requireLogin ok',data:{role:this.getSession()?.role},timestamp:Date.now(),hypothesisId:'login-auth',runId:'97c411login'})}).catch(()=>{});
-    // #endregion
     if (window.location.protocol !== 'file:' && !window.SOUBLU_SKIP_BACK_TRAP) {
       window.history.pushState(null,'',window.location.href);
       window.addEventListener('popstate',()=>window.history.pushState(null,'',window.location.href));
@@ -299,7 +361,9 @@ const Auth = {
 
   requireAdmin() {
     const s = this.getSession();
-    if (!s || !this.usesAdminPanel(s.role)) {
+    const role = String(s?.role || '').toLowerCase();
+    const ok = !!(s && (this.usesAdminPanel(role) || this.isPortaria() || window.SOUBLU_PORTARIA_BOOT));
+    if (!ok) {
       window.location.replace(this.employeePageHref());
       throw new Error('AUTH_REDIRECT');
     }
@@ -311,7 +375,7 @@ const Auth = {
     if (!s) return false;
     const role = String(s.role || '').toLowerCase();
     // Baseado na tabela de "quem abre"
-    if (['vendedor','backoffice'].includes(role)) {
+    if (['vendedor','backoffice','portaria'].includes(role)) {
       return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Ouvidoria', 'Desenvolvimento'].includes(department);
     }
     if (role === 'supervisor') {
@@ -340,10 +404,10 @@ const Auth = {
     switch (department) {
       case 'RH': return ['rh', 'gerencia', 'juridico'].includes(role);
       case 'Financeiro': return role === 'financeiro';
-      case 'Operacional': return ['backoffice', 'gerencia', 'operacional'].includes(role);
-      case 'Supervisão': return ['supervisor', 'gerencia'].includes(role);
-      case 'Ouvidoria': return role === 'rh' || role === 'ouvidoria';
-      case 'Gerência': return role === 'gerencia';
+      case 'Operacional': return role === 'sup_backoffice';
+      case 'Supervisão': return ['supervisor', 'gerente', 'gerencia'].includes(role);
+      case 'Ouvidoria': return ['rh', 'ouvidoria', 'gerente', 'gerencia'].includes(role);
+      case 'Gerência': return ['gerente', 'gerencia'].includes(role);
       case 'Jurídico': return role === 'juridico';
       case 'Diretoria': return role === 'diretoria';
       case 'Desenvolvimento':
@@ -359,6 +423,7 @@ const Auth = {
   },
 
   _clear() {
+    this.clearWaSessionStorage();
     localStorage.removeItem(this.SESSION_KEY);
     sessionStorage.removeItem(this.SESSION_KEY);
     try {

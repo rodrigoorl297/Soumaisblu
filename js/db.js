@@ -52,6 +52,9 @@
 
     formatUserDbError(err) {
       const msg = String(err?.message || err || '');
+      if (/Unknown column/i.test(msg)) {
+        return 'Banco desatualizado (coluna faltando). Recarregue a página ou avise o suporte para rodar a migração RH.';
+      }
       if (/23505/.test(msg) && /users_email|email/i.test(msg)) {
         return 'Este e-mail já está cadastrado. Use outro e-mail ou edite o usuário existente.';
       }
@@ -74,6 +77,8 @@
     async init() {
       if (this.online) {
         await this._ensureOnlineUsersOnce();
+        await this.ensurePersistTablesOnline().catch(() => null);
+        await this.ensureRhTablesOnline().catch(() => null);
         return;
       }
 
@@ -186,7 +191,7 @@
     },
   
     async getAdmins() {
-      const adminRoles = ['master','fundador','desenvolvedor','gerente','financeiro','financial','supervisor','sup_backoffice','rh','gerencia','operacional','juridico','diretoria','backoffice','ouvidoria','admin'];
+      const adminRoles = ['master','fundador','desenvolvedor','gerente','financeiro','financial','supervisor','sup_backoffice','rh','gerencia','operacional','juridico','diretoria','backoffice','ouvidoria','admin','portaria'];
       if (this.online) return await supaReq('GET','users',null,`?role=in.(${adminRoles.join(',')})&select=*&order=name.asc`);
       return this._lget(this.LK.users).filter(u => adminRoles.includes(u.role));
     },
@@ -466,25 +471,42 @@
 
     /** Lista leve de vendedores para selects (evita timeout em GET users completo) */
     async getVendorsForSelect(adminId = null) {
-      const cols = 'id,name,email,role,active';
+      const isVendorRole = (u) => {
+        const r = String(u?.role || '').toLowerCase();
+        return r === 'employee' || r === 'vendedor';
+      };
+      const isActive = (u) => u?.active !== false && u?.active !== 0 && u?.active !== '0';
+      const inScope = (u) => !adminId || String(u.admin_id || '') === String(adminId);
+      const sortName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+
+      // Preferir getAllUsers (já em cache no boot admin) — evita query active=eq.true quebrada no MySQL.
+      try {
+        const all = await this.getAllUsers();
+        if (Array.isArray(all) && all.length) {
+          return all.filter(u => isVendorRole(u) && isActive(u) && inScope(u)).sort(sortName);
+        }
+      } catch (e) {
+        console.warn('[DB] getVendorsForSelect via getAllUsers:', e);
+      }
+
       if (this.online) {
-        let params = `?role=in.(employee,vendedor)&active=eq.true&select=${cols}&order=name.asc&limit=500`;
+        const cols = 'id,name,email,role,active,admin_id';
+        // active=eq.1 (não "true") — Hostinger/MySQL TINYINT
+        let params = `?role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         if (adminId) {
-          params = `?admin_id=eq.${encodeURIComponent(adminId)}&role=in.(employee,vendedor)&active=eq.true&select=${cols}&order=name.asc&limit=500`;
+          params = `?admin_id=eq.${encodeURIComponent(adminId)}&role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         }
         try {
-          return await supaReq('GET', 'users', null, params);
+          const rows = await supaReq('GET', 'users', null, params);
+          return (Array.isArray(rows) ? rows : []).filter(isActive).sort(sortName);
         } catch (e) {
           console.warn('[DB] getVendorsForSelect:', e);
           return [];
         }
       }
-      const all = this._lget(this.LK.users);
-      return all.filter(u =>
-        (u.role === 'employee' || u.role === 'vendedor') &&
-        u.active !== false &&
-        (!adminId || u.admin_id === adminId)
-      );
+      return this._lget(this.LK.users)
+        .filter(u => isVendorRole(u) && isActive(u) && inScope(u))
+        .sort(sortName);
     },
   
     /* Todos os usuários sem filtro (master panel) */
@@ -532,7 +554,14 @@
         })();
         this.__allUsersInflight = run;
         try {
-          return await run;
+          return await Promise.race([
+            run,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('users timeout')), 40000)),
+          ]);
+        } catch (e) {
+          if (this.__allUsersMem?.length) return this.__allUsersMem;
+          console.warn('[DB] getAllUsers:', e);
+          return [];
         } finally {
           this.__allUsersInflight = null;
         }
@@ -570,6 +599,8 @@
       };
       if (data.cpf) user.cpf = String(data.cpf).replace(/\D/g, '');
       if (data.phone) user.phone = String(data.phone).trim();
+      if (data.partner_root_id) user.partner_root_id = data.partner_root_id;
+      if (data.permissions != null) user.permissions = data.permissions;
       try {
         if (this.online) { _cacheDel('users'); const r = await supaReq('POST', 'users', user); return r[0] || user; }
         const list = this._lget(this.LK.users);
@@ -1118,7 +1149,7 @@
       const all=await this.getWithdrawals();
       return all.filter(w=>ids.has(w.employee_id));
     },
-    /** Normaliza tipo/chave PIX antes de gravar ou enviar à Efi. */
+    /** Normaliza tipo/chave PIX antes de gravar ou enviar à Efi. Detecta o tipo automaticamente. */
     normalizePixPayment(type, key) {
       const alias = (t) => {
         let x = String(t || '').trim().toLowerCase();
@@ -1129,11 +1160,19 @@
         return x;
       };
 
+      const toUuid = (raw) => {
+        const hex = String(raw || '').replace(/[^0-9a-f]/gi, '');
+        if (hex.length !== 32) return String(raw || '').trim();
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`.toLowerCase();
+      };
+
       const inferType = (raw) => {
         const k = String(raw || '').trim();
         if (!k) return 'cpf';
         if (k.includes('@')) return 'email';
         if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(k)) return 'random';
+        const hexOnly = k.replace(/[^0-9a-f]/gi, '');
+        if (/^[0-9a-f]{32}$/i.test(hexOnly)) return 'random';
         const digits = k.replace(/\D/g, '');
         if (digits.length === 14) return 'cnpj';
         if (digits.length === 11 && !k.includes('@')) {
@@ -1141,6 +1180,7 @@
           return 'cpf';
         }
         if (digits.length === 10 || digits.length === 11) return 'phone';
+        if (digits.length === 12 || digits.length === 13) return 'phone';
         return 'random';
       };
 
@@ -1158,6 +1198,8 @@
             return '+' + digits;
           case 'email':
             return k.toLowerCase();
+          case 'random':
+            return toUuid(k);
           default:
             return k.trim();
         }
@@ -1175,23 +1217,22 @@
         }
       };
 
-      let t = alias(type);
-      let k = String(key || '').trim();
-      if (!k) return { pix_key_type: t || 'cpf', pix_key: '' };
+      const rawKey = String(key || '').trim();
+      if (!rawKey) return { pix_key_type: alias(type) || 'cpf', pix_key: '' };
 
-      if (!t) t = inferType(k);
-      k = formatKey(t, k);
-
-      if (!isValid(t, k)) {
-        const inferred = inferType(String(key || '').trim());
-        if (inferred !== t) {
-          t = inferred;
-          k = formatKey(t, key);
-        }
+      const tryTypes = [];
+      const hinted = alias(type) || inferType(rawKey);
+      tryTypes.push(hinted);
+      for (const t of ['email', 'random', 'cnpj', 'cpf', 'phone']) {
+        if (!tryTypes.includes(t)) tryTypes.push(t);
       }
 
-      if (!isValid(t, k)) return { pix_key_type: t, pix_key: '' };
-      return { pix_key_type: t, pix_key: k };
+      for (const t of tryTypes) {
+        const k = formatKey(t, rawKey);
+        if (isValid(t, k)) return { pix_key_type: t, pix_key: k };
+      }
+
+      return { pix_key_type: inferType(rawKey), pix_key: '' };
     },
 
     async requestWithdrawal(empId, amount, pixData) {
@@ -1546,7 +1587,7 @@
       if (wd.pix_status === 'pago' && wd.pix_e2e_id) {
         return { ok: false, error: 'PIX já confirmado pelo banco (E2E presente).' };
       }
-      await this._patchWd(id, { status: 'processando', pix_status: 'processando', pix_error: null });
+      await this._patchWd(id, { status: 'processando', pix_status: 'processando', pix_error: null, pix_id_envio: null, pix_e2e_id: null });
       const pixResult = await this._maybeTriggerPixGateway({ ...wd, id, status: 'processando' });
       if (!pixResult) {
         const errMsg = 'API PIX não respondeu. Verifique config.pix.local.php no servidor.';
@@ -1794,6 +1835,11 @@
       pairs.forEach(([a, b]) => {
         if (!empty(out[a]) && empty(out[b])) out[b] = out[a];
         else if (!empty(out[b]) && empty(out[a])) out[a] = out[b];
+        // Ambos preenchidos e divergentes: camelCase (a) vence — evita dono
+        // supervisorId/vendorId diferente de supervisor_id/vendor_id.
+        else if (!empty(out[a]) && !empty(out[b]) && String(out[a]) !== String(out[b])) {
+          out[b] = out[a];
+        }
       });
       return out;
     },
@@ -1970,6 +2016,9 @@
     /* Colunas leves — evita timeout ao buscar attachments/history em massa */
     _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissaoRecebida,valorComissaoRecebida,createdAt,created_at,updatedAt,updated_at,employee_id',
 
+    /** Dashboard / faturamento — sem fases/obs (payload ~95% menor). */
+    _PROPOSALS_LITE_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,protocolo,valor,valorFinal,valor_final,status,statusOp,status_op,created_at,updated_at,employee_id',
+
     /** Proposta considerada paga (status ou fase operacional). */
     isPaidProposal(p) {
       const norm = (s) => String(s || '')
@@ -1995,13 +2044,8 @@
       return String(p?.vendorId ?? p?.vendor_id ?? p?.employee_id ?? '').trim();
     },
 
-    /** Data para filtros de faturamento por período (criação → última alteração). */
+    /** Data para filtros de faturamento por período (agora última alteração → criação). */
     proposalBillingDate(p) {
-      const raw = p?.createdAt ?? p?.created_at;
-      if (raw) {
-        const d = new Date(raw);
-        if (!Number.isNaN(d.getTime())) return d;
-      }
       return this.proposalDate(p);
     },
 
@@ -2041,7 +2085,9 @@
     async listProposals() {
       if (this.online) {
         try {
-          return await supaReq('GET', 'proposals', null, this._proposalsListQuery());
+          return await this._cachedProposals('list', async () =>
+            supaReq('GET', 'proposals', null, this._proposalsListQuery())
+          );
         } catch (e) {
           console.warn('[DB] listProposals:', e.message);
           return [];
@@ -2050,15 +2096,55 @@
       return this._lget(this.LK.proposals);
     },
   
+    _proposalsCache: { key: '', at: 0, rows: null },
+    _proposalsCacheTtlMs: 90000,
+
+    async _cachedProposals(key, fetcher, ttlMs) {
+      const ttl = ttlMs ?? this._proposalsCacheTtlMs;
+      const now = Date.now();
+      const c = this._proposalsCache;
+      if (c.key === key && Array.isArray(c.rows) && (now - c.at) < ttl) {
+        return c.rows;
+      }
+      const rows = await fetcher();
+      this._proposalsCache = { key, at: now, rows: Array.isArray(rows) ? rows : [] };
+      return this._proposalsCache.rows;
+    },
+
+    _invalidateProposalsCache() {
+      this._proposalsCache = { key: '', at: 0, rows: null };
+    },
+
     _proposalsListQuery(extra = '') {
-      return `?select=${this._PROPOSALS_LIST_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=2000${extra}`;
+      return `?select=${this._PROPOSALS_LIST_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=800${extra}`;
+    },
+
+    _proposalsLiteQuery(limit = 600, extra = '') {
+      const lim = Math.min(Math.max(parseInt(limit, 10) || 600, 1), 1200);
+      return `?select=${this._PROPOSALS_LITE_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=${lim}${extra}`;
+    },
+
+    async listProposalsLite(opts = {}) {
+      const limit = opts.limit ?? 600;
+      if (this.online) {
+        try {
+          const key = 'lite:' + limit + ':' + (opts.extra || '');
+          return await this._cachedProposals(key, async () =>
+            supaReq('GET', 'proposals', null, this._proposalsLiteQuery(limit, opts.extra || ''))
+          );
+        } catch (e) {
+          console.warn('[DB] listProposalsLite:', e.message);
+          return [];
+        }
+      }
+      return this._lget(this.LK.proposals);
     },
 
     /** Busca propostas só da equipe (evita GET de 2000 linhas + filtro no browser). */
     async _fetchProposalsForVendorIds(teamIds) {
       const ids = [...teamIds].filter(Boolean).map(String);
       if (!ids.length) return [];
-      const base = this._proposalsListQuery();
+      const base = this._proposalsLiteQuery(800);
       const seen = new Set();
       const rows = [];
       const push = (list) => {
@@ -2119,12 +2205,24 @@
       if (!userId) return new Set();
       try {
         if (this.online) {
-          const rows = await supaReq('GET', 'clients', null, `?supervisorId=eq.${encodeURIComponent(userId)}&select=cpf,id`);
-          return new Set((rows || []).map(c => String(c.cpf || c.id || '').replace(/\D/g, '')).filter(Boolean));
+          const uid = encodeURIComponent(userId);
+          const [byCamel, bySnake] = await Promise.all([
+            supaReq('GET', 'clients', null, `?supervisorId=eq.${uid}&select=cpf,id`).catch(() => []),
+            supaReq('GET', 'clients', null, `?supervisor_id=eq.${uid}&select=cpf,id`).catch(() => []),
+          ]);
+          const seen = new Set();
+          for (const c of [...(byCamel || []), ...(bySnake || [])]) {
+            const cpf = String(c?.cpf || c?.id || '').replace(/\D/g, '');
+            if (cpf) seen.add(cpf);
+          }
+          return seen;
         }
         return new Set(
           this._lget(this.LK.clients)
-            .filter(c => String(c.supervisorId || '') === String(userId))
+            .filter(c => {
+              const sid = String(c.supervisorId || c.supervisor_id || '');
+              return sid === String(userId);
+            })
             .map(c => String(c.cpf || c.id || '').replace(/\D/g, ''))
             .filter(Boolean)
         );
@@ -2146,7 +2244,7 @@
           return this._fetchProposalsForVendorIds(teamIds);
         }
         if (!uid) {
-          return await supaReq('GET', 'proposals', null, this._proposalsListQuery());
+          return await supaReq('GET', 'proposals', null, this._proposalsLiteQuery(800));
         }
   
         const seen = new Set();
@@ -2159,7 +2257,7 @@
           }
         };
   
-        const base = this._proposalsListQuery();
+        const base = this._proposalsLiteQuery(800);
         const vendorCols = ['employee_id', 'vendorId', 'vendor_id'];
         const parts = await Promise.all(
           vendorCols.map((col) =>
@@ -2171,24 +2269,20 @@
         );
         parts.forEach(push);
   
-        if (rows.length === 0) {
+        try {
+          const all = await supaReq('GET', 'proposals', null, base);
+          push((all || []).filter(p => this._matchProposalToVendor(p, vendor)));
+        } catch (e) {
+          console.warn('[DB] getProposals name fallback:', e.message);
+        }
+
+        const cpfs = await this._getVendorClientCpfs(uid);
+        if (cpfs.size) {
           try {
             const all = await supaReq('GET', 'proposals', null, base);
-            push((all || []).filter(p => this._matchProposalToVendor(p, vendor)));
+            push((all || []).filter(p => cpfs.has(String(p.clientCpf || p.client_cpf || '').replace(/\D/g, ''))));
           } catch (e) {
-            console.warn('[DB] getProposals name fallback:', e.message);
-          }
-        }
-  
-        if (rows.length === 0) {
-          const cpfs = await this._getVendorClientCpfs(uid);
-          if (cpfs.size) {
-            try {
-              const all = await supaReq('GET', 'proposals', null, base);
-              push((all || []).filter(p => cpfs.has(String(p.clientCpf || p.client_cpf || '').replace(/\D/g, ''))));
-            } catch (e) {
-              console.warn('[DB] getProposals client fallback:', e.message);
-            }
+            console.warn('[DB] getProposals client fallback:', e.message);
           }
         }
   
@@ -2241,6 +2335,9 @@
     _compactProposalPayloadForApi(payload) {
       if (!payload || typeof payload !== 'object') return payload;
       const p = { ...payload };
+      if (Array.isArray(p.history) && p.history.length > 100) {
+        p.history = p.history.slice(-100);
+      }
       const maxBytes = 4000000;
       if (p.attachments && typeof p.attachments === 'object' && !Array.isArray(p.attachments)) {
         const att = { ...p.attachments };
@@ -2332,6 +2429,7 @@
       const row = this._sanitizeProposalForApi(this._normalizeProposalForDb(updates, { isNew: false }));
       if (this.online) {
         _cacheDel('proposals');
+        this._invalidateProposalsCache();
         const r = await supaReq('PATCH', 'proposals', row, `?id=eq.${encodeURIComponent(id)}`);
         return r[0] || null;
       }
@@ -2351,6 +2449,7 @@
       if (this.online) {
         payload = this._compactProposalPayloadForApi(payload);
         _cacheDel('proposals');
+        this._invalidateProposalsCache();
         let r = await supaReq('PATCH', 'proposals', payload, `?id=eq.${encodeURIComponent(merged.id)}`);
         if (!r || (Array.isArray(r) && r.length === 0)) {
           const created = this._compactProposalPayloadForApi(this._sanitizeProposalForApi(
@@ -2528,6 +2627,18 @@
 
     /** Compatível com Proposals.openAdminModal — anexos vêm da própria linha. */
     async getProposalAttachments(id) {
+      if (!id) return null;
+      if (this.online) {
+        try {
+          const r = await supaReq('GET', 'proposals', null,
+            `?id=eq.${encodeURIComponent(id)}&select=attachments&limit=1`);
+          if (r[0]) {
+            return { attachments: this._parseProposalAttachments(r[0].attachments) };
+          }
+        } catch (e) {
+          console.warn('[DB] getProposalAttachments:', e.message);
+        }
+      }
       const p = await this.getProposal(id);
       if (!p) return null;
       return { attachments: this._parseProposalAttachments(p.attachments) };
@@ -2617,6 +2728,13 @@
       const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
       const phpUp = _cfg.UPLOAD_URL && _cfg.API_KEY;
 
+      // #region agent log
+      if (typeof window._dbgSessionLog === 'function') window._dbgSessionLog('db.js:uploadProposalFile', 'upload start', {
+        phpUp: !!phpUp, hasUrl: !!_cfg.UPLOAD_URL, hasKey: !!_cfg.API_KEY,
+        grupo: safeGrp, size: file.size || 0,
+      }, 'H-B');
+      // #endregion
+
       if (phpUp) {
         const fd = new FormData();
         fd.append('file', file, origName);
@@ -2629,6 +2747,11 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok || !data.caminho) {
           const errMsg = data.error || `HTTP ${res.status}`;
+          // #region agent log
+          if (typeof window._dbgSessionLog === 'function') window._dbgSessionLog('db.js:uploadProposalFile', 'upload fail', {
+            status: res.status, errMsg: String(errMsg).slice(0, 120),
+          }, 'H-B');
+          // #endregion
           throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         }
         return {
@@ -3658,12 +3781,23 @@
     },
 
     async getFinancePropostaOps(type = null) {
+      const normalize = (rows) => (rows || []).map((r) => {
+        const data = (r.data && typeof r.data === 'object') ? r.data : {};
+        return {
+          ...data,
+          ...r,
+          id: r.id || data.id,
+          type: r.type || data.type,
+          proposal_id: r.proposal_id ?? data.proposal_id ?? null,
+          proposal_numero: r.proposal_numero ?? data.proposal_numero ?? null,
+        };
+      });
       let all;
       if (this.online) {
         try {
           let q = '?select=*&order=created_at.desc&limit=500';
           if (type) q += `&type=eq.${encodeURIComponent(type)}`;
-          all = await supaReq('GET', 'finance_proposta_ops', null, q);
+          all = normalize(await supaReq('GET', 'finance_proposta_ops', null, q));
         } catch {
           all = this._lget(this.LK.finance_proposta_ops) || [];
         }
@@ -3674,32 +3808,38 @@
     },
 
     async saveFinancePropostaOp(record) {
-      const row = {
+      const full = {
         id: record.id || this._genId('fpo'),
         ...record,
         updated_at: new Date().toISOString(),
       };
-      if (!row.created_at) row.created_at = row.updated_at;
+      if (!full.created_at) full.created_at = full.updated_at;
+      const row = {
+        id: full.id,
+        type: full.type || 'baixa_comissao',
+        proposal_id: full.proposal_id || null,
+        proposal_numero: full.proposal_numero || null,
+        created_by: full.created_by || null,
+        created_at: full.created_at,
+        updated_at: full.updated_at,
+        data: full,
+      };
       if (this.online) {
-        try {
-          _cacheDel('finance_proposta_ops');
-          const existing = await supaReq('GET', 'finance_proposta_ops', null, `?id=eq.${encodeURIComponent(row.id)}&select=id&limit=1`);
-          if (existing?.length) {
-            const r = await supaReq('PATCH', 'finance_proposta_ops', row, `?id=eq.${encodeURIComponent(row.id)}`);
-            return r[0] || row;
-          }
-          const r = await supaReq('POST', 'finance_proposta_ops', row);
-          return r[0] || row;
-        } catch (e) {
-          console.warn('[DB] saveFinancePropostaOp online fallback:', e.message);
+        _cacheDel('finance_proposta_ops');
+        const existing = await supaReq('GET', 'finance_proposta_ops', null, `?id=eq.${encodeURIComponent(row.id)}&select=id&limit=1`);
+        if (existing?.length) {
+          const r = await supaReq('PATCH', 'finance_proposta_ops', row, `?id=eq.${encodeURIComponent(row.id)}`);
+          return r[0]?.data || full;
         }
+        const r = await supaReq('POST', 'finance_proposta_ops', row);
+        return r[0]?.data || full;
       }
       const list = this._lget(this.LK.finance_proposta_ops) || [];
-      const idx = list.findIndex(x => x.id === row.id);
-      if (idx >= 0) list[idx] = row;
-      else list.unshift(row);
+      const idx = list.findIndex(x => x.id === full.id);
+      if (idx >= 0) list[idx] = full;
+      else list.unshift(full);
       this._lset(this.LK.finance_proposta_ops, list.slice(0, 500));
-      return row;
+      return full;
     },
 
     async buildContaCorrenteStatement(empId, limit = 120) {
@@ -5535,8 +5675,13 @@
       row.created_at = row.created_at || new Date().toISOString();
       row.updated_at = new Date().toISOString();
       try {
-        const res = await supaReq('POST', table, row, '?on_conflict=id');
-        return res?.[0] || row;
+        const exists = await supaReq('GET', table, null, `?id=eq.${encodeURIComponent(row.id)}&select=id&limit=1`);
+        if (exists?.length) {
+          const r = await supaReq('PATCH', table, row, `?id=eq.${encodeURIComponent(row.id)}`);
+          return r?.[0] || row;
+        }
+        const r = await supaReq('POST', table, row);
+        return r?.[0] || row;
       } catch (e) {
         console.error(`[DB] save ${table}:`, e);
         throw new Error(this.formatUserDbError ? this.formatUserDbError(e) : (e.message || 'Erro ao salvar.'));
@@ -5570,6 +5715,29 @@
       }
     },
 
+    async ensurePersistTablesOnline(force = false) {
+      const c = typeof window !== 'undefined' ? (window.SOUBLU_CONFIG || {}) : {};
+      const key = c.API_KEY;
+      const base = String(c.API_BASE_URL || c.SITE_URL || (typeof location !== 'undefined' ? location.origin : '')).replace(/\/+$/, '');
+      if (!key || c.DB_BACKEND !== 'hostinger') return { ok: true, skipped: true };
+      const flag = force ? null : sessionStorage.getItem('soublu_persist_migrated');
+      if (flag === '1') return { ok: true };
+      const headers = { apikey: key, 'X-API-Key': key };
+      try {
+        const results = await Promise.all([
+          fetch(`${base}/api/migrate-users-columns.php`, { headers }).then((r) => r.json().catch(() => ({}))),
+          fetch(`${base}/api/migrate-finance-proposta-ops.php`, { headers }).then((r) => r.json().catch(() => ({}))),
+          fetch(`${base}/api/migrate-proposals-comissao.php`, { headers }).then((r) => r.json().catch(() => ({}))),
+        ]);
+        const ok = results.every((r) => r?.ok !== false);
+        if (ok) sessionStorage.setItem('soublu_persist_migrated', '1');
+        return { ok, results };
+      } catch (e) {
+        console.warn('[DB] ensurePersistTablesOnline:', e);
+        return { ok: false, error: e.message };
+      }
+    },
+
     async getRhCompanies() {
       if (this.online) return await this._rhOnlineList('rh_companies');
       return this._lget(this.LK.rh_companies);
@@ -5593,6 +5761,21 @@
       resume.updated_at = new Date().toISOString();
       return await this._rhLocalSave(this.LK.rh_resumes, resume, r => r.cpf === resume.cpf || r.id === resume.id);
     },
+    async deleteRhResume(id) {
+      if (!id) return false;
+      if (this.online) {
+        try {
+          await supaReq('DELETE', 'rh_resumes', null, `?id=eq.${encodeURIComponent(id)}`);
+          return true;
+        } catch (e) {
+          console.error('[DB] deleteRhResume:', e);
+          throw new Error(this.formatUserDbError ? this.formatUserDbError(e) : (e.message || 'Erro ao excluir currículo.'));
+        }
+      }
+      const all = this._lget(this.LK.rh_resumes) || [];
+      this._lset(this.LK.rh_resumes, all.filter((r) => String(r.id) !== String(id)));
+      return true;
+    },
 
     async getRhJobs() {
       if (this.online) return await this._rhOnlineList('rh_jobs');
@@ -5607,6 +5790,21 @@
       return await this._rhLocalSave(this.LK.rh_jobs, job, j => j.id === job.id);
     },
     async saveRhPosition(job) { return await this.saveRhJob(job); },
+    async deleteRhJob(id) {
+      if (!id) return false;
+      if (this.online) {
+        try {
+          await supaReq('DELETE', 'rh_jobs', null, `?id=eq.${encodeURIComponent(id)}`);
+          return true;
+        } catch (e) {
+          console.error('[DB] deleteRhJob:', e);
+          throw new Error(this.formatUserDbError ? this.formatUserDbError(e) : (e.message || 'Erro ao excluir cargo.'));
+        }
+      }
+      const all = this._lget(this.LK.rh_jobs) || [];
+      this._lset(this.LK.rh_jobs, all.filter((j) => String(j.id) !== String(id)));
+      return true;
+    },
 
     async getRhEmployees() {
       if (this.online) return await this._rhOnlineList('rh_employees', 'nome.asc');
@@ -5618,6 +5816,21 @@
       employee.created_at = employee.created_at || new Date().toISOString();
       employee.updated_at = new Date().toISOString();
       return await this._rhLocalSave(this.LK.rh_employees, employee, e => e.cpf === employee.cpf || e.id === employee.id);
+    },
+    async deleteRhEmployee(id) {
+      if (!id) return false;
+      if (this.online) {
+        try {
+          await supaReq('DELETE', 'rh_employees', null, `?id=eq.${encodeURIComponent(id)}`);
+          return true;
+        } catch (e) {
+          console.error('[DB] deleteRhEmployee:', e);
+          throw new Error(this.formatUserDbError ? this.formatUserDbError(e) : (e.message || 'Erro ao excluir funcionário.'));
+        }
+      }
+      const all = this._lget(this.LK.rh_employees) || [];
+      this._lset(this.LK.rh_employees, all.filter((e) => String(e.id) !== String(id)));
+      return true;
     },
 
     async getRhAbsenceJustifications() {
@@ -5745,9 +5958,17 @@
       const campaignId = opts.campaignId || 'album-copa-2026';
       if (this.online) {
         try {
+          if (typeof _cacheDel === 'function') _cacheDel('bolao_copa_picks');
           let q = `?campaign_id=eq.${encodeURIComponent(campaignId)}&select=*&order=updated_at.desc&limit=5000`;
           if (opts.userId) q += `&user_id=eq.${encodeURIComponent(opts.userId)}`;
-          return await supaReq('GET', 'bolao_copa_picks', null, q);
+          const rows = await supaReq('GET', 'bolao_copa_picks', null, q);
+          if (Array.isArray(rows)) {
+            const merged = (this._lget(this.LK.bolao_copa_picks) || []).filter(
+              (r) => String(r.campaign_id || '') !== String(campaignId)
+            );
+            this._lset(this.LK.bolao_copa_picks, merged.concat(rows));
+          }
+          return rows;
         } catch (e) {
           console.warn('[DB] getBolaoPicks:', e.message);
         }

@@ -7,6 +7,7 @@ error_reporting(E_ALL);
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/FinanceMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/BeneficiosMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/PostgRestCompat.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
@@ -34,9 +35,16 @@ $query = preg_replace('/(^|&)table=[^&]*/', '', $query) ?? $query;
 $query = ltrim($query, '&');
 
 try {
+    $t0 = microtime(true);
     $run = static function () use ($table, $method, $body, $query) {
-        soublu_ensure_finance_modulos_tables(soublu_pdo());
-        $api = new PostgRestCompat(soublu_pdo());
+        $pdo = soublu_pdo();
+        if (!soublu_finance_modulos_tables_exist($pdo)) {
+            soublu_ensure_finance_modulos_tables($pdo);
+        }
+        if (!soublu_beneficios_tables_exist($pdo)) {
+            soublu_ensure_beneficios_tables($pdo);
+        }
+        $api = new PostgRestCompat($pdo);
         return $api->handle($table, $method, $body, $query);
     };
     try {
@@ -47,6 +55,10 @@ try {
         }
         soublu_pdo(true);
         $rows = $run();
+    }
+    $ms = (int) round((microtime(true) - $t0) * 1000);
+    if ($ms > 500 && !headers_sent()) {
+        header('X-SOUBLU-Rest-Ms: ' . $ms);
     }
     soublu_json($rows, $method === 'POST' ? 201 : 200);
 } catch (RuntimeException $e) {
