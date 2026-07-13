@@ -116,6 +116,7 @@ $allowed = [
     'js/pix-automatico-credito.js',
     'js/financeiro-propostas.js',
     'js/financeiro-boot.js',
+    'js/conta-corrente.js',
     'js/fiscal-parceiro.js',
     'js/fontedata.js',
     'js/rh-manager.js',
