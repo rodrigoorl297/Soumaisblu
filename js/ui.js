@@ -327,10 +327,7 @@ function applySidebarAvatar(el, name, photo) {
     el.style.backgroundImage = '';
     el.style.background = avatarColor(name);
     el.textContent = getInitials(name);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'ui.js:applySidebarAvatar',message:'photo load failed',data:{srcLen:src.length,srcHead:src.slice(0,80)},timestamp:Date.now(),hypothesisId:'C',runId:'perf-photo-fix'})}).catch(()=>{});
-    // #endregion
-  };
+};
   probe.src = src;
 }
 window.applySidebarAvatar = applySidebarAvatar;

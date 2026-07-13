@@ -862,23 +862,7 @@
     var phoneFormatted = phone && fmt ? fmt(phone) : phone;
 
     var isConnected = isUiConnected();
-    // #region agent log
-    if (typeof window._dbgSessionLog === 'function') {
-      var stDbg = (typeof WhatsAppChat !== 'undefined' && WhatsAppChat._getState) ? WhatsAppChat._getState() : {};
-      window._dbgSessionLog('whatsapp-kanban.js:updateConnBar', 'conn UI decision', {
-        isConnected: isConnected,
-        uiStatusText: isConnected ? 'Conectado' : (_status === 'connecting' ? 'Conectando' : 'Desconectado'),
-        localStatus: _status,
-        chatStatus: stDbg.status || null,
-        sessionLive: !!stDbg.sessionLive,
-        rebind: !!stDbg.rebindRequired,
-        hasPhone: !!phone,
-        openEnoughAvatar: !!(isEffectivelyOpen() || (_status === 'open' && !_rebindRequired())),
-      }, 'H-D-ui');
-    }
-    // #endregion
-    
-    if (dropdownStatus) {
+if (dropdownStatus) {
       if (isConnected) {
         dropdownStatus.textContent = 'Status: Conectado' + (phoneFormatted ? ' (' + phoneFormatted + ')' : '');
         dropdownStatus.style.color = '#25d366';

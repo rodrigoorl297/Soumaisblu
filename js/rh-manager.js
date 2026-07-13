@@ -625,6 +625,90 @@ function _resolveRhLinkedUser(users, emp, email) {
   return null;
 }
 
+async function _loadEmpClubeLimite(userId) {
+  _set('emp_limite_clube', '0');
+  _set('emp_clube_limite_id', '');
+  if (!userId || typeof supaReq !== 'function') return;
+  try {
+    const list = await supaReq(
+      'GET',
+      'beneficios_limites',
+      null,
+      `?employee_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=1`
+    );
+    const row = Array.isArray(list) && list[0] ? list[0] : null;
+    if (!row) return;
+    _set('emp_clube_limite_id', row.id || '');
+    const val = parseFloat(row.limite_aprovado);
+    _set('emp_limite_clube', Number.isFinite(val) ? String(val) : '0');
+  } catch (e) {
+    console.warn('[RH] load clube limite:', e?.message || e);
+  }
+}
+
+async function _saveEmpClubeLimite(userId, employeeName, limiteVal) {
+  if (!userId || typeof supaReq !== 'function') return;
+  const aprovado = Math.max(0, Math.round((parseFloat(limiteVal) || 0) * 100) / 100);
+  const existingId = _val('emp_clube_limite_id');
+  let utilizado = 0;
+  let limitId = existingId;
+
+  try {
+    if (!limitId) {
+      const list = await supaReq(
+        'GET',
+        'beneficios_limites',
+        null,
+        `?employee_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=1`
+      );
+      if (Array.isArray(list) && list[0]) {
+        limitId = list[0].id;
+        utilizado = parseFloat(list[0].limite_utilizado) || 0;
+      }
+    } else {
+      const list = await supaReq(
+        'GET',
+        'beneficios_limites',
+        null,
+        `?id=eq.${encodeURIComponent(limitId)}&limit=1`
+      );
+      if (Array.isArray(list) && list[0]) {
+        utilizado = parseFloat(list[0].limite_utilizado) || 0;
+      }
+    }
+
+    const disponivel = Math.max(0, Math.round((aprovado - utilizado) * 100) / 100);
+    const payload = {
+      employee_id: userId,
+      employee_name: employeeName || '',
+      limite_aprovado: aprovado,
+      limite_utilizado: utilizado,
+      limite_disponivel: disponivel,
+      status: aprovado > 0 ? 'aprovado' : 'solicitado',
+    };
+
+    if (limitId) {
+      await supaReq('PATCH', 'beneficios_limites', payload, `?id=eq.${encodeURIComponent(limitId)}`);
+    } else if (aprovado > 0) {
+      payload.id = 'ben_lim_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      payload.protocolo = 'RH-' + Date.now().toString(36).toUpperCase();
+      await supaReq('POST', 'beneficios_limites', payload);
+      limitId = payload.id;
+    }
+
+    if (limitId) _set('emp_clube_limite_id', limitId);
+
+    try {
+      await DB.updateUser(userId, { acesso_clube: aprovado > 0 });
+    } catch (accErr) {
+      console.warn('[RH] acesso_clube:', accErr?.message || accErr);
+    }
+  } catch (e) {
+    console.error('[RH] save clube limite:', e);
+    throw new Error('Não foi possível salvar o limite do Clube de Benefícios: ' + (e?.message || e));
+  }
+}
+
 async function _syncRhUserFromEmployee(emp, password, opts = {}) {
   const email = DB.normalizeEmail(emp.email || emp.email_pessoal || '');
   if (!email && !emp.user_id) return emp.user_id || null;
@@ -984,31 +1068,7 @@ function renderEmployeeList() {
   const raw = window._allEmployees || [];
   const company = _rhCompanyEmployees(raw);
   const list = _sortRhEmpByName(company);
-  // #region agent log
-  try {
-    const excluded = raw.filter((e) => !_isRhCompanyEmployee(e)).slice(0, 8).map((e) => ({
-      nome: e.nome || e.name || '',
-      dept: e.departamento || '',
-      role: e.system_role || e.role || '',
-      user_id: e.user_id || null,
-    }));
-    const dbg = {
-      scriptV: '97c411emp1',
-      totalRaw: raw.length,
-      companyCount: list.length,
-      excludedCount: raw.length - company.length,
-      excludedSample: excluded,
-    };
-    window.__rhEmpFilterDbg = dbg;
-    if (tbody) {
-      tbody.dataset.rhEmpFilter = String(list.length);
-      tbody.dataset.rhEmpFilterVer = '97c411emp1';
-    }
-    const logBody = JSON.stringify({ sessionId: '97c411', location: 'rh-manager.js:renderEmployeeList', message: 'employee list company filter', data: dbg, timestamp: Date.now(), hypothesisId: 'H-emp-filter', runId: 'emp-filter-v1' });
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: logBody }).catch(() => {});
-  } catch (_) {}
-  // #endregion
-  if (!list.length) {
+if (!list.length) {
     tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
     return;
   }
@@ -1272,10 +1332,7 @@ async function salvarCurriculo(event) {
     const cvKey = _editingCvId || cpf;
     const prev = _editingCvId ? (_allResumes.find((r) => String(r.id) === String(_editingCvId)) || {}) : {};
     row.attachments = await _collectRhAttachments(_RH_CV_FILE_FIELDS, prev.attachments, `curriculos/${cvKey}`);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'rh-manager.js:salvarCurriculo',message:'cv attachments saved',data:{keys:Object.keys(row.attachments||{}),count:Object.keys(row.attachments||{}).length},timestamp:Date.now(),hypothesisId:'H-rh-att',runId:'rh-att-fix'})}).catch(()=>{});
-    // #endregion
-    await DB.saveRhResume(row);
+await DB.saveRhResume(row);
     closeModalRH('curriculoModal');
     await reloadAllData();
     showToast('Currículo salvo com sucesso!', 'success');
@@ -1349,13 +1406,7 @@ async function excluirCargo(id) {
   if (!confirm(`Excluir o cargo "${label}"?\n\nEsta ação não pode ser desfeita.`)) return;
 
   showLoading('Excluindo cargo...');
-  // #region agent log
-  const hasDeleteFn = typeof DB.deleteRhJob === 'function';
-  try {
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: JSON.stringify({ sessionId: '97c411', location: 'rh-manager.js:excluirCargo', message: 'delete cargo attempt', data: { id, label, hasDeleteFn, scriptV: '97c411job1' }, timestamp: Date.now(), hypothesisId: 'H-deleteRhJob', runId: 'job-delete-v1' }) }).catch(() => {});
-  } catch (_) {}
-  // #endregion
-  try {
+try {
     await _deleteRhJobCompat(id);
     _allJobs = _allJobs.filter((j) => String(j.id) !== String(id));
     if (_editingJobId && String(_editingJobId) === String(id)) {
@@ -1410,10 +1461,7 @@ async function salvarCargo(event) {
       row.pop = prev.pop || null;
       row.pop_nome = prev.pop_nome || null;
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'rh-manager.js:salvarCargo',message:'cargo pop saved',data:{hasPop:!!row.pop,hasAtt:!!(row.attachments&&row.attachments.pop)},timestamp:Date.now(),hypothesisId:'H-rh-att',runId:'rh-att-fix'})}).catch(()=>{});
-    // #endregion
-    await DB.saveRhJob(row);
+await DB.saveRhJob(row);
     closeModalRH('cargoModal');
     await reloadAllData();
     showToast('Cargo salvo com sucesso!', 'success');
@@ -1432,6 +1480,8 @@ function limparFormFuncionario() {
   _set('emp_id', '');
   _set('emp_advertencia', '0');
   _set('emp_suspensao', '0');
+  _set('emp_limite_clube', '0');
+  _set('emp_clube_limite_id', '');
   _fillPermissoesForm({});
   const audit = document.getElementById('emp_audit_section');
   if (audit) audit.style.display = 'none';
@@ -1502,6 +1552,7 @@ async function openFuncionarioModal(row) {
         : '<span class="text-muted">Nenhuma alteração registrada.</span>';
     }
     _showRhAttachmentHints(_RH_EMP_FILE_FIELDS, row.attachments);
+    await _loadEmpClubeLimite(row.user_id || null);
   }
 
   openModalRH('funcionarioModal');
@@ -1821,11 +1872,28 @@ async function salvarFuncionario(event) {
       console.warn('[RH] sync usuário:', userErr);
       userSyncWarn = userErr?.message || String(userErr);
     }
+
+    const limiteClube = parseFloat(_val('emp_limite_clube')) || 0;
+    let clubeWarn = '';
+    if (row.user_id) {
+      try {
+        await _saveEmpClubeLimite(row.user_id, nome, limiteClube);
+      } catch (limErr) {
+        console.warn('[RH] limite clube:', limErr);
+        clubeWarn = limErr?.message || String(limErr);
+      }
+    } else if (limiteClube > 0) {
+      clubeWarn = 'Informe e-mail/senha de acesso para liberar o limite do Clube.';
+    }
+
     await DB.saveRhEmployee(row);
     closeModalRH('funcionarioModal');
     await reloadAllData();
-    if (userSyncWarn) {
-      showToast(`Funcionário salvo. Login do sistema: ${userSyncWarn}`, 'warning', 8000);
+    if (userSyncWarn || clubeWarn) {
+      const parts = [];
+      if (userSyncWarn) parts.push(`Login: ${userSyncWarn}`);
+      if (clubeWarn) parts.push(clubeWarn);
+      showToast(`Funcionário salvo. ${parts.join(' ')}`, 'warning', 8000);
     } else {
       showToast(id ? 'Funcionário atualizado!' : 'Funcionário cadastrado!', 'success');
     }

@@ -186,13 +186,27 @@
   
     /* ══ USERS ══ */
     async getUsers() {
-      if (this.online) return await supaReq('GET','users',null,'?select=*&order=name.asc');
+      if (this.online) {
+        return await supaReq(
+          'GET',
+          'users',
+          null,
+          '?select=id,name,email,role,active,admin_id,partner_root_id,department,cpf,matricula,points,balance,photo_url,acesso_clube,phone,username&order=name.asc&limit=1000'
+        );
+      }
       return this._lget(this.LK.users);
     },
   
     async getAdmins() {
       const adminRoles = ['master','fundador','desenvolvedor','gerente','financeiro','financial','supervisor','sup_backoffice','rh','gerencia','operacional','juridico','diretoria','backoffice','ouvidoria','admin','portaria'];
-      if (this.online) return await supaReq('GET','users',null,`?role=in.(${adminRoles.join(',')})&select=*&order=name.asc`);
+      if (this.online) {
+        return await supaReq(
+          'GET',
+          'users',
+          null,
+          `?role=in.(${adminRoles.join(',')})&select=id,name,email,role,active,admin_id,department,photo_url&order=name.asc&limit=500`
+        );
+      }
       return this._lget(this.LK.users).filter(u => adminRoles.includes(u.role));
     },
   
@@ -361,7 +375,7 @@
     async getPartnerTeamIds(partnerRootId) {
       if (!partnerRootId) return new Set();
       const users = this.online
-        ? await supaReq('GET', 'users', null, '?select=id,admin_id,role&limit=2000').catch(() => [])
+        ? await supaReq('GET', 'users', null, '?select=id,admin_id,role&limit=1000').catch(() => [])
         : this._lget(this.LK.users);
       return this.expandPartnerOrgIds(partnerRootId, users);
     },
@@ -371,7 +385,7 @@
       const ids = await this.getPartnerTeamIds(partnerRootId);
       ids.delete(String(partnerRootId));
       if (this.online) {
-        const all = await supaReq('GET', 'users', null, '?select=*&order=name.asc&limit=2000').catch(() => []);
+        const all = await supaReq('GET', 'users', null, '?select=*&order=name.asc&limit=1000').catch(() => []);
         return (all || []).filter(u => ids.has(String(u.id)) && this.PARTNER_TEAM_ROLES.includes(u.role));
       }
       return this._sortUsersByName(this._lget(this.LK.users).filter(u =>
@@ -396,7 +410,14 @@
 
     /* Funcionários de um admin específico (supervisor: vendedores) */
     async getEmployeesByAdmin(adminId) {
-      if (this.online) return await supaReq('GET','users',null,`?admin_id=eq.${adminId}&role=in.(employee,vendedor)&select=*&order=name.asc`);
+      if (this.online) {
+        return await supaReq(
+          'GET',
+          'users',
+          null,
+          `?admin_id=eq.${encodeURIComponent(adminId)}&role=in.(employee,vendedor)&select=id,name,email,role,active,admin_id,department,cpf,matricula,points,balance,photo_url,phone&order=name.asc&limit=500`
+        );
+      }
       return this._sortUsersByName(this._lget(this.LK.users).filter(u=>(u.role==='employee'||u.role==='vendedor')&&u.admin_id===adminId));
     },
 
@@ -419,7 +440,14 @@
     },
   
     async getEmployeesByDepartment(department) {
-      if (this.online) return await supaReq('GET','users',null,`?department=eq.${department}&role=in.(employee,vendedor)&select=*&order=name.asc`);
+      if (this.online) {
+        return await supaReq(
+          'GET',
+          'users',
+          null,
+          `?department=eq.${encodeURIComponent(department)}&role=in.(employee,vendedor)&select=id,name,email,role,active,admin_id,department,cpf,matricula,points,balance,photo_url&order=name.asc&limit=500`
+        );
+      }
       return this._lget(this.LK.users).filter(u=>(u.role==='employee'||u.role==='vendedor')&&u.department===department);
     },
   
@@ -652,7 +680,7 @@
     async getPartners() {
       if (this.online) {
         try {
-          return await supaReq('GET', 'partners', null, '?select=*&order=razao_social.asc');
+          return await supaReq('GET', 'partners', null, '?select=*&order=razao_social.asc&limit=500');
         } catch (e) {
           console.warn('[DB] partners online:', e.message);
         }
@@ -839,15 +867,7 @@
     async addBalance(empId, amount, reason, byId, meta) {
       const emp=await this.getUser(empId); if(!emp)return null;
       const allowed = this._partnerBalanceMutationAllowed(emp, meta);
-      // #region agent log
-      if (!allowed || !emp) {
-        try {
-          const base = (typeof window !== 'undefined' && window.SOUBLU_BASE) ? window.SOUBLU_BASE : '';
-          fetch(`${base}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'db.js:addBalance', message: 'balance blocked', data: { empId, hasEmp: !!emp, allowed, partnerWallet: this._isPartnerWalletUser(emp), metaScreen: meta?.screen, metaKind: meta?.kind }, timestamp: Date.now(), hypothesisId: 'A' }) }).catch(() => {});
-        } catch (_) {}
-      }
-      // #endregion
-      if (!allowed) return null;
+if (!allowed) return null;
       const amt = this._walletAmt(amount, emp, false);
       if (!Number.isFinite(amt) || amt <= 0) return null;
       const current = this._isPartnerWalletUser(emp)
@@ -917,7 +937,7 @@
     /* ══ PRODUCTS ══ */
     async getProducts(adminId=null) {
       if (this.online) {
-        const q=adminId?`?admin_id=eq.${adminId}&select=*&order=created_at.desc`:'?select=*&order=created_at.desc';
+        const q=adminId?`?admin_id=eq.${adminId}&select=*&order=created_at.desc&limit=300`:'?select=*&order=created_at.desc&limit=300';
         return await supaReq('GET','products',null,q);
       }
       const all=this._lget(this.LK.products); return adminId?all.filter(p=>p.admin_id===adminId):all;
@@ -952,7 +972,7 @@
     /* ══ TRANSACTIONS ══ */
     async getTransactions(empId=null) {
       if (this.online) {
-        const q=empId?`?employee_id=eq.${empId}&select=*&order=created_at.desc`:'?select=*&order=created_at.desc&limit=300';
+        const q=empId?`?employee_id=eq.${empId}&select=*&order=created_at.desc&limit=200`:'?select=*&order=created_at.desc&limit=300';
         return await supaReq('GET','transactions',null,q);
       }
       const all=this._lget(this.LK.transactions);
@@ -1006,7 +1026,7 @@
     async getOrders(empId=null) {
       if (this.online) {
         const q=empId
-          ? `?employee_id=eq.${empId}&select=*&order=created_at.desc`
+          ? `?employee_id=eq.${empId}&select=*&order=created_at.desc&limit=200`
           : '?select=id,employee_id,status,total_points,total_price,created_at,order_code&order=created_at.desc&limit=300';
         return await supaReq('GET','orders',null,q);
       }
@@ -1140,7 +1160,12 @@
   
     /* ══ WITHDRAWALS ══ */
     async getWithdrawals(empId=null) {
-      if(this.online){const q=empId?`?employee_id=eq.${empId}&select=*&order=created_at.desc`:'?select=*&order=created_at.desc';return await supaReq('GET','withdrawals',null,q);}
+      if(this.online){
+        const q=empId
+          ?`?employee_id=eq.${encodeURIComponent(empId)}&select=*&order=created_at.desc&limit=200`
+          :'?select=*&order=created_at.desc&limit=400';
+        return await supaReq('GET','withdrawals',null,q);
+      }
       const all=this._lget(this.LK.withdrawals);return empId?all.filter(w=>w.employee_id===empId):all;
     },
     async getWithdrawalsByAdmin(adminId) {
@@ -2120,7 +2145,7 @@
     },
 
     _proposalsLiteQuery(limit = 600, extra = '') {
-      const lim = Math.min(Math.max(parseInt(limit, 10) || 600, 1), 1200);
+      const lim = Math.min(Math.max(parseInt(limit, 10) || 600, 1), 800);
       return `?select=${this._PROPOSALS_LITE_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=${lim}${extra}`;
     },
 
@@ -2727,15 +2752,7 @@
 
       const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
       const phpUp = _cfg.UPLOAD_URL && _cfg.API_KEY;
-
-      // #region agent log
-      if (typeof window._dbgSessionLog === 'function') window._dbgSessionLog('db.js:uploadProposalFile', 'upload start', {
-        phpUp: !!phpUp, hasUrl: !!_cfg.UPLOAD_URL, hasKey: !!_cfg.API_KEY,
-        grupo: safeGrp, size: file.size || 0,
-      }, 'H-B');
-      // #endregion
-
-      if (phpUp) {
+if (phpUp) {
         const fd = new FormData();
         fd.append('file', file, origName);
         const q = new URLSearchParams({ bucket, path });
@@ -2747,12 +2764,7 @@
         const data = await res.json().catch(() => ({}));
         if (!res.ok || !data.ok || !data.caminho) {
           const errMsg = data.error || `HTTP ${res.status}`;
-          // #region agent log
-          if (typeof window._dbgSessionLog === 'function') window._dbgSessionLog('db.js:uploadProposalFile', 'upload fail', {
-            status: res.status, errMsg: String(errMsg).slice(0, 120),
-          }, 'H-B');
-          // #endregion
-          throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
+throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         }
         return {
           url: data.url || data.public_url || '',
@@ -5662,7 +5674,7 @@
     /* ══ RH MODULE ══ */
     async _rhOnlineList(table, order = 'created_at.desc') {
       try {
-        const rows = await supaReq('GET', table, null, `?order=${order}`);
+        const rows = await supaReq('GET', table, null, `?order=${order}&limit=400`);
         return Array.isArray(rows) ? rows : [];
       } catch (e) {
         console.error(`[DB] get ${table}:`, e);

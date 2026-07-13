@@ -159,30 +159,14 @@ function wa_status_fast_json(
 ): void {
     // Se sessão foi encerrada/resetada, nunca reportar open/live no fast-path.
     if (wa_session_locked($repo, $userId, $inst)) {
-        // #region agent log
-        wa_session_debug('whatsapp_api.php:wa_status_fast_json', 'fast path blocked locked', [
-            'user_tail' => substr($userId, -8),
-            'db_status' => $status,
-        ], 'H-A-fastpath');
-        // #endregion
-        wa_json_session_locked();
+wa_json_session_locked();
     }
     $phoneFast = wa_phone_digits((string) ($phone ?? $inst['phone'] ?? ''));
     $count = $chatCount ?? ($status === 'open'
         ? wa_count_user_chats_fast($repo, $userId)
         : 0);
     $profilePic = ($includeProfilePic && $status === 'open') ? wa_profile_pic_proxy_url($userId) : null;
-    // #region agent log
-    wa_session_debug('whatsapp_api.php:wa_status_fast_json', 'fast status response', [
-        'user_tail' => substr($userId, -8),
-        'db_status' => $status,
-        'session_live' => $status === 'open',
-        'has_phone' => $phoneFast !== '' || trim((string) ($inst['phone'] ?? '')) !== '',
-        'chats_count' => $count,
-        'rebind_forced_false' => true,
-    ], 'H-A-fastpath');
-    // #endregion
-    soublu_json([
+soublu_json([
         'ok' => true,
         'user_id' => $userId,
         'configured' => soublu_whatsapp_configured(),
@@ -356,13 +340,7 @@ function wa_rebind_fresh_evolution_instance(
         $created = true;
         $qr = soublu_whatsapp_extract_qr($conn);
     } catch (Throwable $eCreate) {
-        // #region agent log
-        wa_session_debug('whatsapp_api.php:wa_rebind', 'create failed', [
-            'new_tail' => substr($newName, -16),
-            'err' => substr($eCreate->getMessage(), 0, 140),
-        ], 'H-H-rebind');
-        // #endregion
-        throw $eCreate;
+throw $eCreate;
     }
     try {
         $evo->setWebhook($newName, $webhook);
@@ -372,16 +350,7 @@ function wa_rebind_fresh_evolution_instance(
     if ($qr === null || $qr === '') {
         $qr = wa_fetch_qr($evo, $newName, 0, true);
     }
-    // #region agent log
-    wa_session_debug('whatsapp_api.php:wa_rebind', 'rebind done', [
-        'user_tail' => substr($userId, -8),
-        'old_tail' => $oldName !== '' ? substr($oldName, -16) : '',
-        'new_tail' => substr($newName, -16),
-        'qr_len' => is_string($qr) ? strlen($qr) : 0,
-        'created' => $created,
-    ], 'H-H-rebind');
-    // #endregion
-    return ['instance' => $inst, 'name' => $newName, 'qr' => $qr, 'created' => $created];
+return ['instance' => $inst, 'name' => $newName, 'qr' => $qr, 'created' => $created];
 }
 
 function wa_phone_digits(string $input): string
@@ -463,7 +432,7 @@ function wa_contacts_max(): int
 function wa_contacts_cooldown_sec(): int
 {
     if (wa_mirror_mode()) {
-        return defined('WA_CONTACTS_COOLDOWN_SEC') ? max(60, (int) WA_CONTACTS_COOLDOWN_SEC) : 120;
+        return defined('WA_CONTACTS_COOLDOWN_SEC') ? max(90, (int) WA_CONTACTS_COOLDOWN_SEC) : 180;
     }
     return defined('WA_CONTACTS_COOLDOWN_SEC') ? max(0, (int) WA_CONTACTS_COOLDOWN_SEC) : 3600;
 }
@@ -471,7 +440,7 @@ function wa_contacts_cooldown_sec(): int
 /** Cooldown do espelho leve (poll silencioso) — evita findChats a cada poucos segundos. */
 function wa_mirror_poll_cooldown_sec(): int
 {
-    return defined('WA_MIRROR_POLL_COOLDOWN_SEC') ? max(30, (int) WA_MIRROR_POLL_COOLDOWN_SEC) : 90;
+    return defined('WA_MIRROR_POLL_COOLDOWN_SEC') ? max(45, (int) WA_MIRROR_POLL_COOLDOWN_SEC) : 120;
 }
 
 function wa_target_user_id(string $userId, array $body = []): string
@@ -561,15 +530,7 @@ function wa_fetch_qr(EvolutionClient|ZApiClient|WhaticketClient $evo, string $in
     $hasLive = false;
     if (($probe['status'] ?? '') === 'open') {
         $hasLive = wa_evo_has_live_chats($evo, $instanceName);
-        // #region agent log
-        wa_session_debug('whatsapp_api.php:wa_fetch_qr', 'probe open', [
-            'instance_tail' => substr($instanceName, -16),
-            'has_live' => $hasLive,
-            'force' => $force,
-            'attempt' => $attempt,
-        ], 'H-F-qr');
-        // #endregion
-        if ($hasLive && !$force) {
+if ($hasLive && !$force) {
             /** #region agent log */
             wa_agent_debug('whatsapp_api.php:wa_fetch_qr', 'skip connect — already open', [
                 'instance' => $instanceName,
@@ -608,15 +569,7 @@ function wa_fetch_qr(EvolutionClient|ZApiClient|WhaticketClient $evo, string $in
             'error' => $probe['error'] ?? '',
         ], 'B');
         /** #endregion */
-        // #region agent log
-        wa_session_debug('whatsapp_api.php:wa_fetch_qr', 'probe not open', [
-            'instance_tail' => substr($instanceName, -16),
-            'status' => $probe['status'] ?? '',
-            'force' => $force,
-            'attempt' => $attempt,
-        ], 'H-F-qr');
-        // #endregion
-    }
+}
 
     $qr = null;
     $conn = [];
@@ -659,17 +612,7 @@ function wa_fetch_qr(EvolutionClient|ZApiClient|WhaticketClient $evo, string $in
         usleep(250000);
         return wa_fetch_qr($evo, $instanceName, 1, $force);
     }
-    // #region agent log
-    wa_session_debug('whatsapp_api.php:wa_fetch_qr', 'extract result', [
-        'instance_tail' => substr($instanceName, -16),
-        'qr_len' => is_string($qr) ? strlen($qr) : 0,
-        'conn_keys' => $lastConnKeys,
-        'attempt' => $attempt,
-        'force' => $force,
-        'count' => is_array($conn) ? count($conn) : 0,
-    ], 'H-F-qr');
-    // #endregion
-    wa_debug_log('QR extraction', [
+wa_debug_log('QR extraction', [
         'qr_present' => $qr !== null,
         'conn_keys' => array_keys($conn),
         'attempt' => $attempt,
@@ -1264,17 +1207,7 @@ function wa_destroy_evolution_instance(EvolutionClient|ZApiClient|WhaticketClien
     }
     // Logout pode falhar se já estiver fechada — delete é o que importa.
     $ok = $deleteOk;
-    // #region agent log
-    wa_session_debug('whatsapp_api.php:wa_destroy', 'destroy result', [
-        'name_tail' => substr($instanceName, -16),
-        'logout_ok' => $logoutOk,
-        'delete_ok' => $deleteOk,
-        'ok' => $ok,
-        'logout_err' => $logoutErr !== '' ? substr($logoutErr, 0, 120) : '',
-        'delete_err' => $deleteErr !== '' ? substr($deleteErr, 0, 120) : '',
-    ], 'H-G-destroy');
-    // #endregion
-    wa_debug_log('destroy evolution instance', ['name' => $instanceName, 'ok' => $ok, 'logout_ok' => $logoutOk], 'isolate');
+wa_debug_log('destroy evolution instance', ['name' => $instanceName, 'ok' => $ok, 'logout_ok' => $logoutOk], 'isolate');
     return $ok;
 }
 
@@ -2303,10 +2236,7 @@ function wa_build_contact_name_index(EvolutionClient|ZApiClient|WhaticketClient 
         $resp = $evo->findContacts($instanceName);
         $rows = wa_evolution_rows($resp);
     } catch (Throwable $e) {
-        // #region agent log
-        wa_debug_log('contact index fetch failed', ['error' => $e->getMessage()], 'name-enrich');
-        // #endregion
-        return [];
+return [];
     }
     $withSaved = 0;
     $withPush = 0;
@@ -2357,18 +2287,7 @@ function wa_build_contact_name_index(EvolutionClient|ZApiClient|WhaticketClient 
             }
         }
     }
-    // #region agent log
-    wa_debug_log('contact name index built', [
-        'index_size' => count($index),
-        'rows' => count($rows),
-        'with_saved_name' => $withSaved,
-        'with_push_name' => $withPush,
-        'skipped_no_key' => $skippedNoKey,
-        'skipped_no_label' => $skippedNoLabel,
-        'index_collisions' => $indexCollisions,
-    ], 'name-enrich');
-    // #endregion
-    return $index;
+return $index;
 }
 
 function wa_resolve_chat_display_name(array $row, array $contactIndex = [], array $ownerLabels = []): string
@@ -2376,16 +2295,7 @@ function wa_resolve_chat_display_name(array $row, array $contactIndex = [], arra
     $name = wa_chat_list_name_from_row($row, $ownerLabels);
     $legacyName = wa_chat_name_from_row($row);
     $jid = wa_contact_jid_from_row($row);
-    // #region agent log
-    if ($legacyName !== '' && $name !== '' && $legacyName !== $name) {
-        wa_debug_log('chat name legacy vs push', [
-            'jid_tail' => substr($jid, -18),
-            'push_name' => $name,
-            'legacy_name' => $legacyName,
-        ], 'H1-legacy-name');
-    }
-    // #endregion
-    if ($jid === '') {
+if ($jid === '') {
         return $name;
     }
     if ($name !== '' && wa_is_plausible_display_name($name)) {
@@ -2397,15 +2307,7 @@ function wa_resolve_chat_display_name(array $row, array $contactIndex = [], arra
         }
         $fromContacts = trim((string) $contactIndex[$key]);
         if ($fromContacts !== '') {
-            // #region agent log
-            wa_debug_log('chat name enriched from index', [
-                'jid_tail' => substr($jid, -18),
-                'lookup_key_tail' => substr($key, -18),
-                'from_index' => $fromContacts,
-                'chat_push_name' => $name,
-            ], 'H2-index-enrich');
-            // #endregion
-            return $fromContacts;
+return $fromContacts;
         }
     }
     return $name;
@@ -2794,17 +2696,7 @@ function wa_extract_incoming_media(array $item, string $userId, EvolutionClient|
         return null;
     }
     $saved = wa_save_media_bytes($userId, $binary, $mime);
-    // #region agent log
-    if ($saved !== null) {
-        wa_debug_log('incoming media saved', [
-            'type' => $type,
-            'path_tail' => substr($saved, -24),
-            'mime' => $mime,
-            'bytes' => strlen($binary),
-        ], 'media-recv');
-    }
-    // #endregion
-    return $saved;
+return $saved;
 }
 
 function wa_is_zapi_webhook_payload(array $payload): bool
@@ -3310,14 +3202,7 @@ function wa_repair_chat_names_by_phone(WhatsAppRepository $repo, string $userId,
         }
         if ($old === '' || $old !== $newName) {
             $repo->updateChatMeta((string) $chat['id'], ['contact_name' => $newName]);
-            // #region agent log
-            wa_debug_log('chat name repaired by phone', [
-                'phone_tail' => substr($phone, -4),
-                'prev' => $old,
-                'next' => $newName,
-            ], 'H3-sync-correct');
-            // #endregion
-            $fixed++;
+$fixed++;
         }
     }
     return $fixed;
@@ -3515,30 +3400,7 @@ function wa_sync_chats_from_evolution(
     } elseif ($synced > 0 || $force) {
         wa_mark_sync($userId);
     }
-
-    // #region agent log
-    wa_debug_log('sync chats done', [
-        'synced' => $synced,
-        'skipped_ghost' => $skippedGhost,
-        'rows' => count($rows),
-        'force' => $force,
-        'mirror_poll' => $mirrorPoll,
-        'contact_index_size' => count($contactIndex),
-        'enriched_from_contacts' => $enrichedFromContacts,
-        'missing_name_after' => $missingNameAfter,
-        'names_repaired_by_phone' => $namesRepaired,
-        'today_rows' => count(array_filter($rows, static function (array $r): bool {
-            $ts = wa_row_conversation_timestamp($r);
-            if ($ts <= 0) {
-                return false;
-            }
-            $startToday = gmmktime(0, 0, 0, (int) gmdate('n'), (int) gmdate('j'), (int) gmdate('Y'));
-            return $ts >= $startToday;
-        })),
-    ], 'sync-hygiene');
-    // #endregion
-
-    return ['synced' => $synced, 'skipped' => false, 'skipped_ghost' => $skippedGhost, 'rows' => count($rows), 'skip_reason' => null, 'chats' => wa_list_user_chats($repo, $userId), 'mirror' => wa_mirror_mode()];
+return ['synced' => $synced, 'skipped' => false, 'skipped_ghost' => $skippedGhost, 'rows' => count($rows), 'skip_reason' => null, 'chats' => wa_list_user_chats($repo, $userId), 'mirror' => wa_mirror_mode()];
 }
 
 /** @deprecated alias */
@@ -4464,20 +4326,7 @@ try {
                 'instance_name' => $instName,
                 'rebind_required' => $rebindRequired,
             ], 'G');
-            // #region agent log
-            wa_session_debug('whatsapp_api.php:status', 'full status response', [
-                'user_tail' => substr($userId, -8),
-                'status' => $status,
-                'session_live' => $sessionLive,
-                'rebind_required' => $rebindRequired,
-                'has_phone' => wa_phone_digits((string) ($phone ?? '')) !== '',
-                'chats_count' => $dbChatCount,
-                'evo_raw_state' => $evoRawState,
-                'db_inst_status' => (string) ($inst['status'] ?? ''),
-                'skip_qr' => (string) ($_GET['skip_qr'] ?? '') === '1',
-            ], 'H-B-fullstatus');
-            // #endregion
-            soublu_json([
+soublu_json([
                 'ok' => true,
                 'user_id' => $userId,
                 'configured' => soublu_whatsapp_configured(),
@@ -4565,15 +4414,7 @@ try {
                 $qr = $rebind['qr'];
                 $repo->updateInstanceStatus((string) $inst['id'], 'connecting', null);
             }
-            // #region agent log
-            wa_session_debug('whatsapp_api.php:qr', 'qr result', [
-                'user_tail' => substr($userId, -8),
-                'need_fresh_qr' => $needFreshQr,
-                'qr_len' => is_string($qr) ? strlen($qr) : 0,
-                'instance' => $name,
-            ], 'H-F-qr');
-            // #endregion
-            soublu_json([
+soublu_json([
                 'ok' => true,
                 'status' => 'connecting',
                 'qr' => $qr,
@@ -4611,16 +4452,7 @@ try {
                 'was_locked' => $wasLocked,
                 'need_fresh_qr' => $needFreshQr,
             ], 'C');
-            // #region agent log
-            wa_session_debug('whatsapp_api.php:connect', 'connect start', [
-                'user_tail' => substr($userId, -8),
-                'was_locked' => $wasLocked,
-                'force_qr' => $forceQr,
-                'need_fresh_qr' => $needFreshQr,
-                'instance' => $name,
-            ], 'H-F-qr');
-            // #endregion
-            $probe = wa_probe_evo_connection($evo, $name);
+$probe = wa_probe_evo_connection($evo, $name);
             /** #region agent log */
             wa_agent_debug('whatsapp_api.php:connect', 'probe on connect', [
                 'instance' => $name,
@@ -4680,15 +4512,7 @@ try {
                 $qr = $rebind['qr'];
                 $repo->updateInstanceStatus((string) $inst['id'], 'connecting', null);
             }
-            // #region agent log
-            wa_session_debug('whatsapp_api.php:connect', 'connect qr result', [
-                'user_tail' => substr($userId, -8),
-                'instance' => $name,
-                'qr_len' => is_string($qr) ? strlen($qr) : 0,
-                'need_fresh_qr' => $needFreshQr,
-            ], 'H-F-qr');
-            // #endregion
-            $repo->updateInstanceStatus($inst['id'], 'connecting');
+$repo->updateInstanceStatus($inst['id'], 'connecting');
             soublu_json([
                 'ok' => true,
                 'status' => 'connecting',
@@ -4740,15 +4564,7 @@ try {
             if ($inst) {
                 $repo->updateInstanceStatus((string) $inst['id'], 'close', null);
             }
-            // #region agent log
-            wa_session_debug('whatsapp_api.php:reset_session', 'reset kept locked', [
-                'user_tail' => substr($userId, -8),
-                'deleted_chats' => $deleted,
-                'destroy_ok' => $destroyOk,
-                'locked' => true,
-            ], 'H-E-resetlock');
-            // #endregion
-            wa_debug_log('reset_session', [
+wa_debug_log('reset_session', [
                 'user_tail' => substr($userId, -8),
                 'instance_name' => $instanceName,
                 'clear_data' => $clearData,
@@ -5742,15 +5558,7 @@ try {
             if ($sendPhone === '') {
                 soublu_json(['ok' => false, 'error' => 'Destino da conversa inválido.'], 400);
             }
-            // #region agent log
-            wa_debug_log('send target', [
-                'chat_id' => $chatId,
-                'remote_jid' => (string) ($chat['remote_jid'] ?? ''),
-                'contact_phone' => (string) ($chat['contact_phone'] ?? ''),
-                'send_target' => str_contains($sendPhone, '@') ? $sendPhone : ('digits:' . strlen($sendPhone)),
-            ], 'send');
-            // #endregion
-            $waId = '';
+$waId = '';
             $msgType = 'text';
             $storedMedia = null;
 
@@ -5866,17 +5674,7 @@ try {
                     $storedMedia = ltrim(preg_replace('#^uploads/#', '', str_replace('\\', '/', $mediaPath)) ?? $mediaPath, '/');
                 }
                 $waId = (string) ($evoResp['key']['id'] ?? $evoResp['messageId'] ?? '');
-                // #region agent log
-                wa_debug_log('send media ok', [
-                    'media_type' => $msgType,
-                    'chat_id' => $chatId,
-                    'wa_id_tail' => $waId !== '' ? substr($waId, -8) : '',
-                    'has_local' => $local !== null,
-                    'payload_kind' => $local !== null ? 'base64' : 'url',
-                    'stored_media' => $storedMedia !== null,
-                ], 'media-send');
-                // #endregion
-            } else {
+} else {
                 $evoResp = $evo->sendText($inst['instance_name'], $sendPhone, $text);
                 $waId = (string) ($evoResp['key']['id'] ?? $evoResp['messageId'] ?? '');
             }

@@ -293,12 +293,7 @@
     async renderRetorno() {
       const root = document.getElementById('retornoPropostasRoot');
       if (!root || !canView()) return;
-
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'financeiro-credito.js:renderRetorno',message:'retorno form v6',data:{pixFixo:PIX_AUTOMATICO_FIXO,build:'97c411credito6'},timestamp:Date.now(),hypothesisId:'pix-auto-fixo',runId:'post-fix'})}).catch(()=>{});
-      // #endregion
-
-      const props = await _loadCreditoProposals();
+const props = await _loadCreditoProposals();
       const credito = props || [];
 
       root.innerHTML = `
@@ -660,13 +655,7 @@
             adiantamento_id: row.id,
           };
           const nb = await DB.addBalance(emp.id, valor, reason, session?.id || 'financeiro', meta);
-          // #region agent log
-          try {
-            const base = (typeof window !== 'undefined' && window.SOUBLU_BASE) ? window.SOUBLU_BASE : '';
-            fetch(`${base}/api/credito_api.php?action=client_log`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: '97c411', location: 'financeiro-credito.js:decidirAdiantamento', message: 'addBalance result', data: { empId: emp.id, empName: emp.name, valor, credited: nb != null, newBalance: nb, partnerWallet: typeof DB._isPartnerWalletUser === 'function' ? DB._isPartnerWalletUser(emp) : null, adiantamentoId: row.id }, timestamp: Date.now(), hypothesisId: 'A', runId: 'post-fix' }) }).catch(() => {});
-          } catch (_) {}
-          // #endregion
-          if (nb == null) {
+if (nb == null) {
             showToast('Adiantamento registrado, mas não foi possível creditar o saldo.', 'warning');
           }
         }

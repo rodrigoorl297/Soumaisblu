@@ -1,10 +1,10 @@
 /* SOU+BLU — Painel WhatsApp (Evolution API, estilo WhatsApp Web) */
 const WhatsAppChat = (() => {
   /* Polls conservadores — events ~3s (cursor leve); chats/msg lentos; status skip_qr MySQL-fast. */
-  const POLL_CONNECT_MS = 8000;
-  const POLL_MSG_MS = 12000;
-  const POLL_CHATS_MS = 45000;
-  const POLL_EVENTS_MS = 12000;
+  const POLL_CONNECT_MS = 12000;
+  const POLL_MSG_MS = 18000;
+  const POLL_CHATS_MS = 60000;
+  const POLL_EVENTS_MS = 15000;
   const EVENTS_CHATS_MIN_GAP_MS = 10000;
   const AVATAR_WARM_MAX = 6;
   const AVATAR_WARM_GAP_MS = 350;
@@ -1589,6 +1589,7 @@ const WhatsAppChat = (() => {
     if (!_sessionLive) return;
     _eventsSince = 0;
     _pollEvents = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (!_sessionLive || !isEffectivelyOpen()) return;
       api('events', { query: { since: String(_eventsSince) } }).then(async (data) => {
         if (!data || !data.changed) return;
@@ -1626,6 +1627,7 @@ const WhatsAppChat = (() => {
     _connectPollN = 0;
     _connectPollStarted = Date.now();
     const tick = () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       _connectPollN += 1;
       
       // Enquanto o QR não estiver em tela, ocasionalmente permita que /status devolva o QR.
@@ -1678,6 +1680,7 @@ const WhatsAppChat = (() => {
   function startMsgPoll() {
     if (_pollMsg) clearInterval(_pollMsg);
     _pollMsg = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (_activeChatId && !isUserTyping()) {
         loadMessages(_activeChatId, true).catch(() => {});
       }
@@ -1687,6 +1690,7 @@ const WhatsAppChat = (() => {
   function startChatsPoll() {
     if (_pollChats) clearInterval(_pollChats);
     _pollChats = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (!isEffectivelyOpen()) return;
       // Sem force_sync no tick — mirror/enrich só no load inicial / pull forçado.
       loadChats(true, { force: false }).catch(() => {});
@@ -2221,22 +2225,7 @@ const WhatsAppChat = (() => {
     _phone = data.phone || null;
     _sessionLive = !!data.session_live;
     _serverChatsCount = Number(data.chats_count) || 0;
-    // #region agent log
-    if (typeof window._dbgSessionLog === 'function') {
-      window._dbgSessionLog('whatsapp-chat.js:refreshStatus', 'status applied', {
-        incoming: incomingStatus,
-        applied: _status,
-        sessionLive: _sessionLive,
-        rebind: !!(data.rebind_required || data.disconnected || data.session_locked),
-        hasPhone: !!_phone,
-        chatsCount: _serverChatsCount,
-        fastPath: !!data.fast_path,
-        effectivelyOpen: (_status === 'open' && _sessionLive && !(data.rebind_required || data.disconnected || data.session_locked)),
-        userTail: String(data.user_id || _userId || '').slice(-8),
-      }, 'H-C-clientstatus');
-    }
-    // #endregion
-    applyProfilePicFromStatus(data);
+applyProfilePicFromStatus(data);
     const serverLocked = !!(data.rebind_required || data.disconnected || data.session_locked);
     if (_status === 'open' && !serverLocked) {
       _rebindRequired = false;
@@ -2412,14 +2401,8 @@ const WhatsAppChat = (() => {
         }
         // Após reset/rebind, força QR limpo (não reaproveitar sessão fantasma).
         const forceQr = force || !!_rebindRequired || _status === 'close' || !_sessionLive;
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ec660'},body:JSON.stringify({sessionId:'5ec660',location:'whatsapp-chat.js:connect',message:'connect request',data:{forceQr:!!forceQr,rebind:!!_rebindRequired,status:_status,sessionLive:!!_sessionLive},timestamp:Date.now(),hypothesisId:'H-F-qr'})}).catch(()=>{});
-        // #endregion
-        const data = await withTimeout(api('connect', { method: 'POST', body: { force_qr: !!forceQr } }), 90000, 'Gerar QR Code');
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ec660'},body:JSON.stringify({sessionId:'5ec660',location:'whatsapp-chat.js:connect:result',message:'connect response',data:{ok:!!data?.ok,status:data?.status||'',qrLen:data?.qr?String(data.qr).length:0},timestamp:Date.now(),hypothesisId:'H-F-qr'})}).catch(()=>{});
-        // #endregion
-        _rebindRequired = false;
+const data = await withTimeout(api('connect', { method: 'POST', body: { force_qr: !!forceQr } }), 90000, 'Gerar QR Code');
+_rebindRequired = false;
         _status = data.status || 'connecting';
         if (data.phone) _phone = data.phone;
         if (data.qr) _qr = data.qr;

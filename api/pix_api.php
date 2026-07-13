@@ -909,25 +909,7 @@ function pix_send_payment(
                 $recipient,
                 $infoPagador
             );
-
-            // #region agent log
-            @file_put_contents(dirname(__DIR__) . '/debug-97c411.log', json_encode([
-                'sessionId' => '97c411', 'hypothesisId' => 'H2', 'runId' => 'pix-send',
-                'location' => 'pix_api.php:pix_send_payment:efi-result',
-                'message' => 'Efi sendPix response',
-                'data' => [
-                    'withdrawal_id' => $id,
-                    'status' => $result['status'] ?? null,
-                    'recipient_type' => (string) ($wd['pix_key_type'] ?? ''),
-                    'recipient_masked' => substr((string) ($wd['pix_key'] ?? ''), 0, 6) . '…',
-                    'valor' => $valor,
-                    'detail' => pix_extract_efi_error_detail($result),
-                ],
-                'timestamp' => (int) round(microtime(true) * 1000),
-            ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-            // #endregion
-
-            $update = pix_apply_efi_status_patch($result, $wd);
+$update = pix_apply_efi_status_patch($result, $wd);
             $update['pix_id_envio'] = $idEnvio;
 
             $repo->update($id, $update);
@@ -1194,20 +1176,7 @@ if ($action === 'status') {
             );
             $remote = $client->getStatusByIdEnvio($idEnvio);
             if ($remote) {
-                // #region agent log
-                @file_put_contents(dirname(__DIR__) . '/debug-97c411.log', json_encode([
-                    'sessionId' => '97c411', 'hypothesisId' => 'H3', 'runId' => 'pix-status',
-                    'location' => 'pix_api.php:status:efi-remote',
-                    'message' => 'Efi status poll',
-                    'data' => [
-                        'withdrawal_id' => $withdrawalId,
-                        'status' => $remote['status'] ?? null,
-                        'detail' => pix_extract_efi_error_detail($remote),
-                    ],
-                    'timestamp' => (int) round(microtime(true) * 1000),
-                ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-                // #endregion
-                $patch = pix_apply_efi_status_patch($remote, $wd);
+$patch = pix_apply_efi_status_patch($remote, $wd);
                 $wd = $repo->update($withdrawalId, $patch) ?? $wd;
             }
         } catch (Throwable $e) {

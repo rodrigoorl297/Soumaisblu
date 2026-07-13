@@ -5,7 +5,6 @@
   let currentUser = null;
   let currentLimit = null;
   let orderMode = 'entrega';
-  let selectedMeats = [];
 
   function _benId(prefix) {
     return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -58,18 +57,8 @@
     }
   }
 
-  function toggleMeat(el, meat) {
-    if (selectedMeats.includes(meat)) {
-      selectedMeats = selectedMeats.filter(x => x !== meat);
-      el.classList.remove('active');
-    } else {
-      if (selectedMeats.length >= 2) {
-        alert('Selecione no máximo 2 carnes.');
-        return;
-      }
-      selectedMeats.push(meat);
-      el.classList.add('active');
-    }
+  function toggleMeat() {
+    /* removido — pedido do restaurante sem seleção de carnes */
   }
 
   function renderDistribution(providers) {
@@ -208,10 +197,6 @@
       alert(`O valor do pedido excede o seu limite disponível (${formatCurrency(disponivel)}).`);
       return;
     }
-    if (orderMode === 'entrega' && selectedMeats.length < 2) {
-      alert('Por favor, escolha 2 opções de carne.');
-      return;
-    }
     try {
       const providers = await supaReq('GET', 'beneficios_prestadores', null, '?categoria=eq.Restaurante&limit=1');
       const provider = (providers && providers.length > 0) ? providers[0] : { id: 'rest_default', nome_fantasia: 'Restaurante Clube ZS Benefícios' };
@@ -221,9 +206,6 @@
       const detalhes = {
         modo: orderMode,
         horario_entrega: orderMode === 'entrega' ? document.getElementById('orderDeliveryTime')?.value : null,
-        salada: orderMode === 'entrega' ? !!document.getElementById('chkSalada')?.checked : false,
-        feijao_caldo: orderMode === 'entrega' ? !!document.getElementById('chkFeijaoCaldo')?.checked : false,
-        carnes: orderMode === 'entrega' ? selectedMeats.slice() : [],
         observacoes: document.getElementById('orderObs')?.value?.trim() || '',
       };
       await supaReq('POST', 'beneficios_vouchers', {
@@ -246,8 +228,6 @@
       }, `?id=eq.${currentLimit.id}`);
       alert(`Pedido salvo com sucesso! Seu voucher é: ${voucherNo}`);
       document.getElementById('orderForm').reset();
-      selectedMeats = [];
-      document.querySelectorAll('.meat-option').forEach(o => o.classList.remove('active'));
       await loadUserData();
     } catch (err) {
       alert('Erro ao salvar pedido: ' + err.message);

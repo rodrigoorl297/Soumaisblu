@@ -80,25 +80,7 @@ final class CreditProposalMysqlRepository
         $now = gmdate('Y-m-d H:i:s');
         $payload['created_at'] = $payload['created_at'] ?? $now;
         $payload['updated_at'] = $payload['updated_at'] ?? $now;
-
-        // #region agent log
-        $logPath = dirname(__DIR__, 2) . '/debug-97c411.log';
-        @file_put_contents($logPath, json_encode([
-            'sessionId' => '97c411',
-            'timestamp' => (int) round(microtime(true) * 1000),
-            'location' => 'CreditProposalMysqlRepository.php:create',
-            'message' => 'insert payload columns',
-            'data' => [
-                'columns' => array_keys($payload),
-                'has_meta' => array_key_exists('meta', $payload),
-                'meta_exists' => $this->columnExists('meta'),
-            ],
-            'hypothesisId' => 'A,D',
-            'runId' => 'post-fix',
-        ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-        // #endregion
-
-        $cols = array_keys($payload);
+$cols = array_keys($payload);
         $placeholders = array_map(static fn (string $c): string => ':' . $c, $cols);
         $sql = sprintf(
             'INSERT INTO `%s` (`%s`) VALUES (%s)',

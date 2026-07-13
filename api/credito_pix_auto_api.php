@@ -355,41 +355,14 @@ function pix_auto_verificar_conta_apply(EfiPayPixAutomatico $service, array $ctx
             'ispbParticipante' => $ispb,
         ],
     ];
-    // #region agent log
-    pix_auto_dbg_log('credito_pix_auto_api.php:verificar_conta', 'solicrec payload', [
-        'idRec' => $idRec,
-        'banco' => $ctx['banco'],
-        'ispb' => $ispb,
-        'agencia' => $ctx['agencia'],
-        'conta_api' => $ctx['conta'],
-        'conta_raw' => $ctx['conta_raw'] ?? '',
-        'cpf_mask' => pix_auto_mask_cpf($ctx['cpf']),
-        'rec_status' => (string) ($pixAuto['status'] ?? ''),
-    ], 'H3-conta-format', 'push-debug');
-    // #endregion
-    $solic = $service->createSolicRec($solicPayload);
-    // #region agent log
-    pix_auto_dbg_log('credito_pix_auto_api.php:verificar_conta:response', 'solicrec created', [
-        'idSolicRec' => (string) ($solic['idSolicRec'] ?? ''),
-        'status' => (string) ($solic['status'] ?? ''),
-        'atualizacao' => $solic['atualizacao'] ?? [],
-        'dest_conta' => (string) ($solic['destinatario']['conta'] ?? ''),
-    ], 'H1-H2-solic-status', 'push-debug');
-    // #endregion
-    $idSolicNew = (string) ($solic['idSolicRec'] ?? '');
+$solic = $service->createSolicRec($solicPayload);
+$idSolicNew = (string) ($solic['idSolicRec'] ?? '');
     $solicPollStatus = '';
     if ($idSolicNew !== '') {
         try {
             $solicPoll = $service->getSolicRec($idSolicNew);
             $solicPollStatus = (string) ($solicPoll['status'] ?? '');
-            // #region agent log
-            pix_auto_dbg_log('credito_pix_auto_api.php:verificar_conta:poll', 'solicrec poll imediato', [
-                'idSolicRec' => $idSolicNew,
-                'status' => $solicPollStatus,
-                'atualizacao' => $solicPoll['atualizacao'] ?? [],
-            ], 'H2-enviada', 'push-debug');
-            // #endregion
-        } catch (Throwable $pollErr) {
+} catch (Throwable $pollErr) {
             pix_auto_dbg_log('credito_pix_auto_api.php:verificar_conta:poll', 'poll falhou', [
                 'error' => $pollErr->getMessage(),
             ], 'H2-enviada', 'push-debug');
@@ -712,17 +685,7 @@ try {
         $dataIni = pix_auto_resolve_data_inicial($ctx['dataDesconto']);
         $dataInicial = $dataIni['dataInicial'];
         $dataFinal = pix_auto_add_months($dataInicial, $ctx['parcelas'] - 1);
-        // #region agent log
-        pix_auto_dbg_log('credito_pix_auto_api.php:criar_recorrencia', 'datas recorrência', [
-            'dataInicial' => $dataInicial,
-            'dataFinal' => $dataFinal,
-            'dataDescontoOriginal' => $dataIni['original'] ?? '',
-            'ajustada' => $dataIni['ajustada'] ?? false,
-            'motivo' => $dataIni['motivo'] ?? '',
-        ], 'rec-data-inicial', 'post-fix');
-        // #endregion
-
-        $loc = $service->createLocation();
+$loc = $service->createLocation();
         $locId = (int) ($loc['id'] ?? 0);
         $recPayload = EfiPayPixAutomatico::buildRecPayload(
             $locId,

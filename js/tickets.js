@@ -23,12 +23,7 @@ window.Tickets = {
       hypothesisId: hypothesisId || 'ticket-modal',
       runId: 'ticket-modal-fix-v2',
     };
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-    const cfg = window.SOUBLU_CONFIG || {};
+const cfg = window.SOUBLU_CONFIG || {};
     const base = String(cfg.API_BASE_URL || cfg.SITE_URL || location.origin || '').replace(/\/+$/, '');
     const key = cfg.API_KEY || '';
     if (!base || !key) return;
@@ -51,10 +46,7 @@ window.Tickets = {
       if (!btn) return;
       ev.preventDefault();
       const id = btn.getAttribute('data-ticket-open');
-      // #region agent log
-      this._ticketDbgLog('tickets.js:bindClick', 'tratar click', { id, hasOpenModal: typeof this.openTicketDetail === 'function' }, 'H3');
-      // #endregion
-      if (id) this.openTicketDetail(id);
+if (id) this.openTicketDetail(id);
     }, true);
   },
 
@@ -355,15 +347,9 @@ window.Tickets = {
 
     try {
       await DB.save('tickets', ticket);
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'tickets.js:submit',message:'ticket saved',data:{id:ticketId,dept},timestamp:Date.now(),hypothesisId:'B',runId:'chamados-nav-fix'})}).catch(()=>{});
-      // #endregion
-      alert("Chamado aberto com sucesso!");
+alert("Chamado aberto com sucesso!");
     } catch(e) {
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'tickets.js:submit',message:'ticket save failed',data:{err:String(e?.message||e)},timestamp:Date.now(),hypothesisId:'B',runId:'chamados-nav-fix'})}).catch(()=>{});
-      // #endregion
-      alert("Erro ao abrir chamado: " + e.message);
+alert("Erro ao abrir chamado: " + e.message);
       return;
     }
 
@@ -486,10 +472,7 @@ window.Tickets = {
   },
 
     openTicketDetail: async function(id) {
-    // #region agent log
-    this._ticketDbgLog('tickets.js:openTicketDetail', 'open start', { id }, 'ticket-click');
-    // #endregion
-    try {
+try {
     const raw = await DB.get('tickets', id);
     const ticket = this._normTicket(raw);
     if (!ticket) {
@@ -575,15 +558,9 @@ window.Tickets = {
       : (typeof openModal === 'function' ? openModal : null);
     if (showUiModal) showUiModal('manageTicketModal');
     else modal.classList.add('open');
-    // #region agent log
-    this._ticketDbgLog('tickets.js:openTicketDetail', 'open ok', { id: ticket.id, threadLen: ticket.thread?.length || 0 }, 'ticket-click');
-    // #endregion
-    } catch (err) {
+} catch (err) {
       console.error('[Tickets.openTicketDetail]', err);
-      // #region agent log
-      this._ticketDbgLog('tickets.js:openTicketDetail', 'open error', { err: String(err?.message || err) }, 'ticket-click');
-      // #endregion
-      alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift+R).');
+alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift+R).');
     }
   },
 

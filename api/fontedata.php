@@ -250,21 +250,6 @@ $slowConsultas = ['ccd-pf', 'ccd-pj', 'tj-certidao', 'trf-certidao', 'mpf-certid
 $curlTimeout = in_array($consulta ?: $endpoint, $slowConsultas, true) ? 120 : 60;
 
 $ch = curl_init($url);
-// #region agent log
-@file_put_contents(dirname(__DIR__) . '/debug-97c411.log', json_encode([
-    'sessionId' => '97c411',
-    'location' => 'fontedata.php:request',
-    'message' => 'fontedata upstream url',
-    'data' => [
-        'consulta' => $consulta ?: $endpoint,
-        'url_pattern' => fontedata_query_param_for($consulta ?: $endpoint) ? 'query' : 'path',
-        'host' => parse_url($url, PHP_URL_HOST) ?: 'unknown',
-    ],
-    'timestamp' => (int) round(microtime(true) * 1000),
-    'hypothesisId' => 'H1-ccd-query',
-    'runId' => 'ccd-query-fix',
-], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-// #endregion
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_CONNECTTIMEOUT => 30,
@@ -280,23 +265,7 @@ $err = curl_error($ch);
 curl_close($ch);
 
 if ($body === false || $err !== '') {
-    // #region agent log
-    $logPath = dirname(__DIR__) . '/debug-97c411.log';
-    @file_put_contents($logPath, json_encode([
-        'sessionId' => '97c411',
-        'location' => 'fontedata.php:curl_error',
-        'message' => 'fontedata curl failed',
-        'data' => [
-            'consulta' => $consulta ?? $endpoint ?? '',
-            'host' => parse_url($url, PHP_URL_HOST) ?: 'unknown',
-            'error' => $err !== '' ? $err : 'empty body',
-        ],
-        'timestamp' => (int) round(microtime(true) * 1000),
-        'hypothesisId' => 'certidao-host',
-        'runId' => 'calc-fix-v2',
-    ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-    // #endregion
-    $isTimeout = stripos($err, 'timed out') !== false || stripos($err, 'timeout') !== false;
+$isTimeout = stripos($err, 'timed out') !== false || stripos($err, 'timeout') !== false;
     $msg = $isTimeout
         ? 'A consulta demorou demais. Certidões podem levar até 2 minutos — tente novamente.'
         : 'Falha ao contactar FonteData: ' . $err;
@@ -347,21 +316,4 @@ if ($doc !== '') {
 } else {
     $out['cpf'] = $cpf;
 }
-// #region agent log
-$logPath = dirname(__DIR__) . '/debug-97c411.log';
-@file_put_contents($logPath, json_encode([
-    'sessionId' => '97c411',
-    'location' => 'fontedata.php:success',
-    'message' => 'fontedata ok',
-    'data' => [
-        'consulta' => $consulta ?? $endpoint ?? '',
-        'host' => parse_url($url, PHP_URL_HOST) ?: 'unknown',
-        'http' => $code,
-        'has_data' => is_array($decoded) && $decoded !== [],
-    ],
-    'timestamp' => (int) round(microtime(true) * 1000),
-    'hypothesisId' => 'analise-api,certidao-host',
-    'runId' => 'calc-fix-v2',
-], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-// #endregion
 echo json_encode($out, JSON_UNESCAPED_UNICODE);

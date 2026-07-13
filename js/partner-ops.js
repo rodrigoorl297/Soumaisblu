@@ -312,6 +312,3 @@ const PartnerOps = {
 };
 
 if (typeof window !== 'undefined') window.PartnerOps = PartnerOps;
-// #region agent log
-fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'partner-ops.js:export',message:'PartnerOps exported',data:{hasRenderPanel:typeof PartnerOps.renderPanel==='function',onWindow:!!window.PartnerOps},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-// #endregion

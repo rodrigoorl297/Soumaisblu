@@ -474,23 +474,67 @@
       }).join('');
     },
 
-    async renderGestao() {
-      this.ensureUi();
-      const root = document.getElementById('contaCorrenteGestaoRoot');
-      if (!root || !canManageMovements()) return;
-
+    async _loadGestaoEmployees() {
       const s = Auth.getSession();
+      const hubRoles = new Set([
+        'master', 'fundador', 'gerente', 'gerencia', 'financeiro', 'financial', 'rh', 'diretoria', 'desenvolvedor',
+      ]);
+      const opRoles = new Set([
+        'vendedor', 'employee', 'funcionario', 'supervisor', 'sup_backoffice', 'backoffice',
+        'operacional', 'parceiro', 'gerente', 'gerencia',
+      ]);
       let employees = [];
       if (window.PARTNER_ROOT_ID) {
-        employees = await DB.getEmployeesByAdmin(window.PARTNER_ROOT_ID);
-      } else if (s?.role === 'master' || s?.role === 'fundador') {
-        employees = await DB.getUsers();
+        employees = await DB.getEmployeesByAdmin(window.PARTNER_ROOT_ID).catch(() => []);
+      } else if (hubRoles.has(String(s?.role || '').toLowerCase())) {
+        const all = typeof DB.getAllUsers === 'function'
+          ? await DB.getAllUsers().catch(() => [])
+          : await DB.getUsers().catch(() => []);
+        employees = (all || []).filter((u) => opRoles.has(String(u?.role || '').toLowerCase()));
+        if (!employees.length) employees = all || [];
       } else {
-        employees = await DB.getEmployeesByAdmin(s?.id);
+        employees = await DB.getEmployeesByAdmin(s?.id).catch(() => []);
       }
-      employees = (employees || []).filter(u => u && u.active !== false);
+      return (employees || [])
+        .filter((u) => u && u.active !== false)
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+    },
 
-      const selId = this.gestaoUserId || employees[0]?.id || '';
+    async renderGestao() {
+      this.ensureStyles();
+      this.ensureModals();
+      const root = document.getElementById('contaCorrenteGestaoRoot');
+      if (!root) {
+        if (typeof showToast === 'function') showToast('Área Gestão de conta não carregou. Atualize (Ctrl+F5).', 'error');
+        return;
+      }
+      if (!canManageMovements()) {
+        root.innerHTML = `<div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-text-muted);">
+          Sem permissão para gestão de conta corrente.</div>`;
+        return;
+      }
+
+      let employees = [];
+      try {
+        employees = await this._loadGestaoEmployees();
+      } catch (e) {
+        console.error('[ContaCorrente] renderGestao load:', e);
+        root.innerHTML = `<div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-danger,#dc2626);">
+          Erro ao carregar usuários. Tente novamente.</div>`;
+        return;
+      }
+
+      if (!employees.length) {
+        root.innerHTML = `<div class="section-header"><div><h2>Gestão de conta corrente</h2>
+          <p class="text-muted">Lançar crédito/débito de proposta.</p></div></div>
+          <div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-text-muted);">
+            Nenhum colaborador encontrado para gerenciar.</div>`;
+        return;
+      }
+
+      const selId = this.gestaoUserId && employees.some((e) => e.id === this.gestaoUserId)
+        ? this.gestaoUserId
+        : (employees[0]?.id || '');
       this.gestaoUserId = selId;
 
       const movBtns = [];

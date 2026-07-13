@@ -333,10 +333,7 @@
           }
           return;
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'financeiro-boot.js:secPartnerOps',message:'PartnerOps check',data:{hasPartnerOps:!!window.PartnerOps,hasRenderPanel:typeof window.PartnerOps?.renderPanel==='function'},timestamp:Date.now(),hypothesisId:'A',runId:'post-fix'})}).catch(()=>{});
-        // #endregion
-        if (!window.PartnerOps?.renderPanel) {
+if (!window.PartnerOps?.renderPanel) {
           if (box) {
             box.innerHTML = '<div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-text-muted);">Módulo PartnerOps não carregado. Recarregue a página (Ctrl+F5).</div>';
           }

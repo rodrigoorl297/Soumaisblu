@@ -327,10 +327,7 @@ async function purgeExpiredRecusados() {
   const gone = new Set(expired.map((r) => String(r.id)));
   const kept = list.filter((r) => !gone.has(String(r.id)));
   window._allResumes = kept;
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'rh-ops.js:purgeExpiredRecusados',message:'purged recusados',data:{count:expired.length},timestamp:Date.now(),hypothesisId:'H-recusado-ttl',runId:'recusado-week'})}).catch(()=>{});
-  // #endregion
-  return expired.length;
+return expired.length;
 }
 
 window.purgeExpiredRecusados = purgeExpiredRecusados;
@@ -761,12 +758,6 @@ function onPunicaoEmployeeChange() {
   const mon = document.getElementById('punicao_monitoria');
   if (mon && !mon.value && emp.qualidade_monitoria) mon.value = emp.qualidade_monitoria;
   onPunicaoTipoChange();
-  // #region agent log
-  try {
-    const logBody = JSON.stringify({ sessionId: '97c411', location: 'rh-ops.js:onPunicaoEmployeeChange', message: 'punicao employee selected', data: { empId, nome: emp.nome || '', dept: emp.departamento || '', scriptV: '97c411pun1' }, timestamp: Date.now(), hypothesisId: 'H-punicao-select', runId: 'punicao-select-v1' });
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' }, body: logBody }).catch(() => {});
-  } catch (_) {}
-  // #endregion
 }
 
 function buscarDadosPunicao() {

@@ -3,6 +3,27 @@ declare(strict_types=1);
 
 final class PostgRestCompat
 {
+    /** Limite padrão quando o cliente não envia limit (evita SELECT * ilimitado). */
+    private const DEFAULT_LIMIT = 200;
+
+    /** Teto absoluto — mesmo se o cliente pedir mais. */
+    private const HARD_CAP = 1000;
+
+    /** Tetos por tabela pesada (menor que HARD_CAP). */
+    private const TABLE_CAPS = [
+        'proposals' => 800,
+        'users' => 1000,
+        'transactions' => 500,
+        'clients' => 800,
+        'tickets' => 300,
+        'leads' => 500,
+        'wa_messages' => 300,
+        'wa_chats' => 400,
+        'finance_proposta_ops' => 500,
+        'beneficios_vouchers' => 500,
+        'rh_employees' => 500,
+    ];
+
     private const ALLOWED = [
         'users', 'partners', 'products', 'transactions', 'orders', 'withdrawals',
         'clients', 'proposals', 'feedbacks', 'tickets', 'meetings',
@@ -115,6 +136,17 @@ final class PostgRestCompat
         throw new RuntimeException('Método não suportado: ' . $method, 405);
     }
 
+    /** Aplica default + teto por tabela (nunca devolve resultado ilimitado). */
+    private function resolveLimit(string $table, mixed $requested): int
+    {
+        $tableCap = self::TABLE_CAPS[$table] ?? self::HARD_CAP;
+        $cap = min(self::HARD_CAP, max(1, (int) $tableCap));
+        if ($requested === null || $requested === '' || (int) $requested <= 0) {
+            return min(self::DEFAULT_LIMIT, $cap);
+        }
+        return max(1, min((int) $requested, $cap));
+    }
+
     private function parseQuery(string $qs): array
     {
         $out = [
@@ -182,11 +214,9 @@ final class PostgRestCompat
         if ($params['order']) {
             $sql .= ' ORDER BY ' . $this->parseOrder($table, $params['order']);
         }
-        if ($params['limit']) {
-            $lim = max(1, (int) $params['limit']);
-            $off = max(0, (int) ($params['offset'] ?? 0));
-            $sql .= $off > 0 ? (' LIMIT ' . $off . ',' . $lim) : (' LIMIT ' . $lim);
-        }
+        $lim = $this->resolveLimit($table, $params['limit'] ?? null);
+        $off = max(0, (int) ($params['offset'] ?? 0));
+        $sql .= $off > 0 ? (' LIMIT ' . $off . ',' . $lim) : (' LIMIT ' . $lim);
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($bind);
         $rows = $stmt->fetchAll();

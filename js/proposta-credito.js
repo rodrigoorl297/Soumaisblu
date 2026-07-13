@@ -474,10 +474,7 @@
       if (!nav) return;
       const show = isCreditoPilotUser(user);
       nav.style.display = show ? '' : 'none';
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'proposta-credito.js:applyEmployeeNavVisibility',message:'credito nav',data:{show,role:String(user?.role||''),name:String(user?.name||'').slice(0,40),pilot:isCreditoPilotUser(user)},timestamp:Date.now(),hypothesisId:'H-credito-nav',runId:'credito-pilot-higor'})}).catch(()=>{});
-      // #endregion
-    },
+},
 
     async buscarFuncionario(cpfArg, opts = {}) {
       const cpf = digits(cpfArg || document.getElementById('pc_cpf_funcionario')?.value);

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
@@ -8,7 +8,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
 
 if (!soublu_api_auth_ok()) {
-    soublu_json(['ok' => false, 'error' => 'Não autorizado.'], 401);
+    soublu_json(['ok' => false, 'error' => 'N├úo autorizado.'], 401);
 }
 
 $allowed = [
@@ -151,14 +151,14 @@ if ($path === '' || $content === false) {
 }
 
 if (!in_array($path, $allowed, true)) {
-    soublu_json(['ok' => false, 'error' => 'path inválido ou não permitido'], 400);
+    soublu_json(['ok' => false, 'error' => 'path inv├ílido ou n├úo permitido'], 400);
 }
 
 $root = dirname(__DIR__);
 $dest = $root . '/' . $path;
 $parent = dirname($dest);
 if (!is_dir($parent) && !mkdir($parent, 0755, true) && !is_dir($parent)) {
-    soublu_json(['ok' => false, 'error' => 'Não foi possível criar pasta destino.'], 500);
+    soublu_json(['ok' => false, 'error' => 'N├úo foi poss├¡vel criar pasta destino.'], 500);
 }
 
 if (file_put_contents($dest, $content) === false) {

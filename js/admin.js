@@ -1696,7 +1696,7 @@ async function _renderDashboardBody() {
       _ordersForRole(),
       _transactionsForRole(),
       prodProm,
-      typeof DB.listProposalsLite === 'function' ? DB.listProposalsLite({ limit: 1500 })
+      typeof DB.listProposalsLite === 'function' ? DB.listProposalsLite({ limit: 800 })
         : (typeof DB.listProposals === 'function' ? DB.listProposals() : DB.list('proposals')),
     ]);
     emps = rEmps.status === 'fulfilled' ? (rEmps.value || []) : [];
@@ -2033,7 +2033,7 @@ async function renderTeamBillingChart() {
 
   if (!_allProposalsCache) {
     _allProposalsCache = typeof DB.listProposalsLite === 'function'
-      ? await DB.listProposalsLite({ limit: 1500 }).catch(() => [])
+      ? await DB.listProposalsLite({ limit: 800 }).catch(() => [])
       : (typeof DB.listProposals === 'function'
         ? await DB.listProposals().catch(() => [])
         : await DB.list('proposals').catch(() => []));

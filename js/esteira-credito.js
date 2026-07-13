@@ -82,12 +82,7 @@
       hypothesisId: hypothesisId || 'calc-parcela',
       runId: 'calc-fix-v2',
     };
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-    const cfg = window.SOUBLU_CONFIG || {};
+const cfg = window.SOUBLU_CONFIG || {};
     const base = String(cfg.API_BASE_URL || cfg.SITE_URL || location.origin || '').replace(/\/+$/, '');
     const key = cfg.API_KEY || '';
     if (!base || !key) return;
@@ -612,24 +607,15 @@
 
     async _loadProposals() {
       if (!window.CreditoPropostasApi?.list) {
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'esteira-credito.js:_loadProposals',message:'CreditoPropostasApi missing',data:{},timestamp:Date.now(),hypothesisId:'H1',runId:'esteira-sep'})}).catch(()=>{});
-        // #endregion
-        return [];
+return [];
       }
       try {
         const creditRows = await CreditoPropostasApi.list();
         const rows = Array.isArray(creditRows) ? creditRows.filter(isCreditoProposal) : [];
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'esteira-credito.js:_loadProposals',message:'loaded credit_proposals only',data:{count:rows.length,sampleIds:rows.slice(0,3).map((p)=>p.id)},timestamp:Date.now(),hypothesisId:'H1,H2',runId:'esteira-sep'})}).catch(()=>{});
-        // #endregion
-        return rows;
+return rows;
       } catch (e) {
         console.warn('[EsteiraCredito] credit_proposals:', e.message || e);
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'esteira-credito.js:_loadProposals:fail',message:'credit list failed',data:{error:String(e&&e.message||e)},timestamp:Date.now(),hypothesisId:'H3',runId:'esteira-sep'})}).catch(()=>{});
-        // #endregion
-        return [];
+return [];
       }
     },
 
@@ -747,10 +733,7 @@
       const sum = _sumParcelasInputs('ecParcelasWrap');
       const finalEl = document.getElementById('ecValorFinal');
       if (finalEl) finalEl.value = sum > 0 ? String(sum) : '';
-      // #region agent log
-      _ecDbgLog('esteira-credito.js:_recalcValorFinalFromParcelas', 'sum parcelas', { sum }, 'parcelas-soma');
-      // #endregion
-    },
+},
 
     _recalcValoresParcela() {
       this.onParcelasChange();
@@ -805,16 +788,7 @@
         if (parcelas) parcelasEl.dataset.parcelas = String(parcelas);
         else delete parcelasEl.dataset.parcelas;
       }
-      // #region agent log
-      _ecDbgLog('esteira-credito.js:onProposalChange', 'proposal loaded', {
-        proposalId: id,
-        parcelas,
-        valorSolicitado: est.valor_solicitado ?? p.valor,
-        hasMetaParcelas: !!(m.parcelas_meses || m.parcelas),
-        hasEsteiraParcelas: !!(est.parcelas_meses || est.parcelas),
-      }, 'calc-parcela');
-      // #endregion
-      set('ecFormaPagamento', PIX_AUTOMATICO_FIXO);
+set('ecFormaPagamento', PIX_AUTOMATICO_FIXO);
       const vp = est.valor_parcela ?? ret.valor_parcela ?? '';
       set('ecValorParcela', vp);
       this.onValorParcelaChange();
@@ -1002,17 +976,7 @@
         };
 
         await _saveProposal(updated);
-        // #region agent log
-        _ecDbgLog('esteira-credito.js:salvarDados', 'esteira saved', {
-          proposalId: p.id,
-          valorParcela: fields.valor_parcela,
-          valorFinal: fields.valor_final,
-          statusCredito: fields.status_credito,
-          dataDesconto: fields.data_desconto,
-          formaPagamento: fields.forma_pagamento,
-        }, 'credito-form-v3');
-        // #endregion
-        _esteiraPending = {};
+_esteiraPending = {};
         showToast('Dados da esteira salvos. Documentos disponíveis no Retorno de Propostas.', 'success');
         await this.renderWorkflow();
         if (document.getElementById('esteiraCreditoDetailModal')?.classList.contains('open')) {
@@ -1048,17 +1012,7 @@
         const m = p.meta && typeof p.meta === 'object' ? p.meta : {};
         const dataNasc = await this._resolveDataNascimento(p, cpf) || m.data_nascimento || m.dataNascimento || '';
         const res = await FonteData.lookupAnaliseCreditoPf(cpf, dataNasc);
-        // #region agent log
-        _ecDbgLog('esteira-credito.js:apiAnaliseCredito', 'analise result', {
-          ok: res.ok,
-          rhOk: !!res.rh?.ok,
-          receitaOk: !!res.rh?.receita?.ok,
-          pisOk: !!res.rh?.pis?.ok,
-          hasDataNasc: !!dataNasc,
-          error: res.error || null,
-        }, 'analise-api');
-        // #endregion
-        if (!res.ok) throw new Error(res.error || 'Falha na consulta');
+if (!res.ok) throw new Error(res.error || 'Falha na consulta');
         const bundle = { rh: res.rh, score: res.score };
         const prevEst = parseEsteira(p);
         const esteira = {
@@ -1271,19 +1225,7 @@
           const beneficiary = typeof DB.getUser === 'function' ? await DB.getUser(empId) : null;
           beneficiaryName = beneficiary?.name || p.clientName || p.client_name || p.nome || 'funcionário';
           const submitterId = String(p.employee_id || p.vendor_id || '');
-          // #region agent log
-          _ecDbgLog('esteira-credito.js:decidir', 'credit beneficiary', {
-            proposalId: p.id,
-            empId,
-            beneficiaryName,
-            submitterId,
-            cpf: proposalCpf(p),
-            valorCredito,
-            redirectedFromSubmitter: submitterId && submitterId !== String(empId),
-          }, 'credit-beneficiary');
-          // #endregion
-
-          const protocolo = fields.protocolo || p.protocolo || p.numero || p.id;
+const protocolo = fields.protocolo || p.protocolo || p.numero || p.id;
           const reason = `Crédito aprovado — Esteira Proposta de Crédito (${protocolo})`;
           const meta = {
             screen: 'esteira_credito',

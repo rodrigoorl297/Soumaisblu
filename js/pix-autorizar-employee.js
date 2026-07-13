@@ -340,10 +340,7 @@
       }
       if (!_pending.length) stopPoll();
       else startPoll();
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'pix-autorizar-employee.js:refresh',message:'pending pix auth',data:{count:_pending.length,ids:_pending.slice(0,3).map((r)=>r.id),fases:_pending.slice(0,3).map((r)=>pixFluxoFase(pixAuto(r)))},timestamp:Date.now(),hypothesisId:'H-emp-panel',runId:'emp-pix-auth-v2'})}).catch(()=>{});
-      // #endregion
-    },
+},
 
     async init(user) {
       _user = user;

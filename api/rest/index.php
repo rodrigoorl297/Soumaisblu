@@ -38,10 +38,11 @@ try {
     $t0 = microtime(true);
     $run = static function () use ($table, $method, $body, $query) {
         $pdo = soublu_pdo();
-        if (!soublu_finance_modulos_tables_exist($pdo)) {
+        // Ensure só no caminho das tabelas do módulo — evita INFORMATION_SCHEMA em todo GET.
+        if (str_starts_with($table, 'finance_') && !soublu_finance_modulos_tables_exist($pdo)) {
             soublu_ensure_finance_modulos_tables($pdo);
         }
-        if (!soublu_beneficios_tables_exist($pdo)) {
+        if (str_starts_with($table, 'beneficios_') && !soublu_beneficios_tables_exist($pdo)) {
             soublu_ensure_beneficios_tables($pdo);
         }
         $api = new PostgRestCompat($pdo);

@@ -111,10 +111,7 @@ function _redirectAdminPanelFromEmployee(liveRole, urlParams) {
   if (role === 'portaria' || (typeof Auth.isPortaria === 'function' && Auth.isPortaria())) {
     return _redirectPortariaToAdmin();
   }
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'5ec660'},body:JSON.stringify({sessionId:'5ec660',location:'employee.js:_redirectAdminPanelFromEmployee',message:'live role redirect',data:{role,target:role==='financeiro'||role==='financial'?'financeiro':'admin'},timestamp:Date.now(),hypothesisId:'RH-ROLE-SESSION',runId:'post-fix'})}).catch(()=>{});
-  // #endregion
-  if ((role === 'financeiro' || role === 'financial')
+if ((role === 'financeiro' || role === 'financial')
     && typeof Auth.isFinanceiroOnly === 'function'
     && Auth.isFinanceiroOnly()) {
     window.location.replace(
@@ -179,10 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if (_s && (String(_s.role || '').toLowerCase() === 'portaria'
       || (typeof Auth.isPortaria === 'function' && Auth.isPortaria()))) {
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:portariaRedirect',message:'employee -> admin',data:{role:_s.role,target:'admin'},timestamp:Date.now(),hypothesisId:'H1-loop',runId:'portaria-loop'})}).catch(()=>{});
-      // #endregion
-      _redirectPortariaToAdmin();
+_redirectPortariaToAdmin();
       return;
     }
 
@@ -267,10 +261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window._PARTNER_PERMS = PartnerPerms.merge(row?.permissions);
       }
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:partnerBoot',message:'partner root resolved',data:{partnerRootId:partnerRootId||null,hasRazao:!!window.PARTNER_RAZAO_SOCIAL,role:currentUser?.role,hasPartnerHint:!!currentUser?.partner_root_id},timestamp:Date.now(),hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
+if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
       BolaoCopa.applyNavVisibility();
     }
     _applyEmployeeLeadsNav(currentUser);
@@ -347,12 +338,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (typeof navigateTo === 'function') navigateTo('secInicio');
       await PainelSonhos.render('painelSonhosRoot');
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:boot',message:'critical boot done',data:{ms:Date.now()-bootT0,perfil:!!window.__PERFIL_MODE__},timestamp:Date.now(),hypothesisId:'D',runId:'perf-photo-fix'})}).catch(()=>{});
-    // #endregion
-
-    hideLoading();
+hideLoading();
     _ensureEmployeeSectionVisible();
     void _deferredEmployeeBoot(_inPartnerOrg);
 
@@ -420,10 +406,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (s==='secClients')   { if(window.Clients) await Clients.renderEmployeeList(); }
         if (s==='secClubeBeneficios' && window.BeneficiosClube?.init) await BeneficiosClube.init();
         if (s==='secTickets')   {
-          // #region agent log
-          fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:secTickets',message:'nav chamados',data:{hasTickets:!!window.Tickets,role:currentUser?.role,navDisplay:document.getElementById('navTickets')?.style?.display||'default'},timestamp:Date.now(),hypothesisId:'A',runId:'chamados-nav-fix'})}).catch(()=>{});
-          // #endregion
-          if (window.Tickets) {
+if (window.Tickets) {
             Tickets.init();
             await Tickets.renderEmployeeList();
           }
@@ -506,10 +489,7 @@ async function _deferredEmployeeBoot(_inPartnerOrg) {
   }
   try {
     await Promise.all(tasks);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'97c411'},body:JSON.stringify({sessionId:'97c411',location:'employee.js:deferredBoot',message:'deferred boot done',data:{ms:Date.now()-t0,taskCount:tasks.length},timestamp:Date.now(),hypothesisId:'D',runId:'perf-photo-fix'})}).catch(()=>{});
-    // #endregion
-  } catch (err) {
+} catch (err) {
     console.warn('[employee deferred boot]', err);
   }
 }

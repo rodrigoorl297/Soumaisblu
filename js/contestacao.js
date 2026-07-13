@@ -67,24 +67,7 @@
       hypothesisId: hypothesisId || 'contestacao-nav',
       runId: 'contestacao-nav-fix-v1',
     };
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-    const cfg = window.SOUBLU_CONFIG || {};
-    const base = String(cfg.API_BASE_URL || cfg.SITE_URL || location.origin || '').replace(/\/+$/, '');
-    const key = cfg.API_KEY || '';
-    if (base && key) {
-      fetch(`${base}/api/credito_api.php?action=client_log`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-API-Key': key },
-        body: JSON.stringify(payload),
-      }).catch(() => {});
-    }
-    // #endregion
-  }
+}
 
   async function scopeFilter() {
     const root = window.PARTNER_ROOT_ID;
@@ -133,13 +116,7 @@
       if (navBtn && !navBtn.dataset.navWired) {
         navBtn.dataset.navWired = '1';
         navBtn.addEventListener('click', () => {
-          // #region agent log
-          _ctDbgLog('contestacao.js:navClick', 'nav click', {
-            hasNavigateTo: typeof navigateTo === 'function',
-            hasSection: !!document.getElementById('secContestacao'),
-          }, 'H1');
-          // #endregion
-          if (typeof window.navigateTo === 'function') window.navigateTo('secContestacao');
+if (typeof window.navigateTo === 'function') window.navigateTo('secContestacao');
           else if (typeof navigateTo === 'function') navigateTo('secContestacao');
           this.render();
         });

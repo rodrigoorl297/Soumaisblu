@@ -38,13 +38,6 @@ function _dbgLogin(location, message, data, hypothesisId) {
     hypothesisId: hypothesisId || 'login-boot',
     runId: '97c411login',
   };
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
-    body: JSON.stringify(payload),
-  }).catch(() => {});
-  // #endregion
 }
 
 // 1. Otimização do Waiter do Banco de Dados

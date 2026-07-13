@@ -204,30 +204,5 @@ try {
 
     soublu_json(['ok' => false, 'error' => 'Ação inválida.'], 400);
 } catch (Throwable $e) {
-    // #region agent log
-    $debug = ['action' => $action, 'backend' => soublu_credit_proposal_backend()];
-    if ($debug['backend'] === 'mysql-credit_proposals') {
-        try {
-            $colSt = soublu_pdo()->prepare(
-                'SELECT COUNT(*) FROM information_schema.COLUMNS
-                 WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?'
-            );
-            $colSt->execute(['credit_proposals', 'meta']);
-            $debug['meta_column_exists'] = (int) $colSt->fetchColumn() > 0;
-        } catch (Throwable $colErr) {
-            $debug['meta_column_check_error'] = $colErr->getMessage();
-        }
-    }
-    $logPath = dirname(__DIR__) . '/debug-97c411.log';
-    @file_put_contents($logPath, json_encode([
-        'sessionId' => '97c411',
-        'timestamp' => (int) round(microtime(true) * 1000),
-        'location' => 'credito_api.php:catch',
-        'message' => 'credito_api error',
-        'data' => array_merge($debug, ['error' => $e->getMessage()]),
-        'hypothesisId' => 'A,B,D',
-        'runId' => 'pre-fix',
-    ], JSON_UNESCAPED_UNICODE) . "\n", FILE_APPEND | LOCK_EX);
-    // #endregion
-    soublu_json(['ok' => false, 'error' => $e->getMessage(), 'debug' => $debug], 500);
+soublu_json(['ok' => false, 'error' => $e->getMessage(), 'debug' => $debug], 500);
 }
