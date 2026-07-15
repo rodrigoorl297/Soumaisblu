@@ -26,8 +26,8 @@
 
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'financeiro-sections.html?v=97c411att3'
-      : 'pages/financeiro-sections.html?v=97c411att3';
+      ? 'financeiro-sections.html?v=pager-vis1'
+      : 'pages/financeiro-sections.html?v=pager-vis1';
     return typeof Auth !== 'undefined' && Auth.resolveHref
       ? Auth.resolveHref(rel)
       : rel;
@@ -195,7 +195,8 @@
     if (isFinInjectedAdminNav(el)) return false;
     if (el.dataset.tab === 'inicio') return true;
     if (el.dataset.section) return true;
-    if (el.id === 'navFinVoltar') return true;
+    if (el.id === 'navFinVoltar' || el.id === 'navFinFolha' || el.id === 'navFinFolhaGerar') return true;
+    if (el.id === 'navWhatsApp' || el.getAttribute('data-wa-external') === '1') return true;
     if (el.getAttribute('onclick')?.includes('Auth.logout')) return true;
     if (el.classList.contains('fin-nav-black-bar') && el.getAttribute('role') === 'presentation') return true;
     if (el.classList.contains('nav-section-label')) return true;
@@ -217,18 +218,42 @@
     });
     const blackBars = nav.querySelectorAll('a.fin-nav-black-bar[data-section]');
     blackBars.forEach((el) => { el.style.display = ''; });
+    applyInicioNavVisibility();
   }
 
+  /** Absolute Folha URL — never bare relative against <base href=".../pages/"> (avoids /pages/pages/...). */
   function folhaPagamentoHref() {
-    if (typeof Auth !== 'undefined' && Auth.folhaPagamentoPageHref) {
-      return Auth.folhaPagamentoPageHref();
+    try {
+      if (typeof window.soubluPage === 'function') {
+        const u = new URL(window.soubluPage('folha-pagamento.html'));
+        u.searchParams.set('_r', Date.now().toString(36));
+        return u.href;
+      }
+    } catch (_) { /* fall through */ }
+    if (typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHrefFresh === 'function') {
+      return Auth.folhaPagamentoPageHrefFresh();
     }
-    const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'folha-pagamento.html'
-      : 'pages/folha-pagamento.html';
-    return typeof Auth !== 'undefined' && Auth.resolveHref
-      ? Auth.resolveHref(rel)
-      : rel;
+    if (typeof Auth !== 'undefined' && typeof Auth.pageHrefFresh === 'function') {
+      return Auth.pageHrefFresh('folha-pagamento.html');
+    }
+    if (typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHref === 'function') {
+      try {
+        const u = new URL(Auth.folhaPagamentoPageHref());
+        u.searchParams.set('_r', Date.now().toString(36));
+        return u.href;
+      } catch (_) {
+        return Auth.folhaPagamentoPageHref();
+      }
+    }
+    const inPages = /\/pages(\/|$)/i.test(String(location.pathname || '').replace(/\\/g, '/'));
+    const rel = inPages ? 'folha-pagamento.html' : 'pages/folha-pagamento.html';
+    try {
+      const u = new URL(rel, window.location.href);
+      u.searchParams.set('_r', Date.now().toString(36));
+      return u.href;
+    } catch (_) {
+      return rel;
+    }
   }
 
   function isFinanceiroOnlyUser() {
@@ -238,6 +263,32 @@
     const s = Auth.getSession();
     const r = String(s?.role || '').toLowerCase();
     return r === 'financeiro' || r === 'financial';
+  }
+
+  function hubShowsSonhos() {
+    const role = Auth.getSession()?.role;
+    if (window.PainelSonhos && typeof PainelSonhos.eligibleOnHub === 'function') {
+      return PainelSonhos.eligibleOnHub(role);
+    }
+    return false;
+  }
+
+  /** First meaningful Financeiro module (sidebar after Painel Inicial). */
+  function defaultFinanceiroSection() {
+    return 'secPrestadorServicos';
+  }
+
+  function applyInicioNavVisibility() {
+    const show = hubShowsSonhos();
+    document.querySelectorAll('#finSidebarNav [data-tab="inicio"], #navFinInicio').forEach((el) => {
+      el.style.display = show ? '' : 'none';
+      if (!show) el.classList.remove('active');
+    });
+    const tabInicio = document.getElementById('tab-inicio');
+    if (tabInicio && !show) {
+      tabInicio.style.display = 'none';
+      tabInicio.classList.remove('active');
+    }
   }
 
   function wireSidebar() {
@@ -261,9 +312,15 @@
     });
 
     nav.querySelectorAll('#navFinFolha, #navFinFolhaGerar').forEach(el => {
+      const href = folhaPagamentoHref();
+      if (el.tagName === 'A') {
+        el.setAttribute('href', href);
+        el.setAttribute('data-folha-href', '1');
+      }
       el.addEventListener('click', (e) => {
         e.preventDefault();
-        window.location.href = folhaPagamentoHref();
+        e.stopPropagation();
+        window.location.assign(folhaPagamentoHref());
       });
     });
 
@@ -381,6 +438,10 @@ if (!window.PartnerOps?.renderPanel) {
   }
 
   function showInicioPanel() {
+    if (!hubShowsSonhos()) {
+      void FinanceiroBoot.openSection(defaultFinanceiroSection());
+      return;
+    }
     const inicio = document.getElementById('tab-inicio');
     const modulos = document.getElementById('tab-modulos');
     if (modulos) { modulos.classList.remove('active'); modulos.style.display = 'none'; }
@@ -408,6 +469,7 @@ if (!window.PartnerOps?.renderPanel) {
       }
       ensureFinanceiroSidebarVisible();
       applyFinanceiroPartnerNavVisibility();
+      applyInicioNavVisibility();
       wireBalanceForm();
       if (typeof wirePartnerBalanceForm === 'function') wirePartnerBalanceForm();
       wireSidebar();
@@ -415,7 +477,7 @@ if (!window.PartnerOps?.renderPanel) {
     },
 
     async openSection(sectionId, opts) {
-      const tab = typeof opts === 'string' ? opts : (opts?.tab || '');
+      let tab = typeof opts === 'string' ? opts : (opts?.tab || '');
       const proposalId = typeof opts === 'object' ? opts?.proposalId : '';
 
       if (sectionId === 'secFinPropostas') {
@@ -430,8 +492,13 @@ if (!window.PartnerOps?.renderPanel) {
       }
 
       if (!sectionId) {
-        showInicioPanel();
-        return;
+        if (hubShowsSonhos()) {
+          showInicioPanel();
+          return;
+        }
+        sectionId = defaultFinanceiroSection();
+        tab = '';
+        window._finLastTab = '';
       }
       showModulePanel(sectionId);
       await renderSection(sectionId, tab);

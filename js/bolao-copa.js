@@ -2,6 +2,40 @@
 const BolaoCopa = (() => {
   'use strict';
 
+  function _bolaoEnabled() {
+    const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
+    if (cfg.BOLAO_COPA_ENABLED === false || cfg.BOLAO_COPA_ENABLED === 0 || cfg.BOLAO_COPA_ENABLED === '0') return false;
+    if (typeof window !== 'undefined' && window.SOUBLU_BOLAO_ENABLED === false) return false;
+    /* desligado por padrão até reativação explícita */
+    return cfg.BOLAO_COPA_ENABLED === true || cfg.BOLAO_COPA_ENABLED === 1 || cfg.BOLAO_COPA_ENABLED === '1';
+  }
+
+  function _hideBolaoDom() {
+    document.querySelectorAll('.bolao-copa-nav, #navBolaoCopa, #secBolaoCopa').forEach((el) => {
+      el.style.display = 'none';
+      el.setAttribute('hidden', 'hidden');
+    });
+  }
+
+  if (!_bolaoEnabled()) {
+    const api = {
+      ensureDom() { _hideBolaoDom(); },
+      applyNavVisibility() { _hideBolaoDom(); return Promise.resolve(false); },
+      render() { _hideBolaoDom(); return Promise.resolve(); },
+      renderWelcomeHtml() { return ''; },
+      checkAndCelebrate() { return Promise.resolve(); },
+      enabled: false,
+    };
+    if (typeof document !== 'undefined') {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _hideBolaoDom, { once: true });
+      } else {
+        _hideBolaoDom();
+      }
+    }
+    return api;
+  }
+
   const TZ = 'America/Sao_Paulo';
   const SECTION_ID = 'secBolaoCopa';
   const CAMPAIGN_ID = 'album-copa-2026';

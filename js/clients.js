@@ -109,6 +109,37 @@ window.Clients = {
     el.textContent = msg || '';
   },
 
+  /** Dono do cadastro (vendedor/funcionário que registrou). */
+  _clientOwnerId: function(c) {
+    return String(c?.supervisorId || c?.supervisor_id || '').trim();
+  },
+
+  /**
+   * Regra de produto: CPF já existente bloqueia novo cadastro (histórico global).
+   * Mensagem reforça o caso de má-fé “mesmo vendedor”.
+   */
+  _dupCadastroMsg: function(existing) {
+    const session = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+    const owner = this._clientOwnerId(existing);
+    const quem = existing?.name ? ` (${existing.name})` : '';
+    if (session?.id && owner && owner === String(session.id)) {
+      return `Este cliente${quem} já está cadastrado com você (mesmo vendedor). Não é permitido cadastrar de novo.`;
+    }
+    return `Este cliente${quem} já está cadastrado no sistema. O CPF não pode ser cadastrado novamente.`;
+  },
+
+  _setCpfDupBlocked: function(blocked) {
+    const modal = document.getElementById('clientModal');
+    if (modal) {
+      if (blocked) modal.dataset.cpfDupBlocked = '1';
+      else delete modal.dataset.cpfDupBlocked;
+    }
+    // Só trava o botão em cadastro novo (edição usa editCpf).
+    if (modal?.dataset?.editCpf) return;
+    const saveBtn = document.querySelector('#clientModal .btn-primary');
+    if (saveBtn) saveBtn.disabled = !!blocked;
+  },
+
   _bindCpfLookup: function() {
     if (this._cpfLookupBound) return;
     const cpfEl = document.getElementById('clientCpf');
@@ -126,6 +157,7 @@ window.Clients = {
         cpfEl.value = formatPixKey('cpf', digits);
       }
       if (digits.length < 11) {
+        this._setCpfDupBlocked(false);
         this._setCpfStatus(digits.length ? 'Digite os 11 dígitos do CPF para buscar os dados.' : '', 'muted');
         return;
       }
@@ -163,19 +195,22 @@ window.Clients = {
 
   _onCpfInput: async function() {
     const cpfEl = document.getElementById('clientCpf');
-    if (!cpfEl || typeof FonteData === 'undefined') return;
+    if (!cpfEl) return;
 
     const cpf = cpfEl.value.replace(/\D/g, '');
     if (cpf.length !== 11) return;
 
     const modal = document.getElementById('clientModal');
-    const onlyEmpty = !!modal?.dataset?.editCpf;
+    const isEdit = !!modal?.dataset?.editCpf;
+    const onlyEmpty = isEdit;
 
     try {
       const local = typeof DB.getClientByCpf === 'function'
         ? await DB.getClientByCpf(cpf).catch(() => null)
-        : null;
-      if (local?.name) {
+        : (typeof DB.findClientByCpf === 'function'
+          ? await DB.findClientByCpf(cpf).catch(() => null)
+          : null);
+      if (local && (local.name || local.cpf || local.id)) {
         this._applyFonteDataToForm({
           cpf: local.cpf || cpf,
           name: local.name,
@@ -191,10 +226,26 @@ window.Clients = {
           const rgEl = document.getElementById('clientRg');
           if (rgEl && local.rg) rgEl.value = local.rg;
         }
+        // Cadastro novo + CPF já no sistema → trava (anti má-fé / mesmo vendedor).
+        if (!isEdit) {
+          const msg = this._dupCadastroMsg(local);
+          this._setCpfDupBlocked(true);
+          this._setCpfStatus(msg, 'error');
+          this._notify(msg, 'error');
+          return;
+        }
+        this._setCpfDupBlocked(false);
         this._setCpfStatus('Cliente já cadastrado — dados carregados do sistema.', 'success');
         return;
       }
     } catch (_) { /* segue FonteData */ }
+
+    this._setCpfDupBlocked(false);
+
+    if (typeof FonteData === 'undefined') {
+      this._setCpfStatus('CPF disponível — preencha os dados do cliente.', 'muted');
+      return;
+    }
 
     this._setCpfStatus('Consultando FonteData…', 'muted');
     const res = await FonteData.lookupCpf(cpf);
@@ -232,10 +283,12 @@ window.Clients = {
       const modal = document.getElementById('clientModal');
       if (modal) {
         delete modal.dataset.editCpf;
+        delete modal.dataset.cpfDupBlocked;
         modal.classList.add('open');
       } else {
         alert("Erro: O formulário de cliente não foi encontrado.");
       }
+      this._setCpfDupBlocked(false);
     } catch (e) {
       alert("Erro ao abrir formulário: " + e.message);
     }
@@ -254,6 +307,75 @@ window.Clients = {
     return this._cpfDigits(cpf).replace(/'/g, '');
   },
 
+  _escHtml(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  },
+
+  _ensureDetailsModal() {
+    let el = document.getElementById('clientDetailsModal');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'clientDetailsModal';
+    el.className = 'modal-overlay';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-labelledby', 'clientDetailsTitle');
+    el.innerHTML =
+      '<div class="modal" style="max-width:520px;">' +
+        '<div class="modal-header">' +
+          '<h3 id="clientDetailsTitle">Detalhes do Cliente</h3>' +
+          '<button type="button" class="modal-close" onclick="closeModal(\'clientDetailsModal\')" aria-label="Fechar"></button>' +
+        '</div>' +
+        '<div class="modal-body" style="max-height:70vh;overflow-y:auto;">' +
+          '<div id="clientDetailsBody" class="card card-padded" style="background:var(--color-surface-2);padding:0;"></div>' +
+        '</div>' +
+        '<div class="modal-footer">' +
+          '<button type="button" class="btn btn-outline" onclick="closeModal(\'clientDetailsModal\')">Fechar</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(el);
+    return el;
+  },
+
+  showDetailsModal(client) {
+    if (!client) return;
+    this._ensureDetailsModal();
+    const show = (v) => {
+      const s = String(v ?? '').trim();
+      return s || '—';
+    };
+    const row = (label, value) =>
+      '<div class="client-details-row" style="display:grid;grid-template-columns:minmax(110px,32%) 1fr;gap:10px 14px;padding:11px 14px;border-bottom:1px solid var(--color-border);align-items:start;">' +
+        `<div style="font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--color-text-muted);padding-top:2px;">${this._escHtml(label)}</div>` +
+        `<div style="font-size:14px;font-weight:600;color:var(--color-text);word-break:break-word;line-height:1.45;">${this._escHtml(show(value))}</div>` +
+      '</div>';
+    const body = document.getElementById('clientDetailsBody');
+    if (body) {
+      body.innerHTML =
+        '<div style="border-radius:var(--radius-md);overflow:hidden;">' +
+          row('Nome', client.name) +
+          row('CPF', client.cpf) +
+          row('RG', client.rg) +
+          row('Telefone', client.phone1) +
+          row('Telefone 2', client.phone2) +
+          row('Estado Civil', client.civilState) +
+          row('Endereço', client.address) +
+          row('Email', client.email) +
+          row('Mãe', client.motherName) +
+          row('Pai', client.fatherName) +
+        '</div>';
+      const last = body.querySelector('.client-details-row:last-child');
+      if (last) last.style.borderBottom = 'none';
+    }
+    if (typeof openModal === 'function') openModal('clientDetailsModal');
+    else document.getElementById('clientDetailsModal')?.classList.add('open');
+  },
+
   viewDetails: async function(cpf) {
     const digits = this._cpfDigits(cpf);
     let client = typeof DB.getClientByCpf === 'function' ? await DB.getClientByCpf(digits) : null;
@@ -264,20 +386,7 @@ window.Clients = {
       this._notify('Cliente não encontrado.', 'error');
       return;
     }
-    const show = (v) => {
-      const s = String(v ?? '').trim();
-      return s || '—';
-    };
-    const lines = [
-      `Nome: ${show(client.name)}`,
-      `CPF: ${show(client.cpf)}`,
-      `E-mail: ${show(client.email)}`,
-      `Celular: ${show(client.phone1)}`,
-      `Celular 2: ${show(client.phone2)}`,
-      `RG: ${show(client.rg)}`,
-      `Endereço: ${show(client.address)}`,
-    ];
-    alert(lines.join('\n'));
+    this.showDetailsModal(client);
   },
 
   /** Botões de ação em linha (ícones) — tabela admin e cards do vendedor */
@@ -433,6 +542,7 @@ window.Clients = {
     const modal = document.getElementById('clientModal');
     if (modal) {
       modal.dataset.editCpf = digits;
+      delete modal.dataset.cpfDupBlocked;
       modal.classList.add('open');
     }
     this._setCpfStatus('Edição — documentos só são obrigatórios em cadastro novo.', 'muted');
@@ -531,9 +641,15 @@ window.Clients = {
       } else if (typeof DB.getClientByCpf === 'function') {
         existing = await DB.getClientByCpf(cpf);
       }
+      // Flag setada no blur/input do CPF — barreira extra antes da consulta DB.
+      if (!isEdit && modal?.dataset?.cpfDupBlocked === '1') {
+        this._notify(this._dupCadastroMsg(existing || { cpf, name }), 'error');
+        return;
+      }
       if (existing && !isEdit) {
-        const quem = existing.name ? ` (${existing.name})` : '';
-        this._notify(`Este cliente já está cadastrado${quem}. O CPF informado não pode ser cadastrado novamente.`, 'warning');
+        // Bloqueia re-cadastro do mesmo CPF (mesmo vendedor = caso típico de má-fé).
+        this._setCpfDupBlocked(true);
+        this._notify(this._dupCadastroMsg(existing), 'error');
         return;
       }
       if (existing && editCpf && editCpf !== cpf) {
@@ -610,16 +726,28 @@ window.Clients = {
       if (!isEdit) {
         const now = new Date().toISOString();
         clientData.created_at = now;
+        // Impede DB.save de “atualizar” um CPF existente quando a checagem prévia falhar.
+        clientData.__createOnly = true;
       }
 
       if (editCpf && editCpf !== cpf) {
         try { await DB.delete('clients', editCpf); } catch(e) {}
       }
-      if (modal) delete modal.dataset.editCpf;
+      if (modal) {
+        delete modal.dataset.editCpf;
+        delete modal.dataset.cpfDupBlocked;
+      }
 
       try {
         await DB.save('clients', clientData);
       } catch (e) {
+        const msg = String(e?.message || e || '');
+        if (/CLIENT_DUP|já está cadastrado|já cadastrado/i.test(msg)) {
+          if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+          this._setCpfDupBlocked(true);
+          this._notify(this._dupCadastroMsg(existing || { cpf, name }), 'error');
+          return;
+        }
         console.warn('Erro ao salvar em Supabase, tentando localStorage:', e.message);
         if (DB._lget && DB._lset) {
           const clients = DB._lget(DB.LK.clients) || [];
@@ -630,7 +758,8 @@ window.Clients = {
           });
           if (!isEdit && idx >= 0) {
             if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
-            this._notify('Este cliente já está cadastrado.', 'warning');
+            this._setCpfDupBlocked(true);
+            this._notify(this._dupCadastroMsg(clients[idx] || { cpf, name }), 'error');
             return;
           }
           if (idx >= 0) clients[idx] = clientData;

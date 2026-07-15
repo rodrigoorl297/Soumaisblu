@@ -287,13 +287,13 @@ if (id) this.openTicketDetail(id);
         console.warn('[Tickets] upload:', e);
       }
     }
-    if (file.size <= 800000) {
+    // Base64 no thread estoura timeout da API — só para arquivos bem pequenos.
+    if (file.size <= 120000) {
       const data = await this.readFileAsBase64(file);
       return { url: data, name: file.name || 'Anexo' };
     }
-    throw new Error('Não foi possível enviar o anexo. Tente um arquivo menor (até 5 MB) ou contate o suporte.');
+    throw new Error('Não foi possível enviar o anexo (arquivo grande). Tente de novo ou use uma imagem menor.');
   },
-
   submit: async function() {
     const user = Auth.getSession();
     const dept = document.getElementById('ticketDept').value;

@@ -18,19 +18,47 @@ if (!soublu_api_auth_ok()) {
 }
 
 $bucket = preg_replace('/[^a-z0-9_-]/', '', strtolower((string) ($_GET['bucket'] ?? 'misc')));
+if ($bucket === '') {
+    $bucket = 'misc';
+}
 $rawPath = (string) ($_GET['path'] ?? '');
+
+/** Normaliza path de subpasta: \ → /, remove .., tira nome de arquivo no final. */
+function soublu_upload_normalize_subpath(string $rawPath): string
+{
+    $sub = trim(str_replace('\\', '/', $rawPath), '/');
+    if ($sub === '') {
+        return '';
+    }
+    if (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub)) {
+        soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
+    }
+    $parts = array_values(array_filter(explode('/', $sub), static fn ($s) => $s !== ''));
+    if ($parts === []) {
+        return '';
+    }
+    $last = (string) end($parts);
+    if (preg_match('/\.[a-z0-9]{1,16}$/i', $last)) {
+        array_pop($parts);
+    }
+    $clean = [];
+    foreach ($parts as $seg) {
+        $seg = preg_replace('/[^a-zA-Z0-9_-]/', '', (string) $seg) ?? '';
+        if ($seg !== '') {
+            $clean[] = $seg;
+        }
+    }
+    return implode('/', $clean);
+}
+
 if ($bucket === 'proposal-attachments') {
     $sub = trim(str_replace('\\', '/', $rawPath), '/');
     if ($sub !== '' && (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub))) {
         soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
     }
-} elseif (in_array($bucket, ['partner-docs', 'ticket-docs', 'tim-docs', 'contestacao-docs', 'finance-docs', 'rh-demissao', 'rh-justificativa', 'rh-docs', 'monitoria-atendimento', 'partner-nf'], true)) {
-    $sub = trim(str_replace('\\', '/', $rawPath), '/');
-    if ($sub !== '' && (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub))) {
-        soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
-    }
 } else {
-    $sub = preg_replace('/[^a-zA-Z0-9_-]/', '', $rawPath);
+    /* sonhos, profile-photos, product-images, docs, whatsapp-media, etc. */
+    $sub = soublu_upload_normalize_subpath($rawPath);
 }
 
 if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
@@ -54,7 +82,7 @@ $blockedExt = [
     'htaccess', 'htpasswd',
 ];
 if ($bucket === 'proposal-attachments') {
-  if ($ext === '' || !preg_match('/^[a-z0-9]{1,16}$/', $ext)) {
+    if ($ext === '' || !preg_match('/^[a-z0-9]{1,16}$/', $ext)) {
         $ext = 'bin';
     }
     /* Supabase Storage: aceita qualquer documento; só renomeia extensões perigosas no objeto. */
@@ -73,7 +101,7 @@ if ($bucket === 'proposal-attachments') {
     }
 }
 
-    if ($bucket === 'proposal-attachments') {
+if ($bucket === 'proposal-attachments') {
     $object = trim(str_replace('\\', '/', $rawPath), '/');
     if ($object === '' || str_contains($object, '..')) {
         soublu_json(['ok' => false, 'error' => 'Caminho inválido para anexo de proposta.'], 400);
@@ -112,30 +140,44 @@ if ($bucket === 'proposal-attachments') {
     ]);
 }
 
-$base = defined('UPLOAD_DIR') ? UPLOAD_DIR : (dirname(__DIR__) . '/uploads');
-if (!is_dir($base) && !mkdir($base, 0755, true)) {
-    soublu_json(['ok' => false, 'error' => 'Não foi possível criar pasta uploads.'], 500);
+$siteRoot = dirname(__DIR__);
+$base = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : ($siteRoot . '/uploads');
+$base = str_replace('\\', '/', $base);
+/* Caminho relativo (ex.: "uploads" ou "uploads\sonhos") cairia no CWD e poluiria a raiz. */
+if ($base === '' || $base === '.' || !preg_match('#^(/|[a-zA-Z]:/)#', $base)) {
+    $base = $siteRoot . '/uploads';
 }
-if (in_array($bucket, ['partner-docs', 'ticket-docs', 'tim-docs', 'contestacao-docs', 'finance-docs', 'rh-demissao', 'rh-justificativa', 'rh-docs', 'monitoria-atendimento', 'partner-nf'], true) && $sub !== '') {
-    $parts = array_values(array_filter(explode('/', $sub), static fn ($s) => $s !== ''));
-    if (count($parts) > 1) {
-        $last = (string) end($parts);
-        if (preg_match('/\.[a-z0-9]{1,16}$/i', $last)) {
-            array_pop($parts);
-            $sub = implode('/', $parts);
-        }
+$base = rtrim(str_replace('\\', '/', $base), '/');
+if (!str_ends_with($base, '/uploads') && !str_contains($base, '/uploads/')) {
+    /* Se UPLOAD_DIR apontar para a raiz do site, força /uploads. */
+    $normalizedRoot = rtrim(str_replace('\\', '/', $siteRoot), '/');
+    if ($base === $normalizedRoot) {
+        $base = $normalizedRoot . '/uploads';
     }
 }
-$dir = rtrim($base, '/\\') . '/' . $bucket;
+
+if (!is_dir($base) && !mkdir($base, 0755, true) && !is_dir($base)) {
+    soublu_json(['ok' => false, 'error' => 'Não foi possível criar pasta uploads.'], 500);
+}
+
+$dir = $base . '/' . $bucket;
 if ($sub !== '') {
     $dir .= '/' . $sub;
 }
-if (!is_dir($dir) && !mkdir($dir, 0755, true)) {
+$dir = str_replace('\\', '/', $dir);
+if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
     soublu_json(['ok' => false, 'error' => 'Não foi possível criar pasta de upload.'], 500);
 }
 
 $name = bin2hex(random_bytes(8)) . '.' . $ext;
 $dest = $dir . '/' . $name;
+
+$baseReal = realpath($base);
+$dirReal = realpath($dir);
+if ($baseReal === false || $dirReal === false || !str_starts_with($dirReal, $baseReal)) {
+    soublu_json(['ok' => false, 'error' => 'Destino de upload inválido.'], 500);
+}
+
 if (!move_uploaded_file($file['tmp_name'], $dest)) {
     soublu_json(['ok' => false, 'error' => 'Falha ao salvar arquivo.'], 500);
 }

@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Modal pointer-events debug</title>
+  <link rel="stylesheet" href="css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="css/variables.css"/>
+  <link rel="stylesheet" href="css/global.css?v=modal-bs1"/>
+  <style>body{margin:0;font-family:sans-serif}#probe{padding:40px}button{padding:12px 20px;font-size:16px}</style>
+</head>
+<body>
+  <div id="probe">
+    <h1>Teste de clique</h1>
+    <button type="button" id="testBtn">Botão de teste</button>
+    <pre id="out"></pre>
+  </div>
+  <div class="modal-overlay" id="fakeModal">
+    <div class="modal"><div class="modal-header"><h3>Invisível</h3></div><div class="modal-body">bloqueador?</div></div>
+  </div>
+  <script src="js/ui.js"></script>
+  <script>
+    document.getElementById('testBtn').addEventListener('click', () => {
+      document.getElementById('out').textContent = 'BOTAO OK ' + Date.now();
+    });
+    function report() {
+      const cx = Math.floor(innerWidth/2), cy = Math.floor(innerHeight/2);
+      const hit = document.elementFromPoint(cx, cy);
+      const overlay = hit && hit.closest && hit.closest('.modal-overlay');
+      const modal = document.querySelector('#fakeModal .modal');
+      const cs = getComputedStyle(modal);
+      const ocs = getComputedStyle(document.getElementById('fakeModal'));
+      const payload = {
+        sessionId: '7a80a8',
+        runId: 'local-repro',
+        hypothesisId: 'C',
+        location: 'debug-modal-pe.html',
+        message: 'pointer-events hit test',
+        data: {
+          hitTag: hit && hit.tagName,
+          hitClass: hit && String(hit.className||'').slice(0,80),
+          overlayOpen: overlay ? overlay.classList.contains('open') : false,
+          modalPE: cs.pointerEvents,
+          modalDisplay: cs.display,
+          overlayPE: ocs.pointerEvents,
+          overlayOpacity: ocs.opacity,
+          btnClicked: document.getElementById('out').textContent.startsWith('BOTAO OK')
+        },
+        timestamp: Date.now()
+      };
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},
+        body:JSON.stringify(payload)
+      }).catch(()=>{});
+      document.getElementById('out').textContent += '\n' + JSON.stringify(payload.data, null, 2);
+    }
+    document.getElementById('testBtn').click();
+    report();
+  </script>
+</body>
+</html>

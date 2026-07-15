@@ -11,10 +11,15 @@
     const SUPABASE_KEY = String(_cfg.SUPABASE_ANON_KEY || _cfg.SUPABASE_KEY || '').trim();
     const SUPABASE_CONFIGURED = !HOSTINGER_CONFIGURED && !!(SUPABASE_URL && SUPABASE_KEY);
     if (typeof window !== 'undefined') {
+      window.SOUBLU_CONFIG = window.SOUBLU_CONFIG || {};
+      if (window.SOUBLU_CONFIG.BOLAO_COPA_ENABLED === undefined) {
+        window.SOUBLU_CONFIG.BOLAO_COPA_ENABLED = false;
+      }
       window.SOUBLU_RUNTIME = {
         dbBackend: HOSTINGER_CONFIGURED ? 'hostinger' : (SUPABASE_CONFIGURED ? 'supabase' : 'local'),
         supabaseConfigured: SUPABASE_CONFIGURED,
         hostingerConfigured: HOSTINGER_CONFIGURED,
+        bolaoEnabled: window.SOUBLU_CONFIG.BOLAO_COPA_ENABLED === true,
       };
     }
    
@@ -22,19 +27,31 @@
    const CACHE_STALE_MAX = 86400000; // 24h — dados antigos ainda servem na tela
    const API_RETRY_MAX = 3;
    const API_RETRY_BASE_MS = 500;
-   const API_FETCH_TIMEOUT_MS = 25000;
+   /** GET listagens leves; escritas (PATCH/POST com anexos) usam timeout maior. */
+   const API_FETCH_TIMEOUT_MS = 35000;
+   const API_WRITE_TIMEOUT_MS = 90000;
    const _supaInflight = new Map();
    const _bgRefresh = new Set();
+   /** Incrementado em cada escrita — evita GET em voo regravar cache após DELETE/PATCH. */
+   const _tableWriteGen = Object.create(null);
 
    /** Debug ingest desligado em produção (evita spam localhost + /api/debug-session-log). */
    function _dbgSessionLog() { /* noop */ }
    if (typeof window !== 'undefined') window._dbgSessionLog = _dbgSessionLog;
 
+   function _bumpTableWriteGen(table) {
+     if (!table) return 0;
+     _tableWriteGen[table] = (_tableWriteGen[table] || 0) + 1;
+     return _tableWriteGen[table];
+   }
+
    function _scheduleBgRefresh(cacheKey, method, table, body, params) {
      if (_bgRefresh.has(cacheKey)) return;
      _bgRefresh.add(cacheKey);
+     const genAtStart = _tableWriteGen[table] || 0;
      supaReqOnce(method, table, body, params)
        .then((data) => {
+         if ((_tableWriteGen[table] || 0) !== genAtStart) return;
          if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
        })
        .catch(() => {})
@@ -253,7 +270,9 @@
 
      let res;
      const ctrl = new AbortController();
-     const timer = setTimeout(() => ctrl.abort(), API_FETCH_TIMEOUT_MS);
+     const isWrite = method !== 'GET' && method !== 'HEAD';
+     const timeoutMs = isWrite ? API_WRITE_TIMEOUT_MS : API_FETCH_TIMEOUT_MS;
+     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
      try {
        res = await fetch(url, {
          method,
@@ -269,6 +288,7 @@
          : 'Confira internet, bloqueador de anúncios ou status do Supabase.';
        const err = new Error(`Sem conexão com o servidor (${netMsg}). ${hint}`);
        err.status = 0;
+       err.aborted = !!aborted;
        throw err;
      } finally {
        clearTimeout(timer);
@@ -308,28 +328,35 @@
        return _supaInflight.get(inflightKey);
      }
 
+     const genAtStart = _tableWriteGen[table] || 0;
      const task = (async () => {
      let lastErr;
      for (let attempt = 1; attempt <= API_RETRY_MAX; attempt++) {
        try {
          const data = await supaReqOnce(method, table, body, params);
-         if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
-         if (method !== 'GET') _cacheDel(table);
+         if (method !== 'GET') {
+           _bumpTableWriteGen(table);
+           _cacheDel(table);
+         } else if ((_tableWriteGen[table] || 0) === genAtStart) {
+           if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
+         }
          return data;
        } catch (e) {
          lastErr = e;
          const stale = cacheKey ? _cacheGetAny(cacheKey) : null;
-         if (method === 'GET' && stale) {
+         if (method === 'GET' && stale && (_tableWriteGen[table] || 0) === genAtStart) {
            return stale;
          }
-         if (attempt < API_RETRY_MAX && _isTransientApiFailure(e.status, e)) {
+         /* Abort/timeout: no máximo 1 retry — evitar 3×25s travando o painel. */
+         const maxAttempts = e?.aborted ? 2 : API_RETRY_MAX;
+         if (attempt < maxAttempts && _isTransientApiFailure(e.status, e)) {
            await new Promise(r => setTimeout(r, API_RETRY_BASE_MS * attempt));
            continue;
          }
          throw e;
        }
      }
-     if (method === 'GET' && cacheKey) {
+     if (method === 'GET' && cacheKey && (_tableWriteGen[table] || 0) === genAtStart) {
        const stale = _cacheGetAny(cacheKey);
        if (stale) return stale;
      }

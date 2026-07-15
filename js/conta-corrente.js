@@ -153,6 +153,9 @@
   const ContaCorrente = {
     viewUserId: null,
     gestaoUserId: null,
+    selectMode: false,
+    selectedIds: new Set(),
+    gestaoStmt: null,
 
     ensureUi() {
       const main = document.querySelector('.page-content');
@@ -234,9 +237,22 @@
 .cc-filter-btn.active { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
 
 .cc-extrato { border: 1px solid var(--color-border); border-radius: 16px; overflow: hidden; background: var(--color-surface); box-shadow: 0 4px 16px rgba(0,0,0,0.02); }
-.cc-extrato__head { padding: 14px 18px; background: var(--color-surface-2); font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; }
+.cc-extrato__head { padding: 14px 18px; background: var(--color-surface-2); font-weight: 700; font-size: 14px; border-bottom: 1px solid var(--color-border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .cc-extrato__title { font-weight: 700; }
 .cc-extrato__count { font-size: 12px; color: var(--color-text-muted); font-weight: 500; }
+.cc-extrato__head-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.cc-extrato__trash { background: none; border: 1px solid transparent; color: var(--color-text-muted); cursor: pointer; padding: 6px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; transition: color 0.15s, background 0.15s, border-color 0.15s; }
+.cc-extrato__trash:hover { color: var(--color-danger, #dc2626); background: rgba(239,68,68,0.08); border-color: rgba(239,68,68,0.2); }
+.cc-extrato__trash svg { width: 16px; height: 16px; }
+.cc-extrato__sel-actions { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cc-extrato.select-mode .cc-extrato__sel-actions { display: flex; }
+.cc-extrato.select-mode .cc-extrato__trash { display: none; }
+.cc-line__check { display: none; flex-shrink: 0; }
+.cc-extrato.select-mode .cc-line__check { display: flex; align-items: center; }
+.cc-extrato.select-mode .cc-line--selectable { cursor: pointer; }
+.cc-extrato.select-mode .cc-line--selectable.selected { background: rgba(37,99,235,0.06); }
+.cc-extrato.select-mode .cc-line--locked { opacity: 0.55; }
+.cc-line__check input { width: 16px; height: 16px; accent-color: var(--color-primary, #2563eb); cursor: pointer; }
 
 .cc-date-group { background: var(--color-surface-2); padding: 8px 18px; font-size: 11px; font-weight: 700; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--color-border); display: flex; align-items: center; }
 .cc-line { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-bottom: 1px solid var(--color-border); transition: background 0.15s; }
@@ -269,9 +285,9 @@
     },
 
     ensureModals() {
-      if (document.getElementById('contaCorrenteMovModal')) return;
-      const wrap = document.createElement('div');
-      wrap.innerHTML = `
+      if (!document.getElementById('contaCorrenteMovModal')) {
+        const wrap = document.createElement('div');
+        wrap.innerHTML = `
 <div class="modal-overlay" id="contaCorrenteMovModal">
   <div class="modal" style="max-width:480px;">
     <div class="modal-header"><h3 id="contaCorrenteMovTitle">Movimentação</h3>
@@ -304,7 +320,26 @@
     </div>
   </div>
 </div>`;
-      document.body.appendChild(wrap);
+        document.body.appendChild(wrap);
+      }
+      if (!document.getElementById('contaCorrenteDelModal')) {
+        const del = document.createElement('div');
+        del.innerHTML = `
+<div class="modal-overlay" id="contaCorrenteDelModal">
+  <div class="modal" style="max-width:400px;">
+    <div class="modal-header"><h3>Excluir histórico</h3>
+      <button type="button" class="modal-close" onclick="closeModal('contaCorrenteDelModal')"></button></div>
+    <div class="modal-body">
+      <p id="ccDelConfirmMsg" style="font-size:14px;color:var(--color-text-muted);line-height:1.5;margin:0;"></p>
+    </div>
+    <div class="modal-footer" style="gap:10px;">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('contaCorrenteDelModal')">Cancelar</button>
+      <button type="button" class="btn btn-danger" id="ccDelConfirmBtn">Excluir</button>
+    </div>
+  </div>
+</div>`;
+        document.body.appendChild(del.firstElementChild);
+      }
     },
 
     async render(empId) {
@@ -441,13 +476,18 @@
       return this._renderLinesGrouped(lines, user, money);
     },
 
+    _trashSvg() {
+      return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+    },
+
     _renderLinesGrouped(lines, user, money) {
       if (!lines.length) {
         return '<div class="text-muted text-center" style="padding:24px;">Nenhuma movimentação no período.</div>';
       }
       const groups = groupLinesByDate(lines);
       const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
-      
+      const selectMode = !!this.selectMode;
+
       return sortedDates.map(dateKey => {
         const dateHeader = `<div class="cc-date-group">${formatGroupDate(dateKey)}</div>`;
         const itemsHtml = groups[dateKey].map(ln => {
@@ -461,7 +501,26 @@
           const advDetail = isAdv ? adiantamentoDetail(ln) : '';
           const extraParts = [advDetail, kind, ln.status].filter(Boolean);
           const extra = extraParts.join(' · ');
-          return `<div class="cc-line">
+          const canSelect = ln.kind === 'transaction' && !!ln.id;
+          const id = String(ln.id || '');
+          const checked = canSelect && this.selectedIds.has(id);
+          const lineCls = [
+            'cc-line',
+            canSelect ? 'cc-line--selectable' : 'cc-line--locked',
+            checked ? 'selected' : '',
+          ].filter(Boolean).join(' ');
+          const checkHtml = selectMode
+            ? `<label class="cc-line__check" onclick="event.stopPropagation()">
+                <input type="checkbox" ${canSelect ? '' : 'disabled '}
+                  ${checked ? 'checked ' : ''}
+                  ${canSelect ? `onchange="ContaCorrente.toggleSelect('${esc(id)}', this.checked)"` : ''}/>
+              </label>`
+            : '';
+          const click = canSelect && selectMode
+            ? ` onclick="ContaCorrente.toggleSelect('${esc(id)}')"`
+            : '';
+          return `<div class="${lineCls}" data-tx-id="${esc(id)}"${click}>
+            ${checkHtml}
             <div class="cc-line__icon ${cls}">${icon}</div>
             <div class="cc-line__body">
               <div class="cc-line__title">${esc(ln.reason)}</div>
@@ -472,6 +531,99 @@
         }).join('');
         return dateHeader + itemsHtml;
       }).join('');
+    },
+
+    exitSelectMode() {
+      this.selectMode = false;
+      this.selectedIds = new Set();
+      this._refreshGestaoExtratoUi();
+    },
+
+    enterSelectMode() {
+      if (!canManageMovements()) return;
+      this.selectMode = true;
+      this.selectedIds = new Set();
+      this._refreshGestaoExtratoUi();
+    },
+
+    toggleSelect(id, forceChecked) {
+      if (!this.selectMode || !id) return;
+      const key = String(id);
+      const on = forceChecked == null ? !this.selectedIds.has(key) : !!forceChecked;
+      if (on) this.selectedIds.add(key);
+      else this.selectedIds.delete(key);
+      this._refreshGestaoExtratoUi();
+    },
+
+    _refreshGestaoExtratoUi() {
+      const box = document.getElementById('ccGestaoExtrato');
+      if (!box || !this.gestaoStmt) return;
+      const stmt = this.gestaoStmt;
+      const lines = stmt.lines || [];
+      box.classList.toggle('select-mode', !!this.selectMode);
+      const countEl = document.getElementById('ccGestaoExtratoCount');
+      if (countEl) {
+        const n = this.selectMode ? this.selectedIds.size : lines.length;
+        countEl.textContent = this.selectMode
+          ? `${n} selecionado${n === 1 ? '' : 's'}`
+          : `${lines.length} lançamento${lines.length === 1 ? '' : 's'}`;
+      }
+      const body = document.getElementById('ccGestaoExtratoBody');
+      if (body) body.innerHTML = this._renderLinesGrouped(lines, stmt.user, stmt.money);
+      const delBtn = document.getElementById('ccGestaoDelBtn');
+      if (delBtn) delBtn.disabled = !this.selectedIds.size;
+    },
+
+    requestDeleteSelected() {
+      if (!canManageMovements()) {
+        showToast('Sem permissão para excluir histórico.', 'warning');
+        return;
+      }
+      const n = this.selectedIds.size;
+      if (!n) {
+        showToast('Selecione ao menos um lançamento.', 'warning');
+        return;
+      }
+      this.ensureModals();
+      const msg = document.getElementById('ccDelConfirmMsg');
+      if (msg) {
+        msg.textContent = `Excluir ${n} lançamento${n === 1 ? '' : 's'} do histórico? O saldo será ajustado e essa ação não pode ser desfeita.`;
+      }
+      const btn = document.getElementById('ccDelConfirmBtn');
+      if (btn) {
+        btn.onclick = () => ContaCorrente.confirmDeleteSelected();
+      }
+      openModal('contaCorrenteDelModal');
+    },
+
+    async confirmDeleteSelected() {
+      closeModal('contaCorrenteDelModal');
+      const empId = this.gestaoUserId || document.getElementById('ccGestaoSelect')?.value;
+      const ids = [...this.selectedIds];
+      if (!empId || !ids.length) return;
+      if (!canManageMovements()) {
+        showToast('Sem permissão para excluir histórico.', 'warning');
+        return;
+      }
+      const s = Auth.getSession();
+      if (typeof showLoading === 'function') showLoading('Excluindo...');
+      try {
+        const res = await DB.deleteContaCorrenteHistory(empId, ids, s?.id || 'admin');
+        if (!res?.ok) {
+          showToast(res?.msg || 'Falha ao excluir.', 'error');
+          return;
+        }
+        showToast(`${res.deleted || ids.length} lançamento(s) excluído(s).`, 'success');
+        this.selectMode = false;
+        this.selectedIds = new Set();
+        await this._renderGestaoPreview(empId);
+        if (this.viewUserId === empId) await this.render(empId);
+      } catch (e) {
+        console.error('[ContaCorrente] delete history', e);
+        showToast('Erro ao excluir histórico.', 'error');
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
     },
 
     async _loadGestaoEmployees() {
@@ -503,6 +655,8 @@
     async renderGestao() {
       this.ensureStyles();
       this.ensureModals();
+      this.selectMode = false;
+      this.selectedIds = new Set();
       const root = document.getElementById('contaCorrenteGestaoRoot');
       if (!root) {
         if (typeof showToast === 'function') showToast('Área Gestão de conta não carregou. Atualize (Ctrl+F5).', 'error');
@@ -571,22 +725,49 @@
 
     async onGestaoSelect(id) {
       this.gestaoUserId = id;
+      this.selectMode = false;
+      this.selectedIds = new Set();
       await this._renderGestaoPreview(id);
     },
 
     async _renderGestaoPreview(empId) {
       const box = document.getElementById('ccGestaoPreview');
       if (!box) return;
-      const stmt = await DB.buildContaCorrenteStatement(empId, 30);
+      const stmt = await DB.buildContaCorrenteStatement(empId, 60);
+      this.gestaoStmt = stmt;
       const u = stmt.user;
       if (!u) { box.innerHTML = ''; return; }
       const neg = Number(stmt.balance) < 0;
+      const name = typeof fixMojibake === 'function' ? fixMojibake(u.name) : u.name;
+      const lines = stmt.lines || [];
+      const selCls = this.selectMode ? ' select-mode' : '';
+      const countTxt = this.selectMode
+        ? `${this.selectedIds.size} selecionado${this.selectedIds.size === 1 ? '' : 's'}`
+        : `${lines.length} lançamento${lines.length === 1 ? '' : 's'}`;
       box.innerHTML = `
         <div class="cc-card ${neg ? 'negative' : ''}" style="margin-bottom:12px;">
-          <div class="cc-card__top"><span>Prévia</span><span>${esc(typeof fixMojibake === 'function' ? fixMojibake(u.name) : u.name)}</span></div>
+          <div class="cc-card__top"><span>Prévia</span><span>${esc(name)}</span></div>
           <div class="cc-card__balance">${fmtBal(stmt.balance, stmt.money, u)}</div>
         </div>
-        <div class="cc-extrato">${this._renderLines(stmt.lines.slice(0, 15), u, stmt.money)}</div>`;
+        <div class="cc-extrato${selCls}" id="ccGestaoExtrato">
+          <div class="cc-extrato__head">
+            <span class="cc-extrato__title">Histórico</span>
+            <div class="cc-extrato__head-right">
+              <span class="cc-extrato__count" id="ccGestaoExtratoCount">${countTxt}</span>
+              <button type="button" class="cc-extrato__trash" title="Apagar histórico"
+                onclick="ContaCorrente.enterSelectMode()" aria-label="Apagar histórico">
+                ${this._trashSvg()}
+              </button>
+              <div class="cc-extrato__sel-actions">
+                <button type="button" class="btn btn-ghost btn-sm" onclick="ContaCorrente.exitSelectMode()">Cancelar</button>
+                <button type="button" class="btn btn-danger btn-sm" id="ccGestaoDelBtn"
+                  ${this.selectedIds.size ? '' : 'disabled '}
+                  onclick="ContaCorrente.requestDeleteSelected()">Excluir</button>
+              </div>
+            </div>
+          </div>
+          <div id="ccGestaoExtratoBody">${this._renderLinesGrouped(lines, u, stmt.money)}</div>
+        </div>`;
     },
 
     openMovement(kind) {

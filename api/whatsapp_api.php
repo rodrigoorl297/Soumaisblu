@@ -432,7 +432,7 @@ function wa_contacts_max(): int
 function wa_contacts_cooldown_sec(): int
 {
     if (wa_mirror_mode()) {
-        return defined('WA_CONTACTS_COOLDOWN_SEC') ? max(90, (int) WA_CONTACTS_COOLDOWN_SEC) : 180;
+        return defined('WA_CONTACTS_COOLDOWN_SEC') ? max(120, (int) WA_CONTACTS_COOLDOWN_SEC) : 240;
     }
     return defined('WA_CONTACTS_COOLDOWN_SEC') ? max(0, (int) WA_CONTACTS_COOLDOWN_SEC) : 3600;
 }
@@ -440,7 +440,7 @@ function wa_contacts_cooldown_sec(): int
 /** Cooldown do espelho leve (poll silencioso) — evita findChats a cada poucos segundos. */
 function wa_mirror_poll_cooldown_sec(): int
 {
-    return defined('WA_MIRROR_POLL_COOLDOWN_SEC') ? max(45, (int) WA_MIRROR_POLL_COOLDOWN_SEC) : 120;
+    return defined('WA_MIRROR_POLL_COOLDOWN_SEC') ? max(60, (int) WA_MIRROR_POLL_COOLDOWN_SEC) : 180;
 }
 
 function wa_target_user_id(string $userId, array $body = []): string

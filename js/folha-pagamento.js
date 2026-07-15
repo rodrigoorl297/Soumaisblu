@@ -10,6 +10,109 @@
   let _parceiros   = [];
   let _funcionarios = [];   // equipe carregada do parceiro selecionado
   let _folhaData   = null;  // resultado do processamento
+  let _swStatus    = null;  // meta Sistema Web (api/folha_api.php?action=status)
+  let _protocolo   = '';
+
+  /* ══ SISTEMA WEB PROXY ══ */
+  function folhaApiUrl(action) {
+    const base = String((window.SOUBLU_CONFIG || {}).API_BASE_URL || '').replace(/\/+$/, '');
+    const path = `/api/folha_api.php?action=${encodeURIComponent(action)}`;
+    return base ? `${base}${path}` : path;
+  }
+
+  function folhaApiHeaders() {
+    const key = String((window.SOUBLU_CONFIG || {}).API_KEY || '').trim();
+    const h = { 'Content-Type': 'application/json', Accept: 'application/json' };
+    if (key) h['X-API-Key'] = key;
+    return h;
+  }
+
+  async function folhaApiFetch(action, opts = {}) {
+    const method = opts.method || (opts.body ? 'POST' : 'GET');
+    const res = await fetch(folhaApiUrl(action), {
+      method,
+      headers: folhaApiHeaders(),
+      body: opts.body ? JSON.stringify(opts.body) : undefined,
+      credentials: 'same-origin',
+    });
+    let data = null;
+    try { data = await res.json(); } catch (_) { data = null; }
+    if (!res.ok || (data && data.ok === false)) {
+      const err = new Error((data && (data.error || data.setup_hint)) || `HTTP ${res.status}`);
+      err.status = res.status;
+      err.data = data;
+      throw err;
+    }
+    return data || { ok: true };
+  }
+
+  function setSwBadge(state, text) {
+    const badge = document.getElementById('fpSwBadge');
+    if (!badge) return;
+    badge.dataset.state = state || 'off';
+    badge.textContent = text || '';
+    badge.title = (_swStatus && _swStatus.setup_hint) || text || '';
+  }
+
+  function updateSwUi() {
+    const ready = !!( _swStatus && _swStatus.ready );
+    const toggle = document.getElementById('fpSyncSistemaWeb');
+    const wrap = document.getElementById('fpSwToggleWrap');
+    if (wrap) wrap.style.display = ready ? '' : 'none';
+    if (toggle) {
+      toggle.disabled = !ready;
+      if (!ready) toggle.checked = false;
+      else if (!toggle.dataset.userTouched) toggle.checked = true;
+    }
+    if (!_swStatus) {
+      setSwBadge('unknown', 'Sistema Web: verificando…');
+      return;
+    }
+    if (ready) {
+      setSwBadge('ready', 'Sistema Web: conectada');
+    } else if (_swStatus.configured) {
+      setSwBadge('partial', 'Sistema Web: falta path da API');
+    } else {
+      setSwBadge('off', 'Sistema Web: não configurada');
+    }
+  }
+
+  async function probeSistemaWeb() {
+    try {
+      _swStatus = await folhaApiFetch('status');
+    } catch (e) {
+      _swStatus = {
+        ok: false,
+        ready: false,
+        configured: false,
+        paths_ready: false,
+        setup_hint: e.message || 'Falha ao consultar proxy',
+      };
+      setSwBadge('error', 'Sistema Web: proxy indisponível');
+      return;
+    }
+    updateSwUi();
+  }
+
+  function gerarProtocoloFolha() {
+    const d = new Date();
+    const y = d.getFullYear().toString(36).toUpperCase();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const r = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `FLH-${y}${m}${day}-${r}`;
+  }
+
+  function fillMetaFields() {
+    _protocolo = gerarProtocoloFolha();
+    const p = document.getElementById('fpProtocolo');
+    if (p) p.value = _protocolo;
+    const session = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+    const sol = document.getElementById('fpSolicitante');
+    if (sol) sol.value = (session && (session.name || session.email)) || '—';
+    const loginEl = document.getElementById('fpLoginFuncionario');
+    if (loginEl) loginEl.value = '';
+  }
 
   /* ══ HELPERS ══ */
   function fmtMoney(v) {
@@ -144,8 +247,13 @@
     const mesStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`;
     document.getElementById('selectMes').value = mesStr;
 
-    // Carrega parceiros
-    await carregarParceiros();
+    fillMetaFields();
+    document.getElementById('fpSyncSistemaWeb')?.addEventListener('change', function () {
+      this.dataset.userTouched = '1';
+    });
+
+    // Carrega parceiros + status Sistema Web (não bloqueia se proxy falhar)
+    await Promise.all([carregarParceiros(), probeSistemaWeb()]);
   }
 
   /* ══ CARREGAR PARCEIROS ══ */
@@ -198,20 +306,58 @@
 
     showLoader('Carregando funcionários...');
     try {
-      // Busca o usuário root do parceiro (user_id do parceiro)
-      const partnerUserId = parceiro?.user_id;
       let equipe = [];
-      if (partnerUserId) {
-        equipe = await DB.getPartnerTeam(partnerUserId).catch(() => []);
+      let source = 'local';
+
+      // Preferência: Sistema Web quando credentials+paths estiverem prontos
+      if (_swStatus?.ready) {
+        try {
+          const sw = await folhaApiFetch('employees', {
+            method: 'POST',
+            body: {
+              cnpj: parceiro?.cnpj || '',
+              mes,
+              empresa_id: empresaId,
+              protocolo: _protocolo || document.getElementById('fpProtocolo')?.value || '',
+            },
+          });
+          if (Array.isArray(sw.employees) && sw.employees.length) {
+            equipe = sw.employees.map(emp => {
+              // Adequa pix_* do SW ao formato getPixData
+              if (emp.pix_key && !emp.payment_saved) {
+                emp.payment_saved = {
+                  pix: {
+                    pix_key: emp.pix_key,
+                    pix_key_type: emp.pix_key_type || '',
+                    holder_name: emp.pix_holder || '',
+                    bank_name: emp.bank_name || '',
+                  },
+                };
+              }
+              return emp;
+            });
+            source = 'sistema_web';
+          }
+        } catch (swErr) {
+          console.warn('[FolhaPagamento] Sistema Web employees fallback local:', swErr);
+          showToast('Sistema Web indisponível — usando cadastro local.', 'info', 4000);
+        }
       }
 
-      // Fallback: busca por admin_id = partnerUserId
-      if (!equipe.length && partnerUserId) {
-        const all = await DB.getUsers().catch(() => []);
-        equipe = all.filter(u =>
-          String(u.admin_id) === String(partnerUserId) &&
-          u.active !== false
-        );
+      // Local (DB RH) — padrão atual e fallback
+      if (!equipe.length) {
+        const partnerUserId = parceiro?.user_id;
+        if (partnerUserId) {
+          equipe = await DB.getPartnerTeam(partnerUserId).catch(() => []);
+        }
+        if (!equipe.length && partnerUserId) {
+          const all = await DB.getUsers().catch(() => []);
+          equipe = all.filter(u =>
+            String(u.admin_id) === String(partnerUserId) &&
+            u.active !== false
+          );
+        }
+        source = 'local';
       }
 
       _funcionarios = equipe;
@@ -226,6 +372,9 @@
         document.getElementById('fpTableCard').style.display = '';
         document.getElementById('fpSummary').style.display   = '';
         document.getElementById('fpFooterBar').style.display = '';
+        if (source === 'sistema_web') {
+          showToast(`${equipe.length} funcionário(s) via Sistema Web.`, 'success');
+        }
       }
 
       updateSummary();
@@ -241,7 +390,7 @@
   function renderEmptyTable() {
     document.getElementById('fpTableBody').innerHTML = `
       <tr>
-        <td colspan="6">
+        <td colspan="7">
           <div class="fp-empty">
             <div class="fp-empty-icon">👥</div>
             <div class="fp-empty-title">Nenhum funcionário encontrado</div>
@@ -266,6 +415,10 @@
         ? `<div class="fp-emp-avatar"><img src="${foto}" alt="${emp.name}"/></div>`
         : `<div class="fp-emp-avatar">${ini}</div>`;
 
+      const login = emp.login || emp.email || emp.usuario || '';
+      const valorPrefill = (emp.valor != null && Number(emp.valor) > 0)
+        ? Number(emp.valor).toFixed(2)
+        : '';
       return `<tr id="row-${idx}" data-idx="${idx}" data-emp-id="${emp.id}">
         <td class="td-check">
           <input type="checkbox" class="fp-check emp-check" data-idx="${idx}" checked
@@ -281,13 +434,16 @@
           </div>
         </td>
         <td style="color:var(--color-text-muted,#94a3b8);font-size:12px;">
+          ${login || '—'}
+        </td>
+        <td style="color:var(--color-text-muted,#94a3b8);font-size:12px;">
           ${emp.matricula || '—'}
         </td>
         <td>
           <div style="display:flex;align-items:center;gap:6px;">
             <span style="font-size:13px;color:var(--color-text-muted,#94a3b8);">R$</span>
             <input type="number" class="fp-value-input" id="valor-${idx}" data-idx="${idx}"
-              placeholder="0,00" min="0" step="0.01"
+              placeholder="0,00" min="0" step="0.01" value="${valorPrefill}"
               oninput="onValorInput(${idx})"
               onblur="onValorBlur(${idx})"/>
           </div>
@@ -301,7 +457,14 @@
       </tr>`;
     }).join('');
 
+    const loginEl = document.getElementById('fpLoginFuncionario');
+    if (loginEl && emps.length) {
+      const first = emps[0];
+      loginEl.value = first.login || first.email || `${emps.length} colaborador(es)`;
+    }
+
     updateSummary();
+    emps.forEach((_, idx) => updateStatusCell(idx));
   }
 
   /* ══ EVENTS ON TABLE ══ */
@@ -475,6 +638,7 @@
         const typeLabels = { cpf: 'CPF', cnpj: 'CNPJ', email: 'E-mail', phone: 'Celular', random: 'Aleatória' };
         linhas.push({
           nome:      emp.name,
+          login:     emp.login || emp.email || '',
           matricula: emp.matricula || '',
           email:     emp.email || '',
           role:      roleLabel(emp.role),
@@ -489,10 +653,33 @@
     return linhas;
   }
 
+  async function syncFolhaSistemaWeb(folha) {
+    const toggle = document.getElementById('fpSyncSistemaWeb');
+    if (!toggle?.checked || !_swStatus?.ready) {
+      return { skipped: true };
+    }
+    const parceiro = folha.parceiro || {};
+    const payload = {
+      protocolo: _protocolo || document.getElementById('fpProtocolo')?.value || '',
+      solicitante: document.getElementById('fpSolicitante')?.value || '',
+      empresa_id: parceiro.id || '',
+      cnpj: parceiro.cnpj || '',
+      razao_social: parceiro.razao_social || '',
+      mes: folha.mes,
+      total: folha.total,
+      gerado_em: folha.geradoEm,
+      linhas: folha.linhas,
+    };
+    return folhaApiFetch('save', { method: 'POST', body: payload });
+  }
+
   /* ══ CONFIRMAR PROCESSAMENTO ══ */
-  window.confirmarProcessamento = function () {
+  window.confirmarProcessamento = async function () {
     if (!_folhaData) return;
     closeFolhaConfirmModal();
+
+    _folhaData.protocolo = _protocolo || document.getElementById('fpProtocolo')?.value || '';
+    _folhaData.solicitante = document.getElementById('fpSolicitante')?.value || '';
 
     // Salva registro na folha (localStorage como fallback, pois não há tabela dedicada)
     const key = `soublu_folha_${_folhaData.parceiro?.id}_${_folhaData.mes}`;
@@ -502,13 +689,31 @@
 
     showToast(`Folha processada com sucesso! ${_folhaData.linhas.length} funcionário(s) — ${fmtMoney(_folhaData.total)}`, 'success', 5000);
 
+    // Envio opcional ao Sistema Web (só se configurado + checkbox)
+    try {
+      showLoader('Enviando ao Sistema Web...');
+      const sync = await syncFolhaSistemaWeb(_folhaData);
+      if (!sync.skipped) {
+        showToast('Folha enviada ao Sistema Web.', 'success');
+      }
+    } catch (e) {
+      console.warn('[FolhaPagamento] sync Sistema Web:', e);
+      showToast(
+        'Folha salva localmente, mas falhou o envio ao Sistema Web: ' + (e.message || 'erro'),
+        'error',
+        6000
+      );
+    } finally {
+      hideLoader();
+    }
+
     // Habilita export
     updateExportBtns(true);
     setTimeout(() => exportXlsx(), 500);
   };
 
   /* ══ EXPORT XLSX ══ */
-  window.exportXlsx = function () {
+  window.exportXlsx = async function () {
     if (!_funcionarios.length) { showToast('Carregue os funcionários primeiro.', 'error'); return; }
 
     const empresaId = document.getElementById('selectEmpresa').value;
@@ -518,7 +723,23 @@
 
     if (!linhas.length) { showToast('Informe pelo menos um valor para exportar.', 'error'); return; }
 
-    const wb = typeof XLSX !== 'undefined' ? XLSX.utils.book_new() : null;
+    try {
+      if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+      else if (typeof XLSX === 'undefined') {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('SheetJS'));
+          document.head.appendChild(s);
+        });
+      }
+    } catch (e) {
+      showToast('Não foi possível carregar a biblioteca de Excel.', 'error');
+      return;
+    }
+
+    const wb = XLSX.utils.book_new();
 
     const rows = [
       ['FOLHA DE PAGAMENTO — SOU + BLU'],
@@ -528,36 +749,27 @@
       ['Mês de Referência:', fmtMes(mes)],
       ['Data de Geração:', new Date().toLocaleString('pt-BR')],
       [],
-      ['Nome', 'Matrícula', 'E-mail', 'Cargo', 'Valor (R$)', 'Tipo PIX', 'Chave PIX', 'Titular', 'Banco'],
+      ['Protocolo:', _protocolo || document.getElementById('fpProtocolo')?.value || '—'],
+      [],
+      ['Nome', 'Login', 'Matrícula', 'E-mail', 'Cargo', 'Valor (R$)', 'Tipo PIX', 'Chave PIX', 'Titular', 'Banco'],
       ...linhas.map(l => [
-        l.nome, l.matricula, l.email, l.role,
+        l.nome, l.login || '', l.matricula, l.email, l.role,
         l.valor, l.pixTipo, l.pix, l.titular, l.banco,
       ]),
       [],
-      ['TOTAL', '', '', '', linhas.reduce((s, l) => s + l.valor, 0)],
+      ['TOTAL', '', '', '', '', linhas.reduce((s, l) => s + l.valor, 0)],
     ];
 
-    if (wb && typeof XLSX !== 'undefined') {
-      const ws = XLSX.utils.aoa_to_sheet(rows);
-      // Larguras de coluna
-      ws['!cols'] = [
-        { wch: 30 }, { wch: 14 }, { wch: 28 }, { wch: 16 },
-        { wch: 14 }, { wch: 12 }, { wch: 36 }, { wch: 24 }, { wch: 20 },
-      ];
-      XLSX.utils.book_append_sheet(wb, ws, 'Folha');
-      const nomeParceiro = (parceiro?.razao_social || 'folha').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
-      XLSX.writeFile(wb, `Folha_${nomeParceiro}_${mes}.xlsx`);
-      showToast('XLSX exportado com sucesso!', 'success');
-    } else {
-      // Fallback CSV
-      const csv = rows.map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
-      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
-      const url  = URL.createObjectURL(blob);
-      const a    = document.createElement('a');
-      a.href = url; a.download = `Folha_${mes}.csv`; a.click();
-      URL.revokeObjectURL(url);
-      showToast('CSV exportado (XLSX não disponível).', 'info');
-    }
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // Larguras de coluna
+    ws['!cols'] = [
+      { wch: 30 }, { wch: 22 }, { wch: 14 }, { wch: 28 }, { wch: 16 },
+      { wch: 14 }, { wch: 12 }, { wch: 36 }, { wch: 24 }, { wch: 20 },
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'Folha');
+    const nomeParceiro = (parceiro?.razao_social || 'folha').replace(/[^a-zA-Z0-9\s]/g, '').trim().replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `Folha_${nomeParceiro}_${mes}.xlsx`);
+    showToast('XLSX exportado com sucesso!', 'success');
   };
 
   /* ══ START ══ */

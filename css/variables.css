@@ -27,6 +27,15 @@
   --color-info:           #3B82F6;
   --color-info-light:     #EFF6FF;
 
+  /* Bootstrap 5 — alinhado ao tema SOU+BLU (não deixa azul padrão dominar o DOM) */
+  --bs-primary:           #4A7FFF;
+  --bs-primary-rgb:       74, 127, 255;
+  --bs-body-font-family:  var(--font-body, 'Barlow', system-ui, sans-serif);
+  --bs-body-color:        var(--color-text, #1E293B);
+  --bs-body-bg:           var(--color-bg, #F8FAFC);
+  --bs-border-radius:     var(--radius-md, 0.5rem);
+  --bs-link-color:        var(--color-accent, #4A7FFF);
+
   /* Neutrals */
   --color-bg:             #F8FAFC;
   --color-surface:        #ffffff;

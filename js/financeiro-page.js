@@ -192,7 +192,7 @@
   const FinanceiroPage = {
     async openSection(section, tab) {
       if (!section) {
-        if (window.FinanceiroBoot) FinanceiroBoot.showInicioPanel();
+        if (window.FinanceiroBoot) await FinanceiroBoot.openSection('');
         await renderDashboard();
         return;
       }

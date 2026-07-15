@@ -30,19 +30,174 @@ function _normRhDept(v) {
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-/** Colaboradores SOU+BLU (cadastro RH interno) — exclui parceiros e equipe parceira. */
+function _normRhRazao(s) {
+  return String(s || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+/** SAK SERVIÇOS CADASTRAIS — única rede parceira permitida na lista RH Funcionários. */
+function _isSakRazao(razao) {
+  const n = _normRhRazao(razao);
+  if (!n) return false;
+  if (n === 'SAK SERVICOS CADASTRAIS LTDA') return true;
+  return n.includes('SAK') && n.includes('CADASTRAIS');
+}
+
+function _isSakEmail(email) {
+  const e = String(email || '').toLowerCase();
+  return e.includes('@sakpromotora.') || e.includes('@sakservicos.') || e.includes('@sak.');
+}
+
+function _rhDigits(v) {
+  return String(v || '').replace(/\D/g, '');
+}
+
+/**
+ * Cache: CNPJs/roots SAK vs demais parceiros (só filtro de UI — não apaga dados).
+ * Montado em reloadAllData a partir de partners + rh_companies + users.
+ */
+window._RH_ORG_FILTER = window._RH_ORG_FILTER || {
+  sakRootIds: new Set(),
+  sakNetworkIds: new Set(),
+  sakCnpjs: new Set(),
+  otherRootIds: new Set(),
+  otherNetworkIds: new Set(),
+  otherCnpjs: new Set(),
+};
+
+function _rebuildRhOrgFilter(partners, companies, users) {
+  const sakRootIds = new Set();
+  const sakCnpjs = new Set();
+  const otherRootIds = new Set();
+  const otherCnpjs = new Set();
+
+  (partners || []).forEach((p) => {
+    const cnpj = _rhDigits(p.cnpj);
+    const root = p.user_id ? String(p.user_id) : '';
+    const sak = _isSakRazao(p.razao_social || p.razaoSocial || '');
+    if (sak) {
+      if (root) sakRootIds.add(root);
+      if (cnpj.length === 14) sakCnpjs.add(cnpj);
+    } else {
+      if (root) otherRootIds.add(root);
+      if (cnpj.length === 14) otherCnpjs.add(cnpj);
+    }
+  });
+
+  (companies || []).forEach((c) => {
+    const cnpj = _rhDigits(c.cnpj);
+    if (cnpj.length !== 14) return;
+    if (_isSakRazao(c.razao_social || '')) {
+      sakCnpjs.add(cnpj);
+      otherCnpjs.delete(cnpj);
+    }
+  });
+
+  const sakNetworkIds = new Set(sakRootIds);
+  const otherNetworkIds = new Set(otherRootIds);
+  const allUsers = users || window._allSystemUsersCache || [];
+
+  if (typeof DB !== 'undefined' && typeof DB.expandPartnerOrgIds === 'function') {
+    sakRootIds.forEach((rid) => {
+      DB.expandPartnerOrgIds(rid, allUsers).forEach((id) => sakNetworkIds.add(String(id)));
+    });
+    otherRootIds.forEach((rid) => {
+      DB.expandPartnerOrgIds(rid, allUsers).forEach((id) => otherNetworkIds.add(String(id)));
+    });
+  } else {
+    allUsers.forEach((u) => {
+      if (!u?.id) return;
+      const aid = u.admin_id ? String(u.admin_id) : '';
+      if (aid && sakRootIds.has(aid)) sakNetworkIds.add(String(u.id));
+      if (aid && otherRootIds.has(aid)) otherNetworkIds.add(String(u.id));
+    });
+  }
+
+  // SAK nunca fica no conjunto "outros"
+  sakNetworkIds.forEach((id) => otherNetworkIds.delete(id));
+  sakCnpjs.forEach((c) => otherCnpjs.delete(c));
+
+  window._RH_ORG_FILTER = {
+    sakRootIds, sakNetworkIds, sakCnpjs,
+    otherRootIds, otherNetworkIds, otherCnpjs,
+  };
+  return window._RH_ORG_FILTER;
+}
+
+function _rhLinkedUser(emp) {
+  const uid = emp?.user_id ? String(emp.user_id) : '';
+  if (!uid) return null;
+  return (window._allSystemUsersCache || []).find((x) => String(x.id) === uid) || null;
+}
+
+function _isSakRhEmployee(emp) {
+  if (!emp) return false;
+  const f = window._RH_ORG_FILTER || {};
+  const cnpj = _rhDigits(emp.cnpj_registro || emp.cnpj || '');
+  if (cnpj && f.sakCnpjs?.has(cnpj)) return true;
+  if (_isSakRazao(emp.empresa || emp.razao_social || emp.company_name || '')) return true;
+  if (_isSakEmail(emp.email || emp.email_pessoal || '')) return true;
+  const dept = _normRhDept(emp.departamento);
+  if (dept.includes('sak')) return true;
+
+  const uid = emp.user_id ? String(emp.user_id) : '';
+  if (uid && f.sakNetworkIds?.has(uid)) return true;
+
+  const u = _rhLinkedUser(emp);
+  if (u) {
+    if (_isSakEmail(u.email)) return true;
+    if (f.sakNetworkIds?.has(String(u.id))) return true;
+    const aid = u.admin_id ? String(u.admin_id) : '';
+    if (aid && f.sakRootIds?.has(aid)) return true;
+  }
+
+  for (const k of ['supervisor_id', 'admin_id', 'responsavel_dpto_id', 'diretor_dpto_id']) {
+    const id = emp[k] ? String(emp[k]) : '';
+    if (id && (f.sakRootIds?.has(id) || f.sakNetworkIds?.has(id))) return true;
+  }
+  return false;
+}
+
+function _isOtherPartnerRhEmployee(emp) {
+  if (!emp) return false;
+  if (_isSakRhEmployee(emp)) return false;
+  const f = window._RH_ORG_FILTER || {};
+  const role = String(emp.system_role || emp.role || '').trim().toLowerCase();
+  if (role === 'parceiro') return true;
+  const dept = _normRhDept(emp.departamento);
+  if (dept === 'parceiro') return true;
+
+  const cnpj = _rhDigits(emp.cnpj_registro || emp.cnpj || '');
+  if (cnpj && f.otherCnpjs?.has(cnpj)) return true;
+
+  const uid = emp.user_id ? String(emp.user_id) : '';
+  if (uid && f.otherNetworkIds?.has(uid)) return true;
+
+  const u = _rhLinkedUser(emp);
+  if (u) {
+    if (f.otherNetworkIds?.has(String(u.id))) return true;
+    const aid = u.admin_id ? String(u.admin_id) : '';
+    if (aid && f.otherRootIds?.has(aid)) return true;
+    if (typeof isUserInPartnerNetworkSync === 'function' && isUserInPartnerNetworkSync(u)) {
+      return true;
+    }
+  }
+  if (uid && window._PARTNER_NETWORK_USER_IDS?.has(uid) && !f.sakNetworkIds?.has(uid)) return true;
+
+  for (const k of ['supervisor_id', 'admin_id', 'responsavel_dpto_id', 'diretor_dpto_id']) {
+    const id = emp[k] ? String(emp[k]) : '';
+    if (id && (f.otherRootIds?.has(id) || f.otherNetworkIds?.has(id))) return true;
+  }
+  return false;
+}
+
+/**
+ * Lista RH "Funcionários": só equipe SOU+BLU interna + povo da SAK.
+ * Parceiros e colaboradores de outras redes ficam só em Cadastrar Parceiro.
+ */
 function _isRhCompanyEmployee(emp) {
   if (!emp) return false;
-  const role = String(emp.system_role || emp.role || '').trim().toLowerCase();
-  if (role === 'parceiro') return false;
-  const dept = _normRhDept(emp.departamento);
-  if (dept === 'parceiro') return false;
-  const uid = emp.user_id ? String(emp.user_id) : '';
-  if (uid && window._PARTNER_NETWORK_USER_IDS?.has(uid)) return false;
-  if (uid && typeof isUserInPartnerNetworkSync === 'function') {
-    const u = (window._allSystemUsersCache || []).find((x) => String(x.id) === uid);
-    if (u && isUserInPartnerNetworkSync(u)) return false;
-  }
+  if (_isSakRhEmployee(emp)) return true;
+  if (_isOtherPartnerRhEmployee(emp)) return false;
   return true;
 }
 
@@ -50,8 +205,23 @@ function _rhCompanyEmployees(rows) {
   return (rows || []).filter(_isRhCompanyEmployee);
 }
 
+function _rhAllowedCompanies(rows) {
+  const f = window._RH_ORG_FILTER || {};
+  return (rows || []).filter((c) => {
+    const cnpj = _rhDigits(c.cnpj);
+    if (_isSakRazao(c.razao_social || '')) return true;
+    if (cnpj && f.sakCnpjs?.has(cnpj)) return true;
+    if (cnpj && f.otherCnpjs?.has(cnpj)) return false;
+    return true;
+  });
+}
+
+window._isSakRazao = _isSakRazao;
+window._isSakRhEmployee = _isSakRhEmployee;
 window._isRhCompanyEmployee = _isRhCompanyEmployee;
 window._rhCompanyEmployees = _rhCompanyEmployees;
+window._rhAllowedCompanies = _rhAllowedCompanies;
+window._rebuildRhOrgFilter = _rebuildRhOrgFilter;
 
 let _editingCvId = null;
 let _editingJobId = null;
@@ -492,8 +662,13 @@ async function _ensureRhDatabaseReady() {
 }
 
 function _rhDefaultTab(role) {
-  if (typeof PainelSonhos !== 'undefined' && PainelSonhos.eligible(role)) return 'sonhos';
-  return 'kanban';
+  const elig = typeof PainelSonhos !== 'undefined' && (
+    typeof PainelSonhos.eligibleOnHub === 'function'
+      ? PainelSonhos.eligibleOnHub(role)
+      : PainelSonhos.eligible(role)
+  );
+  const tab = elig ? 'sonhos' : 'kanban';
+  return tab;
 }
 
 function _rhGreeting() {
@@ -511,13 +686,17 @@ function _updateRhFuncionarioGreeting() {
   const el = document.getElementById('rhFuncionarioGreeting');
   if (!el || !currentUser) return;
   const name = String(currentUser.name || '').trim().split(/\s+/)[0] || 'gestor';
-  el.textContent = `${_rhGreeting()}, ${name}! Cadastre e atualize colaboradores com o formulário completo de RH.`;
+  el.textContent = `${_rhGreeting()}, ${name}! Lista só da equipe SOU+BLU e SAK (parceiros ficam no Financeiro).`;
 }
 
 function _applyRhChrome(role) {
   const r = String(role || '').toLowerCase();
   const isJuridico = r === 'juridico';
-  const showSonhos = typeof PainelSonhos !== 'undefined' && PainelSonhos.eligible(r);
+  const showSonhos = typeof PainelSonhos !== 'undefined' && (
+    typeof PainelSonhos.eligibleOnHub === 'function'
+      ? PainelSonhos.eligibleOnHub(r)
+      : PainelSonhos.eligible(r)
+  );
 
   document.querySelectorAll('.juridico-section-label, .juridico-nav').forEach((el) => {
     el.style.display = isJuridico ? '' : 'none';
@@ -625,6 +804,13 @@ function _resolveRhLinkedUser(users, emp, email) {
   return null;
 }
 
+async function _resolveRhEmployeeUserId(emp, email) {
+  if (emp?.user_id) return emp.user_id;
+  const users = await DB.getAllUsers().catch(() => []);
+  const u = _resolveRhLinkedUser(users, emp, email || emp?.email || emp?.email_pessoal || '');
+  return u?.id || null;
+}
+
 async function _loadEmpClubeLimite(userId) {
   _set('emp_limite_clube', '0');
   _set('emp_clube_limite_id', '');
@@ -688,12 +874,17 @@ async function _saveEmpClubeLimite(userId, employeeName, limiteVal) {
     };
 
     if (limitId) {
-      await supaReq('PATCH', 'beneficios_limites', payload, `?id=eq.${encodeURIComponent(limitId)}`);
+      const patched = await supaReq('PATCH', 'beneficios_limites', payload, `?id=eq.${encodeURIComponent(limitId)}`);
+      if (!patched?.length) {
+        throw new Error('Registro de limite não encontrado para atualizar.');
+      }
     } else if (aprovado > 0) {
       payload.id = 'ben_lim_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
       payload.protocolo = 'RH-' + Date.now().toString(36).toUpperCase();
-      await supaReq('POST', 'beneficios_limites', payload);
-      limitId = payload.id;
+      const created = await supaReq('POST', 'beneficios_limites', payload);
+      limitId = (Array.isArray(created) && created[0]?.id) ? created[0].id : payload.id;
+    } else {
+      return;
     }
 
     if (limitId) _set('emp_clube_limite_id', limitId);
@@ -703,6 +894,9 @@ async function _saveEmpClubeLimite(userId, employeeName, limiteVal) {
     } catch (accErr) {
       console.warn('[RH] acesso_clube:', accErr?.message || accErr);
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-lim',hypothesisId:'H1-H3',location:'rh-manager.js:save-clube-limite',message:'clube limite saved',data:{userId,limitId,aprovado,utilizado,disponivel,status:payload.status},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
   } catch (e) {
     console.error('[RH] save clube limite:', e);
     throw new Error('Não foi possível salvar o limite do Clube de Benefícios: ' + (e?.message || e));
@@ -775,6 +969,10 @@ function closeModalRH(id) {
 
 /* ══ NAVEGAÇÃO ══ */
 function switchTab(tabId) {
+  if (tabId === 'ranking') {
+    openRhRankingTab();
+    return;
+  }
   document.querySelectorAll('.tab-content').forEach((t) => {
     t.classList.remove('active');
     t.style.display = 'none';
@@ -830,17 +1028,28 @@ function switchTab(tabId) {
 }
 
 function openRhRankingTab() {
+  /* Conteúdo continua em #tab-relatorios; menu lateral usa só Ranking Vendas. */
   switchTab('relatorios');
   if (typeof switchRhRelatorio === 'function') switchRhRelatorio('ranking');
+  document.querySelectorAll('.nav-item[data-tab]').forEach((n) => n.classList.remove('active'));
+  document.querySelector('.nav-item[data-tab="ranking"]')?.classList.add('active');
   const titleEl = document.getElementById('pageTitle');
   if (titleEl) titleEl.textContent = _RH_TAB_TITLES.ranking || 'Ranking Vendas';
 }
 
 function openRhFolhaTab() {
-  switchTab('relatorios');
-  if (typeof switchRhRelatorio === 'function') switchRhRelatorio('folha');
-  const titleEl = document.getElementById('pageTitle');
-  if (titleEl) titleEl.textContent = _RH_TAB_TITLES.folha || 'Gerar Folha de Pagamento';
+  if (typeof openFolhaPagamento === 'function') {
+    openFolhaPagamento();
+    return;
+  }
+  const href = typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHrefFresh === 'function'
+    ? Auth.folhaPagamentoPageHrefFresh()
+    : (typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHref === 'function'
+      ? Auth.folhaPagamentoPageHref()
+      : (typeof window.soubluPage === 'function'
+        ? window.soubluPage('folha-pagamento.html')
+        : 'folha-pagamento.html'));
+  window.location.assign(href);
 }
 
 function _adminPanelHrefFresh(hash) {
@@ -942,7 +1151,13 @@ function _normalizeRhEmployeeRow(row) {
   if (!r.emergencia_nome_2 && r.nome_emergencia_2) r.emergencia_nome_2 = r.nome_emergencia_2;
   if (!r.emergencia_contato_2 && r.contato_emergencia_2) r.emergencia_contato_2 = r.contato_emergencia_2;
   if (!r.email_pessoal && r.email) r.email_pessoal = r.email;
-  if (!r.cargo_id && r.cargo && /^[a-f0-9]{16,}$/i.test(String(r.cargo))) r.cargo_id = r.cargo;
+  if (!r.cargo_id && r.cargo) {
+    if (/^[a-f0-9]{16,}$/i.test(String(r.cargo))) r.cargo_id = r.cargo;
+    else if (typeof _resolveJobId === 'function') {
+      const resolved = _resolveJobId(r.cargo);
+      if (resolved) r.cargo_id = resolved;
+    }
+  }
   ['permissions', 'attachments', 'fontedata_meta', 'audit_log'].forEach((k) => {
     if (typeof r[k] === 'string' && r[k] !== '') {
       try { r[k] = JSON.parse(r[k]); } catch { /* mantém string */ }
@@ -995,14 +1210,57 @@ async function _fillLeadersSelects() {
 function _fillCompanySelect() {
   const el = document.getElementById('emp_cnpj_registro');
   if (!el) return;
-  el.innerHTML = '<option value="">Selecione a empresa...</option>' + _allCompanies.map((c) =>
+  const list = typeof _rhAllowedCompanies === 'function'
+    ? _rhAllowedCompanies(_allCompanies)
+    : (_allCompanies || []);
+  el.innerHTML = '<option value="">Selecione a empresa...</option>' + list.map((c) =>
     `<option value="${_esc(c.cnpj || c.id)}">${_esc(c.razao_social || 'Empresa')} — ${_esc(_fmtCnpj(c.cnpj))}</option>`
   ).join('');
 }
 
-function _jobLabel(id) {
-  const j = _allJobs.find((x) => String(x.id) === String(id));
-  return j ? (j.cargo || j.titulo || '—') : '—';
+function _jobLabel(idOrName) {
+  const key = String(idOrName || '').trim();
+  if (!key) return '—';
+  const byId = _allJobs.find((x) => String(x.id) === key);
+  if (byId) return byId.cargo || byId.titulo || '—';
+  const low = key.toLowerCase();
+  const byName = _allJobs.find((x) => {
+    const n = String(x.cargo || x.titulo || '').trim().toLowerCase();
+    return n && n === low;
+  });
+  if (byName) return byName.cargo || byName.titulo || key;
+  if (/^[a-f0-9]{16,}$/i.test(key)) return '—';
+  return key;
+}
+
+function _resolveJobId(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (_allJobs.some((j) => String(j.id) === raw)) return raw;
+  const low = raw.toLowerCase();
+  const byName = _allJobs.find((j) => {
+    const n = String(j.cargo || j.titulo || '').trim().toLowerCase();
+    return n && n === low;
+  });
+  return byName ? String(byName.id) : '';
+}
+
+function _setEmpCargoSelect(row) {
+  const el = document.getElementById('emp_cargo');
+  if (!el) return;
+  const raw = String(row?.cargo_id || row?.cargo || '').trim();
+  let id = _resolveJobId(raw);
+  if (!id && raw && !/^[a-f0-9]{16,}$/i.test(raw)) {
+    /* texto legado sem job cadastrado — mantém visível no select */
+    const opt = document.createElement('option');
+    opt.value = raw;
+    opt.textContent = raw;
+    opt.dataset.legacy = '1';
+    el.appendChild(opt);
+    id = raw;
+  }
+  el.value = id || '';
+  if (typeof _onEmpCargoChange === 'function' && el.value) _onEmpCargoChange();
 }
 
 function renderCompanyList() {
@@ -1069,21 +1327,35 @@ function renderEmployeeList() {
   const company = _rhCompanyEmployees(raw);
   const list = _sortRhEmpByName(company);
 if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
     return;
   }
   tbody.innerHTML = list.map((e) => {
     const adv = parseInt(e.advertencias || e.advertencia || 0, 10) || 0;
     const sus = parseInt(e.suspensoes || e.suspensao || 0, 10) || 0;
     const medidas = `${adv} adv. / ${sus} susp.`;
-    return `<tr>
+    const st = String(e.status || (e.demitido ? 'demitido' : 'ativo')).toLowerCase();
+    const isInactive = st === 'inativo' || st === 'demitido' || e.demitido === true;
+    const statusBadge = st === 'demitido'
+      ? '<span class="badge badge-danger">Demitido</span>'
+      : (isInactive
+        ? '<span class="badge badge-warning">Inativo</span>'
+        : '<span class="badge badge-success">Ativo</span>');
+    const toggleBtn = st === 'demitido'
+      ? ''
+      : (isInactive
+        ? `<button type="button" class="btn btn-xs btn-success" onclick="reativarFuncionario('${_esc(e.id)}')">Reativar</button>`
+        : `<button type="button" class="btn btn-xs btn-outline" onclick="inativarFuncionario('${_esc(e.id)}')">Inativar</button>`);
+    return `<tr${isInactive ? ' style="opacity:.72;"' : ''}>
       <td><strong>${_esc(e.nome)}</strong><div style="font-size:12px;color:var(--color-text-muted);">${_esc(_fmtCpf(e.cpf))}</div></td>
       <td>${_esc(_jobLabel(e.cargo_id || e.cargo))}</td>
       <td>${_esc(e.departamento || '—')}</td>
       <td>${_fmtDate(e.data_admissao)}</td>
+      <td>${statusBadge}</td>
       <td>${_esc(medidas)}</td>
       <td><div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button type="button" class="btn btn-xs btn-outline" onclick="editFuncionario('${_esc(e.id)}')">Editar</button>
+        ${toggleBtn}
         <button type="button" class="btn btn-xs btn-danger" onclick="excluirFuncionario('${_esc(e.id)}')">Excluir</button>
       </div></td>
     </tr>`;
@@ -1113,13 +1385,15 @@ async function reloadAllData(opts = {}) {
     } catch (_) {
       window._allSystemUsersCache = [];
     }
-    const [companies, resumes, jobs, employees] = await Promise.all([
+    const [companies, resumes, jobs, employees, partners] = await Promise.all([
       DB.getRhCompanies().catch(() => []),
       DB.getRhResumes().catch(() => []),
       DB.getRhJobs().catch(() => []),
       DB.getRhEmployees().catch(() => []),
+      (typeof DB.getPartners === 'function' ? DB.getPartners().catch(() => []) : Promise.resolve([])),
     ]);
     _allCompanies = companies || [];
+    _rebuildRhOrgFilter(partners || [], _allCompanies, window._allSystemUsersCache || []);
     _allResumes = resumes || [];
     window._allResumes = _allResumes;
     if (typeof purgeExpiredRecusados === 'function') {
@@ -1512,7 +1786,7 @@ async function openFuncionarioModal(row) {
     _set('emp_data_admissao', (row.data_admissao || '').slice(0, 10));
     _set('emp_departamento', row.departamento || '');
     _set('emp_chave_pix', row.chave_pix || '');
-    _set('emp_cargo', row.cargo_id || row.cargo || '');
+    _setEmpCargoSelect(row);
     _set('emp_cbo_cod', row.cbo_cod || '');
     _set('emp_cbo_descricao', row.cbo_descricao || '');
 
@@ -1552,7 +1826,11 @@ async function openFuncionarioModal(row) {
         : '<span class="text-muted">Nenhuma alteração registrada.</span>';
     }
     _showRhAttachmentHints(_RH_EMP_FILE_FIELDS, row.attachments);
-    await _loadEmpClubeLimite(row.user_id || null);
+    let linkedUid = row.user_id || null;
+    if (!linkedUid) {
+      linkedUid = await _resolveRhEmployeeUserId(row, row.email || row.email_pessoal || '');
+    }
+    await _loadEmpClubeLimite(linkedUid);
   }
 
   openModalRH('funcionarioModal');
@@ -1600,6 +1878,77 @@ async function excluirFuncionario(id) {
   } finally {
     hideLoading();
   }
+}
+
+async function _setRhEmployeeActiveState(id, active) {
+  const row = (window._allEmployees || []).find((e) => String(e.id) === String(id));
+  if (!row) {
+    showToast('Funcionário não encontrado.', 'warning');
+    return;
+  }
+  if (row.demitido || String(row.status || '').toLowerCase() === 'demitido') {
+    showToast('Funcionário demitido. Use o fluxo de demissão/reintegração.', 'warning');
+    return;
+  }
+  const label = row.nome || _fmtCpf(row.cpf) || id;
+  const ask = active
+    ? `Reativar o funcionário "${label}"?\n\nO login do sistema será liberado novamente.`
+    : `Inativar o funcionário "${label}"?\n\nO cadastro RH permanece, mas o login do sistema será bloqueado.`;
+  if (!confirm(ask)) return;
+
+  showLoading(active ? 'Reativando...' : 'Inativando...');
+  try {
+    const next = {
+      ...row,
+      status: active ? 'ativo' : 'inativo',
+      demitido: false,
+      updated_at: new Date().toISOString(),
+    };
+    const author = typeof Auth !== 'undefined' ? (Auth.getSession()?.name || 'RH') : 'RH';
+    const log = Array.isArray(row.audit_log) ? [...row.audit_log] : [];
+    log.unshift({
+      data: new Date().toLocaleString('pt-BR'),
+      nota: active ? 'Funcionário reativado' : 'Funcionário inativado',
+      autor: author,
+    });
+    next.audit_log = log.slice(0, 50);
+
+    await DB.saveRhEmployee(next);
+
+    if (typeof _setUserActive === 'function') {
+      await _setUserActive(next, active);
+    } else if (next.user_id && typeof DB.updateUser === 'function') {
+      await DB.updateUser(next.user_id, { active: !!active });
+    } else {
+      const users = await DB.getAllUsers().catch(() => []);
+      const cpf = _digits(next.cpf);
+      const email = String(next.email || next.email_pessoal || '').trim().toLowerCase();
+      const u = users.find((x) =>
+        (next.user_id && String(x.id) === String(next.user_id))
+        || (cpf && _digits(x.cpf) === cpf)
+        || (email && String(x.email || '').trim().toLowerCase() === email)
+      );
+      if (u?.id) await DB.updateUser(u.id, { active: !!active });
+    }
+
+    const idx = (window._allEmployees || []).findIndex((e) => String(e.id) === String(id));
+    if (idx >= 0) window._allEmployees[idx] = next;
+    renderEmployeeList();
+    showToast(active ? 'Funcionário reativado.' : 'Funcionário inativado.', 'success');
+  } catch (e) {
+    console.error('[RH] setActive:', e);
+    showToast(e?.message || 'Erro ao alterar status do funcionário.', 'error');
+  } finally {
+    hideLoading();
+  }
+}
+
+async function inativarFuncionario(id) {
+  return _setRhEmployeeActiveState(id, false);
+}
+
+async function reativarFuncionario(id) {
+  return _setRhEmployeeActiveState(id, true);
 }
 
 async function openFuncionarioFromRef(refId) {
@@ -1760,12 +2109,19 @@ async function salvarFuncionario(event) {
   const cpf = _digits(_val('emp_cpf'));
   const nome = _val('emp_nome').trim();
   const cnpjReg = _digits(_val('emp_cnpj_registro'));
-  const cargoId = _val('emp_cargo');
+  const prev = id ? ((window._allEmployees || []).find((e) => String(e.id) === String(id)) || {}) : {};
+  const cargoRaw = _val('emp_cargo');
+  let cargoId = _resolveJobId(cargoRaw) || '';
+  if (!cargoId && cargoRaw && /^[a-f0-9]{16,}$/i.test(cargoRaw)) cargoId = cargoRaw;
+  if (!cargoId && id) {
+    cargoId = String(prev.cargo_id || '').trim()
+      || (_resolveJobId(prev.cargo) || '')
+      || (prev.cargo && /^[a-f0-9]{16,}$/i.test(String(prev.cargo)) ? String(prev.cargo) : '');
+  }
   const email = _val('emp_email_pessoal').trim();
   const password = _val('emp_password');
   const role = _val('emp_role') || 'vendedor';
   let finalRole = role;
-  const prev = id ? ((window._allEmployees || []).find((e) => String(e.id) === String(id)) || {}) : {};
   if (id && prev.user_id) {
     const linked = await DB.getUser(prev.user_id, true).catch(() => null);
     const linkedRole = String(linked?.role || '').trim().toLowerCase();
@@ -1787,6 +2143,10 @@ async function salvarFuncionario(event) {
   }
 
   const job = _allJobs.find((j) => String(j.id) === String(cargoId));
+  const cargoName = (job?.cargo || job?.titulo || '').trim()
+    || (cargoRaw && !/^[a-f0-9]{16,}$/i.test(cargoRaw) ? cargoRaw.trim() : '')
+    || (prev.cargo && !/^[a-f0-9]{16,}$/i.test(String(prev.cargo)) ? String(prev.cargo).trim() : '')
+    || '';
   const permissions = _collectPermissoesFromForm();
   const auditNote = _val('emp_audit_note').trim();
 
@@ -1808,7 +2168,7 @@ async function salvarFuncionario(event) {
     departamento: _val('emp_departamento').trim(),
     chave_pix: _val('emp_chave_pix').trim(),
     cargo_id: cargoId || null,
-    cargo: cargoId || null,
+    cargo: cargoName || cargoId || null,
     cbo_cod: _val('emp_cbo_cod').trim() || job?.cbo_cod || '',
     cbo_descricao: _val('emp_cbo_descricao').trim() || job?.cbo_descricao || '',
     supervisor: _leaderFieldValue(elSup, 'name'),
@@ -1832,8 +2192,10 @@ async function salvarFuncionario(event) {
     system_role: finalRole,
     role: finalRole,
     permissions,
-    demitido: false,
-    status: 'ativo',
+    demitido: !!(prev?.demitido || String(prev?.status || '').toLowerCase() === 'demitido'),
+    status: (prev?.demitido || String(prev?.status || '').toLowerCase() === 'demitido')
+      ? 'demitido'
+      : (String(prev?.status || '').toLowerCase() === 'inativo' ? 'inativo' : 'ativo'),
   };
 
   if (id && auditNote) {
@@ -1865,13 +2227,21 @@ async function salvarFuncionario(event) {
     try {
       if (password) {
         row.user_id = await _syncRhUserFromEmployee(row, password);
-      } else if (email || prevUserId) {
+      } else if (email || prev.user_id || cpf) {
         row.user_id = await _syncRhUserFromEmployee(row, null, { syncRole: roleChanged });
+      }
+      if (!row.user_id) {
+        row.user_id = await _resolveRhEmployeeUserId({ ...row, user_id: prev.user_id }, email);
       }
     } catch (userErr) {
       console.warn('[RH] sync usuário:', userErr);
       userSyncWarn = userErr?.message || String(userErr);
+      if (!row.user_id) {
+        row.user_id = await _resolveRhEmployeeUserId({ ...row, user_id: prev.user_id }, email);
+      }
     }
+
+    await DB.saveRhEmployee(row);
 
     const limiteClube = parseFloat(_val('emp_limite_clube')) || 0;
     let clubeWarn = '';
@@ -1883,10 +2253,13 @@ async function salvarFuncionario(event) {
         clubeWarn = limErr?.message || String(limErr);
       }
     } else if (limiteClube > 0) {
-      clubeWarn = 'Informe e-mail/senha de acesso para liberar o limite do Clube.';
+      clubeWarn = 'Informe e-mail/senha de acesso ou vincule o CPF a um usuário para liberar o limite do Clube.';
     }
 
-    await DB.saveRhEmployee(row);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-lim',hypothesisId:'H1-H2',location:'rh-manager.js:salvar-funcionario',message:'salvar funcionario clube',data:{empId:id||null,userId:row.user_id||null,limiteClube,clubeWarn:clubeWarn||null,userSyncWarn:userSyncWarn||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+
     closeModalRH('funcionarioModal');
     await reloadAllData();
     if (userSyncWarn || clubeWarn) {
@@ -1952,14 +2325,17 @@ async function _initRhManager() {
   const tabParam = params.get('tab') || (window.location.hash || '').replace(/^#/, '');
   const editParam = params.get('edit');
 
-  const landSonhos = typeof PainelSonhos !== 'undefined' && PainelSonhos.eligible(role);
   const folhaDeepLink = tabParam === 'folha';
-  const initialTab = folhaDeepLink ? 'relatorios' : (tabParam || _rhDefaultTab(role));
-  switchTab(initialTab);
-  if (folhaDeepLink && typeof switchRhRelatorio === 'function') {
-    switchRhRelatorio('folha');
-    const titleEl = document.getElementById('pageTitle');
-    if (titleEl) titleEl.textContent = _RH_TAB_TITLES.folha || 'Gerar Folha de Pagamento';
+  if (folhaDeepLink) {
+    openRhFolhaTab();
+    return;
+  }
+  /* Relatórios saiu do menu — deep-links antigos abrem Ranking Vendas (mesmo hub). */
+  if (tabParam === 'relatorios' || tabParam === 'ranking') {
+    openRhRankingTab();
+  } else {
+    const initialTab = tabParam || _rhDefaultTab(role);
+    switchTab(initialTab);
   }
 
   reloadAllData({ silent: true }).then(async () => {
@@ -2018,6 +2394,8 @@ window.buscarCpfFuncionario = buscarCpfFuncionario;
 window.buscarCnpjFuncionario = buscarCnpjFuncionario;
 window.editFuncionario = editFuncionario;
 window.excluirFuncionario = excluirFuncionario;
+window.inativarFuncionario = inativarFuncionario;
+window.reativarFuncionario = reativarFuncionario;
 window.onEmpRoleChange = onEmpRoleChange;
 
 document.addEventListener('DOMContentLoaded', () => {

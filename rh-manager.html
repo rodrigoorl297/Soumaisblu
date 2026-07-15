@@ -12,447 +12,18 @@
   <link rel="apple-touch-icon" href="../images/logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/variables.css"/>
-  <link rel="stylesheet" href="../css/global.css"/>
+  <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
+  <link rel="stylesheet" href="../css/global.css?v=modal-pe1"/>
   <link rel="stylesheet" href="../css/colors-orange.css"/>
   <link rel="stylesheet" href="../css/leads.css"/>
-  <link rel="stylesheet" href="../css/layout.css"/>
+  <link rel="stylesheet" href="../css/layout.css?v=rh-css2"/>
   <link rel="stylesheet" href="../css/store.css"/>
   <link rel="stylesheet" href="../css/withdrawal.css"/>
-  <link rel="stylesheet" href="../css/painel-sonhos.css?v=19"/>
+  <link rel="stylesheet" href="../css/painel-sonhos.css?v=mural-company1"/>
+    <!-- SheetJS lazy: carregado só na exportação -->
   <link rel="stylesheet" href="../css/folha-pagamento.css?v=3"/>
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <style>
-    /* Estilos Customizados para o Módulo de RH */
-    .kanban-board {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 16px;
-      margin-top: 20px;
-      align-items: start;
-    }
-    .kanban-col {
-      background: var(--color-bg-sidebar);
-      border-radius: 12px;
-      padding: 16px;
-      border: 1px solid var(--color-border);
-      min-height: 500px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .kanban-col-title {
-      font-size: 16px;
-      font-weight: 800;
-      color: var(--color-text);
-      border-bottom: 2px solid var(--color-accent);
-      padding-bottom: 8px;
-      margin-bottom: 8px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .kanban-col-cards {
-      flex: 1;
-      min-height: 420px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-      border-radius: 8px;
-      transition: background 0.15s, outline 0.15s;
-    }
-    .kanban-col-cards.drag-over {
-      background: rgba(59, 130, 246, 0.08);
-      outline: 2px dashed var(--color-accent);
-      outline-offset: -2px;
-    }
-    .kanban-card {
-      background: var(--color-card-bg, #fff);
-      border-radius: 8px;
-      padding: 12px;
-      border-left: 5px solid var(--color-accent);
-      box-shadow: 0 4px 6px rgba(0,0,0,0.05);
-      cursor: grab;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    .kanban-card:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 12px rgba(0,0,0,0.1);
-    }
-    .kanban-card:active {
-      cursor: grabbing;
-    }
-    .kanban-card.is-dragging {
-      opacity: 0.5;
-      cursor: grabbing;
-    }
-    .kanban-card .card-actions button {
-      cursor: pointer;
-    }
-    .kanban-card.stage-triagem { border-left-color: #3b82f6; }
-    .kanban-card.stage-entrevista { border-left-color: #f59e0b; }
-    .kanban-card.stage-contratado { border-left-color: #10b981; }
-    .rh-justif-hint {
-      font-size: 11px;
-      font-weight: 700;
-      color: #dc2626;
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      margin-top: 4px;
-    }
-    .rh-justif-panel {
-      border: 1px solid var(--color-border);
-      border-radius: 12px;
-      padding: 14px 16px;
-      margin-top: 12px;
-      background: var(--color-surface-2, #f8fafc);
-    }
-    .rh-justif-panel__title {
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--color-primary, #0b2545);
-      margin-bottom: 12px;
-    }
-    #demissao_emp_info {
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--color-text-secondary);
-      padding: 10px 12px;
-      border-radius: 8px;
-      background: #fff;
-      border: 1px solid var(--color-border);
-      margin-top: 8px;
-    }
-    #punicao_emp_info,
-    .punicao-witness-info {
-      font-size: 13px;
-      line-height: 1.5;
-      color: var(--color-text-secondary);
-      padding: 10px 12px;
-      border-radius: 8px;
-      background: #fff;
-      border: 1px solid var(--color-border);
-      margin-top: 8px;
-    }
-    .rh-pun-meta-hint {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--color-success, #16a34a);
-      text-transform: uppercase;
-      letter-spacing: 0.03em;
-      line-height: 38px;
-    }
-    .rh-pun-witness-panel {
-      margin-top: 12px;
-      padding: 14px 16px;
-      border-radius: 12px;
-      border: 1px solid var(--color-border);
-      background: var(--color-surface-2, #f8fafc);
-    }
-    .rh-pun-witness-panel__title {
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--color-primary, #0b2545);
-      margin-bottom: 10px;
-    }
-    .rh-dem-anexo-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-      padding: 10px 12px;
-      border-radius: 10px;
-      border: 1px solid var(--color-border);
-      background: var(--color-surface-2, #f8fafc);
-      margin-bottom: 8px;
-    }
-    .rh-dem-anexo-row__label {
-      flex: 1;
-      min-width: 140px;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .rh-dem-anexo-row__status {
-      font-size: 12px;
-      color: var(--color-text-muted);
-      max-width: 180px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .rh-dem-anexos-panel {
-      margin-top: 14px;
-      padding: 14px 16px;
-      border-radius: 12px;
-      border: 1px solid var(--color-border);
-      background: #f1f5f9;
-    }
-    .rh-dem-anexos-panel__title {
-      font-size: 12px;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--color-primary, #0b2545);
-      margin-bottom: 10px;
-    }
-
-    .cbo-search-wrap { position: relative; }
-    .cbo-dropdown {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: calc(100% + 4px);
-      z-index: 1200;
-      max-height: 240px;
-      overflow-y: auto;
-      background: var(--color-card-bg, #fff);
-      border: 1px solid var(--color-border);
-      border-radius: 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.12);
-    }
-    .cbo-dropdown-item {
-      padding: 10px 12px;
-      cursor: pointer;
-      font-size: 13px;
-      border-bottom: 1px solid var(--color-border);
-      line-height: 1.35;
-    }
-    .cbo-dropdown-item:last-child { border-bottom: none; }
-    .cbo-dropdown-item:hover { background: var(--color-bg-sidebar); }
-    .cbo-dropdown-item strong { color: var(--color-accent); margin-right: 8px; white-space: nowrap; }
-    .cbo-dropdown-empty {
-      padding: 12px;
-      font-size: 13px;
-      color: var(--color-text-muted);
-    }
-
-    .rh-relatorios-menu {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-    .rh-relatorio-card {
-      text-align: left;
-      padding: 16px 18px;
-      border: 2px solid var(--color-border);
-      border-radius: 12px;
-      background: var(--color-card-bg, #fff);
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s, transform 0.15s;
-    }
-    .rh-relatorio-card:hover { transform: translateY(-1px); border-color: var(--color-accent); }
-    .rh-relatorio-card.active {
-      border-color: var(--color-accent);
-      background: rgba(249, 115, 22, 0.08);
-    }
-    .rh-relatorio-card strong { display: block; font-size: 14px; margin-bottom: 4px; }
-    .rh-relatorio-card span { font-size: 12px; color: var(--color-text-muted); line-height: 1.4; }
-
-    #rhRelatorioPanel {
-      min-height: 320px;
-      margin-top: 4px;
-      scroll-margin-top: 88px;
-      padding: 0;
-      overflow: visible;
-    }
-    #rhRelatorioPanel.rh-showing-folha #rhFolhaEmbedRoot {
-      display: block !important;
-    }
-    #rhRelatorioPanel.rh-showing-folha #rhRelatorioContent {
-      display: none !important;
-    }
-    #rhRelatorioPanel:not(.rh-showing-folha) #rhFolhaEmbedRoot {
-      display: none !important;
-    }
-    #rhRelatorioPanel:not(.rh-showing-folha) #rhRelatorioContent {
-      display: block !important;
-    }
-    #rhFolhaEmbedRoot {
-      padding: 20px 24px 24px;
-    }
-    #rhRelatorioPanel.card-padded { padding: 0; }
-    .rh-relatorio-stack {
-      width: 100%;
-      min-height: 320px;
-    }
-    .rh-relatorio-content {
-      width: 100%;
-      min-height: 320px;
-    }
-    .rh-relatorio-content:not([hidden]) {
-      padding: 20px 24px;
-    }
-    .rh-folha-inline { width: 100%; }
-    #rhRelatorioPanel .rh-relatorio-panel-head {
-      padding-bottom: 16px;
-      margin-bottom: 16px;
-      border-bottom: 1px solid var(--color-border);
-    }
-    #rhRelatorioPanel .rh-relatorio-panel-head h3 {
-      font-weight: 800;
-      font-size: 20px;
-      margin: 0 0 6px;
-    }
-    #rhRelatorioPanel .rh-relatorio-panel-head p {
-      font-size: 13px;
-      margin: 0;
-      line-height: 1.5;
-    }
-
-    #adminRankingList .ranking-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      padding: 12px;
-      border: 1px solid var(--color-border);
-      border-radius: 10px;
-      margin-bottom: 10px;
-      background: var(--color-card-bg, #fff);
-    }
-    #adminRankingList .ranking-pos {
-      width: 36px;
-      font-weight: 900;
-      text-align: center;
-      flex-shrink: 0;
-    }
-    #adminRankingList .ranking-item__body { flex: 1; min-width: 0; }
-    #adminRankingList .ranking-name { font-weight: 700; font-size: 14px; }
-    #adminRankingList .ranking-dept { font-size: 12px; color: var(--color-text-muted); }
-    #adminRankingList .ranking-item__stats { font-size: 12px; margin-top: 4px; display: flex; flex-wrap: wrap; gap: 8px; }
-    .sales-ranking-toolbar {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-      margin-bottom: 8px;
-    }
-    .sales-ranking-filter-group { min-width: 140px; }
-    .sales-ranking-filter-label {
-      display: block;
-      font-size: 10px;
-      font-weight: 800;
-      letter-spacing: 0.05em;
-      color: var(--color-text-muted);
-      margin-bottom: 4px;
-    }
-
-    .card-protocol {
-      font-size: 11px;
-      font-weight: 700;
-      color: var(--color-text-muted);
-      margin-bottom: 4px;
-    }
-    .card-name {
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--color-text);
-      margin-bottom: 8px;
-    }
-    .card-info {
-      font-size: 12px;
-      color: var(--color-text-muted);
-      line-height: 1.4;
-    }
-    .card-actions {
-      margin-top: 10px;
-      display: flex;
-      justify-content: flex-end;
-    }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
-    }
-    .form-grid.three-cols {
-      grid-template-columns: repeat(3, 1fr);
-    }
-    .form-grid.full-width {
-      grid-template-columns: 1fr;
-    }
-    .section-title-bar {
-      background: var(--color-accent-subtle, rgba(249, 115, 22, 0.1));
-      color: var(--color-accent);
-      padding: 8px 16px;
-      font-weight: 800;
-      font-size: 14px;
-      border-radius: 6px;
-      margin-top: 20px;
-      margin-bottom: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-
-    .btn-api-lookup {
-      height: 42px;
-      margin-top: 28px;
-    }
-
-    .rh-sidebar-account {
-      cursor: pointer;
-      border-radius: 10px;
-      transition: background 0.15s;
-    }
-    .rh-sidebar-account:hover {
-      background: rgba(255, 255, 255, 0.08);
-    }
-
-    /* Avatar no topo — mesmo visual circular da sidebar */
-    .topbar-actions {
-      gap: 10px;
-    }
-    .topbar-actions .avatar {
-      flex-shrink: 0;
-      cursor: pointer;
-      border: 2px solid var(--color-border);
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-      width: 36px;
-      height: 36px;
-      font-size: 13px;
-    }
-    .topbar-actions .avatar:hover {
-      box-shadow: 0 2px 12px rgba(15, 23, 42, 0.14);
-    }
-    .sidebar-user .user-avatar {
-      overflow: hidden;
-      line-height: 1;
-    }
-    .sidebar-user .user-avatar img,
-    .topbar-actions .avatar img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 50%;
-      display: block;
-    }
-
-    .sidebar-header .logo-icon.rh-brand-logo {
-      background: transparent;
-      box-shadow: none;
-      padding: 0;
-      overflow: hidden;
-    }
-    .sidebar-header .logo-icon.rh-brand-logo img {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-      display: block;
-      border-radius: 10px;
-    }
-
-    @media (max-width: 1024px) {
-      .kanban-board {
-        grid-template-columns: 1fr;
-      }
-      .form-grid, .form-grid.three-cols {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+  <!-- estilos RH em css/layout.css -->
 </head>
 <body class="leads-app">
   <!-- Loader -->
@@ -507,9 +78,6 @@
         <a class="nav-item rh-mgmt-only" data-tab="justificativa" onclick="switchTab('justificativa')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Justificativa de Falta
         </a>
-        <a class="nav-item rh-mgmt-only" onclick="openRhFolhaTab()">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg></span> Gerar Folha de Pagamento
-        </a>
         <a class="nav-item rh-mgmt-only" data-tab="punicao" onclick="switchTab('punicao')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> Registro Punição
         </a>
@@ -527,15 +95,11 @@
         <a class="nav-item rh-mgmt-only" data-tab="feedback" onclick="switchTab('feedback')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span> Feedbacks
         </a>
-        <a class="nav-item rh-mgmt-only" onclick="openRhRankingTab()">
+        <a class="nav-item rh-mgmt-only" data-tab="ranking" onclick="openRhRankingTab()">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg></span> Ranking Vendas
         </a>
-        <a class="nav-item rh-mgmt-only" data-tab="relatorios" onclick="switchTab('relatorios')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span> Relatórios
-        </a>
-        <a class="nav-item rh-mgmt-only" data-tab="parceiro" onclick="switchTab('parceiro')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span> Cadastrar Parceiro
-        </a>
+        <!-- Relatórios: hub interno via Ranking Vendas (ranking / vendas / qualidade) — sem item no menu -->
+        <!-- Cadastrar Parceiro: só no Financeiro (secPartners) — não duplicar no hub RH -->
 
         <div class="nav-section-label">Sistema</div>
         <a class="nav-item rh-admin-back" onclick="navigateBack()">
@@ -735,7 +299,7 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Funcionário / CPF</th><th>Cargo</th><th>Departamento</th><th>Admissão</th><th>Medidas Disciplinares</th><th>Ações</th>
+                    <th>Funcionário / CPF</th><th>Cargo</th><th>Departamento</th><th>Admissão</th><th>Status</th><th>Medidas Disciplinares</th><th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="employee_list_body">
@@ -851,15 +415,11 @@
           <div class="page-header" style="margin-bottom:20px;">
             <div class="page-header-text">
               <h2 style="font-weight:800;font-size:24px;margin-bottom:4px;">Relatórios</h2>
-              <p class="text-muted" style="font-size:14px;">Folha, ranking, vendas e qualidade da equipe</p>
+              <p class="text-muted" style="font-size:14px;">Ranking, vendas e qualidade da equipe</p>
             </div>
           </div>
           <div class="rh-relatorios-menu" role="tablist" aria-label="Tipos de relatório">
-            <button type="button" class="rh-relatorio-card active" data-rel="folha" role="tab" aria-selected="true">
-              <strong>Folha de Pagamento</strong>
-              <span>Gerar folha do funcionário — protocolo, empresa, mês, PIX, salvar e exportar Excel</span>
-            </button>
-            <button type="button" class="rh-relatorio-card" data-rel="ranking" role="tab" aria-selected="false">
+            <button type="button" class="rh-relatorio-card active" data-rel="ranking" role="tab" aria-selected="true">
               <strong>Ranking de Vendas</strong>
               <span>Classificação por faturamento e propostas</span>
             </button>
@@ -872,7 +432,7 @@
               <span>Monitoria e indicadores da equipe</span>
             </button>
           </div>
-          <div class="card card-padded rh-showing-folha" id="rhRelatorioPanel" aria-live="polite">
+          <div class="card card-padded" id="rhRelatorioPanel" aria-live="polite">
             <div class="rh-relatorio-stack">
               
               <div id="rhFolhaEmbedRoot" class="rh-folha-inline">
@@ -2385,23 +1945,23 @@
   </div>
 
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
-  <script charset="UTF-8" src="../js/config.js?v=14"></script>
-  <script charset="UTF-8" src="../js/db.js?v=perf2"></script>
+  <script charset="UTF-8" src="../js/config.js?v=nodelete-demo1"></script>
+  <script charset="UTF-8" src="../js/db.js?v=nodelete-demo1"></script>
   <script charset="UTF-8" src="../js/fontedata.js?v=4"></script>
   <script charset="UTF-8" src="../js/auth.js?v=1781813000"></script>
-  <script charset="UTF-8" src="../js/ui.js?v=partner-att-fix2"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=rm-dbg1"></script>
   <script charset="UTF-8" src="../js/partners-ui.js?v=partner-att-fix2"></script>
   <script charset="UTF-8" src="../js/partners.js?v=97c411tier1"></script>
   <script charset="UTF-8" src="../js/cbo.js?v=1"></script>
-  <script charset="UTF-8" src="../js/sales-ranking.js?v=4"></script>
-  <script charset="UTF-8" src="../js/folha-pagamento.js?v=12"></script>
-  <script charset="UTF-8" src="../js/rh-relatorios.js?v=11"></script>
-  <script charset="UTF-8" src="../js/painel-sonhos.js?v=19"></script>
+  <script charset="UTF-8" src="../js/sales-ranking.js?v=rank-export1"></script>
+  <script charset="UTF-8" src="../js/folha-pagamento.js?v=xlsx-lazy1"></script>
+  <script charset="UTF-8" src="../js/rh-relatorios.js?v=rel-nof1"></script>
+  <script charset="UTF-8" src="../js/painel-sonhos.js?v=mural-company1"></script>
   <script charset="UTF-8" src="../js/withdrawal-rules.js"></script>
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2"></script>
   <script charset="UTF-8" src="../js/profile.js?v=1781810513726"></script>
   <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
-  <script charset="UTF-8" src="../js/rh-manager.js?v=rh-clube-limite1"></script>
-  <script charset="UTF-8" src="../js/rh-ops.js?v=97c411pun1"></script>
-</body>
+  <script charset="UTF-8" src="../js/rh-manager.js?v=rh-clube-lim1"></script>
+  <script charset="UTF-8" src="../js/rh-ops.js?v=rh-nav-dem2"></script>
+<script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

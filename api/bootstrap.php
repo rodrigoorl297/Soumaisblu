@@ -25,7 +25,7 @@ function soublu_load_local_configs(): void
         require_once $stack;
     }
 
-    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php', 'config.whaticket.local.php'] as $file) {
+    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php', 'config.whaticket.local.php', 'config.sistemaweb.local.php'] as $file) {
         $path = $root . '/' . $file;
         if (is_file($path)) {
             require_once $path;

@@ -140,7 +140,11 @@ const VendorTierPoints = (() => {
   }
 
   function isPaidProposal(p) {
+    if (typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function') {
+      return DB.isPaidProposal(p);
+    }
     const s = _statusNorm(p);
+    if (s.includes('CANCEL')) return false;
     return s === 'PAGO' || s.includes('PAGO');
   }
 
@@ -165,6 +169,16 @@ const VendorTierPoints = (() => {
     return 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  function proposalAmount(p) {
+    if (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function') {
+      return DB.proposalAmount(p);
+    }
+    const v = parseFloat(p?.valor ?? 0);
+    if (Number.isFinite(v) && v > 0) return v;
+    const vf = parseFloat(p?.valorFinal ?? p?.valor_final ?? 0);
+    return Number.isFinite(vf) && vf > 0 ? vf : 0;
+  }
+
   function sumPaidSales(user, proposals, periodKey) {
     let sum = 0;
     let count = 0;
@@ -177,8 +191,7 @@ const VendorTierPoints = (() => {
         if (vid !== String(user.id)) continue;
       }
       if (proposalPeriodKey(p) !== periodKey) continue;
-      const amt = typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : parseFloat(p?.valorFinal || p?.valor || 0) || 0;
-      sum += amt;
+      sum += proposalAmount(p);
       count++;
     }
     return { total: Math.round(sum * 100) / 100, count };

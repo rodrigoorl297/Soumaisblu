@@ -1,0 +1,69 @@
+<?php
+declare(strict_types=1);
+
+/**
+ * Sistema Web — integração de Folha de Pagamento (Financeiro).
+ *
+ * Copie este arquivo para config.sistemaweb.local.php na raiz do site
+ * (mesma pasta que api/) e preencha com os dados fornecidos pelo Financeiro.
+ * NÃO versione o .local.php (contém segredos).
+ *
+ * O que o RH precisa obter do Financeiro / fornecedor:
+ *   1. SISTEMAWEB_BASE_URL     — URL base da API (ex: https://api.sistemweb.exemplo.com.br)
+ *   2. SISTEMAWEB_API_TOKEN    — token / chave / senha de API
+ *   3. Contrato dos endpoints  — paths + método + body JSON para:
+ *        - listar funcionários (empresa/CNPJ + mês)
+ *        - gravar / gerar folha
+ */
+
+if (!defined('SISTEMAWEB_ENABLED')) {
+    define('SISTEMAWEB_ENABLED', false); // true só quando base + token + paths estiverem corretos
+}
+
+if (!defined('SISTEMAWEB_BASE_URL')) {
+    define('SISTEMAWEB_BASE_URL', ''); // TODO: URL base — sem barra final
+}
+
+if (!defined('SISTEMAWEB_API_TOKEN')) {
+    define('SISTEMAWEB_API_TOKEN', ''); // TODO: token real
+}
+
+/** Header de autenticação: Authorization | X-API-Key | apikey */
+if (!defined('SISTEMAWEB_AUTH_HEADER')) {
+    define('SISTEMAWEB_AUTH_HEADER', 'Authorization');
+}
+
+/** Prefixo do valor do header: "Bearer " | "" (token cru) */
+if (!defined('SISTEMAWEB_AUTH_SCHEME')) {
+    define('SISTEMAWEB_AUTH_SCHEME', 'Bearer');
+}
+
+/**
+ * Paths relativos à BASE_URL. Placeholders: {cnpj} {mes} {empresa_id} {protocolo}
+ * Deixe vazio até o Financeiro informar o contrato — o proxy local continua OK.
+ */
+if (!defined('SISTEMAWEB_PATH_EMPLOYEES')) {
+    // Ex.: /api/folha/funcionarios?cnpj={cnpj}&mes={mes}
+    define('SISTEMAWEB_PATH_EMPLOYEES', '');
+}
+
+if (!defined('SISTEMAWEB_METHOD_EMPLOYEES')) {
+    define('SISTEMAWEB_METHOD_EMPLOYEES', 'GET');
+}
+
+if (!defined('SISTEMAWEB_PATH_SAVE_FOLHA')) {
+    // Ex.: /api/folha/gerar
+    define('SISTEMAWEB_PATH_SAVE_FOLHA', '');
+}
+
+if (!defined('SISTEMAWEB_METHOD_SAVE_FOLHA')) {
+    define('SISTEMAWEB_METHOD_SAVE_FOLHA', 'POST');
+}
+
+if (!defined('SISTEMAWEB_SSL_VERIFY')) {
+    define('SISTEMAWEB_SSL_VERIFY', true);
+}
+
+if (!defined('SISTEMAWEB_TIMEOUT_SEC')) {
+    define('SISTEMAWEB_TIMEOUT_SEC', 30);
+}

@@ -506,9 +506,12 @@ async function _renderPropDashboard(proposals) {
   const mesAtual = now.getMonth();
   const anoAtual = now.getFullYear();
 
-  const propAmt = (p) => (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function'
-    ? DB.proposalAmount(p)
-    : (parseFloat(p?.valorFinal ?? p?.valor_final ?? p?.valor) || 0));
+  const propAmt = (p) => {
+    if (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function') return DB.proposalAmount(p);
+    const v = parseFloat(p?.valor ?? 0);
+    if (Number.isFinite(v) && v > 0) return v;
+    return parseFloat(p?.valorFinal ?? p?.valor_final) || 0;
+  };
   const isPaid = (p) => (typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
     ? DB.isPaidProposal(p)
     : String(p?.statusOp || p?.status || '').toUpperCase().includes('PAGO'));

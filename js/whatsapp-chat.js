@@ -1,11 +1,12 @@
 /* SOU+BLU — Painel WhatsApp (Evolution API, estilo WhatsApp Web) */
 const WhatsAppChat = (() => {
-  /* Polls conservadores — events ~3s (cursor leve); chats/msg lentos; status skip_qr MySQL-fast. */
+  /* Polls conservadores — msgs só com chat aberto; chats mais lentos sem thread. */
   const POLL_CONNECT_MS = 12000;
-  const POLL_MSG_MS = 18000;
+  const POLL_MSG_MS = 20000;
   const POLL_CHATS_MS = 60000;
-  const POLL_EVENTS_MS = 15000;
-  const EVENTS_CHATS_MIN_GAP_MS = 10000;
+  const POLL_CHATS_IDLE_MS = 90000;
+  const POLL_EVENTS_MS = 20000;
+  const EVENTS_CHATS_MIN_GAP_MS = 15000;
   const AVATAR_WARM_MAX = 6;
   const AVATAR_WARM_GAP_MS = 350;
   const AVATAR_IO_MARGIN = '120px';
@@ -1584,6 +1585,20 @@ const WhatsAppChat = (() => {
     _connectPollStarted = 0;
   }
 
+  function stopMsgPoll() {
+    if (_pollMsg) { clearInterval(_pollMsg); _pollMsg = null; }
+  }
+
+  function startMsgPoll() {
+    stopMsgPoll();
+    if (!_activeChatId || !_sessionLive) return;
+    _pollMsg = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      if (!_activeChatId || isUserTyping()) return;
+      loadMessages(_activeChatId, true).catch(() => {});
+    }, POLL_MSG_MS);
+  }
+
   function startEventsPoll() {
     if (_pollEvents) clearInterval(_pollEvents);
     if (!_sessionLive) return;
@@ -1646,7 +1661,6 @@ const WhatsAppChat = (() => {
           }
           await loadOwnProfile(true);
           startChatsPoll();
-          startMsgPoll();
           startEventsPoll();
           await pullChats(true, false);
           notifyKanbanState();
@@ -1677,24 +1691,17 @@ const WhatsAppChat = (() => {
     _pollConnect = setInterval(tick, POLL_CONNECT_MS);
   }
 
-  function startMsgPoll() {
-    if (_pollMsg) clearInterval(_pollMsg);
-    _pollMsg = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      if (_activeChatId && !isUserTyping()) {
-        loadMessages(_activeChatId, true).catch(() => {});
-      }
-    }, POLL_MSG_MS);
-  }
-
   function startChatsPoll() {
     if (_pollChats) clearInterval(_pollChats);
-    _pollChats = setInterval(() => {
+    const tick = () => {
       if (typeof document !== 'undefined' && document.hidden) return;
       if (!isEffectivelyOpen()) return;
       // Sem force_sync no tick — mirror/enrich só no load inicial / pull forçado.
       loadChats(true, { force: false }).catch(() => {});
-    }, POLL_CHATS_MS);
+    };
+    tick();
+    const gap = _activeChatId ? POLL_CHATS_MS : POLL_CHATS_IDLE_MS;
+    _pollChats = setInterval(tick, gap);
   }
 
   function updateComposeMode() {
@@ -3160,6 +3167,8 @@ _rebindRequired = false;
       _activeChatId = null;
       _messages = [];
       _msgFingerprint = '';
+      stopMsgPoll();
+      startChatsPoll();
       setCrmMode();
       renderChatList();
       renderThread();
@@ -3174,6 +3183,7 @@ _rebindRequired = false;
       updateComposeMode();
       scheduleThreadMediaRepair();
       startMsgPoll();
+      startChatsPoll();
       const chat = _chats.find(c => c.id === id);
       if (chat) loadThreadAvatarNow(chat);
     },

@@ -82,7 +82,7 @@
         return;
       }
 
-      const SEED_VERSION = 'v26';
+      const SEED_VERSION = 'v27';
       const storedVersion = localStorage.getItem('soublu_seed_version');
       if (storedVersion !== SEED_VERSION) {
         console.log('[DB] Seed offline (localStorage)');
@@ -148,19 +148,22 @@
       ];
     },
 
-    /** Só popula usuários demo quando o Supabase está vazio — nunca re-insere após exclusão. */
+    /**
+     * Seed online só em banco vazio (flag localStorage).
+     * Nunca recria contas apagadas — demos de vendas (Alpha/Beta) foram removidos do seed.
+     */
     async _ensureOnlineUsersOnce() {
       const flag = localStorage.getItem('soublu_supabase_seeded');
-      if (flag === '1') return;
+      if (flag === '1' || flag === '2') return;
       try {
         const existing = await supaReq('GET', 'users', null, '?select=id&limit=1');
         if (existing && existing.length > 0) {
-          localStorage.setItem('soublu_supabase_seeded', '1');
+          localStorage.setItem('soublu_supabase_seeded', '2');
           return;
         }
         console.log('[DB] Banco vazio — seed inicial (uma vez)');
         await this._seedOnline();
-        localStorage.setItem('soublu_supabase_seeded', '1');
+        localStorage.setItem('soublu_supabase_seeded', '2');
       } catch (e) {
         console.warn('[DB] Não foi possível verificar usuários:', e);
       }
@@ -272,22 +275,36 @@
     },
 
     async getUserByCpf(cpf) {
-      const digits = String(cpf || '').replace(/\D/g, '');
+      let digits = String(cpf || '').replace(/\D/g, '');
+      if (digits.length < 11 && digits.length >= 9) digits = digits.padStart(11, '0');
       if (digits.length !== 11) return null;
       if (this.online) {
         try {
-          const r = await supaReq('GET', 'users', null, `?cpf=eq.${digits}&select=*&limit=1`);
-          if (r?.[0]) return r[0];
+          const fmt = digits.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+          const r = await Promise.all([
+            supaReq('GET', 'users', null, `?cpf=eq.${digits}&select=*&limit=1`).catch(() => []),
+            fmt ? supaReq('GET', 'users', null, `?cpf=eq.${encodeURIComponent(fmt)}&select=*&limit=1`).catch(() => []) : Promise.resolve([]),
+          ]);
+          if (r[0]?.[0]) return r[0][0];
+          if (r[1]?.[0]) return r[1][0];
         } catch (e) {
           console.warn('[DB] getUserByCpf:', e.message);
         }
       }
-      const fromLocal = this._lget(this.LK.users).find(u => String(u.cpf || '').replace(/\D/g, '') === digits);
+      const fromLocal = this._lget(this.LK.users).find(u => {
+        let d = String(u.cpf || '').replace(/\D/g, '');
+        if (d.length < 11 && d.length >= 9) d = d.padStart(11, '0');
+        return d === digits;
+      });
       if (fromLocal) return fromLocal;
 
       try {
         const rhList = await this.getRhEmployees().catch(() => []);
-        const rh = (rhList || []).find(e => String(e.cpf || '').replace(/\D/g, '') === digits);
+        const rh = (rhList || []).find(e => {
+          let d = String(e.cpf || '').replace(/\D/g, '');
+          if (d.length < 11 && d.length >= 9) d = d.padStart(11, '0');
+          return d === digits;
+        });
         if (rh) {
           return {
             id: rh.id,
@@ -305,9 +322,11 @@
         const users = this.online
           ? await this.getAllUsers().catch(() => [])
           : this._lget(this.LK.users);
-        const u = (users || []).find(x =>
-          String(x.cpf || '').replace(/\D/g, '') === digits && x.active !== false
-        );
+        const u = (users || []).find(x => {
+          let d = String(x.cpf || '').replace(/\D/g, '');
+          if (d.length < 11 && d.length >= 9) d = d.padStart(11, '0');
+          return d === digits && x.active !== false;
+        });
         if (u) return u;
       } catch (e) {
         console.warn('[DB] getUserByCpf users scan:', e?.message || e);
@@ -385,7 +404,12 @@
       const ids = await this.getPartnerTeamIds(partnerRootId);
       ids.delete(String(partnerRootId));
       if (this.online) {
-        const all = await supaReq('GET', 'users', null, '?select=*&order=name.asc&limit=1000').catch(() => []);
+        const all = await supaReq(
+          'GET',
+          'users',
+          null,
+          '?select=id,name,email,role,active,admin_id,partner_root_id,department,cpf,matricula,points,balance,photo_url,phone&order=name.asc&limit=1000'
+        ).catch(() => []);
         return (all || []).filter(u => ids.has(String(u.id)) && this.PARTNER_TEAM_ROLES.includes(u.role));
       }
       return this._sortUsersByName(this._lget(this.LK.users).filter(u =>
@@ -504,7 +528,13 @@
         return r === 'employee' || r === 'vendedor';
       };
       const isActive = (u) => u?.active !== false && u?.active !== 0 && u?.active !== '0';
-      const inScope = (u) => !adminId || String(u.admin_id || '') === String(adminId);
+      const adminIds = Array.isArray(adminId)
+        ? adminId.filter(Boolean).map(String)
+        : (adminId ? [String(adminId)] : null);
+      const inScope = (u) => {
+        if (!adminIds?.length) return true;
+        return adminIds.includes(String(u.admin_id || ''));
+      };
       const sortName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
 
       // Preferir getAllUsers (já em cache no boot admin) — evita query active=eq.true quebrada no MySQL.
@@ -521,8 +551,8 @@
         const cols = 'id,name,email,role,active,admin_id';
         // active=eq.1 (não "true") — Hostinger/MySQL TINYINT
         let params = `?role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
-        if (adminId) {
-          params = `?admin_id=eq.${encodeURIComponent(adminId)}&role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
+        if (adminIds?.length === 1) {
+          params = `?admin_id=eq.${encodeURIComponent(adminIds[0])}&role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         }
         try {
           const rows = await supaReq('GET', 'users', null, params);
@@ -777,17 +807,31 @@
           try { await supaReq('DELETE', table, null, params); }
           catch (e) { console.warn(`[DB] deleteUser: limpar ${table}:`, e.message); }
         };
-        for (const t of ['transactions', 'orders', 'withdrawals', 'feedbacks', 'proposals', 'tickets']) {
+        // Desvincular equipe que aponta para este usuário (admin_id) antes do hard delete
+        try {
+          const kids = await supaReq('GET', 'users', null, `?admin_id=eq.${eq}&select=id&limit=500`);
+          for (const k of (kids || [])) {
+            try { await supaReq('PATCH', 'users', { admin_id: null }, `?id=eq.${encodeURIComponent(k.id)}`); }
+            catch (e) { console.warn('[DB] deleteUser: unlink admin_id', k.id, e.message); }
+          }
+        } catch (e) {
+          console.warn('[DB] deleteUser: list kids', e.message);
+        }
+        for (const t of ['transactions', 'orders', 'withdrawals', 'feedbacks', 'proposals', 'tickets', 'meetings']) {
           await wipe(t, `?employee_id=eq.${eq}`);
         }
         await wipe('proposals', `?or=(vendor_id.eq.${eq},vendorId.eq.${eq})`);
-        await wipe('clients', `?supervisorId=eq.${eq}`);
+        await wipe('clients', `?or=(supervisorId.eq.${eq},supervisor_id.eq.${eq})`);
+        await wipe('lead_daily_progress', `?user_id=eq.${eq}`);
+        await wipe('lead_weekly_assignments', `?user_id=eq.${eq}`);
+        await wipe('lead_unlock_requests', `?user_id=eq.${eq}`);
         try {
           const prt = await this.getPartnerByUserId(id);
           if (prt?.id) await this.deletePartner(prt.id);
         } catch (_) { /* noop */ }
         await supaReq('DELETE', 'users', null, `?id=eq.${eq}`);
-        const still = await supaReq('GET', 'users', null, `?id=eq.${eq}&select=id&limit=1`);
+        // Bypass cache: confirmação real no MySQL/API
+        const still = await supaReqOnce('GET', 'users', null, `?id=eq.${eq}&select=id&limit=1`);
         if (still && still.length) {
           throw new Error('Não foi possível excluir: ainda existem vínculos com este usuário.');
         }
@@ -1991,26 +2035,43 @@ if (!allowed) return null;
     async findClientByCpf(cpf) {
       const digits = String(cpf || '').replace(/\D/g, '');
       if (!digits) return null;
+      const matchDigits = (c) => {
+        const id = String(c?.id || '').replace(/\D/g, '');
+        const cp = String(c?.cpf || '').replace(/\D/g, '');
+        return cp === digits || id === digits;
+      };
       if (this.online) {
         try {
-          const r = await supaReq('GET', 'clients', null, `?cpf=eq.${digits}&select=*&limit=1`);
+          const r = await supaReq(
+            'GET', 'clients', null,
+            `?or=(cpf.eq.${digits},id.eq.${digits})&select=*&limit=1`
+          );
           if (r && r[0]) return r[0];
         } catch (e) {
           console.warn('[DB] Erro ao buscar cliente por CPF:', e.message);
         }
         try {
-          const r2 = await supaReq('GET', 'clients', null, `?id=eq.${digits}&select=*&limit=1`);
+          const r2 = await supaReq('GET', 'clients', null, `?cpf=eq.${digits}&select=*&limit=1`);
           if (r2 && r2[0]) return r2[0];
+        } catch (_) { /* noop */ }
+        try {
+          const r3 = await supaReq('GET', 'clients', null, `?id=eq.${digits}&select=*&limit=1`);
+          if (r3 && r3[0]) return r3[0];
         } catch (_) { /* noop */ }
       }
       const list = this._lget(this.LK.clients) || [];
-      return list.find((c) => {
-        const id = String(c.id || '').replace(/\D/g, '');
-        const cp = String(c.cpf || '').replace(/\D/g, '');
-        return cp === digits || id === digits;
-      }) || null;
+      return list.find(matchDigits) || null;
     },
     async addClient(data) {
+      const cpf = String(data?.cpf || data?.id || '').replace(/\D/g, '');
+      if (cpf) {
+        const existing = await this.findClientByCpf(cpf);
+        if (existing) {
+          const err = new Error('CLIENT_DUP: Este cliente já está cadastrado. Cadastro duplicado bloqueado.');
+          err.code = 'CLIENT_DUP';
+          throw err;
+        }
+      }
       const row = this._sanitizeClientForApi(this._normalizeClientForDb(data, { isNew: true }));
       if (!row.id) row.id = this._genId('cli');
       if (this.online) {
@@ -2039,29 +2100,75 @@ if (!allowed) return null;
     },
   
     /* Colunas leves — evita timeout ao buscar attachments/history em massa */
-    _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissaoRecebida,valorComissaoRecebida,createdAt,created_at,updatedAt,updated_at,employee_id',
+    _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissaoRecebida,valorComissaoRecebida,createdAt,created_at,updatedAt,updated_at,employee_id,history',
 
     /** Dashboard / faturamento — sem fases/obs (payload ~95% menor). */
-    _PROPOSALS_LITE_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,protocolo,valor,valorFinal,valor_final,status,statusOp,status_op,created_at,updated_at,employee_id',
+    _PROPOSALS_LITE_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,protocolo,valor,valorFinal,valor_final,status,statusOp,status_op,created_at,updated_at,employee_id,history',
+
+    _proposalStatusTextNorm(s) {
+      return String(s || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().trim();
+    },
+
+    /** Proposta cancelada (status ou fase). */
+    isCancelledProposal(p) {
+      const st = this._proposalStatusTextNorm(p?.status);
+      const fase = this._proposalStatusTextNorm(p?.statusOp || p?.status_op);
+      return st.includes('CANCEL') || fase.includes('CANCEL');
+    },
 
     /** Proposta considerada paga (status ou fase operacional). */
     isPaidProposal(p) {
-      const norm = (s) => String(s || '')
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .toUpperCase().trim();
-      const st = norm(p?.status || '');
-      const fase = norm(p?.statusOp || p?.status_op || '');
-      return st === 'PAGO' || st.includes('PAGO') || fase === 'PAGO' || fase.includes('PAGO');
+      const st = this._proposalStatusTextNorm(p?.status);
+      const fase = this._proposalStatusTextNorm(p?.statusOp || p?.status_op);
+      const isPago = (v) => v === 'PAGO' || /(^|[^A-Z])PAGO([^A-Z]|$)/.test(v);
+      // Não contar canceladas como pagas (mesmo se fase residual ainda diga PAGO).
+      if (st.includes('CANCEL') || fase.includes('CANCEL')) return false;
+      return isPago(st) || isPago(fase);
     },
 
-    /** Valor monetário da proposta (valor final com fallback para valor bruto). */
+    /**
+     * Bucket do funil (Relatorio_Vendedores):
+     * efetivado = PAGO · cobranca = em andamento · cancelado = canceladas.
+     */
+    proposalFunnelBucket(p) {
+      if (this.isCancelledProposal(p)) return 'cancelado';
+      if (this.isPaidProposal(p)) return 'efetivado';
+      return 'cobranca';
+    },
+
+    /** Mesmos filtros do gráfico Faturamento por Equipe (dashboard). */
+    proposalMatchesBillingStatus(p, statusFilter) {
+      const f = statusFilter || 'total';
+      if (f === 'total') return true;
+      if (f === 'pagas') return this.isPaidProposal(p);
+      if (f === 'canceladas') return this.isCancelledProposal(p);
+      if (f === 'digitadas') return !this.isPaidProposal(p) && !this.isCancelledProposal(p);
+      return true;
+    },
+
+    /**
+     * Valor bruto da proposta (antes da tabela de comissão).
+     */
+    proposalGrossAmount(p) {
+      const v = parseFloat(p?.valor ?? 0);
+      if (Number.isFinite(v) && v > 0) return v;
+      const vf = parseFloat(p?.valorFinal ?? p?.valor_final);
+      if (Number.isFinite(vf) && vf > 0) return vf;
+      return 0;
+    },
+
+    /**
+     * Valor para ranking, faturamento e análise por equipe.
+     * Preferir valorFinal (após tabela); fallback para valor bruto.
+     */
     proposalAmount(p) {
       const vf = parseFloat(p?.valorFinal ?? p?.valor_final);
-      const v = parseFloat(p?.valor ?? 0);
       if (Number.isFinite(vf) && vf > 0) return vf;
+      const v = parseFloat(p?.valor ?? 0);
       if (Number.isFinite(v) && v > 0) return v;
-      if (Number.isFinite(vf)) return vf;
-      return Number.isFinite(v) ? v : 0;
+      return 0;
     },
 
     /** Vendedor responsável (vendorId → vendor_id → employee_id). */
@@ -2069,9 +2176,17 @@ if (!allowed) return null;
       return String(p?.vendorId ?? p?.vendor_id ?? p?.employee_id ?? '').trim();
     },
 
-    /** Data para filtros de faturamento por período (agora última alteração → criação). */
+    /** Data de cadastro da proposta (ranking / análise por período). */
+    proposalCreatedDate(p) {
+      const raw = p?.createdAt ?? p?.created_at;
+      if (!raw) return new Date(0);
+      const d = new Date(raw);
+      return Number.isNaN(d.getTime()) ? new Date(0) : d;
+    },
+
+    /** Data para filtros de faturamento por período (data de criação). */
     proposalBillingDate(p) {
-      return this.proposalDate(p);
+      return this.proposalCreatedDate(p);
     },
 
     proposalInDateRange(p, from, to) {
@@ -2110,8 +2225,8 @@ if (!allowed) return null;
     async listProposals() {
       if (this.online) {
         try {
-          return await this._cachedProposals('list', async () =>
-            supaReq('GET', 'proposals', null, this._proposalsListQuery())
+          return await this._cachedProposals('list:all', async () =>
+            this._fetchAllProposalPages(this._PROPOSALS_LIST_COLS)
           );
         } catch (e) {
           console.warn('[DB] listProposals:', e.message);
@@ -2140,23 +2255,64 @@ if (!allowed) return null;
       this._proposalsCache = { key: '', at: 0, rows: null };
     },
 
-    _proposalsListQuery(extra = '') {
-      return `?select=${this._PROPOSALS_LIST_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=800${extra}`;
+    /**
+     * Pagina TODAS as propostas (API limita ~800/req).
+     * Ranking/faturamento quebravam com só a 1ª página.
+     */
+    async _fetchAllProposalPages(cols, extra = '', pageSize = 800, maxPages = 20) {
+      const size = Math.min(Math.max(parseInt(pageSize, 10) || 800, 1), 800);
+      const order = 'updated_at.desc.nullslast,created_at.desc';
+      const all = [];
+      const seen = new Set();
+      let offset = 0;
+      for (let page = 0; page < maxPages; page++) {
+        const q = `?select=${cols}&order=${order}&limit=${size}&offset=${offset}${extra || ''}`;
+        const chunk = await supaReq('GET', 'proposals', null, q);
+        if (!Array.isArray(chunk) || !chunk.length) break;
+        for (const p of chunk) {
+          if (!p?.id || seen.has(p.id)) continue;
+          seen.add(p.id);
+          all.push(p);
+        }
+        if (chunk.length < size) break;
+        offset += size;
+      }
+      return all;
     },
 
-    _proposalsLiteQuery(limit = 600, extra = '') {
+    _proposalsListQuery(extra = '', limit = 800, offset = 0) {
+      const lim = Math.min(Math.max(parseInt(limit, 10) || 800, 1), 800);
+      const off = Math.max(parseInt(offset, 10) || 0, 0);
+      const offPart = off > 0 ? `&offset=${off}` : '';
+      return `?select=${this._PROPOSALS_LIST_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=${lim}${offPart}${extra}`;
+    },
+
+    _proposalsLiteQuery(limit = 600, extra = '', offset = 0) {
       const lim = Math.min(Math.max(parseInt(limit, 10) || 600, 1), 800);
-      return `?select=${this._PROPOSALS_LITE_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=${lim}${extra}`;
+      const off = Math.max(parseInt(offset, 10) || 0, 0);
+      const offPart = off > 0 ? `&offset=${off}` : '';
+      return `?select=${this._PROPOSALS_LITE_COLS}&order=updated_at.desc.nullslast,created_at.desc&limit=${lim}${offPart}${extra}`;
     },
 
     async listProposalsLite(opts = {}) {
+      const all = opts.all === true;
       const limit = opts.limit ?? 600;
       if (this.online) {
         try {
-          const key = 'lite:' + limit + ':' + (opts.extra || '');
-          return await this._cachedProposals(key, async () =>
-            supaReq('GET', 'proposals', null, this._proposalsLiteQuery(limit, opts.extra || ''))
-          );
+          const key = all
+            ? 'lite:all:' + (opts.extra || '')
+            : 'lite:' + limit + ':' + (opts.extra || '');
+          return await this._cachedProposals(key, async () => {
+            if (all) {
+              return this._fetchAllProposalPages(this._PROPOSALS_LITE_COLS, opts.extra || '');
+            }
+            return this._fetchAllProposalPages(
+              this._PROPOSALS_LITE_COLS,
+              opts.extra || '',
+              Math.min(limit, 800),
+              1
+            );
+          });
         } catch (e) {
           console.warn('[DB] listProposalsLite:', e.message);
           return [];
@@ -2165,11 +2321,10 @@ if (!allowed) return null;
       return this._lget(this.LK.proposals);
     },
 
-    /** Busca propostas só da equipe (evita GET de 2000 linhas + filtro no browser). */
+    /** Busca propostas só da equipe (pagina todas as páginas — sem teto de 800). */
     async _fetchProposalsForVendorIds(teamIds) {
       const ids = [...teamIds].filter(Boolean).map(String);
       if (!ids.length) return [];
-      const base = this._proposalsLiteQuery(800);
       const seen = new Set();
       const rows = [];
       const push = (list) => {
@@ -2186,7 +2341,8 @@ if (!allowed) return null;
         const inList = chunk.map(encodeURIComponent).join(',');
         const parts = await Promise.all(
           cols.map((col) =>
-            supaReq('GET', 'proposals', null, `${base}&${col}=in.(${inList})`).catch(() => [])
+            this._fetchAllProposalPages(this._PROPOSALS_LITE_COLS, `&${col}=in.(${inList})`)
+              .catch(() => [])
           )
         );
         parts.forEach(push);
@@ -2269,7 +2425,7 @@ if (!allowed) return null;
           return this._fetchProposalsForVendorIds(teamIds);
         }
         if (!uid) {
-          return await supaReq('GET', 'proposals', null, this._proposalsLiteQuery(800));
+          return await this._fetchAllProposalPages(this._PROPOSALS_LITE_COLS);
         }
   
         const seen = new Set();
@@ -2343,7 +2499,6 @@ if (!allowed) return null;
         'valorComissaoRecebida', 'valor_comissao_recebida',
         'attachments', 'history', 'email_contato',
         'creditoRetorno', 'credito_retorno', 'creditoEsteira', 'credito_esteira',
-        'meta',
         'createdAt', 'created_at', 'updatedAt', 'updated_at',
         'lastUpdatedBy', 'last_updated_by',
       ]);
@@ -2671,6 +2826,10 @@ if (!allowed) return null;
 
     async deleteProposal(id) {
       if (!id) return;
+      this._invalidateProposalsCache();
+      if (typeof window !== 'undefined' && window.SalesRanking?.invalidateCache) {
+        try { window.SalesRanking.invalidateCache(); } catch (_) { /* noop */ }
+      }
       if (this.online) {
         _cacheDel('proposals');
         return await supaReq('DELETE', 'proposals', null, `?id=eq.${encodeURIComponent(id)}`);
@@ -3116,6 +3275,10 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         audience_roles: aud,
         pinned: !!row.pinned,
         active: row.active !== false && row.active !== 0,
+        mural_scope: row.mural_scope || (row.partner_root_id ? 'partner' : 'company'),
+        author_name: row.author_name || row.authorName || '',
+        author_department: row.author_department || row.authorDepartment || '',
+        channel: row.channel || row.author_department || row.authorDepartment || '',
       };
     },
 
@@ -3124,10 +3287,10 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
 
     async getTrainings(opts = {}) {
-      const { partnerRootId, activeOnly, category } = opts;
+      const { partnerRootId, activeOnly, category, limit = 300 } = opts;
       if (this.online) {
         try {
-          let q = '?select=*&order=created_at.desc';
+          let q = `?select=*&order=created_at.desc&limit=${Math.max(1, Math.min(1000, Number(limit) || 300))}`;
           if (partnerRootId) {
             q += `&or=(partner_root_id.is.null,partner_root_id.eq.${encodeURIComponent(partnerRootId)})`;
           }
@@ -3284,11 +3447,13 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
 
     async getTrainingMuralPosts(opts = {}) {
-      const { partnerRootId, activeOnly } = opts;
+      const { partnerRootId, companyOnly, activeOnly, limit = 200 } = opts;
       if (this.online) {
         try {
-          let q = '?select=*&order=created_at.desc';
-          if (partnerRootId) {
+          let q = `?select=*&order=created_at.desc&limit=${Math.max(1, Math.min(1000, Number(limit) || 200))}`;
+          if (companyOnly) {
+            q += '&partner_root_id=is.null';
+          } else if (partnerRootId) {
             q += `&or=(partner_root_id.is.null,partner_root_id.eq.${encodeURIComponent(partnerRootId)})`;
           }
           if (activeOnly) q += '&active=eq.true';
@@ -3300,7 +3465,9 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         }
       }
       let all = (this._lget(this.LK.training_mural) || []).map(r => this._normTrainingMural(r));
-      if (partnerRootId) {
+      if (companyOnly) {
+        all = all.filter(r => !r.partner_root_id);
+      } else if (partnerRootId) {
         all = all.filter(r => !r.partner_root_id || String(r.partner_root_id) === String(partnerRootId));
       }
       if (activeOnly) all = all.filter(r => r.active);
@@ -3409,11 +3576,11 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
 
     async getMarketplaceServices(opts = {}) {
-      const { partnerRootId, activeOnly, category } = opts;
+      const { partnerRootId, activeOnly, category, limit = 300 } = opts;
       await this.ensureMarketplaceCatalog();
       if (this.online) {
         try {
-          let q = '?select=*&order=sort_order.asc,created_at.asc';
+          let q = `?select=*&order=sort_order.asc,created_at.asc&limit=${Math.max(1, Math.min(1000, Number(limit) || 300))}`;
           if (partnerRootId) {
             q += `&or=(partner_root_id.is.null,partner_root_id.eq.${encodeURIComponent(partnerRootId)})`;
           }
@@ -3645,8 +3812,8 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     async getFinanceSuppliers(activeOnly = false) {
       if (this.online) {
         const q = activeOnly
-          ? '?active=eq.true&select=*&order=name.asc'
-          : '?select=*&order=name.asc';
+          ? '?active=eq.true&select=*&order=name.asc&limit=500'
+          : '?select=*&order=name.asc&limit=500';
         const rows = await supaReq('GET', 'finance_suppliers', null, q);
         return (rows || []).map(r => this._normFinanceSupplier(r));
       }
@@ -3714,8 +3881,8 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     async getFinanceExpenses(status = null) {
       if (this.online) {
         const q = status
-          ? `?status=eq.${encodeURIComponent(status)}&select=*&order=created_at.desc`
-          : '?select=*&order=created_at.desc';
+          ? `?status=eq.${encodeURIComponent(status)}&select=*&order=created_at.desc&limit=500`
+          : '?select=*&order=created_at.desc&limit=500';
         const rows = await supaReq('GET', 'finance_expenses', null, q);
         return (rows || []).map(r => this._normFinanceExpense(r));
       }
@@ -3936,6 +4103,60 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       return { ok: false, msg: 'Tipo de movimentação inválido.' };
     },
 
+    /** Apaga lançamentos do histórico da conta e reverte o impacto no saldo (sem criar novo tx). */
+    async deleteContaCorrenteHistory(empId, txIds, byUser = 'admin') {
+      const ids = [...new Set((txIds || []).map((id) => String(id || '').trim()).filter(Boolean))];
+      if (!ids.length) return { ok: false, msg: 'Nenhum lançamento selecionado.' };
+      const emp = await this.getUser(empId);
+      if (!emp) return { ok: false, msg: 'Usuário não encontrado.' };
+
+      const all = await this.getTransactions(empId).catch(() => []);
+      const byId = new Map((all || []).map((t) => [String(t.id), t]));
+      const selected = ids.map((id) => byId.get(id)).filter(Boolean);
+      if (!selected.length) return { ok: false, msg: 'Lançamentos não encontrados.' };
+
+      const money = this._isPartnerWalletUser(emp);
+      let current = money
+        ? this._moneyAmt(emp.points || emp.balance || 0)
+        : this._ptsBalance(emp);
+
+      for (const t of selected) {
+        const amt = money
+          ? this._moneyAmt(t.amount)
+          : (Number(t.amount) > 0 ? Number(t.amount) : NaN);
+        if (!Number.isFinite(amt) || amt <= 0) continue;
+        if (String(t.type) === 'credit') {
+          current = money
+            ? Math.max(0, Math.round((current - amt) * 100) / 100)
+            : Math.round((current - amt) * 100) / 100;
+        } else {
+          current = Math.round((current + amt) * 100) / 100;
+        }
+      }
+
+      await this.updateUser(empId, { balance: current, points: current });
+      _cacheDel('users');
+      _cacheDel('transactions');
+
+      const deletedIds = selected.map((t) => String(t.id));
+      if (this.online) {
+        for (const id of deletedIds) {
+          await supaReq('DELETE', 'transactions', null, `?id=eq.${encodeURIComponent(id)}`);
+        }
+      } else {
+        const list = (this._lget(this.LK.transactions) || [])
+          .filter((t) => !deletedIds.includes(String(t.id)));
+        this._lset(this.LK.transactions, list);
+      }
+
+      return {
+        ok: true,
+        balance: current,
+        deleted: deletedIds.length,
+        by_user: byUser || 'admin',
+      };
+    },
+
     _normFinanceAdiantamento(row) {
       if (!row || typeof row !== 'object') return row;
       let att = row.attachments;
@@ -4132,11 +4353,18 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       };
     },
 
+    /* Lista sem thread (JSON pode ter vários MB e estourar timeout do fetch). */
+    _TICKETS_LIST_COLS: 'id,subject,status,updatedAt,createdAt,created_at,updated_at,targetDept,openedById,openedByName,openedByDept,opened_by_name,opened_by_dept,employee_id,department',
+
+    _ticketsListQuery(extra = '') {
+      return `?select=${this._TICKETS_LIST_COLS}&order=updatedAt.desc,created_at.desc&limit=300${extra}`;
+    },
+
     async getTickets(empId=null, department=null) {
       if(this.online){
-        let q = '?select=*&order=created_at.desc';
-        if(empId) q = `?employee_id=eq.${empId}&select=*&order=created_at.desc`;
-        else if(department) q = `?department=eq.${department}&select=*&order=created_at.desc`;
+        let q = this._ticketsListQuery();
+        if(empId) q = this._ticketsListQuery(`&employee_id=eq.${encodeURIComponent(empId)}`);
+        else if(department) q = this._ticketsListQuery(`&department=eq.${encodeURIComponent(department)}`);
         return await supaReq('GET','tickets',null,q);
       }
       const all=this._lget(this.LK.tickets);
@@ -4363,12 +4591,17 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       if (this.online) {
         if (collection === 'proposals') {
           try {
-            return await supaReq('GET', 'proposals', null, this._proposalsListQuery());
+            return await this._fetchAllProposalPages(this._PROPOSALS_LIST_COLS);
           } catch (e) {
             console.warn('[DB] list(proposals) leve falhou, tentando id only:', e.message);
-            const ids = await supaReq('GET', 'proposals', null, '?select=id&order=created_at.desc&limit=500');
-            return ids || [];
+            return await this._fetchAllProposalPages('id', '', 800, 20);
           }
+        }
+        if (collection === 'tickets') {
+          return await supaReq('GET', 'tickets', null, this._ticketsListQuery());
+        }
+        if (collection === 'clients') {
+          return await this.getClients({ pageSize: 800 });
         }
         return await supaReq('GET', collection, null, '?select=*&order=created_at.desc&limit=500');
       }
@@ -4407,8 +4640,15 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         let existing = await this.get(collection, data.id);
 
         if (collection === 'clients') {
+          const createOnly = !!(data && data.__createOnly);
           const cpf = String(data.cpf || data.id || '').replace(/\D/g, '');
           if (!existing && cpf) existing = await this.findClientByCpf(cpf);
+          // Cadastro novo não pode virar PATCH silencioso (anti má-fé / mesmo CPF).
+          if (existing && createOnly) {
+            const err = new Error('CLIENT_DUP: Este cliente já está cadastrado. Cadastro duplicado bloqueado.');
+            err.code = 'CLIENT_DUP';
+            throw err;
+          }
           const row = this._sanitizeClientForApi(
             this._normalizeClientForDb(data, { isNew: !existing })
           );
@@ -4462,6 +4702,20 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       let idx = list.findIndex(i => String(i.id) === String(data.id));
       let normalized = { ...data };
       if (collection === 'clients') {
+        const createOnly = !!(data && data.__createOnly);
+        const digits = String(data.cpf || data.id || '').replace(/\D/g, '');
+        if (idx < 0 && digits) {
+          idx = list.findIndex((c) => {
+            const id = String(c.id || '').replace(/\D/g, '');
+            const cp = String(c.cpf || '').replace(/\D/g, '');
+            return id === digits || cp === digits;
+          });
+        }
+        if (idx > -1 && createOnly) {
+          const err = new Error('CLIENT_DUP: Este cliente já está cadastrado. Cadastro duplicado bloqueado.');
+          err.code = 'CLIENT_DUP';
+          throw err;
+        }
         normalized = this._sanitizeClientForApi(
           this._normalizeClientForDb(data, { isNew: idx < 0 })
         );
@@ -5649,11 +5903,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         {id:'jur01',name:'Jurídico J',email:'juridico@empresa.com',password:'123456',matricula:'JUR001',department:'Jurídico',role:'juridico',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'dir01',name:'Diretoria D',email:'diretoria@empresa.com',password:'123456',matricula:'DIR001',department:'Diretoria',role:'diretoria',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'ouv01',name:'Ouvidoria O',email:'ouvidoria@empresa.com',password:'123456',matricula:'OUV001',department:'Ouvidoria',role:'ouvidoria',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'sup01',name:'Supervisor Alpha',email:'sup1@soublu.com',password:'sup123',matricula:'SUP001',department:'Vendas',role:'supervisor',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'sup02',name:'Supervisor Beta',email:'sup2@soublu.com',password:'sup123',matricula:'SUP002',department:'Vendas',role:'supervisor',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'vend01',name:'Vendedor Um (Alpha)',email:'vend1@soublu.com',password:'vend123',matricula:'VND001',department:'Vendas',role:'vendedor',admin_id:'sup01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'vend02',name:'Vendedor Dois (Alpha)',email:'vend2@soublu.com',password:'vend123',matricula:'VND002',department:'Vendas',role:'vendedor',admin_id:'sup01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'vend03',name:'Vendedor Três (Beta)',email:'vend3@soublu.com',password:'vend123',matricula:'VND003',department:'Vendas',role:'vendedor',admin_id:'sup02',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
+        // demos Alpha/Beta/vendedores removidos — não devem voltar após Excluir
       ];
     },
     _seedProducts(){return[
@@ -5819,7 +6069,18 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
 
     async getRhEmployees() {
-      if (this.online) return await this._rhOnlineList('rh_employees', 'nome.asc');
+      if (this.online) {
+        try {
+          // Lista RH completa — limit 400 do _rhOnlineList cortava CPF em demissão/busca
+          const rows = await (typeof supaReq === 'function'
+            ? supaReq('GET', 'rh_employees', null, '?order=nome.asc&limit=3000')
+            : this._rhOnlineList('rh_employees', 'nome.asc'));
+          return Array.isArray(rows) ? rows : [];
+        } catch (e) {
+          console.error('[DB] getRhEmployees:', e);
+          return [];
+        }
+      }
       return this._sortUsersByName(this._lget(this.LK.rh_employees), 'nome');
     },
     async saveRhEmployee(employee) {

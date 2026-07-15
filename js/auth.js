@@ -89,6 +89,7 @@ const Auth = {
     return ['juridico', 'master', 'fundador', 'rh', 'gerencia'].includes(r);
   },
   folhaPagamentoPageHref() { return this.pageHref('folha-pagamento.html'); },
+  folhaPagamentoPageHrefFresh() { return this.pageHrefFresh('folha-pagamento.html'); },
   treinamentosPageHref() { return this.pageHref('treinamentos.html'); },
   treinamentosPageHrefFresh() { return this.pageHrefFresh('treinamentos.html'); },
   clubeBeneficiosPageHref() { return this.pageHref('clube-beneficios.html'); },
@@ -159,12 +160,16 @@ const Auth = {
 
   _sessionFromUser(user, loginAt) {
     const role = String(user.role || '').trim().toLowerCase();
+    const permissions = (user.permissions && typeof user.permissions === 'object')
+      ? user.permissions
+      : {};
     return {
       id: user.id,
       role,
       name: user.name,
       email: user.email,
       adminId: user.admin_id || user.id,
+      permissions,
       loginAt: loginAt || Date.now(),
     };
   },
@@ -197,7 +202,8 @@ const Auth = {
         }
       }
       const next = this._sessionFromUser(user, s.loginAt);
-      const changed = next.id !== s.id || next.role !== s.role || next.name !== s.name;
+      const changed = next.id !== s.id || next.role !== s.role || next.name !== s.name
+        || JSON.stringify(next.permissions || {}) !== JSON.stringify(s.permissions || {});
       this._writeSession(next);
       if (changed) {
         try { sessionStorage.setItem('soublu_session_synced', String(Date.now())); } catch (_) { /* noop */ }

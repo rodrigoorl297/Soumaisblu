@@ -639,13 +639,18 @@ window.downloadWithdrawalReceipt=downloadWithdrawalReceipt;
 
 function txTypeIcon(type){return{credit:'📈',debit:'💸',withdrawal:'🏦',purchase:'🛒'}[type]||'';}
 
-/** Valores em R$ no ranking de vendas — master, fundador e gerência (filtros período/status/fase). */
+/** Valores em R$ no ranking de vendas — master, fundador, gerência, Super Backoffice e flag explícita. */
 function canViewRankingSalesValues(user) {
   if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) {
     return true;
   }
   const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
-  const r = String(u?.role || '').toLowerCase();
+  if (!u) return false;
+  const perms = (u.permissions && typeof u.permissions === 'object') ? u.permissions : {};
+  if (perms.canViewRankingSalesValues === true) return true;
+  // Higor (Super Backoffice) — relatório/valores do ranking
+  if (String(u.id || '') === 'ump7c8hn7aowp3') return true;
+  const r = String(u.role || '').toLowerCase();
   return ['master', 'fundador', 'gerente', 'gerencia', 'admin', 'rh', 'financeiro', 'financial', 'sup_backoffice'].includes(r);
 }
 window.canViewRankingSalesValues = canViewRankingSalesValues;
@@ -769,10 +774,14 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
   if (!file) throw new Error('Arquivo inválido');
   const extRaw = (file.name && file.name.includes('.')) ? file.name.split('.').pop() : 'jpg';
   const ext = String(extRaw).replace(/[^a-zA-Z0-9]/g, '').slice(0, 8) || 'jpg';
-  const folder = subPath ? String(subPath).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80) : '';
-  const path = _UPLOAD_DOC_BUCKETS.has(bucket)
-    ? folder
-    : (folder ? `${folder}/img_${Date.now()}.${ext}` : `img_${Date.now()}.${ext}`);
+  const folder = subPath
+    ? String(subPath).replace(/\\/g, '/').replace(/[^a-zA-Z0-9_/-]/g, '_').replace(/\/+/g, '/').replace(/^\/+|\/+$/g, '').slice(0, 120)
+    : '';
+  /* PHP gera o nome final; path do Hostinger é só subpasta. Supabase precisa do objeto completo. */
+  const phpPath = folder;
+  const supabasePath = folder
+    ? `${folder}/img_${Date.now()}.${ext}`
+    : `img_${Date.now()}.${ext}`;
 
   const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
   const hostingerUp = String(_cfg.DB_BACKEND || '').toLowerCase() === 'hostinger' && _cfg.UPLOAD_URL && _cfg.API_KEY;
@@ -783,7 +792,7 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const q = new URLSearchParams({ bucket, path });
+      const q = new URLSearchParams({ bucket, path: phpPath });
       const res = await fetch(`${_cfg.UPLOAD_URL}?${q}`, {
         method: 'POST',
         headers: { 'X-API-Key': _cfg.API_KEY },
@@ -806,7 +815,7 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
 
   if (SUPABASE_CONFIGURED && typeof SUPABASE_URL !== 'undefined') {
     try {
-      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`, {
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${bucket}/${supabasePath}`, {
         method: 'POST',
         headers: {
           'apikey': SUPABASE_KEY,
@@ -817,7 +826,7 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
         body: file,
       });
       if (res.ok) {
-        return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
+        return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${supabasePath}`;
       }
       console.warn('[uploadImage]', bucket, res.status, await res.text().catch(() => ''));
     } catch (e) {

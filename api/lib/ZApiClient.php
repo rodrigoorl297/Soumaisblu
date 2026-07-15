@@ -67,43 +67,33 @@ final class ZApiClient
 
     public function request(string $method, string $path, ?array $body = null): array
     {
+        if (!class_exists('HttpClient', false)) {
+            require_once __DIR__ . '/HttpClient.php';
+        }
         $url = str_starts_with($path, 'http') ? $path : $this->endpoint($path);
-        $ch = curl_init($url);
         $headers = ['Content-Type: application/json'];
         if ($this->clientToken !== '') {
             $headers[] = 'Client-Token: ' . $this->clientToken;
         }
         $isMediaFetch = str_contains($path, 'download') || str_contains($path, 'base64');
-        $opts = [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST => strtoupper($method),
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => $isMediaFetch ? 45 : 15,
-            CURLOPT_ENCODING => '',
-        ];
+        $extra = [];
         if (defined('Z_API_SSL_VERIFY') && Z_API_SSL_VERIFY === false) {
-            $opts[CURLOPT_SSL_VERIFYPEER] = false;
-            $opts[CURLOPT_SSL_VERIFYHOST] = 0;
+            $extra[CURLOPT_SSL_VERIFYPEER] = false;
+            $extra[CURLOPT_SSL_VERIFYHOST] = 0;
         }
-        if ($body !== null) {
-            $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE);
+        $res = HttpClient::request($method, $url, $body, $headers, $isMediaFetch ? 45 : 15, 5, $extra);
+        if ($res['error'] !== '') {
+            throw new RuntimeException('Z-API: ' . $res['error']);
         }
-        curl_setopt_array($ch, $opts);
-        $raw = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err = curl_error($ch);
-        curl_close($ch);
-        if ($raw === false) {
-            throw new RuntimeException('Z-API: ' . ($err ?: 'falha na requisição'));
-        }
-        $decoded = json_decode($raw, true);
+        $raw = $res['body'];
+        $decoded = $res['json'];
         if (!is_array($decoded)) {
-            if (is_string($raw) && preg_match('/^[A-Za-z0-9+/=]{80,}$/', trim($raw))) {
+            if (is_string($raw) && preg_match('/^[A-Za-z0-9+\/=]{80,}$/', trim($raw))) {
                 return ['value' => 'data:image/png;base64,' . trim($raw)];
             }
             $decoded = ['raw' => $raw];
         }
+        $code = $res['code'];
         if ($code >= 400) {
             $msg = $decoded['message'] ?? $decoded['error'] ?? $raw;
             if (is_array($msg)) {

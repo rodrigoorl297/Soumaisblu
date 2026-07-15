@@ -17,7 +17,333 @@ const PainelSonhos = (() => {
 
   function eligible(role) {
     const r = String(role || '').trim().toLowerCase();
-    if (!r || EXCLUDED.has(r)) return false;
+    const ok = !!(r && !EXCLUDED.has(r));
+    return ok;
+  }
+
+  /** Roles with Admin master/dashboard access — skip sonhos on Financeiro/RH hubs. */
+  const HUB_MASTER_ROLES = new Set([
+    'master', 'fundador', 'digi_master', 'desenvolvedor', 'diretoria',
+    'gerente', 'gerencia', 'admin', 'financeiro', 'financial', 'rh',
+  ]);
+
+  function hasMasterPanelAccess(role, opts = {}) {
+    if (opts.canMasterPanel || opts.canPartnerDashboard || opts.canDashboard) return true;
+    const r = String(role || '').trim().toLowerCase();
+    if (HUB_MASTER_ROLES.has(r)) return true;
+    try {
+      if (typeof Auth !== 'undefined') {
+        if (typeof Auth.hasMasterPanel === 'function' && Auth.hasMasterPanel()) return true;
+        if (typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
+        const s = typeof Auth.getSession === 'function' ? Auth.getSession() : null;
+        if (s?.permissions?.canMasterPanel) return true;
+      }
+    } catch (_) { /* noop */ }
+    return false;
+  }
+
+  /** True when the mural should appear as home on secondary hubs (Financeiro/RH). */
+  function eligibleOnHub(role, opts = {}) {
+    if (!eligible(role)) return false;
+    if (hasMasterPanelAccess(role, opts)) return false;
+    return true;
+  }
+
+  function shouldShowOnSecondaryHub(role, opts = {}) {
+    return eligibleOnHub(role, opts);
+  }
+
+  /**
+   * Mural da empresa (Painel Inicial): somente master e fundador publicam.
+   */
+  function canManageAvisos(role, user) {
+    try {
+      if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
+    } catch (_) { /* noop */ }
+    const r = String(role || user?.role || '').trim().toLowerCase();
+    return r === 'master' || r === 'fundador';
+  }
+
+  function avisoAuthorLabel(post) {
+    const channel = String(post?.channel || post?.author_department || '').trim();
+    const name = String(post?.author_name || '').trim();
+    if (channel && name) return `${channel} · ${name}`;
+    if (channel) return channel;
+    if (name) return name;
+    return 'Comunicados';
+  }
+
+  function fmtAvisoDate(iso) {
+    if (!iso) return '';
+    try {
+      return new Date(iso).toLocaleString('pt-BR', {
+        timeZone: TZ,
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch (_) {
+      return String(iso);
+    }
+  }
+
+  function avisoAudienceMatch(post, user) {
+    const roles = post?.audience_roles || ['*'];
+    if (roles.includes('*')) return true;
+    const ur = String(user?.role || '').trim().toLowerCase();
+    return roles.map(x => String(x).trim().toLowerCase()).includes(ur);
+  }
+
+  function parseAvisoTitle(rawTitle) {
+    const raw = String(rawTitle || '').trim();
+    const m = raw.match(/^\[([^\]]{1,80})\]\s*(.*)$/s);
+    if (!m) return { channel: '', title: raw };
+    return { channel: m[1].trim(), title: (m[2] || '').trim() || m[1].trim() };
+  }
+
+  function formatAvisoTitle(channel, title) {
+    const t = String(title || '').trim();
+    const c = String(channel || '').trim();
+    if (!t) return '';
+    return c ? `[${c}] ${t}` : t;
+  }
+
+  async function enrichAvisoPosts(posts) {
+    const list = posts || [];
+    const authorIds = [...new Set(list.map((p) => p.created_by).filter(Boolean))];
+    const authorMap = {};
+    await Promise.all(authorIds.map(async (id) => {
+      try {
+        if (typeof DB !== 'undefined' && typeof DB.getUser === 'function') {
+          authorMap[id] = await DB.getUser(id);
+        }
+      } catch (_) { /* noop */ }
+    }));
+    return list.map((p) => {
+      const parsed = parseAvisoTitle(p.title);
+      const author = authorMap[p.created_by] || {};
+      return {
+        ...p,
+        channel: String(p.channel || parsed.channel || author.department || '').trim(),
+        title: parsed.title || p.title || '',
+        author_name: String(p.author_name || author.name || '').trim(),
+        author_department: String(p.author_department || author.department || parsed.channel || '').trim(),
+        author_photo_url: p.author_photo_url || author.photo_url || '',
+      };
+    });
+  }
+
+  async function loadAvisos(user) {
+    if (typeof DB === 'undefined' || typeof DB.getTrainingMuralPosts !== 'function') return [];
+    try {
+      const all = await DB.getTrainingMuralPosts({ companyOnly: true, activeOnly: true });
+      const filtered = (all || [])
+        .filter(p => avisoAudienceMatch(p, user))
+        .sort((a, b) => {
+          if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+          return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+        });
+      return enrichAvisoPosts(filtered);
+    } catch (e) {
+      console.warn('[PainelSonhos] avisos:', e?.message || e);
+      return [];
+    }
+  }
+
+  function renderAvisosSection(posts, canManage, user) {
+    const list = posts || [];
+    const composer = canManage
+      ? `<button type="button" class="mural-feed__composer" onclick="PainelSonhos.openAvisoEditor()">
+          <span class="mural-feed__composer-avatar">${typeof avatarHtml === 'function' ? avatarHtml(user?.name || 'A', 'avatar-sm', user?.photo_url || '') : '💬'}</span>
+          <span class="mural-feed__composer-text">Publicar aviso para toda a empresa…</span>
+        </button>`
+      : '';
+
+    const items = list.length
+      ? list.map(p => {
+          const id = escAttr(p.id);
+          const author = avisoAuthorLabel(p);
+          const avatar = typeof avatarHtml === 'function'
+            ? avatarHtml(p.author_name || author, 'avatar-sm', p.author_photo_url || '')
+            : '<span class="mural-feed__avatar-fallback" aria-hidden="true">📢</span>';
+          const manageBtns = canManage
+            ? `<div class="mural-feed__actions">
+                <button type="button" class="btn btn-outline btn-sm" onclick="PainelSonhos.openAvisoEditor('${id}')">Editar</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="PainelSonhos.removeAviso('${id}')">Excluir</button>
+              </div>`
+            : '';
+          const titleHtml = p.title
+            ? `<h4 class="mural-feed__title">${p.pinned ? '<span class="mural-feed__pin" title="Fixado">📌</span> ' : ''}${esc(p.title)}</h4>`
+            : '';
+          return `<article class="mural-feed__post${p.pinned ? ' is-pinned' : ''}" data-aviso-id="${id}">
+            <div class="mural-feed__post-head">
+              ${avatar}
+              <div class="mural-feed__meta">
+                <div class="mural-feed__author">${esc(author)}</div>
+                <time class="mural-feed__date">${esc(fmtAvisoDate(p.created_at))}</time>
+              </div>
+            </div>
+            ${titleHtml}
+            <div class="mural-feed__body">${esc(p.body || '')}</div>
+            ${manageBtns}
+          </article>`;
+        }).join('')
+      : '<p class="mural-feed__empty">Nenhum aviso publicado no mural da empresa.</p>';
+
+    const manageHead = canManage
+      ? '<button type="button" class="btn btn-primary btn-sm" onclick="PainelSonhos.openAvisoEditor()">+ Novo aviso</button>'
+      : '';
+
+    return `<div class="mural-feed" id="painelSonhosAvisos">
+      <div class="mural-feed__head">
+        <div>
+          <h3 class="mural-feed__heading">Mural da Empresa</h3>
+          <p class="mural-feed__sub">Avisos, comunicados e atualizações para todos · somente leitura</p>
+        </div>
+        ${manageHead}
+      </div>
+      ${composer}
+      <div class="mural-feed__list" id="painelSonhosAvisosList">${items}</div>
+    </div>`;
+  }
+
+  function ensureAvisoModal() {
+    if (document.getElementById('painelSonhosAvisoModal')) return;
+    document.body.insertAdjacentHTML('beforeend', `
+<div class="modal-overlay" id="painelSonhosAvisoModal">
+  <div class="modal painel-sonhos-modal" style="max-width:520px;">
+    <div class="modal-header">
+      <h3 id="painelSonhosAvisoModalTitle">Novo aviso</h3>
+      <button type="button" class="modal-close" onclick="PainelSonhos.closeAvisoEditor()"></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="psAvisoEditId"/>
+      <div class="form-group">
+        <label for="psAvisoChannel">Área / setor</label>
+        <input type="text" id="psAvisoChannel" class="form-control" maxlength="80" placeholder="Ex: Marketing, RH, Diretoria"/>
+      </div>
+      <div class="form-group">
+        <label for="psAvisoTitle">Título</label>
+        <input type="text" id="psAvisoTitle" class="form-control" maxlength="120" placeholder="Ex: Comunicado importante"/>
+      </div>
+      <div class="form-group">
+        <label for="psAvisoBody">Mensagem</label>
+        <textarea id="psAvisoBody" class="form-control" rows="5" placeholder="Texto do aviso / comunicado"></textarea>
+      </div>
+      <label class="painel-sonhos-aviso-check">
+        <input type="checkbox" id="psAvisoPinned"/> Fixar no topo
+      </label>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 20px 20px;">
+      <button type="button" class="btn btn-outline" onclick="PainelSonhos.closeAvisoEditor()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="PainelSonhos.saveAviso()">Publicar</button>
+    </div>
+  </div>
+</div>`);
+  }
+
+  async function openAvisoEditor(id) {
+    const user = await getUser();
+    if (!canManageAvisos(user?.role, user)) {
+      showToast('Somente master e fundador podem publicar no mural.', 'error');
+      return;
+    }
+    ensureAvisoModal();
+    const titleEl = document.getElementById('painelSonhosAvisoModalTitle');
+    document.getElementById('psAvisoEditId').value = id || '';
+    const channelEl = document.getElementById('psAvisoChannel');
+    if (!id) {
+      if (titleEl) titleEl.textContent = 'Novo aviso no mural';
+      if (channelEl) channelEl.value = user?.department || '';
+      document.getElementById('psAvisoTitle').value = '';
+      document.getElementById('psAvisoBody').value = '';
+      document.getElementById('psAvisoPinned').checked = false;
+      if (typeof openModal === 'function') openModal('painelSonhosAvisoModal');
+      else document.getElementById('painelSonhosAvisoModal')?.classList.add('open');
+      return;
+    }
+    if (titleEl) titleEl.textContent = 'Editar aviso';
+    try {
+      const p = await DB.getTrainingMuralPost(id);
+      if (!p) { showToast('Aviso não encontrado.', 'warning'); return; }
+      const parsed = parseAvisoTitle(p.title);
+      if (channelEl) channelEl.value = p.channel || parsed.channel || '';
+      document.getElementById('psAvisoTitle').value = parsed.title || p.title || '';
+      document.getElementById('psAvisoBody').value = p.body || '';
+      document.getElementById('psAvisoPinned').checked = !!p.pinned;
+      if (typeof openModal === 'function') openModal('painelSonhosAvisoModal');
+      else document.getElementById('painelSonhosAvisoModal')?.classList.add('open');
+    } catch (e) {
+      showToast('Não foi possível abrir o aviso.', 'error');
+    }
+  }
+
+  function closeAvisoEditor() {
+    if (typeof closeModal === 'function') closeModal('painelSonhosAvisoModal');
+    else document.getElementById('painelSonhosAvisoModal')?.classList.remove('open');
+  }
+
+  async function saveAviso() {
+    const user = await getUser();
+    if (!user?.id || !canManageAvisos(user.role, user)) {
+      showToast('Somente master e fundador podem publicar no mural.', 'error');
+      return;
+    }
+    const title = document.getElementById('psAvisoTitle')?.value?.trim();
+    const body = document.getElementById('psAvisoBody')?.value?.trim() || '';
+    const channel = document.getElementById('psAvisoChannel')?.value?.trim()
+      || user.department
+      || 'Comunicados';
+    if (!title) {
+      showToast('Informe o título do aviso.', 'warning');
+      return;
+    }
+    const row = {
+      id: document.getElementById('psAvisoEditId')?.value || undefined,
+      title: formatAvisoTitle(channel, title),
+      body,
+      pinned: !!document.getElementById('psAvisoPinned')?.checked,
+      active: true,
+      audience_roles: ['*'],
+      partner_root_id: null,
+      created_by: user.id,
+    };
+    showLoading('Publicando aviso...');
+    try {
+      await DB.saveTrainingMuralPost(row);
+      closeAvisoEditor();
+      showToast('Aviso publicado!', 'success');
+      await render(undefined, { avisosOnly: true });
+    } catch (e) {
+      alert('Erro ao salvar aviso: ' + (e?.message || e));
+    } finally {
+      hideLoading();
+    }
+  }
+
+  async function removeAviso(id) {
+    const user = await getUser();
+    if (!canManageAvisos(user?.role, user)) {
+      showToast('Somente master e fundador podem excluir avisos.', 'error');
+      return;
+    }
+    if (!id || !confirm('Excluir este aviso/comunicado?')) return;
+    try {
+      await DB.deleteTrainingMuralPost(id);
+      showToast('Aviso excluído.', 'success');
+      await render(undefined, { avisosOnly: true });
+    } catch (e) {
+      alert('Erro ao excluir: ' + (e?.message || e));
+    }
+  }
+
+  async function _updateAvisosSection(user) {
+    const host = document.getElementById('painelSonhosAvisos');
+    if (!host) return false;
+    const posts = await loadAvisos(user);
+    const html = renderAvisosSection(posts, canManageAvisos(user?.role, user), user);
+    host.outerHTML = html;
     return true;
   }
 
@@ -655,6 +981,7 @@ const PainelSonhos = (() => {
     const done = dreams.filter(d => d.done).length;
     const open = dreams.length - done;
     const withPhotos = dreams.filter(d => d.photoUrl).length;
+    const manageAvisos = canManageAvisos(user.role, user);
     const bolaoWelcome = (typeof BolaoCopa !== 'undefined' && typeof BolaoCopa.renderWelcomeHtml === 'function')
       ? await Promise.race([
         BolaoCopa.renderWelcomeHtml(),
@@ -669,6 +996,9 @@ const PainelSonhos = (() => {
     if (_editingDreamId && !editingDream) _editingDreamId = null;
 
     const shellExists = !!root.querySelector('.painel-sonhos-wrap');
+    if (shellExists && opts.avisosOnly) {
+      if (await _updateAvisosSection(user)) return;
+    }
     if (shellExists && opts.boardOnly) {
       _updateBoardSection(dreams);
       _updateHeroKpis(dreams);
@@ -679,8 +1009,14 @@ const PainelSonhos = (() => {
       return;
     }
 
+    const avisos = await loadAvisos(user);
+
     root.innerHTML = `
       <div class="painel-sonhos-wrap">
+        <div class="card card-padded mural-feed-wrap">
+          ${renderAvisosSection(avisos, manageAvisos, user)}
+        </div>
+
         <div class="painel-sonhos-hero">
           <div class="painel-sonhos-hero__content">
             <div class="painel-sonhos-hero__top">
@@ -1071,11 +1407,13 @@ const PainelSonhos = (() => {
   }
 
   function shouldLandOnInicio(role, opts = {}) {
-    if (!eligible(role)) return false;
-    if (opts.lojaMode || opts.perfilMode || opts.previewMode) return false;
-    if (opts.partnerOrg || opts.partnerLanding) return false;
-    if (opts.canMasterPanel || opts.canPartnerDashboard || opts.canDashboard) return false;
-    return true;
+    let result = true;
+    let reason = 'eligible';
+    if (!eligible(role)) { result = false; reason = 'not_eligible'; }
+    else if (opts.lojaMode || opts.perfilMode || opts.previewMode) { result = false; reason = 'mode_flag'; }
+    else if (opts.partnerOrg || opts.partnerLanding) { result = false; reason = 'partner'; }
+    else if (opts.canMasterPanel || opts.canPartnerDashboard || opts.canDashboard) { result = false; reason = 'master_or_dash'; }
+    return result;
   }
 
   function renderProfileTeaser() {
@@ -1126,6 +1464,10 @@ const PainelSonhos = (() => {
 
   return {
     eligible,
+    eligibleOnHub,
+    shouldShowOnSecondaryHub,
+    hasMasterPanelAccess,
+    canManageAvisos,
     greeting,
     render,
     renderAll,
@@ -1147,6 +1489,10 @@ const PainelSonhos = (() => {
     openDreamPhotoCadastro,
     cancelDreamEdit,
     focusNewDreamForm,
+    openAvisoEditor,
+    closeAvisoEditor,
+    saveAviso,
+    removeAviso,
     applyEmployeeNav,
     applyAdminNav,
     shouldLandOnInicio,

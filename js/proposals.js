@@ -187,6 +187,7 @@ window.Proposals = {
     '654 - Digimais',
     '465 - Capital Consig',
     '643 - Banco Pine',
+    '643 - Banco Amigoz',
     '321 - 321bank',
     '149 - Facta',
     '121 - Agibank',
@@ -201,6 +202,7 @@ window.Proposals = {
     '321 - 321bank',
     '318 - BMG',
     '270 - NEO',
+    '643 - Banco Amigoz',
   ],
 
   _VENDOR_SITUACOES: [
@@ -615,6 +617,49 @@ window.Proposals = {
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return window.PARTNER_ROOT_ID;
     if (r === 'supervisor' || r === 'sup_backoffice' || r === 'parceiro') return session?.id || null;
     return session?.adminId || session?.id || null;
+  },
+
+  async _proposalVendorScopeForSession(session) {
+    const scope = this._proposalVendorScopeAdmin(session);
+    const r = String(session?.role || '').toLowerCase();
+    if (r === 'supervisor' && !window.PARTNER_ROOT_ID
+      && typeof window._resolveMergedSupervisorAdminIds === 'function') {
+      const merged = await window._resolveMergedSupervisorAdminIds(session.id, session.name);
+      if (merged.length > 1) return merged;
+    }
+    return scope;
+  },
+
+  /** Mantém só propostas do time unificado da supervisora comercial. */
+  async _filterProposalsToSupervisorTeam(proposals, session) {
+    if (!Array.isArray(proposals)) return proposals;
+    const r = String(session?.role || '').toLowerCase();
+    if (r !== 'supervisor' || window.PARTNER_ROOT_ID) return proposals;
+    if (typeof window._getMergedTeamScopeIds !== 'function') return proposals;
+    const teamIds = await window._getMergedTeamScopeIds().catch(() => []);
+    const set = new Set(teamIds.map(String));
+    let usersByName = {};
+    try {
+      const users = typeof DB.getAllUsers === 'function' ? await DB.getAllUsers().catch(() => []) : [];
+      if (typeof _buildUsersByVendorName === 'function') {
+        usersByName = _buildUsersByVendorName(users);
+      } else if (typeof DB._normVendorName === 'function') {
+        (users || []).forEach((u) => {
+          const k = DB._normVendorName(u?.name);
+          if (k && u?.id) usersByName[k] = u.id;
+        });
+      }
+    } catch (_) { /* noop */ }
+    const filtered = proposals.filter((p) => {
+      const vid = typeof DB.resolveProposalVendorId === 'function'
+        ? DB.resolveProposalVendorId(p, usersByName)
+        : String(p.vendorId || p.vendor_id || p.employee_id || '').trim();
+      return vid && set.has(String(vid));
+    });
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'sup-team-fix',hypothesisId:'H2',location:'proposals.js:supervisor-team-filter',message:'supervisor proposals filtered',data:{before:proposals.length,after:filtered.length,scopeSize:set.size},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    return filtered;
   },
 
   /** Mantém só propostas da equipe do parceiro (vendedores vinculados). Master não usa. */
@@ -1206,24 +1251,34 @@ window.Proposals = {
   },
 
   _renderPagination: function(containerId, meta, goFn) {
-    const el = document.getElementById(containerId);
-    if (!el) return;
+    const targets = [containerId];
+    // Só no hub Financeiro: espelhar pager acima da tabela (Admin mantém layout clássico).
+    if (containerId === 'proposalsPagination' && window.SOUBLU_FINANCEIRO_PAGE) {
+      targets.push('proposalsPaginationTop');
+    } else if (containerId === 'proposalsPagination') {
+      const top = document.getElementById('proposalsPaginationTop');
+      if (top) top.innerHTML = '';
+    }
+    const nodes = targets.map((id) => document.getElementById(id)).filter(Boolean);
+    if (!nodes.length) return;
     const { page, pageSize, total } = meta;
     const totalPages = Math.max(1, Math.ceil((total || 0) / pageSize));
+    let html = '';
     if (total <= pageSize && totalPages <= 1) {
-      el.innerHTML = total > 0
+      html = total > 0
         ? `<span class="list-pagination__info">${total} proposta${total !== 1 ? 's' : ''}</span>`
         : '';
-      return;
-    }
-    const from = total ? (page - 1) * pageSize + 1 : 0;
-    const to = Math.min(page * pageSize, total);
-    el.innerHTML = `
+    } else {
+      const from = total ? (page - 1) * pageSize + 1 : 0;
+      const to = Math.min(page * pageSize, total);
+      html = `
       <div class="list-pagination">
         <button type="button" class="btn btn-outline btn-sm" ${page <= 1 ? 'disabled' : ''} onclick="${goFn}(${page - 1})">← Anterior</button>
         <span class="list-pagination__info">Página ${page} de ${totalPages} · ${from}–${to} de ${total}</span>
         <button type="button" class="btn btn-outline btn-sm" ${page >= totalPages ? 'disabled' : ''} onclick="${goFn}(${page + 1})">Próxima →</button>
       </div>`;
+    }
+    nodes.forEach((el) => { el.innerHTML = html; });
   },
 
   _initAdminProposalFilters: async function() {
@@ -1232,7 +1287,7 @@ window.Proposals = {
     if (selHeader.dataset.loaded === '1' && selHeader.options.length > 2) return;
     try {
       const session = Auth.getSession();
-      const scopeAdmin = this._proposalVendorScopeAdmin(session);
+      const scopeAdmin = await this._proposalVendorScopeForSession(session);
       const vendors = await DB.getVendorsForSelect(scopeAdmin);
       const opts = (vendors || [])
         .filter(v => v && v.id)
@@ -2270,6 +2325,83 @@ window.Proposals = {
     return p.createdAt || p.created_at || '';
   },
 
+  _parseProposalMeta: function(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
+    if (typeof raw === 'string') {
+      try {
+        const j = JSON.parse(raw);
+        return j && typeof j === 'object' && !Array.isArray(j) ? j : {};
+      } catch (_) { return {}; }
+    }
+    return {};
+  },
+
+  _parseProposalHistory: function(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === 'string') {
+      try {
+        const j = JSON.parse(raw);
+        return Array.isArray(j) ? j : [];
+      } catch (_) { return []; }
+    }
+    return [];
+  },
+
+  _isDigitacaoStatus: function(val) {
+    const s = String(val || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase().trim();
+    return s === 'DIGITACAO' || s.includes('DIGITACAO');
+  },
+
+  /** Primeiro horário em que a proposta entrou em Digitação (fila FIFO). */
+  _digitacaoAt: function(p) {
+    if (!p) return '';
+    if (p.digitacaoAt || p.digitacao_at) return p.digitacaoAt || p.digitacao_at;
+    const meta = this._parseProposalMeta(p.meta);
+    if (meta.digitacaoAt) return meta.digitacaoAt;
+    const hist = this._parseProposalHistory(p.history);
+    for (const h of hist) {
+      const action = String(h?.action || '');
+      // Aceita "→ [Digitação]" / "-> Digitação" mesmo com encoding quebrado.
+      if (/(→|->|⇒)\s*\[?\s*Digita/i.test(action) || /Status:.*Digita/i.test(action)) {
+        if (h.date) return h.date;
+      }
+    }
+    const st = p.statusOp || p.status_op || p.status || '';
+    if (this._isDigitacaoStatus(st)) {
+      return p.updatedAt || p.updated_at || p.createdAt || p.created_at || '';
+    }
+    return '';
+  },
+
+  _ensureDigitacaoTimestamp: function(proposal, prevStatus, prevStatusOp) {
+    if (!proposal) return proposal;
+    const nowOp = proposal.statusOp || proposal.status_op || proposal.status || '';
+    const entered = this._isDigitacaoStatus(nowOp)
+      && !this._isDigitacaoStatus(prevStatusOp)
+      && !this._isDigitacaoStatus(prevStatus);
+    // Coluna `meta` pode não existir no MySQL — marcar só via history (já gravada no save).
+    if (entered) {
+      proposal._digitacaoAtMark = new Date().toISOString();
+    }
+    return proposal;
+  },
+
+  _fmtDateTime: function(raw) {
+    if (!raw) return '—';
+    try {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      });
+    } catch (_) { return '—'; }
+  },
+
   _proposalSortAt: function(p) {
     if (typeof DB !== 'undefined' && typeof DB.proposalSortTime === 'function') {
       return DB.proposalSortTime(p);
@@ -2281,6 +2413,16 @@ window.Proposals = {
 
   _sortProposalsNewestFirst: function(list) {
     return (list || []).slice().sort((a, b) => this._proposalSortAt(b) - this._proposalSortAt(a));
+  },
+
+  /** Fila de digitação: quem entrou primeiro aparece primeiro. */
+  _sortProposalsDigitacaoFifo: function(list) {
+    return (list || []).slice().sort((a, b) => {
+      const ta = new Date(this._digitacaoAt(a) || 0).getTime() || 0;
+      const tb = new Date(this._digitacaoAt(b) || 0).getTime() || 0;
+      if (ta !== tb) return ta - tb;
+      return this._proposalSortAt(a) - this._proposalSortAt(b);
+    });
   },
 
   _cleanProposalDate: function(val) {
@@ -2347,9 +2489,12 @@ window.Proposals = {
   },
 
   _propDateStr: function(p) {
-    const raw = p?.createdAt || p?.created_at;
-    if (!raw) return '—';
-    try { return new Date(raw).toLocaleDateString('pt-BR'); } catch { return '—'; }
+    const created = this._fmtDateTime(p?.createdAt || p?.created_at);
+    const dig = this._digitacaoAt(p);
+    if (!dig) return created;
+    const digStr = this._fmtDateTime(dig);
+    if (digStr === '—' || digStr === created) return created;
+    return `${created}<div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Digitação: <strong>${digStr}</strong></div>`;
   },
 
   _clientsByCpfMap: function(clients) {
@@ -3248,13 +3393,20 @@ window.Proposals = {
       // getProposals(session.id) já restringe ao vendedor; não filtrar de novo.
     } else if (window.PARTNER_ROOT_ID) {
       proposals = await this._filterProposalsToPartnerOrg(proposals);
-    } else if (!this._canSeePartnerProposalsInAdminList()) {
-      proposals = await this._filterProposalsExcludePartnerOrg(proposals);
+    } else {
+      proposals = await this._filterProposalsToSupervisorTeam(proposals, session);
+      if (!this._canSeePartnerProposalsInAdminList()) {
+        proposals = await this._filterProposalsExcludePartnerOrg(proposals);
+      }
     }
     proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
     proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
-    proposals = this._sortProposalsNewestFirst(proposals);
+    if (this._isDigitacaoStatus(statusFilter)) {
+      proposals = this._sortProposalsDigitacaoFifo(proposals);
+    } else {
+      proposals = this._sortProposalsNewestFirst(proposals);
+    }
 
     this._propPerfLog('proposals.js:_fetchAdminProposalsFiltered', 'list fetched', {
       ms: Date.now() - t0, count: proposals.length, partnerRoot: !!window.PARTNER_ROOT_ID, fromCache: !!canUseCache,
@@ -3744,11 +3896,14 @@ window.Proposals = {
     proposal.entidade = gv('empPropEntidade');
     proposal.protocolo = gv('empPropProtocolo');
     proposal.obs = gv('empPropObs');
+    const oldStatus = proposal.status;
+    const oldStatusOp = proposal.statusOp || proposal.status_op || '';
     if (etapa) {
       proposal.statusOp = etapa;
       proposal.status = etapa;
     }
     this._syncProposalStatusFields(proposal);
+    this._ensureDigitacaoTimestamp(proposal, oldStatus, oldStatusOp);
 
     this._setFolderContext('empPropAnexosFolders', 'empProp');
     try {
@@ -3761,10 +3916,14 @@ window.Proposals = {
     }
 
     proposal.history = proposal.history || [];
+    let empAction = 'Proposta atualizada pelo vendedor';
+    if (etapa && String(etapa) !== String(oldStatusOp || oldStatus)) {
+      empAction = `Status: [${oldStatusOp || oldStatus || '—'}] → [${etapa}]`;
+    }
     proposal.history.push({
       date: new Date().toISOString(),
       actorName: user.name,
-      action: 'Proposta atualizada pelo vendedor',
+      action: empAction,
       note: proposal.obs || ''
     });
 
@@ -4111,16 +4270,20 @@ window.Proposals = {
     }
     proposal.status_op = proposal.statusOp;
     this._syncProposalStatusFields(proposal);
+    this._ensureDigitacaoTimestamp(proposal, oldStatus, oldStatusOp);
     proposal.posVenda        = gv('managePropPosVenda');
     proposal.nuvidio         = gv('managePropNuvidio');
     proposal.fases           = gv('managePropFases');
 
     const note = gv('managePropHistoryNote');
 
-    if (newStatus !== oldStatus || note || novaTabela) {
+    if (newStatus !== oldStatus || newStatusOp !== oldStatusOp || note || novaTabela) {
        proposal.history = proposal.history || [];
        let action = 'Atualização operacional';
        if (newStatus !== oldStatus) action = `Status: [${oldStatus}] → [${newStatus}]`;
+       else if (newStatusOp && newStatusOp !== oldStatusOp) {
+         action = `Status: [${oldStatusOp || oldStatus}] → [${newStatusOp}]`;
+       }
        if (novaTabela && novaTabela !== (proposal._prevTabela || '')) {
          const pctLabel = Math.round((this._tabelaPct[novaTabela]??1)*100);
          action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
@@ -4243,9 +4406,15 @@ window.Proposals = {
       await DB.deleteProposal(id);
       delete this._adminEditCache[id];
       delete this._employeeEditCache[id];
+      if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) {
+        SalesRanking.invalidateCache();
+      }
       if (fromModal) closeModal('manageProposalModal');
       if (typeof showToast === 'function') showToast('Proposta excluída.', 'success');
       await this.renderAdminList();
+      if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
+        try { await renderAdminRanking(); } catch (_) { /* noop */ }
+      }
     } catch (e) {
       console.error('[masterDeleteProposal]', e);
       alert('Erro ao excluir proposta: ' + (e.message || 'tente novamente'));

@@ -111,6 +111,19 @@ function _digits(v) {
   return String(v || '').replace(/\D/g, '');
 }
 
+/** CPF key: digits only, pad to 11 when short (numeric storage drop leading zeros). */
+function _cpfKey(v) {
+  const d = _digits(v);
+  if (!d) return '';
+  if (d.length < 11 && d.length >= 9) return d.padStart(11, '0');
+  return d;
+}
+
+function _rhNotify(msg, type = 'info') {
+  if (typeof showToast === 'function') showToast(msg, type);
+  else alert(msg);
+}
+
 function _rhAuthor() {
   const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
   return s?.name || 'RH';
@@ -120,10 +133,192 @@ function _empById(id) {
   return (window._allEmployees || []).find(e => String(e.id) === String(id));
 }
 
+function _empCpfCandidates(e) {
+  if (!e || typeof e !== 'object') return [];
+  return [e.cpf, e.document, e.documento, e.cpf_cnpj, e.doc].filter(Boolean);
+}
+
+function _empMatchesCpf(e, key) {
+  if (!key) return false;
+  return _empCpfCandidates(e).some((f) => _cpfKey(f) === key);
+}
+
+function _upsertLocalEmployee(emp) {
+  if (!emp) return;
+  const list = window._allEmployees || (window._allEmployees = []);
+  const key = _cpfKey(emp.cpf);
+  const idx = list.findIndex((e) =>
+    (emp.id && String(e.id) === String(emp.id))
+    || (key && _empMatchesCpf(e, key))
+    || (emp.user_id && e.user_id && String(e.user_id) === String(emp.user_id))
+  );
+  const row = (typeof window._normalizeRhEmployeeRow === 'function')
+    ? window._normalizeRhEmployeeRow(emp)
+    : emp;
+  if (idx >= 0) list[idx] = { ...list[idx], ...row };
+  else list.push(row);
+}
+
 function _empByCpf(cpf) {
-  const d = _digits(cpf);
-  if (!d) return null;
-  return (window._allEmployees || []).find(e => _digits(e.cpf) === d);
+  const key = _cpfKey(cpf);
+  if (!key) return null;
+  return (window._allEmployees || []).find((e) => _empMatchesCpf(e, key)) || null;
+}
+
+function _userToRhEmpShape(u) {
+  if (!u) return null;
+  return {
+    id: '',
+    user_id: u.id || '',
+    cpf: _cpfKey(u.cpf),
+    nome: u.name || u.nome || '',
+    contato: u.phone || u.phone1 || '',
+    email: u.email || '',
+    email_pessoal: u.email || '',
+    matricula: u.matricula || '',
+    departamento: u.department || '',
+    cargo: u.role || '',
+    status: u.active === false ? 'inativo' : 'ativo',
+    demitido: false,
+    _fromUsersOnly: true,
+  };
+}
+
+/**
+ * Resolve colaborador por CPF: cache RH → API rh_employees → users.
+ * Evita falso "não encontrado" por lista limitada (limit 400) ou CPF só em users.
+ */
+async function _resolveEmployeeByCpf(cpfRaw) {
+  const key = _cpfKey(cpfRaw);
+  if (key.length !== 11) {
+    return { error: 'Informe um CPF válido (11 dígitos).' };
+  }
+
+  let emp = _empByCpf(key);
+  if (emp) return { emp };
+
+  const tryOnlineRh = async () => {
+    if (typeof DB === 'undefined' || !DB.online || typeof supaReq !== 'function') return null;
+    const variants = [key];
+    const trimmed = key.replace(/^0+/, '');
+    if (trimmed && trimmed !== key) variants.push(trimmed);
+    const fmt = key.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
+    if (fmt) variants.push(fmt);
+    for (const v of variants) {
+      try {
+        const rows = await supaReq(
+          'GET',
+          'rh_employees',
+          null,
+          `?cpf=eq.${encodeURIComponent(v)}&limit=5`
+        );
+        if (Array.isArray(rows) && rows[0]) return rows[0];
+      } catch (_) { /* next variant */ }
+    }
+    return null;
+  };
+
+  try {
+    const online = await tryOnlineRh();
+    if (online) {
+      emp = (typeof window._normalizeRhEmployeeRow === 'function')
+        ? window._normalizeRhEmployeeRow(online)
+        : online;
+      _upsertLocalEmployee(emp);
+      return { emp };
+    }
+  } catch (e) {
+    console.warn('[rh-ops] lookup rh_employees:', e?.message || e);
+  }
+
+  try {
+    if (typeof DB !== 'undefined' && typeof DB.getRhEmployees === 'function') {
+      const list = await DB.getRhEmployees().catch(() => []);
+      const norm = (list || []).map((r) =>
+        (typeof window._normalizeRhEmployeeRow === 'function') ? window._normalizeRhEmployeeRow(r) : r
+      );
+      window._allEmployees = norm;
+      emp = _empByCpf(key);
+      if (emp) return { emp };
+    }
+  } catch (e) {
+    console.warn('[rh-ops] refresh rh_employees:', e?.message || e);
+  }
+
+  let user = null;
+  try {
+    if (typeof DB !== 'undefined' && typeof DB.getUserByCpf === 'function') {
+      user = await DB.getUserByCpf(key).catch(() => null);
+    }
+  } catch (_) { /* noop */ }
+
+  if (!user) {
+    try {
+      let users = window._allSystemUsersCache || [];
+      if (!users.length && typeof DB !== 'undefined' && typeof DB.getAllUsers === 'function') {
+        users = await DB.getAllUsers().catch(() => []);
+        window._allSystemUsersCache = users || [];
+      }
+      user = (users || []).find((u) => _cpfKey(u.cpf) === key) || null;
+    } catch (_) { /* noop */ }
+  }
+
+  if (user) {
+    emp = (window._allEmployees || []).find((e) =>
+      String(e.id) === String(user.id)
+      || String(e.user_id || '') === String(user.id)
+      || _empMatchesCpf(e, key)
+    ) || null;
+    if (emp) return { emp };
+
+    /* getUserByCpf pode devolver id de rh_employees (fallback) — não criar duplicata */
+    if (user.id && typeof DB !== 'undefined' && DB.online && typeof supaReq === 'function') {
+      try {
+        const byId = await supaReq(
+          'GET',
+          'rh_employees',
+          null,
+          `?id=eq.${encodeURIComponent(user.id)}&limit=1`
+        );
+        if (Array.isArray(byId) && byId[0]) {
+          emp = (typeof window._normalizeRhEmployeeRow === 'function')
+            ? window._normalizeRhEmployeeRow(byId[0])
+            : byId[0];
+          _upsertLocalEmployee(emp);
+          return { emp };
+        }
+      } catch (_) { /* continua */ }
+    }
+
+    const shape = _userToRhEmpShape(user);
+    try {
+      if (typeof DB !== 'undefined' && typeof DB.saveRhEmployee === 'function') {
+        const saved = await DB.saveRhEmployee({
+          cpf: key,
+          nome: shape.nome,
+          user_id: user.id,
+          contato: shape.contato,
+          email: shape.email,
+          email_pessoal: shape.email_pessoal,
+          matricula: shape.matricula,
+          departamento: shape.departamento,
+          status: 'ativo',
+        });
+        emp = (typeof window._normalizeRhEmployeeRow === 'function')
+          ? window._normalizeRhEmployeeRow(saved)
+          : saved;
+        _upsertLocalEmployee(emp);
+        return { emp };
+      }
+    } catch (e) {
+      console.warn('[rh-ops] auto-create rh_employee from user:', e?.message || e);
+    }
+    shape.id = user.id;
+    _upsertLocalEmployee(shape);
+    return { emp: shape };
+  }
+
+  return { error: 'Funcionário não encontrado para este CPF.' };
 }
 
 function _activeEmployees() {
@@ -260,10 +455,20 @@ async function reloadRhOpsData() {
 }
 
 function openFolhaPagamento() {
-  const rel = typeof Auth !== 'undefined' && Auth._isInPagesDir?.()
-    ? 'folha-pagamento.html'
-    : 'pages/folha-pagamento.html';
-  window.location.href = typeof Auth.resolveHref === 'function' ? Auth.resolveHref(rel) : rel;
+  const href = typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHrefFresh === 'function'
+    ? Auth.folhaPagamentoPageHrefFresh()
+    : (typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHref === 'function'
+      ? Auth.folhaPagamentoPageHref()
+      : (typeof window.soubluPage === 'function'
+        ? window.soubluPage('folha-pagamento.html')
+        : (typeof Auth !== 'undefined' && Auth._isInPagesDir?.()
+          ? 'folha-pagamento.html'
+          : 'pages/folha-pagamento.html')));
+  window.location.assign(
+    typeof href === 'string' && href.indexOf('http') === 0
+      ? href
+      : (typeof Auth !== 'undefined' && typeof Auth.resolveHref === 'function' ? Auth.resolveHref(href) : href)
+  );
 }
 
 /* ── Kanban ── */
@@ -1104,7 +1309,7 @@ function openDemissaoModal(row) {
       carta: ck.anexo_carta || '',
       entrevista: ck.anexo_entrevista || '',
     };
-    buscarDadosDemissao();
+    buscarDadosDemissao({ quiet: true, fallbackRow: row });
     onDemissaoAvisoChange();
     onDemissaoJustaCausaChange();
   }
@@ -1113,20 +1318,56 @@ function openDemissaoModal(row) {
   _openRhModal('demissaoModal');
 }
 
-function buscarDadosDemissao() {
-  const emp = _empByCpf(document.getElementById('demissao_cpf')?.value);
-  if (!emp) {
-    alert('Funcionário não encontrado para este CPF.');
-    _renderEmpInfoPanel('demissao_emp_info', null);
-    document.getElementById('demissao_employee_id').value = '';
-    return;
+async function buscarDadosDemissao(opts) {
+  const quiet = !!(opts && opts.quiet);
+  const fallbackRow = opts && opts.fallbackRow;
+  const cpfRaw = document.getElementById('demissao_cpf')?.value;
+  if (typeof showLoading === 'function') showLoading('Buscando colaborador...');
+  try {
+    let emp = null;
+    const empIdHint = document.getElementById('demissao_employee_id')?.value;
+    if (empIdHint) emp = _empById(empIdHint);
+
+    const res = emp ? { emp } : await _resolveEmployeeByCpf(cpfRaw);
+    emp = res.emp || null;
+
+    if (!emp && fallbackRow && (fallbackRow.employee_nome || fallbackRow.employee_cpf)) {
+      emp = {
+        id: fallbackRow.employee_id || '',
+        cpf: fallbackRow.employee_cpf || cpfRaw || '',
+        nome: fallbackRow.employee_nome || '—',
+        matricula: '',
+        cargo: '',
+        departamento: '',
+        supervisor: '',
+        advertencias: 0,
+        suspensoes: 0,
+        demitido: true,
+        status: 'demitido',
+      };
+      if (emp.id || emp.cpf) _upsertLocalEmployee(emp);
+    }
+
+    if (!emp) {
+      if (!quiet) _rhNotify(res.error || 'Funcionário não encontrado para este CPF.', 'warning');
+      _renderEmpInfoPanel('demissao_emp_info', null);
+      const hid = document.getElementById('demissao_employee_id');
+      if (hid && !fallbackRow) hid.value = '';
+      return;
+    }
+    if (!quiet && (emp.demitido || emp.status === 'demitido')) {
+      _rhNotify('Este colaborador já consta como desligado.', 'warning');
+    }
+    const hid = document.getElementById('demissao_employee_id');
+    if (hid) hid.value = emp.id || '';
+    _renderEmpInfoPanel('demissao_emp_info', emp);
+    if (!quiet) _rhNotify('Dados do colaborador carregados.', 'success');
+  } catch (e) {
+    console.error('[rh-ops] buscarDadosDemissao:', e);
+    if (!quiet) _rhNotify(e?.message || 'Falha ao buscar colaborador.', 'error');
+  } finally {
+    if (typeof hideLoading === 'function') hideLoading();
   }
-  if (emp.demitido || emp.status === 'demitido') {
-    alert('Este colaborador já consta como desligado.');
-  }
-  document.getElementById('demissao_employee_id').value = emp.id;
-  _renderEmpInfoPanel('demissao_emp_info', emp);
-  if (typeof showToast === 'function') showToast('Dados do colaborador carregados.', 'success');
 }
 
 function onDemissaoAvisoChange() {
@@ -1182,15 +1423,27 @@ async function _uploadDemAnexos(protocolo) {
 async function salvarDemissao(event) {
   if (event) event.preventDefault();
 
-  const empId = document.getElementById('demissao_employee_id').value;
-  const emp = _empById(empId);
-  if (!emp) { alert('Busque o CPF do colaborador antes de salvar.'); return; }
+  let empId = document.getElementById('demissao_employee_id').value;
+  let emp = _empById(empId);
+  if (!emp) {
+    const resolved = await _resolveEmployeeByCpf(document.getElementById('demissao_cpf')?.value);
+    emp = resolved.emp || null;
+    if (emp?.id) {
+      empId = emp.id;
+      const hid = document.getElementById('demissao_employee_id');
+      if (hid) hid.value = empId;
+    }
+  }
+  if (!emp) {
+    _rhNotify('Busque o CPF do colaborador antes de salvar.', 'warning');
+    return;
+  }
 
   const motivo = document.getElementById('demissao_motivo').value.trim();
   const dataSol = document.getElementById('demissao_data_solicitacao').value;
   const solicitante = document.getElementById('demissao_solicitante').value.trim();
   if (!motivo || !dataSol || !solicitante) {
-    alert('Preencha motivo, data da solicitação e solicitante.');
+    _rhNotify('Preencha motivo, data da solicitação e solicitante.', 'warning');
     return;
   }
 
@@ -1242,8 +1495,7 @@ async function salvarDemissao(event) {
   _closeRhModal('demissaoModal');
   if (typeof reloadAllData === 'function') await reloadAllData();
   await reloadRhOpsData();
-  if (typeof showToast === 'function') showToast('Demissão registrada com sucesso!', 'success');
-  else alert('Demissão registrada com sucesso!');
+  _rhNotify('Demissão registrada com sucesso!', 'success');
 }
 
 function renderDemissaoList() {

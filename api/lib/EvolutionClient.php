@@ -43,8 +43,10 @@ final class EvolutionClient
         if (!$this->isConfigured()) {
             throw new RuntimeException('Evolution API não configurada (config.evolution.local.php).');
         }
+        if (!class_exists('HttpClient', false)) {
+            require_once __DIR__ . '/HttpClient.php';
+        }
         $url = $this->baseUrl . '/' . ltrim($path, '/');
-        $ch = curl_init($url);
         $headers = [
             'Content-Type: application/json',
             'apikey: ' . $this->apiKey,
@@ -63,46 +65,30 @@ final class EvolutionClient
             : ($isMediaFetch || $isMediaSend || $isProfileOp
                 ? 20
                 : ($isFindChats ? 8 : ($isProfileFetch || $isConnProbe ? 5 : 8)));
-        $opts = [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CUSTOMREQUEST => strtoupper($method),
-            CURLOPT_HTTPHEADER => $headers,
-            CURLOPT_CONNECTTIMEOUT => 3,
-            CURLOPT_TIMEOUT => $timeout,
-            CURLOPT_TCP_KEEPALIVE => 1,                  // reaproveita conexão TLS
-            CURLOPT_TCP_NODELAY => true,
-            CURLOPT_FORBID_REUSE => false,
-            CURLOPT_FRESH_CONNECT => false,
-            CURLOPT_ENCODING => '',                      // aceita gzip (resposta menor)
-        ];
+        $extra = [];
         if (defined('EVOLUTION_SSL_VERIFY') && EVOLUTION_SSL_VERIFY === false) {
-            $opts[CURLOPT_SSL_VERIFYPEER] = false;
-            $opts[CURLOPT_SSL_VERIFYHOST] = 0;
+            $extra[CURLOPT_SSL_VERIFYPEER] = false;
+            $extra[CURLOPT_SSL_VERIFYHOST] = 0;
         }
-        if ($body !== null) {
-            if ($body instanceof \stdClass) {
-                $body = json_decode(json_encode($body), true) ?: [];
-            }
-            $opts[CURLOPT_POSTFIELDS] = json_encode($body, JSON_UNESCAPED_UNICODE);
+        $payload = $body;
+        if ($payload instanceof \stdClass) {
+            $payload = json_decode(json_encode($payload), true) ?: [];
         }
-        curl_setopt_array($ch, $opts);
-        $raw = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $err = curl_error($ch);
-        curl_close($ch);
-        if ($raw === false) {
-            throw new RuntimeException('Evolution: ' . ($err ?: 'falha na requisição'));
+        $res = HttpClient::request($method, $url, $payload, $headers, $timeout, 3, $extra);
+        if ($res['error'] !== '') {
+            throw new RuntimeException('Evolution: ' . $res['error']);
         }
-        $decoded = json_decode($raw, true);
+        $decoded = $res['json'] ?? ['raw' => $res['body']];
         if (!is_array($decoded)) {
-            $decoded = ['raw' => $raw];
+            $decoded = ['raw' => $res['body']];
         }
+        $code = $res['code'];
         if ($code >= 400) {
             $msg = $decoded['message']
                 ?? $decoded['error']
                 ?? ($decoded['response']['message'] ?? null)
                 ?? ($decoded['response']['error'] ?? null)
-                ?? $raw;
+                ?? $res['body'];
             if (is_array($msg)) {
                 $msg = json_encode($msg, JSON_UNESCAPED_UNICODE);
             }

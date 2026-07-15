@@ -37,7 +37,9 @@
     if (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function') {
       return DB.proposalAmount(p);
     }
-    return parseFloat(p?.valorFinal ?? p?.valor_final ?? p?.valor ?? 0) || 0;
+    const v = parseFloat(p?.valor ?? 0);
+    if (Number.isFinite(v) && v > 0) return v;
+    return parseFloat(p?.valorFinal ?? p?.valor_final ?? 0) || 0;
   }
 
   function proposalLabel(p) {
@@ -76,10 +78,7 @@
     return type ? all.filter((r) => r.type === type) : all;
   }
 
-  async function saveOp(record) {
-    if (typeof DB.saveFinancePropostaOp === 'function') {
-      return DB.saveFinancePropostaOp(record);
-    }
+  async function saveOpLocal(record) {
     let all = [];
     try { all = JSON.parse(localStorage.getItem(LS_KEY) || '[]'); } catch { all = []; }
     const idx = all.findIndex((r) => r.id === record.id);
@@ -87,6 +86,36 @@
     else all.unshift(record);
     localStorage.setItem(LS_KEY, JSON.stringify(all.slice(0, 500)));
     return record;
+  }
+
+  async function saveOp(record) {
+    if (typeof DB.saveFinancePropostaOp === 'function') {
+      try {
+        return await DB.saveFinancePropostaOp(record);
+      } catch (e) {
+        console.warn('[FinPropostas] saveFinancePropostaOp falhou, fallback local:', e?.message || e);
+        return saveOpLocal(record);
+      }
+    }
+    return saveOpLocal(record);
+  }
+
+  /** PATCH parcial — evita saveProposal completo (anexos/base64) que quebra a baixa. */
+  async function patchProposalLean(proposalId, fields) {
+    const id = String(proposalId || '').trim();
+    if (!id) throw new Error('ID da proposta é obrigatório.');
+    const patch = { id, ...fields };
+    if (typeof DB.updateProposal === 'function') {
+      const saved = await DB.updateProposal(id, patch);
+      if (!saved && typeof DB.saveProposal === 'function') {
+        return DB.saveProposal(patch, { skipHydrate: true });
+      }
+      return saved || patch;
+    }
+    if (typeof DB.saveProposal === 'function') {
+      return DB.saveProposal(patch, { skipHydrate: true });
+    }
+    throw new Error('Não foi possível atualizar a proposta.');
   }
 
   const FinPropostas = {
@@ -402,9 +431,9 @@
       // Comissão líquida automática pela faixa do parceiro (FinPropostas / baixa comissão).
       if (isPartner && (vcr == null || vcr === '') && typeof PartnerPerms !== 'undefined') {
         const prt = await this._resolvePartnerForVendor(vendor);
-        const valorBruto = typeof DB.proposalAmount === 'function'
-          ? DB.proposalAmount(proposal)
-          : parseFloat(proposal.valorFinal ?? proposal.valor_final ?? proposal.valor ?? 0);
+        const valorBruto = typeof DB.proposalGrossAmount === 'function'
+          ? DB.proposalGrossAmount(proposal)
+          : parseFloat(proposal.valor ?? proposal.valorFinal ?? proposal.valor_final ?? 0);
         const liquido = PartnerPerms.calcPartnerCommission(valorBruto, prt);
         if (liquido > 0) {
           const elV = document.getElementById(`${prefix}ValorComissao`);
@@ -698,11 +727,8 @@
 
       const dados = {
         comissaoRecebida: val(`${prefix}ComissaoRecebida`) || null,
-        comissao_recebida: val(`${prefix}ComissaoRecebida`) || null,
         comissaoElegivel: val(`${prefix}AptoComissao`) || null,
-        comissao_elegivel: val(`${prefix}AptoComissao`) || null,
         valorComissaoRecebida: valorComissao != null && !Number.isNaN(valorComissao) ? valorComissao : null,
-        valor_comissao_recebida: valorComissao != null && !Number.isNaN(valorComissao) ? valorComissao : null,
       };
 
       const origemParceiro = val(`${prefix}OrigemParceiro`) || null;
@@ -776,26 +802,20 @@
           }
         }
 
-        const prevMeta = this._parseProposalMeta(p);
-        const metaPatch = { ...prevMeta };
         if (creditInfo?.ok) {
-          metaPatch.comissao_conta_creditada = creditInfo.newTotal;
-          metaPatch.comissao_conta_creditada_em = new Date().toISOString();
-          metaPatch.comissao_conta_creditada_para = creditInfo.targetId;
+          op.comissao_conta_creditada = creditInfo.newTotal;
+          op.comissao_conta_creditada_para = creditInfo.targetId;
         }
 
-        const updated = {
-          ...p,
-          ...dados,
-          meta: metaPatch,
-          updatedAt: new Date().toISOString(),
-          obs: typeof DB._appendProposalObsLine === 'function'
-            ? DB._appendProposalObsLine(p.obs, `[BAIXA COMISSÃO] ${new Date().toLocaleString('pt-BR')}`)
-            : `${String(p.obs || '').trim()}\n[BAIXA COMISSÃO] ${new Date().toLocaleString('pt-BR')}`.trim(),
-        };
-        if (typeof DB.saveProposal === 'function') await DB.saveProposal(updated);
-        else await DB.updateProposal(p.id, updated);
+        const obsLine = `[BAIXA COMISSÃO] ${new Date().toLocaleString('pt-BR')}`;
+        const obs = typeof DB._appendProposalObsLine === 'function'
+          ? DB._appendProposalObsLine(p.obs, obsLine)
+          : `${String(p.obs || '').trim()}\n${obsLine}`.trim();
+
         await saveOp(op);
+        await patchProposalLean(p.id, { ...dados, obs });
+
+        const updated = { ...p, ...dados, obs, updatedAt: new Date().toISOString() };
         this._baixaOpsByProposal = null;
         this._drawerProposal = updated;
         if (creditInfo?.ok) {
@@ -812,7 +832,12 @@
           await this._renderHistorico();
         }
       } catch (e) {
-        showToast(e.message || 'Erro ao salvar.', 'error');
+        const msg = String(e?.message || e || '');
+        if (/ATTACHMENTS_TOO_LARGE|PAYLOAD_TOO_LARGE/i.test(msg)) {
+          showToast('Erro ao salvar: anexos da proposta estão grandes demais. Tente novamente.', 'error');
+        } else {
+          showToast(msg || 'Erro ao salvar.', 'error');
+        }
       } finally {
         hideLoading();
       }
@@ -907,17 +932,12 @@
         }
 
         const linhaObs = `[PREJUÍZO ${status}] ${descricao.slice(0, 120)}${status === 'IMPROCEDENTE' ? ` — 5% (${fmtMoney(op.valor_debito_pct)}) para todos` : ` — ${fmtMoney(valorDebito)}`}`;
-        const updated = {
-          ...p,
-          updatedAt: new Date().toISOString(),
-          obs: typeof DB._appendProposalObsLine === 'function'
-            ? DB._appendProposalObsLine(p.obs, linhaObs)
-            : `${String(p.obs || '').trim()}\n${linhaObs}`.trim(),
-        };
-        if (typeof DB.saveProposal === 'function') await DB.saveProposal(updated);
-        else await DB.updateProposal(p.id, updated);
-
+        const obs = typeof DB._appendProposalObsLine === 'function'
+          ? DB._appendProposalObsLine(p.obs, linhaObs)
+          : `${String(p.obs || '').trim()}\n${linhaObs}`.trim();
         await saveOp(op);
+        await patchProposalLean(p.id, { obs });
+        const updated = { ...p, obs, updatedAt: new Date().toISOString() };
         this._prejuizoOpsByProposal = null;
         this._drawerProposal = updated;
         const okCount = (op.debitos_improcedente || op.debitos || []).filter((d) => d.ok).length;
@@ -997,17 +1017,12 @@
         op.debitos = debits;
 
         const linhaObs = `[DÉBITO PARCEIRO] ${parceiroNome} — ${parcelas}X de ${fmtMoney(valorParcela)} (estorno ${fmtMoney(valorEstorno)}${custas > 0 ? ` + custas ${fmtMoney(custas)}` : ''})`;
-        const updated = {
-          ...p,
-          updatedAt: new Date().toISOString(),
-          obs: typeof DB._appendProposalObsLine === 'function'
-            ? DB._appendProposalObsLine(p.obs, linhaObs)
-            : `${String(p.obs || '').trim()}\n${linhaObs}`.trim(),
-        };
-        if (typeof DB.saveProposal === 'function') await DB.saveProposal(updated);
-        else await DB.updateProposal(p.id, updated);
-
+        const obs = typeof DB._appendProposalObsLine === 'function'
+          ? DB._appendProposalObsLine(p.obs, linhaObs)
+          : `${String(p.obs || '').trim()}\n${linhaObs}`.trim();
         await saveOp(op);
+        await patchProposalLean(p.id, { obs });
+        const updated = { ...p, obs, updatedAt: new Date().toISOString() };
         this._debitoOpsByProposal = null;
         this._drawerProposal = updated;
         const okCount = debits.filter((d) => d.ok).length;

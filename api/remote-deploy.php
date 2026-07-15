@@ -8,7 +8,7 @@ header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Headers: Content-Type, X-API-Key');
 
 if (!soublu_api_auth_ok()) {
-    soublu_json(['ok' => false, 'error' => 'N├úo autorizado.'], 401);
+    soublu_json(['ok' => false, 'error' => 'Nao autorizado.'], 401);
 }
 
 $allowed = [
@@ -27,6 +27,10 @@ $allowed = [
     'api/lib/WhaticketClient.php',
     'api/lib/WhatsAppClientFactory.php',
     'api/lib/WhatsAppRepository.php',
+    'api/lib/HttpClient.php',
+    'api/lib/SistemaWebClient.php',
+    'api/folha_api.php',
+    'config.sistemaweb.local.php.example',
     'api/lib/SupabaseClient.php',
     'api/lib/SupabaseLegacy.php',
     'api/repair-proposal-attachments.php',
@@ -67,6 +71,7 @@ $allowed = [
     'js/employee.js',
     'js/admin.js',
     'js/sales-ranking.js',
+    'js/vendor-tier-points.js',
     'js/rh-relatorios.js',
     'js/whatsapp-chat.js',
     'js/wa-audio-recorder.js',
@@ -74,9 +79,23 @@ $allowed = [
     'js/whatsapp-kanban.js',
     'js/bolao-copa.js',
     'js/painel-sonhos.js',
+    'css/painel-sonhos.css',
     'css/bolao-copa.css',
     'css/global.css',
+    'css/layout.css',
+    'css/variables.css',
+    'css/folha-pagamento.css',
     'css/whatsapp-chat.css',
+    'css/whatsapp-app.css',
+    'css/bootstrap.min.css',
+    'js/bootstrap.bundle.min.js',
+    'js/folha-pagamento.js',
+    'js/leads-import.js',
+    'pages/folha-pagamento.html',
+    'pages/treinamentos.html',
+    'pages/leads-manager.html',
+    'leads-manager.html',
+    'pages/admin-beneficios.html',
     'admin.html',
     'clube-beneficios.html',
     'pages/admin.html',
@@ -116,6 +135,7 @@ $allowed = [
     'js/pix-automatico-credito.js',
     'js/financeiro-propostas.js',
     'js/financeiro-boot.js',
+    'js/financeiro-page.js',
     'js/conta-corrente.js',
     'js/fiscal-parceiro.js',
     'js/fontedata.js',
@@ -152,14 +172,14 @@ if ($path === '' || $content === false) {
 }
 
 if (!in_array($path, $allowed, true)) {
-    soublu_json(['ok' => false, 'error' => 'path inv├ílido ou n├úo permitido'], 400);
+    soublu_json(['ok' => false, 'error' => 'path invalido ou nao permitido'], 400);
 }
 
 $root = dirname(__DIR__);
 $dest = $root . '/' . $path;
 $parent = dirname($dest);
 if (!is_dir($parent) && !mkdir($parent, 0755, true) && !is_dir($parent)) {
-    soublu_json(['ok' => false, 'error' => 'N├úo foi poss├¡vel criar pasta destino.'], 500);
+    soublu_json(['ok' => false, 'error' => 'Nao foi possivel criar pasta destino.'], 500);
 }
 
 if (file_put_contents($dest, $content) === false) {

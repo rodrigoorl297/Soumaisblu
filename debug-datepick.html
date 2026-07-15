@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Date picker hit-test</title>
+  <link rel="stylesheet" href="css/variables.css"/>
+  <link rel="stylesheet" href="css/layout.css?v=datepick1"/>
+  <style>body{font-family:sans-serif;padding:40px}.team-billing-dates{margin-top:20px}</style>
+</head>
+<body>
+  <h1>INTERVALO</h1>
+  <div class="team-billing-dates">
+    <input type="date" class="team-billing-date-input" id="filterDateFrom" value="2026-07-01"/>
+    <span class="team-billing-date-sep">até</span>
+    <input type="date" class="team-billing-date-input" id="filterDateTo" value="2026-07-31"/>
+  </div>
+  <pre id="out"></pre>
+  <script>
+    function report(tag) {
+      const el = document.getElementById('filterDateFrom');
+      const cs = getComputedStyle(el);
+      const ind = el;
+      const data = {
+        tag,
+        position: cs.position,
+        cursor: cs.cursor,
+        hasShowPicker: typeof el.showPicker === 'function',
+      };
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},
+        body:JSON.stringify({sessionId:'7a80a8',runId:'date-picker-local',hypothesisId:'A',location:'debug-datepick.html',message:'date input css',data,timestamp:Date.now()})
+      }).catch(()=>{});
+      document.getElementById('out').textContent = JSON.stringify(data,null,2);
+    }
+    report('boot');
+    document.getElementById('filterDateFrom').addEventListener('click', () => {
+      try { document.getElementById('filterDateFrom').showPicker(); report('clicked-showPicker'); }
+      catch(e){ report('click-fail:'+e.message); }
+    });
+  </script>
+</body>
+</html>

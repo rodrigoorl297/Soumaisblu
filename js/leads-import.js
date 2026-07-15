@@ -19,6 +19,18 @@ const LeadsImport = {
    * Returns: { headers: string[], rows: object[], totalRows: number }
    */
   async parseFile(file) {
+    if (typeof XLSX === 'undefined') {
+      if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+      else {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
+          s.onload = resolve;
+          s.onerror = () => reject(new Error('SheetJS'));
+          document.head.appendChild(s);
+        });
+      }
+    }
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 

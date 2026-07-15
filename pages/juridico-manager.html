@@ -12,50 +12,14 @@
   <link rel="apple-touch-icon" href="images/logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-  <link rel="stylesheet" href="../css/variables.css"/>
-  <link rel="stylesheet" href="../css/global.css"/>
+  <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
+  <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
+  <link rel="stylesheet" href="../css/global.css?v=modal-bs1"/>
   <link rel="stylesheet" href="../css/colors-orange.css"/>
   <link rel="stylesheet" href="../css/leads.css"/>
-  <link rel="stylesheet" href="../css/layout.css"/>
+  <link rel="stylesheet" href="../css/layout.css?v=esteira1"/>
   <link rel="stylesheet" href="../css/whatsapp-chat.css?v=wa56"/>
-  <style>
-    .juridico-sidebar-account {
-      cursor: pointer;
-      border-radius: 10px;
-      transition: background 0.15s;
-    }
-    .juridico-sidebar-account:hover {
-      background: rgba(255, 255, 255, 0.08);
-    }
-    .topbar-actions { gap: 10px; }
-    .topbar-actions .avatar {
-      flex-shrink: 0;
-      cursor: pointer;
-      border: 2px solid var(--color-border);
-      box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-      width: 36px;
-      height: 36px;
-      font-size: 13px;
-    }
-    .topbar-actions .avatar:hover { box-shadow: 0 2px 12px rgba(15, 23, 42, 0.14); }
-    .sidebar-user .user-avatar { overflow: hidden; line-height: 1; }
-    .sidebar-user .user-avatar img, .topbar-actions .avatar img {
-      width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block;
-    }
-    .sidebar-header .logo-icon img {
-      width: 100%; height: 100%; object-fit: contain; display: block; border-radius: 10px;
-    }
-    .form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; }
-    .form-grid.three-cols { grid-template-columns: repeat(3, 1fr); }
-    .form-grid.full-width { grid-template-columns: 1fr; }
-    
-    #juridicoDbStatusBanner { margin: 0 0 16px; }
-    
-    @media (max-width: 1024px) {
-      .form-grid, .form-grid.three-cols { grid-template-columns: 1fr; }
-    }
-    #navContestacao, #navManageTickets { display: none !important; }
-  </style>
+  <!-- estilos movidos para CSS externo -->
 </head>
 <body class="leads-app">
   <div id="globalLoader" class="loader-overlay">
@@ -202,8 +166,8 @@
   </div>
 
   <!-- Scripts -->
-  <script charset="UTF-8" src="../js/config.js?v=14"></script>
-  <script charset="UTF-8" src="../js/db.js?v=1781813000"></script>
+  <script charset="UTF-8" src="../js/config.js?v=nodelete-demo1"></script>
+  <script charset="UTF-8" src="../js/db.js?v=nodelete-demo1"></script>
   <script charset="UTF-8" src="../js/fontedata.js?v=2"></script>
   <script charset="UTF-8" src="../js/auth.js?v=wa58"></script>
   <script charset="UTF-8" src="../js/ui.js?v=1781810513726"></script>
@@ -218,7 +182,7 @@
 
 
 
-</body>
+<script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>
 
 

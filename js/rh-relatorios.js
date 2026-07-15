@@ -1,13 +1,12 @@
 /* SOU+BLU — Relatórios RH */
 
 const RH_RELATORIOS = {
-  folha: { label: 'Gerar Folha Funcionário', desc: 'Protocolo automático, empresa, mês, funcionários com PIX do cadastro — salvar e exportar Excel.' },
   ranking: { label: 'Ranking de Vendas', desc: 'Classificação dos vendedores por faturamento e propostas.' },
   vendas: { label: 'Relatório de Vendas', desc: 'Lista consolidada de propostas com filtros e exportação.' },
   qualidade: { label: 'Relatório de Qualidade', desc: 'Monitoria e indicadores de qualidade da equipe.' },
 };
 
-let _rhRelatorioAtual = 'folha';
+let _rhRelatorioAtual = 'ranking';
 let _rhRelatorioGen = 0;
 let _rhVendasCache = [];
 let _folhaIframeEl = null;
@@ -82,7 +81,11 @@ function _rhNormProposal(p) {
     status: p.status || '—',
     valor: (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function')
       ? DB.proposalAmount(p)
-      : (p.valorFinal ?? p.valor_final ?? p.valor ?? 0),
+      : (() => {
+          const v = parseFloat(p.valor ?? 0);
+          if (Number.isFinite(v) && v > 0) return v;
+          return parseFloat(p.valorFinal ?? p.valor_final ?? 0) || 0;
+        })(),
     created_at: (typeof DB !== 'undefined' && typeof DB.proposalDate === 'function')
       ? DB.proposalDate(p).toISOString()
       : (p.updated_at || p.updatedAt || p.created_at || p.createdAt || ''),
@@ -104,7 +107,15 @@ function _rhDownloadCsv(filename, headers, rows) {
 }
 
 function switchRhRelatorio(tipo) {
-  const next = tipo || 'folha';
+  /* Folha ficou só no Financeiro — não abrir como card de Relatórios. */
+  if (tipo === 'folha') {
+    if (typeof openFolhaPagamento === 'function') {
+      openFolhaPagamento();
+      return;
+    }
+    tipo = 'ranking';
+  }
+  const next = tipo || 'ranking';
   _rhRelatorioAtual = next;
   _rhRelatorioGen += 1;
   const gen = _rhRelatorioGen;
@@ -170,7 +181,7 @@ function switchRhRelatorio(tipo) {
 }
 
 function renderRhRelatoriosHub() {
-  switchRhRelatorio(_rhRelatorioAtual || 'folha');
+  switchRhRelatorio(_rhRelatorioAtual || 'ranking');
 }
 
 function initRhRelatoriosHub() {

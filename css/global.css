@@ -247,6 +247,9 @@ table.data-table tbody tr.proposal-row--saved-flash {
 }
 
 /* ===== MODAL ===== */
+/* Custom system: .modal-overlay > .modal + openModal().
+   Bootstrap 5 also defines .modal { display:none; position:fixed; z-index:1055; width/height:100% },
+   which hid the dialog while leaving only the dark overlay visible. Scope resets below. */
 html.modal-open,
 body.modal-open {
   overflow: hidden !important;
@@ -262,12 +265,48 @@ body.modal-open {
   justify-content: center;
   padding: var(--space-md);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transition: opacity var(--transition-slow);
 }
-.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-overlay.open {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: all;
+}
 .modal-overlay.modal-stack-front { z-index: 13000; }
 
+/* Nested selector beats Bootstrap .modal { display:none; position:fixed; ... }.
+   No !important on display so inline display:flex (ex.: chamado estilo chat) still wins.
+   pointer-events only when overlay is open — otherwise invisible dialogs steal clicks. */
+.modal-overlay .modal {
+  display: block;
+  position: relative;
+  top: auto;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  max-width: 520px;
+  max-height: 90vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  outline: 0;
+  background: var(--color-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  transform: translateY(24px) scale(0.97);
+  transition: transform var(--transition-slow);
+  pointer-events: none;
+}
+.modal-overlay.open .modal {
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Legacy/unscoped .modal (same visual tokens; display left alone for true BS modals) */
 .modal {
   background: var(--color-surface);
   border-radius: var(--radius-xl);
@@ -276,10 +315,7 @@ body.modal-open {
   max-width: 520px;
   max-height: 90vh;
   overflow-y: auto;
-  transform: translateY(24px) scale(0.97);
-  transition: transform var(--transition-slow);
 }
-.modal-overlay.open .modal { transform: translateY(0) scale(1); }
 
 .modal-header {
   display: flex;
