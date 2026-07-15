@@ -517,6 +517,14 @@ window.Proposals = {
     {
       group: 'AKI CAPITAL',
       items: [
+        { value: 'AKI_L2_110', label: 'AKI CAPITAL L2 — 110%', pct: 1.10 },
+        { value: 'AKI_L3_100', label: 'AKI CAPITAL L3 — 100%', pct: 1.00 },
+        { value: 'AKI_L4_82', label: 'AKI CAPITAL L4 — 82%', pct: 0.82 },
+        { value: 'AKI_L5_67', label: 'AKI CAPITAL L5 — 67%', pct: 0.67 },
+        { value: 'AKI_L6_52', label: 'AKI CAPITAL L6 — 52%', pct: 0.52 },
+        { value: 'AKI_L7_37', label: 'AKI CAPITAL L7 — 37%', pct: 0.37 },
+        { value: 'AKI_L8_17', label: 'AKI CAPITAL L8 — 17%', pct: 0.17 },
+        { value: 'AKI_L9_10', label: 'AKI CAPITAL L9 — 10%', pct: 0.10 },
         { value: 'AKI_100', label: 'AKI CAPITAL — 100%', pct: 1 },
         { value: 'AKI_70', label: 'AKI CAPITAL — 70%', pct: 0.70 },
         { value: 'AKI_35', label: 'AKI CAPITAL — 35%', pct: 0.35 },
@@ -557,6 +565,7 @@ window.Proposals = {
 
   _tabelaPct: {
     NEO_NORMAL: 1, NEO_FLEX1: 0.82, NEO_FLEX2: 0.67, NEO_FLEX3: 0.52, NEO_FLEX4: 0.37, NEO_FLEX5: 0.17,
+    AKI_L2_110: 1.10, AKI_L3_100: 1.00, AKI_L4_82: 0.82, AKI_L5_67: 0.67, AKI_L6_52: 0.52, AKI_L7_37: 0.37, AKI_L8_17: 0.17, AKI_L9_10: 0.10,
     AKI_100: 1, AKI_70: 0.70, AKI_35: 0.35, AKI_17: 0.17,
     AMIGOZ_100: 1, AMIGOZ_67: 0.67, AMIGOZ_58: 0.58, AMIGOZ_38: 0.38, AMIGOZ_13: 0.13,
     FUTURO_100: 1, FUTURO_95: 0.95, FUTURO_90: 0.90, FUTURO_82: 0.82, FUTURO_50: 0.50, FUTURO_25: 0.25, FUTURO_10: 0.10,
