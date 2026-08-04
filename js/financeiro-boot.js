@@ -26,8 +26,8 @@
 
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'financeiro-sections.html?v=pager-vis1'
-      : 'pages/financeiro-sections.html?v=pager-vis1';
+      ? 'financeiro-sections.html?v=prop-date2'
+      : 'pages/financeiro-sections.html?v=prop-date2';
     return typeof Auth !== 'undefined' && Auth.resolveHref
       ? Auth.resolveHref(rel)
       : rel;
@@ -221,6 +221,7 @@
     applyInicioNavVisibility();
   }
 
+
   /** Absolute Folha URL — never bare relative against <base href=".../pages/"> (avoids /pages/pages/...). */
   function folhaPagamentoHref() {
     try {
@@ -326,17 +327,17 @@
 
     const voltar = document.getElementById('navFinVoltar');
     if (voltar) {
-      if (isFinanceiroOnlyUser()) {
-        voltar.style.display = 'none';
-      } else {
-        voltar.addEventListener('click', (e) => {
-          e.preventDefault();
-          const href = typeof Auth.adminPageHrefFresh === 'function'
-            ? Auth.adminPageHrefFresh()
-            : (typeof Auth.adminPageHref === 'function' ? Auth.adminPageHref() : 'admin.html');
-          window.location.replace(href);
-        });
-      }
+      /* Financeiro também volta ao Painel Master (admin). */
+      voltar.style.display = '';
+      const label = document.getElementById('navFinVoltarLabel');
+      if (label && isFinanceiroOnlyUser()) label.textContent = 'Painel Master';
+      voltar.addEventListener('click', (e) => {
+        e.preventDefault();
+        const href = typeof Auth.adminPageHrefFresh === 'function'
+          ? Auth.adminPageHrefFresh()
+          : (typeof Auth.adminPageHref === 'function' ? Auth.adminPageHref() : 'admin.html');
+        window.location.replace(href);
+      });
     }
   }
 

@@ -1,0 +1,172 @@
+/* RH — módulos (justificativa, hierarquia). Complementa Bootstrap + layout.css */
+
+.rh-modal--wide {
+  max-width: 780px;
+}
+
+.rh-modal-body--scroll {
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+.rh-input-readonly {
+  background-color: var(--bs-light, #f3f4f6) !important;
+}
+
+.rh-field-hint {
+  font-size: 0.6875rem;
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: 400;
+  color: var(--bs-secondary-color, #6b7280);
+}
+
+.rh-justif-hint {
+  font-size: 11px;
+  font-weight: 700;
+  color: #dc2626;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 4px;
+}
+
+.rh-justif-panel {
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 0.75rem;
+  padding: 1rem 1.125rem;
+  margin-top: 0.75rem;
+  background: var(--color-surface-2, #f8fafc);
+}
+
+.rh-justif-panel__title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-primary, #0b2545);
+  margin-bottom: 12px;
+}
+
+.rh-justif-optional {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--bs-secondary-color, #6b7280);
+}
+
+.rh-file-input-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+/* ══ Vagas ══ */
+.rh-vagas-kpis {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.rh-vaga-kpi {
+  background: var(--color-surface-2, #f8fafc);
+  border: 1px solid var(--color-border, #e5e7eb);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.rh-vaga-kpi__val {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.1;
+  color: var(--color-primary, #0b2545);
+}
+
+.rh-vaga-kpi__lab {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--bs-secondary-color, #6b7280);
+  margin-top: 4px;
+}
+
+.rh-vaga-kpi--warn .rh-vaga-kpi__val { color: #b45309; }
+.rh-vaga-kpi--info .rh-vaga-kpi__val { color: #0369a1; }
+.rh-vaga-kpi--ok .rh-vaga-kpi__val { color: #15803d; }
+
+.rh-vagas-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.rh-vagas-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.rh-vagas-filters .form-control {
+  max-width: 220px;
+}
+
+.rh-vaga-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e5e7eb;
+  color: #374151;
+  white-space: nowrap;
+}
+
+.rh-vaga-badge--warn { background: #fef3c7; color: #92400e; }
+.rh-vaga-badge--info { background: #e0f2fe; color: #075985; }
+.rh-vaga-badge--ok { background: #dcfce7; color: #166534; }
+.rh-vaga-badge--accent { background: #ffedd5; color: #9a3412; }
+.rh-vaga-badge--muted { background: #f3f4f6; color: #6b7280; }
+
+.rh-vaga-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px 16px;
+  font-size: 14px;
+}
+
+.rh-vaga-history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.rh-vaga-history li {
+  border-left: 3px solid var(--color-border, #e5e7eb);
+  padding: 8px 0 8px 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+
+.rh-vaga-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .rh-vagas-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rh-vaga-detail-grid { grid-template-columns: 1fr 1fr; }
+}
+
+@media (max-width: 560px) {
+  .rh-vagas-kpis { grid-template-columns: 1fr; }
+  .rh-vaga-detail-grid { grid-template-columns: 1fr; }
+  .rh-vagas-filters .form-control { max-width: 100%; width: 100%; }
+}

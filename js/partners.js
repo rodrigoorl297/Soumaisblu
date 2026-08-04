@@ -202,6 +202,16 @@ const PartnerPerms = {
     return !!p.equipe_sacar_pix || !!m.equipe_sacar_pix;
   },
 
+  /** Alinha team_perms.*.sacar_pix com o interruptor org equipe_sacar_pix. */
+  syncTeamSacarRoleFlags(perms, enabled) {
+    const p = this.merge(perms);
+    const tp = { ...(p.team_perms || {}) };
+    this.PARTNER_TEAM_SACAR_ROLES.forEach((role) => {
+      tp[role] = { ...(tp[role] || this._defaultTeamRolePerms(role)), sacar_pix: !!enabled };
+    });
+    return { ...p, equipe_sacar_pix: !!enabled, team_perms: tp };
+  },
+
   /** Libera saque da equipe deste parceiro quando colaborador já tem saldo (ex.: após distribuição). */
   async ensureTeamSacarForFundedMember(user, partnerRow) {
     if (!user?.id || !partnerRow || typeof DB === 'undefined' || typeof DB.savePartner !== 'function') return partnerRow;
@@ -213,8 +223,10 @@ const PartnerPerms = {
     if (bal <= 0) return partnerRow;
     const perms = this.merge(partnerRow.permissions);
     const meta = this._parseJsonField(partnerRow.meta);
-    if (this.teamSacarEnabled(perms, meta)) return partnerRow;
-    const updatedPerms = { ...perms, equipe_sacar_pix: true };
+    const orgOn = this.teamSacarEnabled(perms, meta);
+    const roleOn = !!(perms.team_perms?.[r]?.sacar_pix);
+    if (orgOn && roleOn) return partnerRow;
+    const updatedPerms = this.syncTeamSacarRoleFlags(perms, true);
     const updatedMeta = { ...meta, equipe_sacar_pix: true, equipe_sacar_auto: true };
     try {
       const saved = await DB.savePartner({
@@ -322,8 +334,10 @@ const PartnerPerms = {
     }
     if (key === 'sacar_pix') {
       if (!this.PARTNER_TEAM_SACAR_ROLES.includes(r)) return false;
-      const orgAllows = this.teamSacarEnabled(perms, meta) || this.can(p, 'sacar_pix');
-      if (!orgAllows) return false;
+      /* Interruptor org "Liberar saque equipe" é a fonte da verdade — não bloquear
+         por team_perms.vendedor.sacar_pix=false residual de formulário antigo. */
+      if (this.teamSacarEnabled(perms, meta)) return true;
+      if (!this.can(p, 'sacar_pix')) return false;
       return !!rolePerms.sacar_pix;
     }
     if (key === 'cadastrar_proposta') {

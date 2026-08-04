@@ -10,17 +10,147 @@
     return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
 
+  function _isSakUser(user) {
+    const norm = (v) => String(v || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase();
+    const name = norm(user?.name || '');
+    if (name.includes('SAK') && name.includes('CADASTRAIS')) return true;
+    const email = String(user?.email || '').toLowerCase();
+    if (email.includes('@sakpromotora.') || email.includes('@sakservicos.') || email.includes('@sak.')) return true;
+    const razao = norm(typeof window !== 'undefined' ? window.PARTNER_RAZAO_SOCIAL : '');
+    if (razao.includes('SAK') && razao.includes('CADASTRAIS')) return true;
+    if (typeof window !== 'undefined' && typeof window._isSakPartnerNetwork === 'function') {
+      return !!window._isSakPartnerNetwork();
+    }
+    return false;
+  }
+
   function _hasClubeAccess(user) {
     if (!user) return false;
     const role = String(user.role || '').toLowerCase();
     if (['admin', 'master', 'portaria', 'fundador', 'financeiro', 'financial'].includes(role)) return true;
+    // Parceiros (e equipe de rede parceira): só SAK mantém Clube.
+    const inPartnerOrg = !!(typeof window !== 'undefined' && window.PARTNER_ROOT_ID)
+      || role === 'parceiro';
+    if (inPartnerOrg && !_isSakUser(user)) return false;
     if (user.acesso_clube === false || user.acesso_clube === 0 || user.acesso_clube === '0') return false;
-    if (user.acesso_clube === true || user.acesso_clube === 1 || user.acesso_clube === '1') return true;
-    return ['vendedor', 'employee', 'funcionario', 'supervisor', 'backoffice', 'operacional', 'gerente', 'gerencia'].includes(role);
+    // Liberado para todos os usuários internos — só parceiros (não-SAK) ficam fora
+    return role !== 'parceiro';
   }
 
   function formatCurrency(val) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
+  }
+
+  /** Extrai texto legível do que foi pedido (itens, modo, obs) a partir de detalhes_pedido. */
+  function _formatPedidoDescricao(v) {
+    let d = v?.detalhes_pedido;
+    if (typeof d === 'string') {
+      try { d = JSON.parse(d); } catch (_) { d = null; }
+    }
+    if (!d || typeof d !== 'object') return '—';
+    const parts = [];
+    const itens = Array.isArray(d.itens) ? d.itens : [];
+    if (itens.length) {
+      const lines = itens.map((it) => {
+        const nome = String(it.name || it.nome || it.sku || 'Item').trim();
+        const qtd = parseInt(it.qty ?? it.qtd ?? it.quantidade ?? 1, 10) || 1;
+        return `${qtd}x ${nome}`;
+      });
+      parts.push(lines.join(', '));
+    }
+    if (d.modo) {
+      const modoLabel = d.modo === 'entrega' ? 'Entrega' : (d.modo === 'retirada' ? 'Retirada' : String(d.modo));
+      parts.push(modoLabel);
+    }
+    if (d.horario_entrega) parts.push(`Horário: ${d.horario_entrega}`);
+    if (d.observacoes) parts.push(`Obs: ${d.observacoes}`);
+    if (d.origem === 'mercadinho') parts.push('Mercadinho');
+    if (Array.isArray(d.carnes) && d.carnes.length) parts.push(`Carnes: ${d.carnes.join(', ')}`);
+    return parts.length ? parts.join(' · ') : '—';
+  }
+
+  const _VOUCHER_DEBIT_STATUSES = new Set(['em_analise', 'utilizado', 'em_processamento', 'pago']);
+
+  function _sumVoucherUtilizado(vouchers) {
+    return (Array.isArray(vouchers) ? vouchers : [])
+      .filter((v) => _VOUCHER_DEBIT_STATUSES.has(String(v.status || '').toLowerCase()))
+      .reduce((acc, v) => acc + (parseFloat(v.valor) || 0), 0);
+  }
+
+  function _computeLimitBalances(aprovado, utilizado) {
+    const approved = Math.max(0, Math.round((parseFloat(aprovado) || 0) * 100) / 100);
+    const used = Math.max(0, Math.min(approved, Math.round((parseFloat(utilizado) || 0) * 100) / 100));
+    const available = Math.max(0, Math.round((approved - used) * 100) / 100);
+    return { aprovado: approved, utilizado: used, disponivel: available };
+  }
+
+  function _renderLimitUI(limitRow) {
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
+    if (!limitRow || (parseFloat(limitRow.limite_aprovado) || 0) <= 0) {
+      set('valAprovado', formatCurrency(0));
+      set('valUtilizado', formatCurrency(0));
+      set('valDisponivel', formatCurrency(0));
+      set('topbarBalance', formatCurrency(0));
+      set('heroDisponivelHint', formatCurrency(0));
+      set('distTotalAvailable', formatCurrency(0));
+      return;
+    }
+    set('valAprovado', formatCurrency(limitRow.limite_aprovado));
+    set('valUtilizado', formatCurrency(limitRow.limite_utilizado));
+    set('valDisponivel', formatCurrency(limitRow.limite_disponivel));
+    set('topbarBalance', formatCurrency(limitRow.limite_disponivel));
+    set('heroDisponivelHint', formatCurrency(limitRow.limite_disponivel));
+    set('distTotalAvailable', formatCurrency(limitRow.limite_aprovado));
+  }
+
+  async function _reconcileLimitRow(limitRow, vouchers) {
+    if (!limitRow?.id) return limitRow;
+    const usedFromVouchers = _sumVoucherUtilizado(vouchers);
+    const balances = _computeLimitBalances(limitRow.limite_aprovado, usedFromVouchers);
+    const storedUsed = parseFloat(limitRow.limite_utilizado) || 0;
+    const storedAvail = parseFloat(limitRow.limite_disponivel) || 0;
+    const nextStatus = balances.aprovado > 0 ? 'aprovado' : (limitRow.status || 'solicitado');
+    const patch = {
+      limite_utilizado: balances.utilizado,
+      limite_disponivel: balances.disponivel,
+      status: nextStatus,
+    };
+    const drift = Math.abs(storedUsed - balances.utilizado) > 0.009
+      || Math.abs(storedAvail - balances.disponivel) > 0.009
+      || String(limitRow.status || '') !== nextStatus;
+    if (drift) {
+      try {
+        await supaReq('PATCH', 'beneficios_limites', patch, `?id=eq.${limitRow.id}`);
+      } catch (e) {
+        console.warn('[Clube] reconcile limit:', e?.message || e);
+      }
+    }
+    return { ...limitRow, ...patch, limite_aprovado: balances.aprovado };
+  }
+
+  async function _debitLimit(amount) {
+    if (!currentLimit?.id) throw new Error('Limite não encontrado.');
+    const orderVal = Math.round((parseFloat(amount) || 0) * 100) / 100;
+    if (orderVal <= 0) throw new Error('Valor inválido.');
+    const disponivel = parseFloat(currentLimit.limite_disponivel) || 0;
+    if (orderVal > disponivel + 0.009) {
+      throw new Error(`O valor excede o limite disponível (${formatCurrency(disponivel)}).`);
+    }
+    const balances = _computeLimitBalances(
+      currentLimit.limite_aprovado,
+      (parseFloat(currentLimit.limite_utilizado) || 0) + orderVal
+    );
+    await supaReq('PATCH', 'beneficios_limites', {
+      limite_utilizado: balances.utilizado,
+      limite_disponivel: balances.disponivel,
+      status: 'aprovado',
+    }, `?id=eq.${currentLimit.id}`);
+    currentLimit = { ...currentLimit, ...balances, status: 'aprovado' };
+    _renderLimitUI(currentLimit);
+    return balances;
   }
 
   function switchTab(tabId, el) {
@@ -47,14 +177,58 @@
     const btnR = document.getElementById('btnModeRetirada');
     const deliveryF = document.getElementById('deliveryFields');
     if (mode === 'entrega') {
-      if (btnE) btnE.className = 'btn btn-primary';
-      if (btnR) btnR.className = 'btn btn-outline';
+      if (btnE) { btnE.className = 'is-active btn btn-primary'; }
+      if (btnR) { btnR.className = 'btn btn-outline'; }
       if (deliveryF) deliveryF.style.display = 'block';
     } else {
-      if (btnE) btnE.className = 'btn btn-outline';
-      if (btnR) btnR.className = 'btn btn-primary';
+      if (btnE) { btnE.className = 'btn btn-outline'; }
+      if (btnR) { btnR.className = 'is-active btn btn-primary'; }
       if (deliveryF) deliveryF.style.display = 'none';
     }
+  }
+
+  const CLUBE_MENU = {
+    marca: { name: 'Opção marca', price: 18 },
+    coca_lata: { name: 'Coca-Cola lata', price: 5 },
+    coca_600: { name: 'Coca-Cola 600ml', price: 8 },
+  };
+
+  function clubeMenuQty(sku, delta) {
+    const el = document.getElementById(`qty_${sku}`);
+    if (!el) return;
+    const next = Math.max(0, Math.min(20, (parseInt(el.value, 10) || 0) + delta));
+    el.value = String(next);
+    _refreshMenuTotal();
+  }
+
+  function _collectMenuItems() {
+    const items = [];
+    let total = 0;
+    Object.keys(CLUBE_MENU).forEach((sku) => {
+      const qty = parseInt(document.getElementById(`qty_${sku}`)?.value, 10) || 0;
+      if (qty <= 0) return;
+      const meta = CLUBE_MENU[sku];
+      const sub = Math.round(meta.price * qty * 100) / 100;
+      total += sub;
+      items.push({ sku, name: meta.name, price: meta.price, qty, subtotal: sub });
+    });
+    return { items, total: Math.round(total * 100) / 100 };
+  }
+
+  function _refreshMenuTotal() {
+    const { total } = _collectMenuItems();
+    const totalEl = document.getElementById('orderMenuTotal');
+    const hidden = document.getElementById('orderValue');
+    if (totalEl) totalEl.textContent = formatCurrency(total);
+    if (hidden) hidden.value = String(total);
+  }
+
+  function _resetMenuQty() {
+    Object.keys(CLUBE_MENU).forEach((sku) => {
+      const el = document.getElementById(`qty_${sku}`);
+      if (el) el.value = '0';
+    });
+    _refreshMenuTotal();
   }
 
   function toggleMeat() {
@@ -130,7 +304,7 @@
     if (!tbody) return;
     tbody.innerHTML = '';
     if (!vouchers || vouchers.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="5" class="text-center">Nenhum voucher emitido.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhum voucher emitido.</td></tr>';
       return;
     }
     vouchers.forEach(v => {
@@ -138,9 +312,13 @@
       let statusBadge = '<span class="badge badge-warning">Em Processamento</span>';
       if (v.status === 'pago') statusBadge = '<span class="badge badge-success">Pago</span>';
       else if (v.status === 'recusado') statusBadge = '<span class="badge badge-danger">Recusado</span>';
+      else if (v.status === 'utilizado') statusBadge = '<span class="badge badge-info">Utilizado</span>';
+      const desc = _formatPedidoDescricao(v);
+      const descSafe = String(desc).replace(/</g, '&lt;').replace(/>/g, '&gt;');
       tr.innerHTML = `
         <td><strong>${v.voucher_no}</strong></td>
         <td>${v.prestador_name || 'Restaurante'}</td>
+        <td style="font-size:12px;line-height:1.4;max-width:280px;">${descSafe}</td>
         <td>${formatCurrency(v.valor)}</td>
         <td>${statusBadge}</td>
         <td>${new Date(v.created_at).toLocaleDateString('pt-BR')}</td>
@@ -149,25 +327,90 @@
     });
   }
 
+  async function _fetchLimitRowFor(employeeId) {
+    if (!employeeId) return null;
+    const rows = await supaReq('GET', 'beneficios_limites', null,
+      `?employee_id=eq.${encodeURIComponent(employeeId)}&order=created_at.desc&limit=1`);
+    return Array.isArray(rows) && rows[0] ? rows[0] : null;
+  }
+
+  /** Limite gravado no id do cadastro RH (funcionário sem login na época):
+      localiza pelo vínculo RH e re-vincula ao login atual (self-heal). */
+  async function _findLimitRowSelfHeal() {
+    let row = await _fetchLimitRowFor(currentUser.id);
+    if (row) return row;
+    /* ilike na compat local é substring ("%valor%") — confirma igualdade exata
+       (sem acentos, case-insensitive) antes de aceitar o vínculo RH. */
+    const _normMatch = (v) => String(v || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+    const rhIds = [];
+    const addIds = (list, field, want) => (Array.isArray(list) ? list : []).forEach((r) => {
+      if (!r?.id || rhIds.includes(r.id)) return;
+      if (field && _normMatch(r[field]) !== _normMatch(want)) return;
+      rhIds.push(r.id);
+    });
+    try {
+      addIds(await supaReq('GET', 'rh_employees', null,
+        `?user_id=eq.${encodeURIComponent(currentUser.id)}&select=id&limit=5`));
+    } catch (_) { /* noop */ }
+    const email = String(currentUser.email || '').trim().toLowerCase();
+    if (!rhIds.length && email) {
+      try {
+        addIds(await supaReq('GET', 'rh_employees', null,
+          `?email=ilike.${encodeURIComponent(email)}&select=id,email&limit=5`), 'email', email);
+      } catch (_) { /* noop */ }
+      try {
+        addIds(await supaReq('GET', 'rh_employees', null,
+          `?email_pessoal=ilike.${encodeURIComponent(email)}&select=id,email_pessoal&limit=5`), 'email_pessoal', email);
+      } catch (_) { /* noop */ }
+    }
+    const nome = String(currentUser.name || '').trim();
+    if (!rhIds.length && nome) {
+      try {
+        addIds(await supaReq('GET', 'rh_employees', null,
+          `?nome=ilike.${encodeURIComponent(nome)}&select=id,nome&limit=5`), 'nome', nome);
+      } catch (_) { /* noop */ }
+    }
+    for (const rhId of rhIds) {
+      if (String(rhId) === String(currentUser.id)) continue;
+      row = await _fetchLimitRowFor(rhId).catch(() => null);
+      if (row?.id) {
+        try {
+          await supaReq('PATCH', 'beneficios_limites', { employee_id: currentUser.id }, `?id=eq.${encodeURIComponent(row.id)}`);
+          row.employee_id = currentUser.id;
+        } catch (e) {
+          console.warn('[Clube] re-vincular limite:', e?.message || e);
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-selfheal',hypothesisId:'L-H2',location:'clube-beneficios.js:_findLimitRowSelfHeal',message:'limite re-vinculado do cadastro RH para o login',data:{userId:currentUser?.id||null,rhId,limitId:row.id},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return row;
+      }
+    }
+    return null;
+  }
+
   async function loadUserData() {
     const errBox = document.getElementById('beneficiosLoadError');
     if (errBox) errBox.style.display = 'none';
     try {
-      const limits = await supaReq('GET', 'beneficios_limites', null, `?employee_id=eq.${currentUser.id}&order=created_at.desc&limit=1`);
-      if (limits && limits.length > 0) {
-        currentLimit = limits[0];
-        const set = (id, val) => { const el = document.getElementById(id); if (el) el.innerText = val; };
-        set('valAprovado', formatCurrency(currentLimit.limite_aprovado));
-        set('valUtilizado', formatCurrency(currentLimit.limite_utilizado));
-        set('valDisponivel', formatCurrency(currentLimit.limite_disponivel));
-        set('topbarBalance', formatCurrency(currentLimit.limite_disponivel));
-        set('distTotalAvailable', formatCurrency(currentLimit.limite_aprovado));
+      const vouchers = await supaReq('GET', 'beneficios_vouchers', null, `?employee_id=eq.${currentUser.id}&order=created_at.desc&limit=500`);
+      const row = await _findLimitRowSelfHeal();
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-load',hypothesisId:'H4',location:'clube-beneficios.js:loadUserData',message:'clube load limite',data:{userId:currentUser?.id||null,hasRow:!!row,aprovado:row?parseFloat(row.limite_aprovado)||0:null,status:row?.status||null,employee_id:row?.employee_id||null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (row && (parseFloat(row.limite_aprovado) || 0) > 0) {
+        currentLimit = await _reconcileLimitRow(row, vouchers);
       } else {
         currentLimit = null;
       }
+      _renderLimitUI(currentLimit);
       const providers = await supaReq('GET', 'beneficios_prestadores', null, '?select=*');
       renderDistribution(providers);
-      const vouchers = await supaReq('GET', 'beneficios_vouchers', null, `?employee_id=eq.${currentUser.id}&order=created_at.desc`);
       renderVouchers(vouchers);
     } catch (e) {
       console.error('Erro ao carregar dados do usuário:', e);
@@ -181,25 +424,91 @@
 
 
 
+  function _digitsPhone(raw) {
+    let d = String(raw || '').replace(/\D/g, '');
+    if (!d) return '';
+    // Aceita (11) 9xxxx-xxxx → acrescenta 55 se parecer BR sem DDI
+    if (d.length >= 10 && d.length <= 11 && !d.startsWith('55')) d = '55' + d;
+    return d;
+  }
+
+  function _restauranteWhatsappFrom(provider) {
+    const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
+    const candidates = [
+      provider?.whatsapp,
+      provider?.telefone,
+      provider?.contato,
+      provider?.phone,
+      cfg.CLUBE_RESTAURANTE_WHATSAPP,
+      cfg.RESTAURANTE_WHATSAPP,
+      '5562991750451', // WhatsApp padrão do restaurante (Clube / marmitas)
+    ];
+    for (const c of candidates) {
+      const d = _digitsPhone(c);
+      if (d.length >= 12) return d;
+    }
+    return '';
+  }
+
+  function _buildFoodOrderWhatsappText({ voucherNo, providerName, items, total, detalhes }) {
+    const nome = String(currentUser?.name || 'Colaborador').trim();
+    const modo = detalhes?.modo === 'retirada' ? 'Retirada' : 'Entrega';
+    const linhas = [
+      'Olá! Já realizei meu pedido pelo *Clube ZS Benefícios*.',
+      '',
+      `*Voucher:* ${voucherNo}`,
+      `*Funcionário:* ${nome}`,
+      `*Restaurante:* ${providerName || 'Restaurante'}`,
+      `*Modo:* ${modo}`,
+    ];
+    if (detalhes?.horario_entrega) linhas.push(`*Horário de entrega:* ${detalhes.horario_entrega}`);
+    linhas.push('', '*Itens do pedido:*');
+    (items || []).forEach((it) => {
+      const q = parseInt(it.qty, 10) || 1;
+      const n = String(it.name || it.sku || 'Item').trim();
+      const sub = formatCurrency(it.subtotal || (it.price * q) || 0);
+      linhas.push(`• ${q}x ${n} — ${sub}`);
+    });
+    linhas.push('', `*Total:* ${formatCurrency(total)}`);
+    if (detalhes?.observacoes) linhas.push(`*Observações:* ${detalhes.observacoes}`);
+    linhas.push('', 'Por favor, confirmar o recebimento deste pedido. Obrigado!');
+    return linhas.join('\n');
+  }
+
+  function _openRestauranteWhatsapp(phone, text) {
+    const digits = _digitsPhone(phone);
+    if (!digits) return false;
+    const url = `https://api.whatsapp.com/send?phone=${encodeURIComponent(digits)}&text=${encodeURIComponent(text)}`;
+    try {
+      window.open(url, '_blank', 'noopener');
+      return true;
+    } catch (_) {
+      window.location.href = url;
+      return true;
+    }
+  }
+
   async function submitFoodOrder(e) {
     e.preventDefault();
-    if (!currentLimit) {
-      alert('Você precisa ter um limite aprovado primeiro.');
+    if (!currentLimit || (parseFloat(currentLimit.limite_aprovado) || 0) <= 0) {
+      alert('Você precisa ter um limite aprovado pelo RH primeiro.');
       return;
     }
-    const orderVal = parseFloat(document.getElementById('orderValue')?.value) || 0;
-    if (orderVal <= 0) {
-      alert('Informe um valor de pedido válido.');
+    const { items, total: orderVal } = _collectMenuItems();
+    if (!items.length || orderVal <= 0) {
+      alert('Selecione ao menos um item do cardápio.');
       return;
     }
     const disponivel = parseFloat(currentLimit.limite_disponivel) || 0;
-    if (orderVal > disponivel) {
+    if (orderVal > disponivel + 0.009) {
       alert(`O valor do pedido excede o seu limite disponível (${formatCurrency(disponivel)}).`);
       return;
     }
     try {
-      const providers = await supaReq('GET', 'beneficios_prestadores', null, '?categoria=eq.Restaurante&limit=1');
-      const provider = (providers && providers.length > 0) ? providers[0] : { id: 'rest_default', nome_fantasia: 'Restaurante Clube ZS Benefícios' };
+      const providers = await supaReq('GET', 'beneficios_prestadores', null, '?categoria=eq.Restaurante&limit=20');
+      const list = Array.isArray(providers) ? providers : [];
+      const provider = list.find((p) => _restauranteWhatsappFrom(p)) || list[0]
+        || { id: 'rest_default', nome_fantasia: 'Restaurante Clube ZS Benefícios' };
       const today = new Date();
       const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
       const voucherNo = `ZS-${today.getDate().toString().padStart(2, '0')}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getFullYear()}-${rand}`;
@@ -207,8 +516,10 @@
         modo: orderMode,
         horario_entrega: orderMode === 'entrega' ? document.getElementById('orderDeliveryTime')?.value : null,
         observacoes: document.getElementById('orderObs')?.value?.trim() || '',
+        itens: items,
       };
-      await supaReq('POST', 'beneficios_vouchers', {
+      await _debitLimit(orderVal);
+      const voucherPayload = {
         id: _benId('ben_vou_'),
         voucher_no: voucherNo,
         employee_id: currentUser.id,
@@ -219,18 +530,34 @@
         valor: orderVal,
         status: 'em_analise',
         detalhes_pedido: detalhes,
+      };
+      await supaReq('POST', 'beneficios_vouchers', voucherPayload);
+
+      const waPhone = _restauranteWhatsappFrom(provider);
+      const waText = _buildFoodOrderWhatsappText({
+        voucherNo,
+        providerName: provider.nome_fantasia,
+        items,
+        total: orderVal,
+        detalhes,
       });
-      const newUsed = Math.round((parseFloat(currentLimit.limite_utilizado || 0) + orderVal) * 100) / 100;
-      const newAvailable = Math.round((disponivel - orderVal) * 100) / 100;
-      await supaReq('PATCH', 'beneficios_limites', {
-        limite_utilizado: newUsed,
-        limite_disponivel: newAvailable,
-      }, `?id=eq.${currentLimit.id}`);
-      alert(`Pedido salvo com sucesso! Seu voucher é: ${voucherNo}`);
+      const opened = waPhone ? _openRestauranteWhatsapp(waPhone, waText) : false;
+
+      if (opened) {
+        alert(`Pedido salvo! Voucher: ${voucherNo}\n\nAbrimos o WhatsApp do restaurante com a mensagem do seu pedido.`);
+      } else if (waPhone) {
+        alert(`Pedido salvo! Voucher: ${voucherNo}`);
+      } else {
+        alert(`Pedido salvo! Voucher: ${voucherNo}\n\nAviso: cadastre o WhatsApp do restaurante em Prestadores (Clube) para abrir o pedido automaticamente.`);
+      }
+
       document.getElementById('orderForm').reset();
+      _resetMenuQty();
+      setOrderMode(orderMode);
       await loadUserData();
     } catch (err) {
       alert('Erro ao salvar pedido: ' + err.message);
+      await loadUserData().catch(() => {});
     }
   }
 
@@ -318,6 +645,7 @@
     saveDistribution,
     submitFoodOrder,
     loadUserData,
+    clubeMenuQty,
   });
 
   if (/\/clube-beneficios\.html/i.test(g.location.pathname || '')) {

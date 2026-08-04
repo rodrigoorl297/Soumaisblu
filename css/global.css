@@ -1301,6 +1301,16 @@ select.header-filter.filter-active + .header-filter-chevron {
   color: var(--color-accent) !important;
 }
 
+/* Encoding-safe chevron — CSS glyph survives HTML corruption */
+.header-filter-chevron::before {
+  content: '▾';
+  font-size: 9px;
+  line-height: 1;
+}
+.header-filter-chevron {
+  font-size: 0;
+}
+
 /* Gestão de Propostas — cabeçalhos e coluna produto legíveis */
 #secManageProposals table.data-table thead th:nth-child(2) {
   min-width: 118px;

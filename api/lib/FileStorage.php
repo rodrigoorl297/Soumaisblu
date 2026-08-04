@@ -21,10 +21,17 @@ function soublu_file_mime(string $file): string
     $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
     return match ($ext) {
         'pdf' => 'application/pdf',
+        'ppt' => 'application/vnd.ms-powerpoint',
+        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'doc' => 'application/msword',
+        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'xls' => 'application/vnd.ms-excel',
+        'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'jpg', 'jpeg' => 'image/jpeg',
         'png' => 'image/png',
         'gif' => 'image/gif',
         'webp' => 'image/webp',
+        'zip' => 'application/zip',
         'mp3' => 'audio/mpeg',
         'ogg' => 'audio/ogg',
         'm4a', 'aac' => 'audio/mp4',
@@ -32,6 +39,21 @@ function soublu_file_mime(string $file): string
         'webm' => 'audio/webm',
         default => 'application/octet-stream',
     };
+}
+
+/** Força download com nome amigável quando ?download=1&name=arquivo.zip */
+function soublu_file_maybe_attachment_header(): void
+{
+    if (!isset($_GET['download']) || (string) $_GET['download'] !== '1') {
+        return;
+    }
+    $name = basename(str_replace(["\0", '\\'], '', trim((string) ($_GET['name'] ?? 'anexo'))));
+    if ($name === '' || $name === '.' || $name === '..') {
+        $name = 'anexo';
+    }
+    $ascii = preg_replace('/[^\x20-\x7E]/', '_', $name) ?: 'anexo';
+    $ascii = str_replace(['"', '\\', ';'], '', $ascii);
+    header('Content-Disposition: attachment; filename="' . $ascii . '"');
 }
 
 function soublu_file_serve_bytes(string $body, string $mime, string $source): void
@@ -42,6 +64,7 @@ function soublu_file_serve_bytes(string $body, string $mime, string $source): vo
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Origin: *');
     header('X-Served-From: ' . $source);
+    soublu_file_maybe_attachment_header();
     echo $body;
     exit;
 }
@@ -58,6 +81,7 @@ function soublu_file_serve_local(string $file, string $source = 'local'): void
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Origin: *');
     header('X-Served-From: ' . $source);
+    soublu_file_maybe_attachment_header();
     readfile($file);
     exit;
 }

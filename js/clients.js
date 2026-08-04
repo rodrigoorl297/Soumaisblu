@@ -417,10 +417,12 @@ window.Clients = {
   mayDeleteClients(user) {
     const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
     if (!u?.id) return false;
+    if (typeof PARTNER_ROOT_ID !== 'undefined' && PARTNER_ROOT_ID) return false;
+    const role = String(u.role || '').toLowerCase();
+    if (role === 'parceiro' || role === 'parceiro_vendedor') return false;
     if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) {
       return true;
     }
-    const role = String(u.role || '').toLowerCase();
     return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
   },
 
@@ -454,10 +456,13 @@ window.Clients = {
     const c = client;
     const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
     if (!c || !u?.id) return false;
+    // Rede parceira: sem exclusão de clientes.
+    if (typeof PARTNER_ROOT_ID !== 'undefined' && PARTNER_ROOT_ID) return false;
+    const role = String(u.role || '').toLowerCase();
+    if (role === 'parceiro' || role === 'parceiro_vendedor') return false;
     if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) {
       return true;
     }
-    const role = String(u.role || '').toLowerCase();
     if (role === 'gerente' || role === 'gerencia') return true;
     const ownerId = String(c.supervisorId || c.supervisor_id || '');
     if (role === 'sup_backoffice') {
@@ -467,12 +472,6 @@ window.Clients = {
           ? await DB.getTeamMemberIds(u.id)
           : [];
         if (team.some(id => String(id) === ownerId)) return true;
-      } catch (_) { /* noop */ }
-    }
-    if (typeof PARTNER_ROOT_ID !== 'undefined' && PARTNER_ROOT_ID && typeof DB.getPartnerTeamIds === 'function') {
-      try {
-        const set = await DB.getPartnerTeamIds(PARTNER_ROOT_ID);
-        if (set.has(ownerId) && (role === 'parceiro' || u.role === 'parceiro')) return true;
       } catch (_) { /* noop */ }
     }
     return false;
@@ -798,7 +797,7 @@ window.Clients = {
     rows.forEach(c => {
       const cpfKey = this._escCpf(c.cpf || c.id);
       html += `
-            <div class="card" style="padding: 16px; margin-bottom: 12px; display:flex; gap: 16px; align-items:center;">
+            <div class="card" style="padding: 16px; margin-bottom: 12px; display:flex; flex-direction:row; flex-wrap:nowrap; gap: 16px; align-items:center; text-align:left;">
                ${typeof avatarHtml === 'function' ? avatarHtml(c.name, 'avatar-md') : ''}
                <div style="flex:1;min-width:0;">
                  <div style="display:flex; justify-content: space-between; align-items:flex-start; gap:8px; margin-bottom: 4px;">

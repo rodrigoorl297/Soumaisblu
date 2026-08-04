@@ -228,12 +228,6 @@ let _editingJobId = null;
 
 const _RH_DOC_BUCKET = 'rh-docs';
 
-const _RH_CV_FILE_FIELDS = [
-  ['cv_anexo_parecer', 'parecer'],
-  ['cv_anexo_certidao_civil', 'certidao_civil'],
-  ['cv_anexo_certidao_negativa', 'certidao_negativa'],
-];
-
 const _RH_EMP_FILE_FIELDS = [
   ['emp_anexo_entrevista_rh', 'entrevista_rh'],
   ['emp_anexo_ficha_rh', 'ficha_rh'],
@@ -346,13 +340,18 @@ function _showRhAttachmentHints(fields, attachments) {
 const _RH_ALLOWED_ROLES = [
   'master', 'fundador', 'desenvolvedor', 'rh', 'gerente',
   'juridico', 'gerencia', 'financeiro', 'diretoria',
+  'supervisor', 'sup_backoffice',
 ];
 
 /** Perfis que nunca devem ser rebaixados pelo sync RH → users. */
 const _RH_PROTECTED_USER_ROLES = ['master', 'fundador'];
 
 /** Perfis cujo admin_id não deve ser sobrescrito pelo cadastro RH. */
-const _RH_PRIVILEGED_USER_ROLES = ['master', 'fundador', 'desenvolvedor', 'gerente', 'diretoria'];
+const _RH_PRIVILEGED_USER_ROLES = ['master', 'fundador', 'desenvolvedor'];
+
+const _RH_TEAM_MEMBER_ROLES = ['employee', 'vendedor', 'backoffice'];
+const _RH_TEAM_LEADER_ROLES = ['supervisor', 'sup_backoffice'];
+const _RH_STAFF_ROLES = ['rh', 'financeiro', 'financial', 'portaria', 'juridico', 'operacional'];
 
 const _RH_TAB_TITLES = {
   sonhos: 'Painel dos Sonhos',
@@ -363,6 +362,7 @@ const _RH_TAB_TITLES = {
   cargo: 'Cargos',
   funcionario: 'Cadastrar Funcionário',
   feedback: 'Feedbacks',
+  vagas: 'Vagas',
   justificativa: 'Justificativa de Falta',
   punicao: 'Registro Punição',
   demissao: 'Demissão',
@@ -594,6 +594,19 @@ function _set(id, v) {
   if (el) el.value = v ?? '';
 }
 
+/** Aceita "1500", "1500.50", "1.500,50" ou "1500,50". */
+function _parseMoney(raw) {
+  let s = String(raw ?? '').trim();
+  if (!s) return 0;
+  if (s.includes(',') && s.includes('.')) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (s.includes(',')) {
+    s = s.replace(',', '.');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : 0;
+}
+
 /** Prefixo fixo — não usar _gerarProtocoloRh de rh-ops.js (carregado depois e exige prefix). */
 function _gerarProtocoloRhManager(prefix = 'RH') {
   const d = new Date();
@@ -616,6 +629,29 @@ function gerarProtocoloCargo() {
 
 async function _ensureRhDatabaseReady() {
   const banner = document.getElementById('rhDbStatusBanner');
+
+  function _rhMigrationIssueLines(core, cbo) {
+    const lines = [];
+    const pushStep = (label, step) => {
+      if (!step || step.ok !== false) return;
+      const err = step.error || step.data?.error || (step.http ? `HTTP ${step.http}` : 'falhou');
+      lines.push(`<li><strong>${label}</strong>: ${_esc(err)}${step.path ? ` <span class="text-muted">(${_esc(step.path)})</span>` : ''}</li>`);
+    };
+    if (core?.ok === false && core.steps) {
+      pushStep('RH Core', core.steps.core);
+      pushStep('RH Hierarquia', core.steps.hierarchy);
+      pushStep('RH Justificativa (horas)', core.steps.justifHours);
+      if (core.error) lines.push(`<li>${_esc(core.error)}</li>`);
+    } else if (core?.ok === false) {
+      lines.push(`<li>${_esc(core.error || 'Migração RH core falhou')}</li>`);
+    }
+    if (cbo?.ok === false) {
+      const err = cbo.error || cbo.data?.error || (cbo.http ? `HTTP ${cbo.http}` : 'falhou');
+      lines.push(`<li><strong>RH CBO</strong>: ${_esc(err)} <span class="text-muted">(migrate-rh-cbo.php)</span></li>`);
+    }
+    return lines;
+  }
+
   try {
     const core = await DB.ensureRhTablesOnline();
     const c = window.SOUBLU_CONFIG || {};
@@ -637,22 +673,43 @@ async function _ensureRhDatabaseReady() {
         } finally {
           clearTimeout(tid);
         }
-        cbo = await res.json().catch(() => ({}));
-        if (res.ok && cbo.ok) sessionStorage.setItem('soublu_rh_cbo_migrated', '1');
+        const data = await res.json().catch(() => ({}));
+        cbo = {
+          ok: res.ok && data.ok !== false,
+          http: res.status,
+          path: 'migrate-rh-cbo.php',
+          error: data.error || (!res.ok ? `HTTP ${res.status}` : null),
+          data,
+        };
+        if (cbo.ok) sessionStorage.setItem('soublu_rh_cbo_migrated', '1');
       }
     }
 
+    const issues = _rhMigrationIssueLines(core, cbo);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',hypothesisId:'H1-H5',location:'rh-manager.js:_ensureRhDatabaseReady',message:'rh db ready',data:{coreOk:core?.ok,cboOk:cbo?.ok,issues:issues.length,steps:core?.steps||null,cbo},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    console.warn('[RH] migração', { core, cbo, issues: issues.length });
+
     if (banner) {
-      if (core?.ok === false || cbo?.ok === false) {
+      if (issues.length) {
         banner.style.display = '';
-        banner.innerHTML = `<div class="alert alert-warning" style="margin:0;">Aviso: migração RH online incompleta. Alguns dados podem não sincronizar.</div>`;
+        banner.innerHTML = `<div class="alert alert-warning" style="margin:0;">
+          <strong>Aviso: migração RH online incompleta.</strong>
+          <ul style="margin:8px 0 0 18px;padding:0;">${issues.join('')}</ul>
+          <div style="margin-top:8px;font-size:12px;">Se persistir após Ctrl+F5, avise o suporte com os itens acima.</div>
+        </div>`;
       } else {
         banner.style.display = 'none';
+        banner.innerHTML = '';
       }
     }
-    return { ok: true, core, cbo };
+    return { ok: issues.length === 0, core, cbo };
   } catch (e) {
     console.warn('[RH] _ensureRhDatabaseReady:', e);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',hypothesisId:'H4',location:'rh-manager.js:_ensureRhDatabaseReady',message:'rh db ready exception',data:{error:e?.message||String(e)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     if (banner) {
       banner.style.display = '';
       banner.innerHTML = `<div class="alert alert-warning" style="margin:0;">Não foi possível validar tabelas RH: ${_esc(e.message || e)}</div>`;
@@ -662,6 +719,8 @@ async function _ensureRhDatabaseReady() {
 }
 
 function _rhDefaultTab(role) {
+  const r = String(role || '').toLowerCase();
+  if (r === 'supervisor' || r === 'sup_backoffice') return 'vagas';
   const elig = typeof PainelSonhos !== 'undefined' && (
     typeof PainelSonhos.eligibleOnHub === 'function'
       ? PainelSonhos.eligibleOnHub(role)
@@ -692,6 +751,7 @@ function _updateRhFuncionarioGreeting() {
 function _applyRhChrome(role) {
   const r = String(role || '').toLowerCase();
   const isJuridico = r === 'juridico';
+  const isSupervisorOnly = r === 'supervisor' || r === 'sup_backoffice';
   const showSonhos = typeof PainelSonhos !== 'undefined' && (
     typeof PainelSonhos.eligibleOnHub === 'function'
       ? PainelSonhos.eligibleOnHub(r)
@@ -707,6 +767,17 @@ function _applyRhChrome(role) {
   document.querySelectorAll('.juridico-only').forEach((el) => {
     el.style.display = isJuridico ? '' : 'none';
   });
+
+  /* Supervisor: acesso focado em Vagas (+ início/conta), sem demais abas de gestão RH. */
+  if (isSupervisorOnly) {
+    document.querySelectorAll('.rh-mgmt-only').forEach((el) => {
+      const tab = el.getAttribute('data-tab');
+      el.style.display = tab === 'vagas' ? '' : 'none';
+    });
+    document.querySelectorAll('.rh-mgmt-label').forEach((el) => {
+      el.style.display = '';
+    });
+  }
 
   document.querySelectorAll('.nav-item[data-tab="sonhos"]').forEach((el) => {
     el.style.display = showSonhos ? '' : 'none';
@@ -785,6 +856,7 @@ function _setEmpRole(role) {
   const v = String(role || '').trim().toLowerCase() || 'vendedor';
   _ensureEmpRoleOption(v);
   _set('emp_role', v);
+  _refreshEmpHierarchyUI(v);
 }
 
 function _resolveRhLinkedUser(users, emp, email) {
@@ -804,113 +876,278 @@ function _resolveRhLinkedUser(users, emp, email) {
   return null;
 }
 
-async function _resolveRhEmployeeUserId(emp, email) {
-  if (emp?.user_id) return emp.user_id;
-  const users = await DB.getAllUsers().catch(() => []);
-  const u = _resolveRhLinkedUser(users, emp, email || emp?.email || emp?.email_pessoal || '');
-  return u?.id || null;
+function _rhLinkedUserIdFromMeta(emp) {
+  const meta = emp?.fontedata_meta;
+  if (typeof meta === 'string' && meta) {
+    try {
+      const parsed = JSON.parse(meta);
+      return parsed?.linked_user_id || null;
+    } catch { /* ignore */ }
+  }
+  if (meta && typeof meta === 'object' && meta.linked_user_id) {
+    return meta.linked_user_id;
+  }
+  return null;
 }
 
-async function _loadEmpClubeLimite(userId) {
+async function _isRealSystemUserId(userId) {
+  if (!userId || typeof DB.getUser !== 'function') return false;
+  const u = await DB.getUser(userId, true).catch(() => null);
+  return !!(u && u.id);
+}
+
+async function _resolveRhEmployeeUserId(emp, email) {
+  if (emp?.user_id) {
+    if (await _isRealSystemUserId(emp.user_id)) return emp.user_id;
+  }
+  const metaUid = _rhLinkedUserIdFromMeta(emp);
+  if (metaUid && await _isRealSystemUserId(metaUid)) return metaUid;
+
+  const users = await DB.getAllUsers().catch(() => []);
+  const u = _resolveRhLinkedUser(users, emp, email || emp?.email || emp?.email_pessoal || '');
+  if (u?.id) return u.id;
+
+  const cpf = _digits(emp?.cpf);
+  if (cpf && typeof DB.getUserByCpf === 'function') {
+    const byCpf = await DB.getUserByCpf(cpf).catch(() => null);
+    if (byCpf?.id && (byCpf.email || byCpf.balance !== undefined || byCpf.admin_id !== undefined)) {
+      if (await _isRealSystemUserId(byCpf.id)) return byCpf.id;
+    }
+  }
+  return null;
+}
+
+function _normNameForMatch(s) {
+  return String(s || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+}
+
+async function _resolveClubeUserId(emp, email) {
+  const resolved = await _resolveRhEmployeeUserId(emp, email || emp?.email || emp?.email_pessoal || '');
+  if (resolved) return resolved;
+  /* Sem vínculo por CPF/e-mail: tenta casar pelo nome nos usuários de login.
+     O Clube busca o limite pelo id de LOGIN — gravar no id do cadastro RH deixa
+     o limite invisível para o colaborador. */
+  const nome = _normNameForMatch(emp?.nome);
+  if (nome) {
+    const users = await DB.getAllUsers().catch(() => []);
+    const byName = (users || []).find((u) => _normNameForMatch(u?.name) === nome);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'L-H2',location:'rh-manager.js:_resolveClubeUserId',message:'match por nome',data:{empId:emp?.id||null,byName:byName?.id||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (byName?.id) return byName.id;
+  }
+  // user_id/id do RH só vale se for usuário de login real (senão o Clube nunca acha o limite).
+  const candidate = String(emp?.user_id || emp?.id || '').trim();
+  if (candidate && await _isRealSystemUserId(candidate)) return candidate;
+  return null;
+}
+
+/** IDs possíveis ligados ao limite do Clube (login, RH, meta). */
+function _clubeLimiteCandidateIds(emp, preferredId) {
+  const ids = [];
+  const add = (v) => {
+    const s = String(v || '').trim();
+    if (s && !ids.includes(s)) ids.push(s);
+  };
+  add(preferredId);
+  add(emp?.user_id);
+  add(emp?.id);
+  add(_rhLinkedUserIdFromMeta(emp));
+  return ids;
+}
+
+async function _fetchClubeLimiteRow(employeeId) {
+  if (!employeeId || typeof supaReq !== 'function') return null;
+  const q = `?employee_id=eq.${encodeURIComponent(employeeId)}&order=updated_at.desc&limit=1`;
+  const list = await supaReq('GET', 'beneficios_limites', null, q);
+  return Array.isArray(list) && list[0] ? list[0] : null;
+}
+
+async function _loadEmpClubeLimite(userId, emp) {
   _set('emp_limite_clube', '0');
   _set('emp_clube_limite_id', '');
-  if (!userId || typeof supaReq !== 'function') return;
+  if (typeof supaReq !== 'function') return null;
+  const candidates = _clubeLimiteCandidateIds(emp, userId);
+  if (!candidates.length) return null;
   try {
-    const list = await supaReq(
-      'GET',
-      'beneficios_limites',
-      null,
-      `?employee_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=1`
-    );
-    const row = Array.isArray(list) && list[0] ? list[0] : null;
-    if (!row) return;
+    let row = null;
+    let matchedUid = '';
+    for (const uid of candidates) {
+      row = await _fetchClubeLimiteRow(uid);
+      if (row) {
+        matchedUid = uid;
+        break;
+      }
+    }
+    if (!row && emp?.nome) {
+      const nome = String(emp.nome).trim();
+      const byName = await supaReq(
+        'GET',
+        'beneficios_limites',
+        null,
+        `?employee_name=ilike.${encodeURIComponent(nome)}&order=updated_at.desc&limit=10`
+      );
+      const rows = Array.isArray(byName) ? byName : [];
+      /* ilike na compat local é substring ("%valor%") — exige igualdade exata
+         (normalizada) para não carregar o limite de outra pessoa (ex.: ANA × MARIANA). */
+      const alvo = _normNameForMatch(nome);
+      row = rows.find((r) => _normNameForMatch(r.employee_name) === alvo) || null;
+      if (row) matchedUid = row.employee_id || '';
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite-load',hypothesisId:'H-load',location:'rh-manager.js:_loadEmpClubeLimite',message:'load clube limite',data:{candidates,matchedUid:matchedUid||null,found:!!row,aprovado:row?row.limite_aprovado:null,limitId:row?.id||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (!row) return null;
     _set('emp_clube_limite_id', row.id || '');
     const val = parseFloat(row.limite_aprovado);
     _set('emp_limite_clube', Number.isFinite(val) ? String(val) : '0');
+    return row;
   } catch (e) {
     console.warn('[RH] load clube limite:', e?.message || e);
+    return null;
   }
 }
 
-async function _saveEmpClubeLimite(userId, employeeName, limiteVal) {
-  if (!userId || typeof supaReq !== 'function') return;
-  const aprovado = Math.max(0, Math.round((parseFloat(limiteVal) || 0) * 100) / 100);
-  const existingId = _val('emp_clube_limite_id');
-  let utilizado = 0;
-  let limitId = existingId;
-
+async function _sumBenVoucherUtilizado(userId) {
+  if (!userId || typeof supaReq !== 'function') return 0;
   try {
-    if (!limitId) {
-      const list = await supaReq(
-        'GET',
-        'beneficios_limites',
-        null,
-        `?employee_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=1`
-      );
-      if (Array.isArray(list) && list[0]) {
-        limitId = list[0].id;
-        utilizado = parseFloat(list[0].limite_utilizado) || 0;
-      }
-    } else {
-      const list = await supaReq(
-        'GET',
-        'beneficios_limites',
-        null,
-        `?id=eq.${encodeURIComponent(limitId)}&limit=1`
-      );
-      if (Array.isArray(list) && list[0]) {
-        utilizado = parseFloat(list[0].limite_utilizado) || 0;
-      }
+    const vouchers = await supaReq(
+      'GET',
+      'beneficios_vouchers',
+      null,
+      `?employee_id=eq.${encodeURIComponent(userId)}&order=created_at.desc&limit=500`
+    );
+    const debit = new Set(['em_analise', 'utilizado', 'em_processamento', 'pago']);
+    return (Array.isArray(vouchers) ? vouchers : [])
+      .filter((v) => debit.has(String(v.status || '').toLowerCase()))
+      .reduce((acc, v) => acc + (parseFloat(v.valor) || 0), 0);
+  } catch (e) {
+    console.warn('[RH] sum vouchers:', e?.message || e);
+    return 0;
+  }
+}
+
+async function _ensureBeneficiosTables() {
+  if (typeof supaReq !== 'function') return;
+  try {
+    await supaReq('GET', 'beneficios_limites', null, '?limit=1');
+  } catch (_) { /* tabela criada sob demanda pelo /api/rest */ }
+}
+
+async function _saveEmpClubeLimite(userId, employeeName, limiteVal) {
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H1-H2',location:'rh-manager.js:_saveEmpClubeLimite:entry',message:'save clube limite start',data:{userId:userId||null,limiteVal,employeeName:(employeeName||'').slice(0,40)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
+  if (!userId || typeof supaReq !== 'function') {
+    throw new Error('Funcionário sem usuário vinculado ao sistema de login.');
+  }
+  await _ensureBeneficiosTables();
+  const aprovado = Math.max(0, Math.round((parseFloat(limiteVal) || 0) * 100) / 100);
+
+  const existing = await _fetchClubeLimiteRow(userId);
+  const loadedLimitId = String(_val('emp_clube_limite_id') || '').trim();
+  const existingAprovado = Math.max(0, parseFloat(existing?.limite_aprovado) || 0);
+  // Evita zerar limite existente quando o campo veio 0 porque o load falhou (sem id no form).
+  if (aprovado <= 0 && existing && existingAprovado > 0 && !loadedLimitId) {
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H-wipe',location:'rh-manager.js:_saveEmpClubeLimite:keep',message:'keep existing limite (load miss)',data:{userId,existingAprovado},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (existing.id) _set('emp_clube_limite_id', existing.id);
+    _set('emp_limite_clube', String(existingAprovado));
+    return existing;
+  }
+
+  const usedFromVouchers = await _sumBenVoucherUtilizado(userId);
+  const utilizado = Math.min(
+    aprovado,
+    Math.round(Math.max(parseFloat(existing?.limite_utilizado) || 0, usedFromVouchers) * 100) / 100
+  );
+  const disponivel = Math.max(0, Math.round((aprovado - utilizado) * 100) / 100);
+  const payload = {
+    employee_id: userId,
+    employee_name: employeeName || existing?.employee_name || '',
+    limite_aprovado: aprovado,
+    limite_utilizado: utilizado,
+    limite_disponivel: disponivel,
+    status: aprovado > 0 ? 'aprovado' : (existing?.status || 'solicitado'),
+  };
+
+  let limitId = existing?.id || loadedLimitId || '';
+  let savedRow = null;
+
+  if (limitId) {
+    const patched = await supaReq(
+      'PATCH',
+      'beneficios_limites',
+      payload,
+      `?id=eq.${encodeURIComponent(limitId)}`
+    );
+    savedRow = Array.isArray(patched) && patched[0] ? patched[0] : null;
+  }
+
+  if (!savedRow) {
+    const row = await _fetchClubeLimiteRow(userId);
+    if (row && Math.abs((parseFloat(row.limite_aprovado) || 0) - aprovado) < 0.01) {
+      savedRow = row;
+      limitId = row.id;
     }
+  }
 
-    const disponivel = Math.max(0, Math.round((aprovado - utilizado) * 100) / 100);
-    const payload = {
-      employee_id: userId,
-      employee_name: employeeName || '',
-      limite_aprovado: aprovado,
-      limite_utilizado: utilizado,
-      limite_disponivel: disponivel,
-      status: aprovado > 0 ? 'aprovado' : 'solicitado',
-    };
-
-    if (limitId) {
-      const patched = await supaReq('PATCH', 'beneficios_limites', payload, `?id=eq.${encodeURIComponent(limitId)}`);
-      if (!patched?.length) {
-        throw new Error('Registro de limite não encontrado para atualizar.');
-      }
-    } else if (aprovado > 0) {
-      payload.id = 'ben_lim_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-      payload.protocolo = 'RH-' + Date.now().toString(36).toUpperCase();
-      const created = await supaReq('POST', 'beneficios_limites', payload);
-      limitId = (Array.isArray(created) && created[0]?.id) ? created[0].id : payload.id;
-    } else {
+  if (!savedRow) {
+    if (aprovado <= 0 && !existing) {
+      // #region agent log
+      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H3',location:'rh-manager.js:_saveEmpClubeLimite:skip',message:'skip zero limite no row',data:{userId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       return;
     }
-
-    if (limitId) _set('emp_clube_limite_id', limitId);
-
-    try {
-      await DB.updateUser(userId, { acesso_clube: aprovado > 0 });
-    } catch (accErr) {
-      console.warn('[RH] acesso_clube:', accErr?.message || accErr);
-    }
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-lim',hypothesisId:'H1-H3',location:'rh-manager.js:save-clube-limite',message:'clube limite saved',data:{userId,limitId,aprovado,utilizado,disponivel,status:payload.status},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-  } catch (e) {
-    console.error('[RH] save clube limite:', e);
-    throw new Error('Não foi possível salvar o limite do Clube de Benefícios: ' + (e?.message || e));
+    const newId = 'ben_lim_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const createPayload = {
+      ...payload,
+      id: newId,
+      protocolo: existing?.protocolo || ('RH-' + Date.now().toString(36).toUpperCase()),
+    };
+    const created = await supaReq('POST', 'beneficios_limites', createPayload);
+    savedRow = Array.isArray(created) && created[0] ? created[0] : (created && created.id ? created : null);
+    limitId = savedRow?.id || newId;
   }
+
+  if (!savedRow || Math.abs((parseFloat(savedRow.limite_aprovado) || 0) - aprovado) > 0.01) {
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H2',location:'rh-manager.js:_saveEmpClubeLimite:fail',message:'save clube limite failed',data:{userId,aprovado,savedRow:!!savedRow,limitId},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    throw new Error('Não foi possível gravar o limite do Clube de Benefícios. Tente novamente.');
+  }
+
+  if (limitId) _set('emp_clube_limite_id', limitId);
+
+  try {
+    await DB.updateUser(userId, { acesso_clube: aprovado > 0 });
+  } catch (accErr) {
+    console.warn('[RH] acesso_clube:', accErr?.message || accErr);
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H6',location:'rh-manager.js:_saveEmpClubeLimite:acesso',message:'acesso_clube update failed',data:{userId,error:String(accErr?.message||accErr).slice(0,120)},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+  }
+  // #region agent log
+  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H1',location:'rh-manager.js:_saveEmpClubeLimite:ok',message:'save clube limite ok',data:{userId,aprovado,limitId,disponivel},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 }
 
 async function _syncRhUserFromEmployee(emp, password, opts = {}) {
   const email = DB.normalizeEmail(emp.email || emp.email_pessoal || '');
-  if (!email && !emp.user_id) return emp.user_id || null;
-
   const users = await DB.getAllUsers().catch(() => []);
   const u = _resolveRhLinkedUser(users, emp, email);
+  if (!email && !emp.user_id && !u?.id) return null;
   const formRole = String(emp.system_role || emp.role || '').trim().toLowerCase() || null;
   const syncRole = opts.syncRole === true;
+  const isTeamMember = _RH_TEAM_MEMBER_ROLES.includes(formRole || '');
+  const isTeamLeader = _RH_TEAM_LEADER_ROLES.includes(formRole || '');
+  const adminFromHierarchy = _resolveRhAdminIdFromHierarchy(emp, formRole);
 
   const userData = {
     name: emp.nome || emp.name || '',
@@ -931,8 +1168,11 @@ async function _syncRhUserFromEmployee(emp, password, opts = {}) {
     if (!password) return null;
     userData.role = formRole || 'vendedor';
     userData.permissions = emp.permissions || _collectPermissoesFromForm();
-    if (emp.supervisor_id) userData.admin_id = emp.supervisor_id;
-    else if (typeof ADMIN_ID !== 'undefined') userData.admin_id = ADMIN_ID;
+    if (isTeamMember) {
+      userData.admin_id = emp.supervisor_id || (typeof ADMIN_ID !== 'undefined' ? ADMIN_ID : null);
+    } else if (adminFromHierarchy) {
+      userData.admin_id = adminFromHierarchy;
+    }
     const created = await DB.addUser({
       ...userData,
       password,
@@ -948,8 +1188,13 @@ async function _syncRhUserFromEmployee(emp, password, opts = {}) {
     if (emp.permissions) userData.permissions = emp.permissions;
   }
   if (!_RH_PRIVILEGED_USER_ROLES.includes(existingRole)) {
-    if (emp.supervisor_id) userData.admin_id = emp.supervisor_id;
-    else if (typeof ADMIN_ID !== 'undefined' && !u.admin_id) userData.admin_id = ADMIN_ID;
+    if (isTeamMember) {
+      userData.admin_id = emp.supervisor_id || null;
+    } else if (isTeamLeader || formRole === 'gerente' || formRole === 'gerencia' || formRole === 'diretoria' || _RH_STAFF_ROLES.includes(formRole || '')) {
+      userData.admin_id = adminFromHierarchy || null;
+    } else if (adminFromHierarchy) {
+      userData.admin_id = adminFromHierarchy;
+    }
   }
 
   await DB.updateUser(u.id, userData);
@@ -1017,6 +1262,9 @@ function switchTab(tabId) {
   }
   if (tabId === 'feedback' && typeof renderRhFeedbackList === 'function') {
     renderRhFeedbackList();
+  }
+  if (tabId === 'vagas' && typeof RhVagas !== 'undefined' && typeof RhVagas.render === 'function') {
+    RhVagas.render();
   }
   if (tabId === 'relatorios') {
     if (typeof initRhRelatoriosHub === 'function') initRhRelatoriosHub();
@@ -1143,6 +1391,131 @@ function _leaderFieldValue(el, mode) {
   return mode === 'id' ? null : text;
 }
 
+function _rhUserRole(u) {
+  return String(u?.role || '').trim().toLowerCase();
+}
+
+function _rhUserIsActive(u) {
+  const a = u?.active;
+  if (a === false || a === 0 || a === '0' || a === 'false') return false;
+  return true;
+}
+
+async function _loadRhSystemUsers(force = false) {
+  if (force && typeof DB.clearAllUsersCache === 'function') {
+    DB.clearAllUsersCache();
+  }
+  let users = await DB.getAllUsers(force).catch(() => []);
+  if (!users?.length) {
+    users = await DB.getUsers().catch(() => []);
+  }
+  window._allSystemUsersCache = Array.isArray(users) ? users : [];
+  return window._allSystemUsersCache;
+}
+
+function _rhLeaderPools() {
+  return {
+    emp_supervisor: ['supervisor', 'sup_backoffice', 'parceiro'],
+    emp_responsavel_dpto: ['gerente', 'gerencia', 'rh', 'operacional', 'backoffice', 'supervisor'],
+    emp_diretor_dpto: ['diretoria', 'gerente', 'gerencia', 'master', 'fundador'],
+  };
+}
+
+function _rhLeaderRoleTag(r) {
+  return ({
+    parceiro: 'Parceiro',
+    sup_backoffice: 'Sup. Backoffice',
+    supervisor: 'Supervisor',
+    diretoria: 'Diretoria',
+    gerente: 'Gerente',
+    gerencia: 'Gerência',
+    rh: 'RH',
+    operacional: 'Operacional',
+    backoffice: 'Backoffice',
+    master: 'Master',
+    fundador: 'Fundador',
+  })[r] || '';
+}
+
+function _buildLeaderOptions(users, allowedRoles, selectedId, selectedName, emptyLabel = '— Sem vínculo —') {
+  const roles = new Set(allowedRoles.map((x) => x.toLowerCase()));
+  const leaders = (users || [])
+    .filter((u) => _rhUserIsActive(u) && roles.has(_rhUserRole(u)))
+    .sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || ''));
+  let html = `<option value="">${emptyLabel}</option>` + leaders.map((s) => {
+    const role = _rhUserRole(s);
+    const tag = _rhLeaderRoleTag(role);
+    const name = s.name || s.email || '';
+    return `<option value="${_esc(s.id)}" data-name="${_esc(name)}">${tag ? `${tag} — ` : ''}${_esc(name)} (${_esc(s.department || '—')})</option>`;
+  }).join('');
+  if (selectedId && !leaders.some((s) => String(s.id) === String(selectedId))) {
+    const nm = selectedName || 'Usuário vinculado';
+    html += `<option value="${_esc(selectedId)}" data-name="${_esc(nm)}">${_esc(nm)} (vínculo salvo)</option>`;
+  }
+  return html;
+}
+
+function _resolveRhAdminIdFromHierarchy(emp, formRole) {
+  const r = String(formRole || emp.system_role || emp.role || '').trim().toLowerCase();
+  if (_RH_TEAM_MEMBER_ROLES.includes(r)) return emp.supervisor_id || null;
+  if (_RH_TEAM_LEADER_ROLES.includes(r)) return emp.responsavel_dpto_id || emp.diretor_dpto_id || null;
+  if (r === 'gerente' || r === 'gerencia' || r === 'diretoria') return emp.diretor_dpto_id || null;
+  if (_RH_STAFF_ROLES.includes(r)) return emp.responsavel_dpto_id || emp.diretor_dpto_id || null;
+  return emp.supervisor_id || null;
+}
+
+function _refreshEmpHierarchyUI(role) {
+  const r = String(role || 'vendedor').toLowerCase();
+  const isTeamMember = _RH_TEAM_MEMBER_ROLES.includes(r);
+  const isTeamLeader = _RH_TEAM_LEADER_ROLES.includes(r);
+  const isStaff = _RH_STAFF_ROLES.includes(r);
+  const isDirector = r === 'diretoria' || r === 'gerente' || r === 'gerencia';
+  const setVis = (id, show) => {
+    const g = document.getElementById(id);
+    if (g) g.style.display = show ? '' : 'none';
+  };
+  // RH/Financeiro/Portaria: sem supervisor comercial; vendedor/supervisor/diretoria mantêm a cadeia.
+  setVis('emp_hier_supervisor_group', !isStaff);
+  setVis('emp_hier_responsavel_group', true);
+  setVis('emp_hier_diretor_group', true);
+
+  const supLbl = document.querySelector('label[for="emp_supervisor"]');
+  if (supLbl) {
+    if (isTeamMember) {
+      supLbl.innerHTML = 'Equipe / Líder responsável <small style="text-transform:none;font-weight:400;">(obrigatório — supervisor ou sup. backoffice)</small>';
+    } else if (isTeamLeader) {
+      supLbl.innerHTML = 'Reporta a / coordenação superior <small style="text-transform:none;font-weight:400;">(opcional)</small>';
+    } else if (isDirector) {
+      supLbl.innerHTML = 'Líder / referência na equipe <small style="text-transform:none;font-weight:400;">(opcional)</small>';
+    } else {
+      supLbl.innerHTML = 'Supervisor do Colaborador';
+    }
+  }
+
+  const hint = document.getElementById('emp_hierarchy_hint');
+  if (!hint) return;
+  if (isTeamLeader) {
+    hint.textContent = 'Como supervisor, selecione o Responsável pelo Dpto e o Diretor (recomendado). O supervisor escolhido no cadastro de vendedores vira a equipe no sistema (mesmo vínculo do Painel Master).';
+  } else if (isDirector) {
+    hint.textContent = 'Como diretor/gerente, preencha responsável e diretor superior se houver. O supervisor comercial é opcional.';
+  } else if (isStaff) {
+    hint.textContent = 'Para este perfil, selecione Responsável pelo Dpto e Diretor Dpto (sem supervisor comercial).';
+  } else if (isTeamMember) {
+    hint.textContent = 'O supervisor escolhido vira a equipe no sistema (mesmo vínculo do Painel Master).';
+  } else {
+    hint.textContent = 'Monte a hierarquia: Supervisor → Responsável Dpto → Diretor Dpto.';
+  }
+}
+
+function _rhSupervisorLabel(e) {
+  if (e?.supervisor) return e.supervisor;
+  if (e?.supervisor_id) {
+    const u = (window._allSystemUsersCache || []).find((x) => String(x.id) === String(e.supervisor_id));
+    if (u) return u.name || u.email || '—';
+  }
+  return '—';
+}
+
 function _normalizeRhEmployeeRow(row) {
   if (!row || typeof row !== 'object') return row;
   const r = { ...row };
@@ -1163,47 +1536,85 @@ function _normalizeRhEmployeeRow(row) {
       try { r[k] = JSON.parse(r[k]); } catch { /* mantém string */ }
     }
   });
+  if (!r.supervisor_id && r.supervisor && typeof r.supervisor === 'string' && /^[a-f0-9-]{16,}$/i.test(r.supervisor)) {
+    r.supervisor_id = r.supervisor;
+    r.supervisor = '';
+  }
+  // Fallback de leitura: legado admin_id (users) → supervisor_id no RH
+  if (!r.supervisor_id && r.admin_id) {
+    r.supervisor_id = r.admin_id;
+  }
   return r;
 }
 
-async function _fillLeadersSelects() {
+async function _fillLeadersSelects(selected = {}, opts = {}) {
   try {
-    if (!window._allSystemUsersCache) {
-      window._allSystemUsersCache = await DB.getUsers();
-    }
-    // Apenas líderes (iguais ao master)
-    const leaders = (window._allSystemUsersCache || []).filter(u =>
-      ['supervisor', 'parceiro', 'sup_backoffice', 'diretoria', 'gerente'].includes(u.role) && u.active !== false
-    );
-    
-    leaders.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const force = opts.force !== false;
+    const users = await _loadRhSystemUsers(force);
+    const pools = _rhLeaderPools();
+    const fieldMap = {
+      emp_supervisor: ['supervisor_id', 'supervisor'],
+      emp_responsavel_dpto: ['responsavel_dpto_id', 'responsavel_dpto'],
+      emp_diretor_dpto: ['diretor_dpto_id', 'diretor_dpto'],
+    };
 
-    const roleTag = (r) => ({
-      parceiro: 'Parceiro',
-      sup_backoffice: 'Sup. Backoffice',
-      supervisor: 'Supervisor',
-      diretoria: 'Diretoria',
-      gerente: 'Gerente'
-    }[r] || '');
+    const emptyLabels = {
+      emp_supervisor: '— Sem líder de equipe —',
+    };
 
-    const opts = '<option value="">— Sem vínculo —</option>' + leaders.map(s => {
-      const tag = roleTag(s.role);
-      // Salva o ID para vincular no admin_id, mas guarda o nome no data-name
-      return `<option value="${_esc(s.id)}" data-name="${_esc(s.name || s.email)}">${tag ? tag + ' — ' : ''}${_esc(s.name || s.email)} (${_esc(s.department || '—')})</option>`;
-    }).join('');
-
-    ['emp_supervisor', 'emp_responsavel_dpto', 'emp_diretor_dpto'].forEach(id => {
+    for (const [id, roles] of Object.entries(pools)) {
       const el = _ensureLeaderSelect(id);
-      if (el) {
-        const currentVal = el.value || el.dataset.pendingValue || '';
-        delete el.dataset.pendingValue;
-        el.innerHTML = opts;
-        if (currentVal) el.value = currentVal;
+      if (!el) continue;
+      el.disabled = false;
+      const [idKey, nameKey] = fieldMap[id] || [];
+      const currentVal = el.value || el.dataset.pendingValue || '';
+      const selId = selected[idKey] || currentVal;
+      const selName = selected[nameKey] || '';
+      delete el.dataset.pendingValue;
+      el.innerHTML = _buildLeaderOptions(users, roles, selId, selName, emptyLabels[id] || '— Sem vínculo —');
+      if (selId) el.value = selId;
+    }
+
+    const role = String(_val('emp_role') || selected.system_role || selected.role || 'vendedor').toLowerCase();
+    const supEl = document.getElementById('emp_supervisor');
+    const respEl = document.getElementById('emp_responsavel_dpto');
+    const dirEl = document.getElementById('emp_diretor_dpto');
+    const counts = {
+      users: (users || []).length,
+      supervisor: supEl ? Math.max(0, supEl.options.length - 1) : 0,
+      responsavel: respEl ? Math.max(0, respEl.options.length - 1) : 0,
+      diretor: dirEl ? Math.max(0, dirEl.options.length - 1) : 0,
+    };
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'hier-fix',hypothesisId:'H-hier2',location:'rh-manager.js:_fillLeadersSelects',message:'leader selects filled',data:{role,counts},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (_RH_TEAM_MEMBER_ROLES.includes(role) || _RH_TEAM_LEADER_ROLES.includes(role) || role === 'diretoria' || role === 'gerente') {
+      const warn = document.getElementById('emp_supervisor_warn');
+      if (warn) {
+        const emptyAll = !counts.supervisor && !counts.responsavel && !counts.diretor;
+        warn.style.display = emptyAll ? '' : 'none';
+        warn.textContent = emptyAll
+          ? 'Nenhum líder encontrado. Cadastre usuários Supervisor / Gerente / Diretoria no sistema.'
+          : '';
       }
-    });
-  } catch(e) {
-    console.error('Error filling leaders:', e);
+    }
+  } catch (e) {
+    console.error('[RH] fill leaders:', e);
   }
+}
+
+function _rhHierarchySelectionFromForm() {
+  const elSup = document.getElementById('emp_supervisor');
+  const elResp = document.getElementById('emp_responsavel_dpto');
+  const elDir = document.getElementById('emp_diretor_dpto');
+  return {
+    supervisor_id: _leaderFieldValue(elSup, 'id'),
+    supervisor: _leaderFieldValue(elSup, 'name'),
+    responsavel_dpto_id: _leaderFieldValue(elResp, 'id'),
+    responsavel_dpto: _leaderFieldValue(elResp, 'name'),
+    diretor_dpto_id: _leaderFieldValue(elDir, 'id'),
+    diretor_dpto: _leaderFieldValue(elDir, 'name'),
+  };
 }
 
 
@@ -1327,7 +1738,7 @@ function renderEmployeeList() {
   const company = _rhCompanyEmployees(raw);
   const list = _sortRhEmpByName(company);
 if (!list.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
     return;
   }
   tbody.innerHTML = list.map((e) => {
@@ -1350,6 +1761,7 @@ if (!list.length) {
       <td><strong>${_esc(e.nome)}</strong><div style="font-size:12px;color:var(--color-text-muted);">${_esc(_fmtCpf(e.cpf))}</div></td>
       <td>${_esc(_jobLabel(e.cargo_id || e.cargo))}</td>
       <td>${_esc(e.departamento || '—')}</td>
+      <td>${_esc(_rhSupervisorLabel(e))}</td>
       <td>${_fmtDate(e.data_admissao)}</td>
       <td>${statusBadge}</td>
       <td>${_esc(medidas)}</td>
@@ -1381,7 +1793,7 @@ async function reloadAllData(opts = {}) {
       await refreshPartnerRootIdsCache().catch(() => {});
     }
     try {
-      window._allSystemUsersCache = await DB.getUsers().catch(() => []);
+      await _loadRhSystemUsers(false);
     } catch (_) {
       window._allSystemUsersCache = [];
     }
@@ -1413,6 +1825,12 @@ async function reloadAllData(opts = {}) {
 
     _fillJobSelects();
     _fillCompanySelect();
+    const openEmpRow = document.getElementById('funcionarioModal')?.classList.contains('open')
+      ? (_val('emp_id')
+        ? (window._allEmployees || []).find((e) => String(e.id) === String(_val('emp_id')))
+        : _rhHierarchySelectionFromForm())
+      : {};
+    await _fillLeadersSelects(openEmpRow || {}, { force: true }).catch(() => {});
     renderCompanyList();
     renderResumeList();
     renderJobList();
@@ -1494,12 +1912,103 @@ async function salvarEmpresa(event) {
 }
 
 /* ══ CURRÍCULO ══ */
+function _cvRadioVal(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? String(el.value || '') : '';
+}
+
+function _cvSetRadio(name, value) {
+  const v = value == null || value === '' ? '' : String(value);
+  document.querySelectorAll(`input[name="${name}"]`).forEach((el) => {
+    el.checked = v !== '' && String(el.value) === v;
+  });
+}
+
+function _cvSkillFromForm(prefix) {
+  const scoreRaw = _cvRadioVal(prefix);
+  const score = scoreRaw ? parseInt(scoreRaw, 10) : null;
+  return {
+    score: (score >= 1 && score <= 5) ? score : null,
+    obs: _val(`${prefix}_obs`).trim(),
+  };
+}
+
+function _cvFillSkill(prefix, data) {
+  const d = data && typeof data === 'object' ? data : {};
+  _cvSetRadio(prefix, d.score != null ? d.score : '');
+  _set(`${prefix}_obs`, d.obs || '');
+}
+
+function _parseCvAvaliacao(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
+  if (typeof raw === 'string' && raw.trim()) {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function _collectCvAvaliacao() {
+  return {
+    doc_parecer_rh: _val('cv_doc_parecer_rh') || '',
+    doc_certidao_civil: _val('cv_doc_certidao_civil') || '',
+    doc_certidao_negativa: _val('cv_doc_certidao_negativa') || '',
+    resumo_executivo: _val('cv_resumo_executivo').trim(),
+    hard_skills: {
+      experiencia: _cvSkillFromForm('cv_hs_experiencia'),
+      formacao: _cvSkillFromForm('cv_hs_formacao'),
+      ferramentas: _cvSkillFromForm('cv_hs_ferramentas'),
+    },
+    soft_skills: {
+      comunicacao: _cvSkillFromForm('cv_ss_comunicacao'),
+      equipe: _cvSkillFromForm('cv_ss_equipe'),
+      problemas: _cvSkillFromForm('cv_ss_problemas'),
+      adaptabilidade: _cvSkillFromForm('cv_ss_adaptabilidade'),
+    },
+    pontos_fortes: _val('cv_pontos_fortes').trim(),
+    pontos_atencao: _val('cv_pontos_atencao').trim(),
+    parecer: _cvRadioVal('cv_parecer') || '',
+    parecer_justificativa: _val('cv_parecer_justificativa').trim(),
+  };
+}
+
+function _fillCvAvaliacao(row) {
+  const a = _parseCvAvaliacao(row?.avaliacao);
+  _set('cv_doc_parecer_rh', a.doc_parecer_rh || '');
+  _set('cv_doc_certidao_civil', a.doc_certidao_civil || '');
+  _set('cv_doc_certidao_negativa', a.doc_certidao_negativa || '');
+  _set('cv_resumo_executivo', a.resumo_executivo || '');
+  const hs = a.hard_skills || {};
+  _cvFillSkill('cv_hs_experiencia', hs.experiencia);
+  _cvFillSkill('cv_hs_formacao', hs.formacao);
+  _cvFillSkill('cv_hs_ferramentas', hs.ferramentas);
+  const ss = a.soft_skills || {};
+  _cvFillSkill('cv_ss_comunicacao', ss.comunicacao);
+  _cvFillSkill('cv_ss_equipe', ss.equipe);
+  _cvFillSkill('cv_ss_problemas', ss.problemas);
+  _cvFillSkill('cv_ss_adaptabilidade', ss.adaptabilidade);
+  _set('cv_pontos_fortes', a.pontos_fortes || '');
+  _set('cv_pontos_atencao', a.pontos_atencao || '');
+  _cvSetRadio('cv_parecer', a.parecer || '');
+  _set('cv_parecer_justificativa', a.parecer_justificativa || '');
+}
+
+function _resetCvAvaliacaoForm() {
+  _fillCvAvaliacao({});
+}
+
 function openCurriculoModal(row) {
   const form = document.getElementById('form-curriculo');
   if (form) form.reset();
   _editingCvId = null;
   _fillJobSelects();
   gerarProtocoloCurriculo();
+  _resetCvAvaliacaoForm();
 
   if (row) {
     _editingCvId = row.id;
@@ -1514,13 +2023,9 @@ function openCurriculoModal(row) {
     _set('cv_unidade', row.unidade || '');
     _set('cv_vaga', row.vaga_id || row.vaga || '');
     _loadRhFonteFieldsFromRow('cv', row);
+    _fillCvAvaliacao(row);
   } else {
     _loadRhFonteFieldsFromRow('cv', null);
-    _clearRhFileSavedHints(_RH_CV_FILE_FIELDS.map((f) => f[0]));
-  }
-
-  if (row) {
-    _showRhAttachmentHints(_RH_CV_FILE_FIELDS, row.attachments);
   }
 
   openModalRH('curriculoModal');
@@ -1596,6 +2101,7 @@ async function salvarCurriculo(event) {
     pis: _digits(_val('cv_pis')),
     situacao_cadastral: _val('cv_situacao_rf').trim(),
     fontedata_meta: _fonteMetaForSave('cv'),
+    avaliacao: _collectCvAvaliacao(),
     stage: _editingCvId
       ? (_allResumes.find((r) => String(r.id) === String(_editingCvId))?.stage || 'triagem')
       : 'triagem',
@@ -1603,10 +2109,8 @@ async function salvarCurriculo(event) {
 
   showLoading('Salvando currículo...');
   try {
-    const cvKey = _editingCvId || cpf;
-    const prev = _editingCvId ? (_allResumes.find((r) => String(r.id) === String(_editingCvId)) || {}) : {};
-    row.attachments = await _collectRhAttachments(_RH_CV_FILE_FIELDS, prev.attachments, `curriculos/${cvKey}`);
-await DB.saveRhResume(row);
+    await DB.ensureRhTablesOnline(true);
+    await DB.saveRhResume(row);
     closeModalRH('curriculoModal');
     await reloadAllData();
     showToast('Currículo salvo com sucesso!', 'success');
@@ -1752,6 +2256,7 @@ function limparFormFuncionario() {
   const form = document.getElementById('form-funcionario');
   if (form) form.reset();
   _set('emp_id', '');
+  _set('emp_user_id', '');
   _set('emp_advertencia', '0');
   _set('emp_suspensao', '0');
   _set('emp_limite_clube', '0');
@@ -1770,16 +2275,27 @@ async function openFuncionarioModal(row) {
   limparFormFuncionario();
   _fillJobSelects();
   _fillCompanySelect();
-  await _fillLeadersSelects();
+  await _loadRhSystemUsers(true);
 
   if (row) {
     row = _normalizeRhEmployeeRow(row);
+    if (!row.supervisor_id && row.user_id) {
+      const u = (window._allSystemUsersCache || []).find((x) => String(x.id) === String(row.user_id));
+      if (u?.admin_id && _RH_TEAM_MEMBER_ROLES.includes(String(row.system_role || row.role || '').toLowerCase())) {
+        row.supervisor_id = u.admin_id;
+      }
+    }
+  }
+
+  if (row) {
     _set('emp_id', row.id);
+    _set('emp_user_id', row.user_id || '');
     document.getElementById('funcModalTitle').textContent = 'Editar Funcionário';
     _set('emp_cpf', _fmtCpf(row.cpf));
     _set('emp_nome', row.nome || '');
     _set('emp_cnpj_registro', row.cnpj_registro || row.cnpj || '');
     _set('emp_matricula', row.matricula || '');
+    _set('emp_cracha_codigo', row.cracha_codigo || '');
     _set('emp_contato', row.contato || '');
     _set('emp_email_pessoal', row.email || row.email_pessoal || '');
     _set('emp_protocolo_entrevista', row.protocolo_entrevista || '');
@@ -1789,6 +2305,10 @@ async function openFuncionarioModal(row) {
     _setEmpCargoSelect(row);
     _set('emp_cbo_cod', row.cbo_cod || '');
     _set('emp_cbo_descricao', row.cbo_descricao || '');
+
+    _setEmpRole(row.system_role || row.role || 'vendedor');
+
+    await _fillLeadersSelects(row);
 
     const setLeader = (idEl, valId, valName) => {
       if (valId) { _set(idEl, valId); return; }
@@ -1812,7 +2332,6 @@ async function openFuncionarioModal(row) {
     _set('emp_emergencia_contato_1', row.emergencia_contato_1 || '');
     _set('emp_emergencia_nome_2', row.emergencia_nome_2 || '');
     _set('emp_emergencia_contato_2', row.emergencia_contato_2 || '');
-    _setEmpRole(row.system_role || row.role || 'vendedor');
     _fillPermissoesForm(row.permissions || {});
     _loadRhFonteFieldsFromRow('emp', row);
 
@@ -1826,11 +2345,11 @@ async function openFuncionarioModal(row) {
         : '<span class="text-muted">Nenhuma alteração registrada.</span>';
     }
     _showRhAttachmentHints(_RH_EMP_FILE_FIELDS, row.attachments);
-    let linkedUid = row.user_id || null;
-    if (!linkedUid) {
-      linkedUid = await _resolveRhEmployeeUserId(row, row.email || row.email_pessoal || '');
-    }
-    await _loadEmpClubeLimite(linkedUid);
+    const linkedUid = await _resolveClubeUserId(row, row.email || row.email_pessoal || '');
+    await _loadEmpClubeLimite(linkedUid, row);
+  } else {
+    _setEmpRole('vendedor');
+    await _fillLeadersSelects({});
   }
 
   openModalRH('funcionarioModal');
@@ -1974,6 +2493,7 @@ async function openFuncionarioFromRef(refId) {
   openFuncionarioModal({
     id: '',
     user_id: u.id,
+    supervisor_id: u.admin_id || null,
     cpf: u.cpf || '',
     nome: u.name || '',
     contato: u.phone || u.phone1 || '',
@@ -2079,13 +2599,15 @@ function onEmpRoleChange() {
     ],
     'portaria': [
       'perm_canLoja', 'perm_canChamados', 'perm_canPainelSonhos', 'perm_canMeuExtrato',
+      'perm_canTreinamentos',
     ],
   };
 
   let toCheck = [];
   if (role === 'diretoria' || role === 'desenvolvedor' || role === 'fundador' || role === 'master') {
-    // Marca tudo
     checkboxes.forEach(cb => cb.checked = true);
+    _refreshEmpHierarchyUI(role);
+    _fillLeadersSelects(_rhHierarchySelectionFromForm(), { force: true }).catch(() => {});
     return;
   } else if (role === 'gerente') {
     toCheck = [
@@ -2100,16 +2622,20 @@ function onEmpRoleChange() {
     const el = document.getElementById(id);
     if (el) el.checked = true;
   });
+  _refreshEmpHierarchyUI(role);
+  _fillLeadersSelects(_rhHierarchySelectionFromForm(), { force: true }).catch(() => {});
 }
 
 async function salvarFuncionario(event) {
   if (event) event.preventDefault();
 
   const id = _val('emp_id');
+  const linkedUserId = _val('emp_user_id') || '';
   const cpf = _digits(_val('emp_cpf'));
   const nome = _val('emp_nome').trim();
   const cnpjReg = _digits(_val('emp_cnpj_registro'));
   const prev = id ? ((window._allEmployees || []).find((e) => String(e.id) === String(id)) || {}) : {};
+  if (!prev.user_id && linkedUserId) prev.user_id = linkedUserId;
   const cargoRaw = _val('emp_cargo');
   let cargoId = _resolveJobId(cargoRaw) || '';
   if (!cargoId && cargoRaw && /^[a-f0-9]{16,}$/i.test(cargoRaw)) cargoId = cargoRaw;
@@ -2120,10 +2646,11 @@ async function salvarFuncionario(event) {
   }
   const email = _val('emp_email_pessoal').trim();
   const password = _val('emp_password');
+  const limiteClubeEarly = _parseMoney(_val('emp_limite_clube'));
   const role = _val('emp_role') || 'vendedor';
   let finalRole = role;
-  if (id && prev.user_id) {
-    const linked = await DB.getUser(prev.user_id, true).catch(() => null);
+  if ((id || linkedUserId) && (prev.user_id || linkedUserId)) {
+    const linked = await DB.getUser(prev.user_id || linkedUserId, true).catch(() => null);
     const linkedRole = String(linked?.role || '').trim().toLowerCase();
     if (_RH_PROTECTED_USER_ROLES.includes(linkedRole) && role !== linkedRole) {
       finalRole = linkedRole;
@@ -2131,12 +2658,23 @@ async function salvarFuncionario(event) {
     }
   }
 
-  if (cpf.length !== 11 || !nome) {
+  if (!nome) {
+    showToast('Preencha o nome.', 'warning');
+    return;
+  }
+  const hasLinkedLogin = !!(linkedUserId || prev.user_id || email);
+  if (cpf.length !== 11 && !hasLinkedLogin) {
     showToast('Preencha CPF e nome.', 'warning');
     return;
   }
+  if (cpf.length && cpf.length !== 11) {
+    showToast('CPF inválido. Informe 11 dígitos ou deixe em branco.', 'warning');
+    return;
+  }
 
-  const dup = (window._allEmployees || []).find((e) => _digits(e.cpf) === cpf && String(e.id) !== String(id));
+  const dup = cpf.length === 11
+    ? (window._allEmployees || []).find((e) => _digits(e.cpf) === cpf && String(e.id) !== String(id))
+    : null;
   if (dup) {
     showToast('CPF já cadastrado para outro funcionário.', 'warning');
     return;
@@ -2156,10 +2694,12 @@ async function salvarFuncionario(event) {
 
   const row = {
     id: id || undefined,
-    cpf,
+    user_id: linkedUserId || prev.user_id || null,
+    cpf: cpf || null,
     nome,
     cnpj_registro: cnpjReg,
     matricula: _val('emp_matricula').trim(),
+    cracha_codigo: _val('emp_cracha_codigo').trim(),
     contato: _val('emp_contato').trim(),
     email,
     email_pessoal: email,
@@ -2213,24 +2753,45 @@ async function salvarFuncionario(event) {
   try {
     await DB.ensureRhTablesOnline(true);
     await DB.ensurePersistTablesOnline(true);
-    const empKey = id || cpf;
+    const empKey = id || cpf || linkedUserId || prev.user_id || ('tmp_' + Date.now());
     try {
       row.attachments = await _collectRhAttachments(_RH_EMP_FILE_FIELDS, prev.attachments, `funcionarios/${empKey}`);
     } catch (attErr) {
-      console.warn('[RH] anexos ignorados:', attErr);
-      row.attachments = prev.attachments || {};
+      console.error('[RH] falha ao enviar anexos:', attErr);
+      hideLoading();
+      const msg = (attErr && attErr.message) ? attErr.message : String(attErr || 'erro desconhecido');
+      showToast('Não foi possível salvar o anexo: ' + msg, 'error', 9000);
+      return;
     }
     let userSyncWarn = '';
+    let loginCreatedMsg = '';
     const prevUserId = prev.user_id || null;
     const prevRole = String(prev.system_role || prev.role || '').trim().toLowerCase();
     const roleChanged = !!id && prevRole && prevRole !== finalRole;
     try {
+      let syncPwd = password || '';
       if (password) {
         row.user_id = await _syncRhUserFromEmployee(row, password);
       } else if (email || prev.user_id || cpf) {
         row.user_id = await _syncRhUserFromEmployee(row, null, { syncRole: roleChanged });
       }
-      if (!row.user_id) {
+      /* Sem usuário de login: com e-mail + limite do Clube (ou senha), cria o acesso
+         automaticamente — senão o colaborador vê "Usuário não encontrado" no login. */
+      const needsLogin = !!(email && !(row.user_id && await _isRealSystemUserId(row.user_id)));
+      if (needsLogin && (password || limiteClubeEarly > 0)) {
+        syncPwd = password || '123456';
+        if (String(syncPwd).length < 4) syncPwd = '123456';
+        row.user_id = await _syncRhUserFromEmployee(row, syncPwd);
+        if (row.user_id && await _isRealSystemUserId(row.user_id)) {
+          if (!password) {
+            loginCreatedMsg = `Login criado: ${email} / senha inicial 123456 (peça para trocar).`;
+          }
+          // #region agent log
+          fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'L-login',location:'rh-manager.js:salvarFuncionario:autoLogin',message:'login auto-criado para clube',data:{empId:id||null,userId:row.user_id||null,hadPassword:!!password,limite:limiteClubeEarly},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+        }
+      }
+      if (!row.user_id || !(await _isRealSystemUserId(row.user_id))) {
         row.user_id = await _resolveRhEmployeeUserId({ ...row, user_id: prev.user_id }, email);
       }
     } catch (userErr) {
@@ -2241,34 +2802,125 @@ async function salvarFuncionario(event) {
       }
     }
 
-    await DB.saveRhEmployee(row);
+    const savedEmp = await DB.saveRhEmployee(row);
+    if (savedEmp?.id) row.id = savedEmp.id;
 
-    const limiteClube = parseFloat(_val('emp_limite_clube')) || 0;
+    let hierWarn = '';
+    const savedId = row.id || id;
+    const clubeUserId = await _resolveClubeUserId(
+      { ...row, user_id: row.user_id || prev.user_id, fontedata_meta: row.fontedata_meta || prev.fontedata_meta },
+      email
+    );
+    if (clubeUserId && clubeUserId !== row.user_id) {
+      row.user_id = clubeUserId;
+      const metaBase = (typeof row.fontedata_meta === 'object' && row.fontedata_meta)
+        ? { ...row.fontedata_meta }
+        : (typeof prev.fontedata_meta === 'object' && prev.fontedata_meta ? { ...prev.fontedata_meta } : {});
+      metaBase.linked_user_id = clubeUserId;
+      row.fontedata_meta = metaBase;
+      if (savedId) {
+        await DB.saveRhEmployee({
+          id: savedId,
+          user_id: clubeUserId,
+          fontedata_meta: metaBase,
+        }).catch((linkErr) => console.warn('[RH] persistir user_id:', linkErr));
+      }
+    } else if (clubeUserId) {
+      row.user_id = clubeUserId;
+    }
+    if (savedId && (row.supervisor_id || row.responsavel_dpto_id || row.diretor_dpto_id)) {
+      let fresh = savedEmp && String(savedEmp.id) === String(savedId) ? savedEmp : null;
+      if (!fresh || (row.supervisor_id && !fresh.supervisor_id)) {
+        fresh = (await DB.getRhEmployees().catch(() => []))
+          .find((e) => String(e.id) === String(savedId)) || fresh;
+      }
+      if (fresh) {
+        const norm = _normalizeRhEmployeeRow(fresh);
+        const missing = [];
+        if (row.supervisor_id && String(norm.supervisor_id || '') !== String(row.supervisor_id)) missing.push('supervisor');
+        if (row.responsavel_dpto_id && String(norm.responsavel_dpto_id || '') !== String(row.responsavel_dpto_id)) missing.push('responsável');
+        if (row.diretor_dpto_id && String(norm.diretor_dpto_id || '') !== String(row.diretor_dpto_id)) missing.push('diretor');
+        if (missing.length) {
+          // Retry hierarchy-only patch after forcing schema migrate
+          await DB.ensureRhTablesOnline(true).catch(() => null);
+          await DB.saveRhEmployee({
+            id: savedId,
+            supervisor_id: row.supervisor_id || null,
+            supervisor: row.supervisor || '',
+            responsavel_dpto_id: row.responsavel_dpto_id || null,
+            responsavel_dpto: row.responsavel_dpto || '',
+            diretor_dpto_id: row.diretor_dpto_id || null,
+            diretor_dpto: row.diretor_dpto || '',
+          }).catch(() => null);
+          const retry = (await DB.getRhEmployees().catch(() => []))
+            .find((e) => String(e.id) === String(savedId));
+          const retryNorm = _normalizeRhEmployeeRow(retry || {});
+          const stillMissing = [];
+          if (row.supervisor_id && String(retryNorm.supervisor_id || '') !== String(row.supervisor_id)) stillMissing.push('supervisor');
+          if (row.responsavel_dpto_id && String(retryNorm.responsavel_dpto_id || '') !== String(row.responsavel_dpto_id)) stillMissing.push('responsável');
+          if (row.diretor_dpto_id && String(retryNorm.diretor_dpto_id || '') !== String(row.diretor_dpto_id)) stillMissing.push('diretor');
+          if (stillMissing.length) {
+            hierWarn = `Hierarquia (${stillMissing.join(', ')}) não persistiu no banco — rode a migração RH (colunas supervisor_id / diretor_dpto_id).`;
+          }
+        }
+      } else {
+        hierWarn = 'Não foi possível confirmar a hierarquia gravada. Reabra o cadastro para verificar.';
+      }
+    }
+
+    const limiteClube = limiteClubeEarly;
     let clubeWarn = '';
-    if (row.user_id) {
+    let clubeOkMsg = '';
+    /* Preferência: id de usuário de LOGIN. Sem login, grava no id do cadastro RH —
+       o Clube re-vincula sozinho no primeiro acesso (self-heal) e o salvamento nunca falha. */
+    let limiteUid = clubeUserId || null;
+    if (!limiteUid) {
+      const fallback = row.user_id || prev.user_id || null;
+      if (fallback && await _isRealSystemUserId(fallback)) limiteUid = fallback;
+    }
+    if (!limiteUid) limiteUid = savedId || id || null;
+    /* Login existe e há linha antiga gravada no id do cadastro RH: migra em vez de duplicar. */
+    if (limiteUid && savedId && String(limiteUid) !== String(savedId)) {
       try {
-        await _saveEmpClubeLimite(row.user_id, nome, limiteClube);
+        const orphan = await _fetchClubeLimiteRow(savedId);
+        if (orphan?.id) {
+          const own = await _fetchClubeLimiteRow(limiteUid);
+          if (!own) {
+            await supaReq('PATCH', 'beneficios_limites', { employee_id: limiteUid }, `?id=eq.${encodeURIComponent(orphan.id)}`);
+            _set('emp_clube_limite_id', orphan.id);
+          }
+        }
+      } catch (migErr) {
+        console.warn('[RH] migrar limite órfão:', migErr?.message || migErr);
+      }
+    }
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-limite',hypothesisId:'H1-H4',location:'rh-manager.js:salvarFuncionario:clube',message:'clube save context',data:{empId:id||null,limiteClube,limiteUid,clubeUserId,rowUserId:row.user_id||null,prevUserId:prev.user_id||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
+    if (limiteUid) {
+      try {
+        await _saveEmpClubeLimite(limiteUid, nome, limiteClube);
+        if (limiteClube > 0) clubeOkMsg = `Limite Clube: R$ ${limiteClube.toFixed(2).replace('.', ',')}.`;
       } catch (limErr) {
         console.warn('[RH] limite clube:', limErr);
         clubeWarn = limErr?.message || String(limErr);
       }
     } else if (limiteClube > 0) {
-      clubeWarn = 'Informe e-mail/senha de acesso ou vincule o CPF a um usuário para liberar o limite do Clube.';
+      clubeWarn = 'Limite não gravado: salve o funcionário primeiro e tente novamente.';
     }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-lim',hypothesisId:'H1-H2',location:'rh-manager.js:salvar-funcionario',message:'salvar funcionario clube',data:{empId:id||null,userId:row.user_id||null,limiteClube,clubeWarn:clubeWarn||null,userSyncWarn:userSyncWarn||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
 
     closeModalRH('funcionarioModal');
     await reloadAllData();
-    if (userSyncWarn || clubeWarn) {
+    if (userSyncWarn || clubeWarn || hierWarn) {
       const parts = [];
       if (userSyncWarn) parts.push(`Login: ${userSyncWarn}`);
+      if (loginCreatedMsg) parts.push(loginCreatedMsg);
       if (clubeWarn) parts.push(clubeWarn);
-      showToast(`Funcionário salvo. ${parts.join(' ')}`, 'warning', 8000);
+      if (hierWarn) parts.push(hierWarn);
+      showToast(`Funcionário salvo. ${parts.join(' ')}`, 'warning', 10000);
     } else {
-      showToast(id ? 'Funcionário atualizado!' : 'Funcionário cadastrado!', 'success');
+      const extra = [clubeOkMsg, loginCreatedMsg].filter(Boolean).join(' ');
+      showToast((id ? 'Funcionário atualizado!' : 'Funcionário cadastrado!') + (extra ? ' ' + extra : ''), 'success', loginCreatedMsg ? 12000 : 5000);
     }
   } catch (e) {
     console.error('[RH] salvarFuncionario:', e);
@@ -2307,9 +2959,12 @@ async function _initRhManager() {
   const role = String(session?.role || '').toLowerCase();
 
   if (!session || !_RH_ALLOWED_ROLES.includes(role)) {
-    _showRhApp();
-    showToast('Acesso restrito ao módulo de RH.', 'error');
-    setTimeout(() => { navigateBack(); }, 2000);
+    /* Sem permissão: não renderizar o painel RH — volta direto à área do usuário. */
+    if (typeof Auth !== 'undefined' && typeof Auth.defaultAppHref === 'function') {
+      window.location.replace(Auth.defaultAppHref());
+    } else {
+      navigateBack();
+    }
     return;
   }
 
@@ -2318,6 +2973,10 @@ async function _initRhManager() {
   _applyRhChrome(role);
   _renderRhSidebarUser(currentUser);
   _wireRhEvents();
+
+  if (typeof loadRhJustificativaSection === 'function') {
+    await loadRhJustificativaSection().catch((e) => console.warn('[RH] justificativa load:', e));
+  }
 
   _showRhApp();
 

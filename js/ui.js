@@ -61,10 +61,13 @@ async function refreshPartnerRootIdsCache() {
 function isUserInPartnerNetworkSync(u) {
   if (!u) return false;
   if (String(u.role || '').toLowerCase() === 'parceiro') return true;
+  /* partner_root_id gravado = carteira R$ mesmo antes do cache de parceiros carregar */
+  if (u.partner_root_id) return true;
   const net = window._PARTNER_NETWORK_USER_IDS;
   if (net && net.has(String(u.id))) return true;
   const roots = window._PARTNER_ROOT_USER_IDS;
   if (roots && u.admin_id && roots.has(String(u.admin_id))) return true;
+  if (roots && u.partner_root_id && roots.has(String(u.partner_root_id))) return true;
   return false;
 }
 
@@ -109,6 +112,18 @@ function parseMoneyAmount(val) {
   return Math.round(n * 100) / 100;
 }
 
+/** Valor monetário com sinal (saldo pode ser negativo após estorno/débito). */
+function parseSignedAmount(val) {
+  const s = String(val ?? '').trim().replace(/\s/g, '');
+  if (!s) return NaN;
+  const normalized = s.includes(',') && !s.includes('.')
+    ? s.replace(/\./g, '').replace(',', '.')
+    : s.replace(/,(?=\d{1,2}$)/, '.');
+  const n = parseFloat(normalized);
+  if (!Number.isFinite(n)) return NaN;
+  return Math.round(n * 100) / 100;
+}
+
 /** Valor numérico de uma transação (MySQL pode vir string ou campo ausente). */
 function txAmount(t) {
   const raw = t?.amount ?? t?.value ?? t?.points ?? 0;
@@ -127,7 +142,7 @@ function txIsCredit(t) {
 
 function _parseWalletField(raw) {
   if (raw == null || raw === '') return null;
-  const n = typeof parseMoneyAmount === 'function' ? parseMoneyAmount(raw) : Number(raw);
+  const n = typeof parseSignedAmount === 'function' ? parseSignedAmount(raw) : Number(raw);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
 }
 
@@ -458,6 +473,7 @@ function formatPoints(n, user) {
 function formatCoins(n) { return formatCurrency(n); }
 window.formatMoney = formatMoney;
 window.parseMoneyAmount = parseMoneyAmount;
+window.parseSignedAmount = parseSignedAmount;
 window.userWalletBalance = userWalletBalance;
 window.PROFILE_SACAR_ROLES = PROFILE_SACAR_ROLES;
 window.userCanSacarPix = userCanSacarPix;
@@ -554,6 +570,7 @@ const PIX_WD_STATUS={
   aguardando:{label:'Aguardando envio',cls:'badge-muted',icon:'⏳'},
   processando:{label:'Processando no banco',cls:'badge-accent',icon:'🔄'},
   pago:{label:'Confirmado pelo banco',cls:'badge-success',icon:'✅'},
+  manual:{label:'Pago manualmente',cls:'badge-success',icon:'✓'},
   erro:{label:'Recusado pelo banco',cls:'badge-danger',icon:'❌'},
   estornado:{label:'Estornado / devolvido',cls:'badge-warning',icon:'↩️'},
 };
@@ -561,6 +578,7 @@ function _resolvePixWdStatus(wd){
   if(!wd)return'aguardando';
   if(wd.status==='rejeitado')return'estornado';
   const ps=String(wd.pix_status||'').toLowerCase();
+  if(ps==='manual')return'manual';
   const hasE2e=!!(wd.pix_e2e_id&&String(wd.pix_e2e_id).trim());
   const bankConfirmed=ps==='pago'||ps==='realizado'||ps==='concluido'||ps==='concluído';
   /* Confirmado pelo banco só com retorno Efi (pix_status + E2E), nunca só por aprovação interna. */
@@ -570,6 +588,7 @@ function _resolvePixWdStatus(wd){
   if(ps==='estornado'||ps==='devolvido')return'estornado';
   if(ps==='processando'||ps==='em_processamento')return'processando';
   if(wd.status==='erro')return'erro';
+  if(String(wd.status||'').toLowerCase()==='pago'&&!hasE2e)return'manual';
   if(wd.approved_by_master&&wd.approved_by_financial)return'processando';
   return'aguardando';
 }

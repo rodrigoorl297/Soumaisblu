@@ -88,7 +88,7 @@
       : (() => {
         const d = typeof DB.proposalBillingDate === 'function'
           ? DB.proposalBillingDate(p)
-          : new Date(p.createdAt || p.created_at || 0);
+          : new Date(p.updatedAt || p.updated_at || p.createdAt || p.created_at || 0);
         return d >= monthStart && d < monthEnd;
       })());
     const propsMonth = props.filter(inMonth);
@@ -354,8 +354,15 @@
     if (!confirm(msg)) return;
     showLoading();
     try {
-      const updated = { ...perms, equipe_sacar_pix: next };
-      const meta = { ...(typeof window._parsePartnerJsonField === 'function' ? window._parsePartnerJsonField(p.meta) : (typeof p.meta === 'object' ? (p.meta || {}) : {})), equipe_sacar_pix: next };
+      const updated = typeof PartnerPerms.syncTeamSacarRoleFlags === 'function'
+        ? PartnerPerms.syncTeamSacarRoleFlags(perms, next)
+        : { ...perms, equipe_sacar_pix: next };
+      const meta = {
+        ...(typeof window._parsePartnerJsonField === 'function'
+          ? window._parsePartnerJsonField(p.meta)
+          : (typeof p.meta === 'object' ? (p.meta || {}) : {})),
+        equipe_sacar_pix: next,
+      };
       await DB.savePartner({ ...p, permissions: updated, meta });
       if (typeof PartnerOps !== 'undefined') PartnerOps.invalidate();
       showToast(next ? 'Equipe liberada para solicitar saque PIX.' : 'Saque da equipe desativado para este parceiro.', 'success');

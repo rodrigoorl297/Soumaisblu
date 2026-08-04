@@ -31,6 +31,9 @@ const VendorTierPoints = (() => {
     { id: 18, label: 'FAIXA18', min: 220000, max: Infinity, points: 10000 },
   ];
 
+  /** Desliga crédito automático de faixas (pontos). Ranking/UI de faixa pode continuar. */
+  const AUTO_CREDIT_ENABLED = false;
+
   function brYmd(d = new Date()) {
     return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(d);
   }
@@ -126,8 +129,13 @@ const VendorTierPoints = (() => {
     const role = String(user.role || '').trim().toLowerCase();
     if (EXEMPT_ROLES.has(role)) return false;
     if (!ELIGIBLE_ROLES.has(role)) return false;
+    // Rede parceira = carteira R$, nunca pontos de faixa SOU+BLU
+    if (user.partner_root_id) return false;
+    if (typeof isUserInPartnerNetworkSync === 'function' && isUserInPartnerNetworkSync(user)) return false;
     if (typeof DB !== 'undefined' && DB._isPartnerWalletUser?.(user)) return false;
     if (typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(user)) return false;
+    const roots = typeof window !== 'undefined' ? window._PARTNER_ROOT_USER_IDS : null;
+    if (roots && user.admin_id && roots.has(String(user.admin_id))) return false;
     if (typeof window !== 'undefined' && window.__PREVIEW_USER_ID__) return false;
     return true;
   }
@@ -293,6 +301,7 @@ const VendorTierPoints = (() => {
   }
 
   async function processCredits(user, data, proposals) {
+    if (!AUTO_CREDIT_ENABLED) return { credited: 0, points: 0, skipped: 'disabled' };
     const day = brDayOfMonth();
     if (day < CREDIT_DAY) return { credited: 0, points: 0 };
 
@@ -343,6 +352,10 @@ const VendorTierPoints = (() => {
   }
 
   async function onLogin(user) {
+    // Garante cache de parceiros antes de decidir elegibilidade (evita crédito indevido no login).
+    if (typeof refreshPartnerRootIdsCache === 'function') {
+      try { await refreshPartnerRootIdsCache(); } catch (_) { /* noop */ }
+    }
     if (!appliesTo(user)) return { synced: false };
 
     const data = normalizeData(user);
@@ -364,6 +377,7 @@ const VendorTierPoints = (() => {
     CREDIT_DAY,
     WITHDRAW_DAY_MIN,
     WITHDRAW_DAY_MAX,
+    AUTO_CREDIT_ENABLED,
     appliesTo,
     usesTierWithdrawRules,
     canWithdrawToday,

@@ -1,0 +1,795 @@
+/* =============================================
+   ZS Clube Benefícios — visual premium corporativo
+   Identidade SOU+BLU (navy + laranja)
+   ============================================= */
+
+body:has(#tab-meus-limites),
+body.clube-beneficios-app {
+  --clube-navy: #0B2545;
+  --clube-navy-deep: #061833;
+  --clube-ink: #14233a;
+  --clube-muted: #5b6b7f;
+  --clube-line: rgba(11, 37, 69, 0.08);
+  --clube-surface: rgba(255, 255, 255, 0.92);
+  --clube-warm: #fff8f2;
+  --clube-accent: var(--color-accent, #F97316);
+  --clube-accent-deep: var(--color-accent-dark, #EA580C);
+  --clube-radius: 18px;
+  --clube-shadow: 0 18px 40px rgba(6, 24, 51, 0.08);
+  font-family: 'Barlow', 'Nunito', system-ui, sans-serif;
+}
+
+body.clube-beneficios-app .main-area,
+body:has(#tab-meus-limites) .main-area {
+  background:
+    radial-gradient(1100px 480px at 12% -10%, rgba(249, 115, 22, 0.14), transparent 55%),
+    radial-gradient(900px 420px at 100% 0%, rgba(11, 37, 69, 0.10), transparent 50%),
+    linear-gradient(180deg, #f7f4ef 0%, #eef2f7 48%, #f8fafc 100%);
+}
+
+body.clube-beneficios-app .page-content,
+body:has(#tab-meus-limites) .page-content {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 8px 28px 48px;
+  box-sizing: border-box;
+}
+
+/* ── Layout sem menu lateral ── */
+body.clube-no-sidebar .main-area {
+  margin-left: 0 !important;
+}
+
+.clube-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 24px;
+}
+
+.clube-topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.clube-back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--clube-line, rgba(11, 37, 69, 0.12));
+  border-radius: 999px;
+  background: #fff;
+  color: var(--clube-navy, #0B2545);
+  font-family: 'Nunito', 'Barlow', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.clube-back-btn:hover {
+  background: var(--clube-warm, #fff8f2);
+  border-color: var(--clube-accent, #F97316);
+  color: var(--clube-accent-deep, #EA580C);
+}
+
+.clube-topbar-logo {
+  height: 40px;
+  width: auto;
+  cursor: pointer;
+}
+
+.clube-topbar-section {
+  font-family: 'Nunito', 'Barlow', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--clube-muted, #5b6b7f);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clube-gestao-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 999px;
+  background: var(--clube-navy, #0B2545);
+  color: #fff;
+  font-family: 'Nunito', 'Barlow', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.clube-gestao-btn:hover {
+  background: var(--clube-accent-deep, #EA580C);
+}
+
+.clube-topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  border-left: 1px solid var(--clube-line, rgba(11, 37, 69, 0.1));
+}
+
+.clube-topbar-user .avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.clube-topbar-user-name {
+  font-family: 'Nunito', 'Barlow', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--clube-ink, #14233a);
+  line-height: 1.2;
+}
+
+.clube-topbar-user-role {
+  font-size: 11px;
+  color: var(--clube-muted, #5b6b7f);
+  line-height: 1.2;
+}
+
+@media (max-width: 720px) {
+  .clube-topbar { padding: 0 12px; }
+  .clube-topbar-logo { height: 32px; }
+  .clube-topbar-section,
+  .clube-topbar-user-role { display: none; }
+}
+
+/* ── Topbar wallet ── */
+.clube-topbar-balance {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--clube-navy) 0%, #163a63 100%);
+  color: #fff;
+  box-shadow: 0 8px 20px rgba(11, 37, 69, 0.22);
+  animation: clubeFadeUp 0.45s ease both;
+}
+
+.clube-topbar-balance .clube-wallet-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.78;
+}
+
+.clube-topbar-balance #topbarBalance,
+.clube-topbar-balance .clube-wallet-value {
+  font-family: 'Nunito', 'Barlow', sans-serif;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+/* ── Hero / section intro ── */
+.clube-hero {
+  position: relative;
+  overflow: hidden;
+  border-radius: calc(var(--clube-radius) + 4px);
+  padding: 28px 28px 26px;
+  margin-bottom: 22px;
+  color: #fff;
+  background:
+    linear-gradient(125deg, rgba(249, 115, 22, 0.22), transparent 42%),
+    linear-gradient(160deg, var(--clube-navy-deep) 0%, var(--clube-navy) 55%, #1a446e 100%);
+  box-shadow: var(--clube-shadow);
+  animation: clubeFadeUp 0.5s ease both;
+}
+
+.clube-hero::after {
+  content: '';
+  position: absolute;
+  right: -40px;
+  top: -50px;
+  width: 220px;
+  height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.35), transparent 70%);
+  pointer-events: none;
+}
+
+.clube-hero-kicker {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.72);
+  margin-bottom: 8px;
+}
+
+.clube-hero h2 {
+  margin: 0 0 8px;
+  font-family: 'Nunito', sans-serif;
+  font-size: clamp(1.45rem, 2.2vw, 1.85rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.clube-hero p {
+  margin: 0;
+  max-width: 46ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.clube-hero-meta {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.clube-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  font-size: 13px;
+  font-weight: 600;
+  backdrop-filter: blur(6px);
+}
+
+/* ── Metric strip ── */
+.clube-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.clube-metric {
+  position: relative;
+  padding: 18px 18px 16px;
+  border-radius: var(--clube-radius);
+  background: var(--clube-surface);
+  border: 1px solid var(--clube-line);
+  box-shadow: 0 10px 28px rgba(6, 24, 51, 0.05);
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  animation: clubeFadeUp 0.55s ease both;
+}
+
+.clube-metric:nth-child(2) { animation-delay: 0.05s; }
+.clube-metric:nth-child(3) { animation-delay: 0.1s; }
+
+.clube-metric:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 16px 34px rgba(6, 24, 51, 0.09);
+}
+
+.clube-metric::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--clube-accent);
+}
+
+.clube-metric-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--clube-muted);
+  margin-bottom: 8px;
+}
+
+.clube-metric .limit-value {
+  font-family: 'Nunito', sans-serif;
+  font-size: clamp(1.35rem, 2vw, 1.7rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--clube-ink);
+  line-height: 1.1;
+}
+
+.clube-metric.is-used .limit-value { color: #c2410c; }
+.clube-metric.is-ok .limit-value { color: #047857; }
+
+/* ── Hub de benefícios (atalhos) ── */
+.clube-hub {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.clube-hub-tile {
+  appearance: none;
+  border: 1px solid var(--clube-line);
+  background: var(--clube-surface);
+  border-radius: calc(var(--clube-radius) + 2px);
+  box-shadow: 0 12px 28px rgba(6, 24, 51, 0.06);
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 168px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  animation: clubeFadeUp 0.55s ease both;
+}
+
+.clube-hub-tile:nth-child(2) { animation-delay: 0.06s; }
+.clube-hub-tile:nth-child(3) { animation-delay: 0.12s; }
+
+.clube-hub-tile:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 36px rgba(6, 24, 51, 0.1);
+  border-color: rgba(249, 115, 22, 0.35);
+}
+
+.clube-hub-tile:focus-visible {
+  outline: 2px solid var(--clube-accent);
+  outline-offset: 2px;
+}
+
+.clube-hub-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.clube-hub-rest .clube-hub-icon {
+  background: linear-gradient(135deg, #0b2545, #1a446e);
+}
+.clube-hub-saude .clube-hub-icon {
+  background: linear-gradient(135deg, #047857, #10b981);
+}
+.clube-hub-loja .clube-hub-icon {
+  background: linear-gradient(135deg, #ea580c, #f97316);
+}
+
+.clube-hub-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.clube-hub-copy strong {
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--clube-ink);
+}
+
+.clube-hub-copy small {
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--clube-muted);
+}
+
+.clube-hub-go {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--clube-accent-deep);
+}
+
+.clube-back-home {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--clube-navy);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 0 0 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.clube-back-home:hover {
+  color: var(--clube-accent-deep);
+}
+
+/* ── Cardápio restaurante ── */
+.clube-menu {
+  margin: 8px 0 18px;
+  border: 1px solid var(--clube-line);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.clube-menu-title {
+  padding: 12px 16px;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--clube-muted);
+  background: #f7f8fb;
+  border-bottom: 1px solid var(--clube-line);
+}
+
+.clube-menu-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--clube-line);
+}
+
+.clube-menu-item:last-of-type {
+  border-bottom: 0;
+}
+
+.clube-menu-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.clube-menu-info strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--clube-ink);
+}
+
+.clube-menu-info small {
+  font-size: 12px;
+  color: var(--clube-muted);
+}
+
+.clube-menu-price {
+  font-weight: 800;
+  color: var(--clube-navy);
+  white-space: nowrap;
+}
+
+.clube-qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #eef2f6;
+  border-radius: 999px;
+  padding: 3px;
+}
+
+.clube-qty-btn {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--clube-navy);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(11, 37, 69, 0.08);
+}
+
+.clube-qty-btn:hover {
+  color: var(--clube-accent-deep);
+}
+
+.clube-qty-val {
+  width: 36px;
+  border: 0;
+  background: transparent;
+  text-align: center;
+  font-weight: 800;
+  color: var(--clube-ink);
+  pointer-events: none;
+}
+
+.clube-menu-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  background: linear-gradient(135deg, #0b2545, #163a63);
+  color: #fff;
+}
+
+.clube-menu-total span {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+
+.clube-menu-total strong {
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .clube-menu-item {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "info price"
+      "qty qty";
+  }
+  .clube-menu-info { grid-area: info; }
+  .clube-menu-price { grid-area: price; }
+  .clube-qty { grid-area: qty; justify-self: start; }
+}
+
+/* ── Panels ── */
+.benefit-card,
+.clube-panel {
+  background: var(--clube-surface);
+  border: 1px solid var(--clube-line);
+  border-radius: calc(var(--clube-radius) + 2px);
+  box-shadow: var(--clube-shadow);
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  backdrop-filter: blur(8px);
+  animation: clubeFadeUp 0.5s ease both;
+}
+
+.benefit-title,
+.clube-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--clube-ink);
+}
+
+.clube-panel-lead,
+.benefit-card > .form-hint,
+.clube-panel > p {
+  margin: 0 0 16px;
+  color: var(--clube-muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.benefit-card .form-group label,
+.clube-panel .form-group label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--clube-muted);
+  margin-bottom: 6px;
+}
+
+.benefit-card .form-control,
+.clube-panel .form-control {
+  border-radius: 12px;
+  border-color: rgba(11, 37, 69, 0.12);
+  background: #fff;
+  min-height: 46px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.benefit-card .form-control:focus,
+.clube-panel .form-control:focus {
+  border-color: var(--clube-accent);
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+}
+
+.benefit-card .form-control[readonly] {
+  background: #f4f6f9;
+  color: var(--clube-ink);
+  font-weight: 600;
+}
+
+/* ── Segmented control (restaurante) ── */
+.clube-segment {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  background: #eef2f6;
+  border: 1px solid var(--clube-line);
+}
+
+.clube-segment button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--clube-muted);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.clube-segment button.is-active,
+.clube-segment button.btn-primary {
+  background: #fff;
+  color: var(--clube-navy);
+  box-shadow: 0 6px 16px rgba(11, 37, 69, 0.1);
+}
+
+.clube-segment button.btn-outline {
+  background: transparent;
+  color: var(--clube-muted);
+  border: 0;
+}
+
+/* ── Primary CTA ── */
+.clube-panel .btn-primary,
+.benefit-card .btn-primary.btn-full,
+#orderForm .btn-primary {
+  border: 0;
+  border-radius: 12px;
+  min-height: 48px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: linear-gradient(135deg, var(--clube-navy) 0%, #163a63 100%);
+  box-shadow: 0 10px 22px rgba(11, 37, 69, 0.22);
+}
+
+.clube-panel .btn-primary:hover,
+.benefit-card .btn-primary.btn-full:hover,
+#orderForm .btn-primary:hover {
+  filter: brightness(1.05);
+}
+
+.clube-cta-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.clube-cta-row .btn {
+  min-height: 52px;
+  border-radius: 14px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.clube-cta-row .btn-outline {
+  background: #fff;
+  border: 1.5px solid rgba(11, 37, 69, 0.14);
+  color: var(--clube-navy);
+}
+
+.clube-cta-row .btn-outline:hover {
+  border-color: var(--clube-accent);
+  color: var(--clube-accent-deep);
+}
+
+/* ── Health service ── */
+.clube-service-visual {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.clube-service-copy h2 {
+  margin: 0 0 8px;
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: var(--clube-ink);
+}
+
+.clube-service-aside {
+  border-radius: var(--clube-radius);
+  padding: 22px;
+  background:
+    linear-gradient(160deg, rgba(249, 115, 22, 0.12), transparent 40%),
+    linear-gradient(180deg, #0b2545 0%, #163a63 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  min-height: 180px;
+}
+
+.clube-service-aside strong {
+  font-family: 'Nunito', sans-serif;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.clube-service-aside span {
+  margin-top: 6px;
+  font-size: 13px;
+  opacity: 0.8;
+}
+
+/* ── Distribution rows ── */
+.limit-dist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--clube-line);
+}
+
+.limit-dist-row:last-child { border-bottom: 0; }
+
+.limit-dist-row strong {
+  color: var(--clube-ink);
+  font-weight: 700;
+}
+
+/* ── Tables ── */
+.benefit-card .data-table thead th {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--clube-muted);
+  background: #f7f8fb;
+}
+
+/* ── Motion ── */
+@keyframes clubeFadeUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tab-content[style*="display: block"],
+.tab-content:not([style*="display: none"]) {
+  animation: clubeFadeUp 0.35s ease both;
+}
+
+@media (max-width: 860px) {
+  body.clube-beneficios-app .page-content,
+  body:has(#tab-meus-limites) .page-content {
+    padding: 8px 14px 40px;
+  }
+  .clube-metrics,
+  .clube-hub,
+  .clube-service-visual,
+  .clube-cta-row,
+  .clube-segment {
+    grid-template-columns: 1fr;
+  }
+  .clube-hero,
+  .benefit-card,
+  .clube-panel {
+    padding: 18px;
+  }
+}

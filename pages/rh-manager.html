@@ -20,8 +20,9 @@
   <link rel="stylesheet" href="../css/layout.css?v=rh-css2"/>
   <link rel="stylesheet" href="../css/store.css"/>
   <link rel="stylesheet" href="../css/withdrawal.css"/>
-  <link rel="stylesheet" href="../css/painel-sonhos.css?v=mural-company1"/>
+  <link rel="stylesheet" href="../css/painel-sonhos.css?v=mural-ciencia1"/>
     <!-- SheetJS lazy: carregado só na exportação -->
+  <link rel="stylesheet" href="../css/rh-modules.css?v=vagas1"/>
   <link rel="stylesheet" href="../css/folha-pagamento.css?v=3"/>
   <!-- estilos RH em css/layout.css -->
 </head>
@@ -94,6 +95,9 @@
         </a>
         <a class="nav-item rh-mgmt-only" data-tab="feedback" onclick="switchTab('feedback')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span> Feedbacks
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="vagas" onclick="switchTab('vagas')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path><line x1="12" y1="12" x2="12" y2="16"></line><line x1="10" y1="14" x2="14" y2="14"></line></svg></span> Vagas
         </a>
         <a class="nav-item rh-mgmt-only" data-tab="ranking" onclick="openRhRankingTab()">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg></span> Ranking Vendas
@@ -299,7 +303,7 @@
               <table class="data-table">
                 <thead>
                   <tr>
-                    <th>Funcionário / CPF</th><th>Cargo</th><th>Departamento</th><th>Admissão</th><th>Status</th><th>Medidas Disciplinares</th><th>Ações</th>
+                    <th>Funcionário / CPF</th><th>Cargo</th><th>Departamento</th><th>Supervisor</th><th>Admissão</th><th>Status</th><th>Medidas Disciplinares</th><th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="employee_list_body">
@@ -328,32 +332,23 @@
         </div>
       </div>
 
-      <!-- ═══ ABA: Justificativa de Falta ═══ -->
-      <div class="tab-content" id="tab-justificativa" style="display:none;">
+      <!-- ═══ ABA: Vagas ═══ -->
+      <div class="tab-content" id="tab-vagas" style="display:none;">
         <div class="page-content">
-          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+          <div class="page-header" style="margin-bottom:16px;">
             <div class="page-header-text">
-              <h2 style="font-weight:800;font-size:24px;margin-bottom:4px;">Justificativa de Falta</h2>
-              <p class="text-muted" style="font-size:14px;">Registre e aprove faltas dos colaboradores</p>
+              <h2 style="font-weight:800;font-size:24px;margin-bottom:4px;">Vagas</h2>
+              <p class="text-muted" style="font-size:14px;">Requisição, aprovação e processo seletivo</p>
             </div>
-            <button class="btn btn-primary btn-sm" onclick="openJustificativaModal()">+ Nova Justificativa</button>
           </div>
-          <div class="card">
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Protocolo</th><th>Colaborador</th><th>Situação</th><th>Dias</th><th>Afastamento</th><th>Retorno</th><th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody id="justificativa_list_body">
-                  <tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
-                </tbody>
-              </table>
-            </div>
+          <div id="rhVagasRoot">
+            <div class="text-muted text-center" style="padding:24px;">Carregando vagas...</div>
           </div>
         </div>
       </div>
+
+      <!-- ═══ ABA: Justificativa de Falta (HTML em pages/rh-justificativa-section.html) ═══ -->
+      <div id="rhJustificativaHost" data-rh-section="justificativa"></div>
 
       <!-- ═══ ABA: Registro Punição ═══ -->
       <div class="tab-content" id="tab-punicao" style="display:none;">
@@ -765,18 +760,158 @@
             </div>
           </div>
           <div class="section-title-bar">Documentos & Antifraude</div>
+          <div class="form-grid three-cols mt-md">
+            <div class="form-group">
+              <label for="cv_doc_parecer_rh">Parecer Assistente RH</label>
+              <select class="form-control" id="cv_doc_parecer_rh">
+                <option value="">—</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="cv_doc_certidao_civil">Certidão Negativa Civil</label>
+              <select class="form-control" id="cv_doc_certidao_civil">
+                <option value="">—</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="cv_doc_certidao_negativa">Certidão Negativa</label>
+              <select class="form-control" id="cv_doc_certidao_negativa">
+                <option value="">—</option>
+                <option value="sim">Sim</option>
+                <option value="nao">Não</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="section-title-bar">2. Resumo Executivo (Visão Geral)</div>
           <div class="form-group mt-md">
-            <label for="cv_anexo_parecer">Anexo Parecer Assistente RH</label>
-            <input type="file" class="form-control" id="cv_anexo_parecer" />
+            <label for="cv_resumo_executivo">Síntese da trajetória, motivações e primeiras impressões</label>
+            <textarea class="form-control" id="cv_resumo_executivo" rows="4" placeholder="Redija uma síntese sobre a trajetória do candidato, motivações declaradas e impressões gerais..."></textarea>
+          </div>
+
+          <div class="section-title-bar">3. Avaliação de Competências Técnicas (Hard Skills)</div>
+          <p class="text-muted" style="font-size:12px;margin:8px 0 12px;">Pontue de 1 a 5 e descreva evidências/observações.</p>
+          <div class="card card-padded mt-md" style="background:var(--color-surface-2);">
+            <div class="form-group">
+              <label>Experiência na Função</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Tempo de atuação anterior e complexidade das tarefas</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;" id="cv_hs_experiencia_score">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_experiencia" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_experiencia" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_experiencia" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_experiencia" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_experiencia" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_hs_experiencia_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+            <div class="form-group mt-md">
+              <label>Formação / Certificações</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Adequação acadêmica e cursos complementares</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_formacao" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_formacao" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_formacao" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_formacao" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_formacao" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_hs_formacao_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+            <div class="form-group mt-md">
+              <label>Domínio de Ferramentas</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Sistemas, hardwares ou metodologias da área</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_ferramentas" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_ferramentas" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_ferramentas" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_ferramentas" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_hs_ferramentas" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_hs_ferramentas_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+          </div>
+
+          <div class="section-title-bar">4. Avaliação de Competências Comportamentais (Soft Skills)</div>
+          <p class="text-muted" style="font-size:12px;margin:8px 0 12px;">Atitudes, habilidades interpessoais e alinhamento cultural.</p>
+          <div class="card card-padded mt-md" style="background:var(--color-surface-2);">
+            <div class="form-group">
+              <label>Comunicação e Articulação</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Clareza, escuta ativa e capacidade de síntese</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_comunicacao" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_comunicacao" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_comunicacao" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_comunicacao" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_comunicacao" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_ss_comunicacao_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+            <div class="form-group mt-md">
+              <label>Trabalho em Equipe</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Cooperação, relacionamento e empatia</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_equipe" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_equipe" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_equipe" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_equipe" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_equipe" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_ss_equipe_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+            <div class="form-group mt-md">
+              <label>Resolução de Problemas</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Análise, iniciativa e criatividade</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_problemas" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_problemas" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_problemas" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_problemas" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_problemas" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_ss_problemas_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+            <div class="form-group mt-md">
+              <label>Adaptabilidade e Aprendizado</label>
+              <small class="text-muted" style="display:block;margin-bottom:6px;">Feedbacks, resiliência e proatividade</small>
+              <div class="flex gap-md" style="flex-wrap:wrap;margin-bottom:8px;">
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_adaptabilidade" value="1" /> 1</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_adaptabilidade" value="2" /> 2</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_adaptabilidade" value="3" /> 3</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_adaptabilidade" value="4" /> 4</label>
+                <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_ss_adaptabilidade" value="5" /> 5</label>
+              </div>
+              <textarea class="form-control" id="cv_ss_adaptabilidade_obs" rows="2" placeholder="Evidências e observações"></textarea>
+            </div>
+          </div>
+
+          <div class="section-title-bar">5. Pontos Fortes e Pontos de Atenção</div>
+          <div class="form-group mt-md">
+            <label for="cv_pontos_fortes">Pontos Fortes identificados</label>
+            <textarea class="form-control" id="cv_pontos_fortes" rows="3" placeholder="Qualidades, talentos e vantagens para a equipe..."></textarea>
           </div>
           <div class="form-group mt-md">
-            <label for="cv_anexo_certidao_civil">Anexo Consulta Certidão Negativa Civil</label>
-            <input type="file" class="form-control" id="cv_anexo_certidao_civil" />
+            <label for="cv_pontos_atencao">Pontos de Atenção ou Desenvolvimento</label>
+            <textarea class="form-control" id="cv_pontos_atencao" rows="3" placeholder="Lacunas técnicas ou comportamentais a acompanhar..."></textarea>
+          </div>
+
+          <div class="section-title-bar">6. Conclusão e Parecer Final</div>
+          <div class="form-group mt-md">
+            <label>Recomendação</label>
+            <div style="display:flex;flex-direction:column;gap:8px;margin-top:6px;">
+              <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_parecer" value="recomendado" /> <strong>RECOMENDADO PARA CONTRATAÇÃO</strong> — atende com excelência aos requisitos técnicos e de cultura.</label>
+              <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_parecer" value="proxima_etapa" /> <strong>SEGUIR PARA PRÓXIMA ETAPA</strong> — bom potencial; necessita validação complementar.</label>
+              <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_parecer" value="banco_talentos" /> <strong>BANCO DE TALENTOS</strong> — perfil interessante, mas não se adequa de forma imediata.</label>
+              <label style="font-size:13px;cursor:pointer;"><input type="radio" name="cv_parecer" value="nao_recomendado" /> <strong>NÃO RECOMENDADO PARA ESTA VAGA</strong> — perfil difere expressivamente do desejado.</label>
+            </div>
           </div>
           <div class="form-group mt-md">
-            <label for="cv_anexo_certidao_negativa">Anexo Consulta Certidão Negativa</label>
-            <input type="file" class="form-control" id="cv_anexo_certidao_negativa" />
+            <label for="cv_parecer_justificativa">Justificativa do Parecer Final</label>
+            <textarea class="form-control" id="cv_parecer_justificativa" rows="4" placeholder="Justifique a recomendação com embasamento técnico ou comportamental..."></textarea>
           </div>
+
           <div class="flex gap-md mt-lg">
             <button type="button" class="btn btn-outline" onclick="closeModalRH('curriculoModal')">Cancelar</button>
             <button type="submit" class="btn btn-accent btn-lg btn-full">Salvar Currículo</button>
@@ -864,11 +999,13 @@
     <div class="modal-body" style="max-height:75vh;overflow-y:auto;">
       <form id="form-funcionario" onsubmit="salvarFuncionario(event)">
               <input type="hidden" id="emp_id" />
+              <input type="hidden" id="emp_user_id" />
 
               <div class="form-grid">
                 <div class="form-group">
                   <label for="emp_cpf">CPF</label>
-                  <input type="text" class="form-control mask-cpf" id="emp_cpf" placeholder="000.000.000-00" required />
+                  <input type="text" class="form-control mask-cpf" id="emp_cpf" placeholder="000.000.000-00" />
+                  <small class="text-muted" style="font-size:11px;">Obrigatório para ficha RH completa. Usuários já cadastrados no login podem ser salvos sem CPF.</small>
                 </div>
                 <div class="form-group">
                   <button type="button" class="btn btn-accent btn-api-lookup btn-full" id="btn_buscar_cpf_emp" onclick="buscarCpfFuncionario()">BUSCAR BANCOS DE DADOS (RF + PIS)</button>
@@ -926,6 +1063,14 @@
 
               <div class="form-grid mt-md">
                 <div class="form-group">
+                  <label for="emp_cracha_codigo">Código do Crachá (Mercadinho)</label>
+                  <input type="text" class="form-control" id="emp_cracha_codigo" placeholder="Código impresso/escaneado no crachá" autocomplete="off" />
+                </div>
+                <div class="form-group"></div>
+              </div>
+
+              <div class="form-grid mt-md">
+                <div class="form-group">
                   <label for="emp_email_pessoal">Email Pessoal</label>
                   <input type="email" class="form-control" id="emp_email_pessoal" placeholder="email@pessoal.com" />
                 </div>
@@ -967,21 +1112,6 @@
                 <div class="form-group">
                   <label for="emp_cbo_descricao">Descrição CBO</label>
                   <input type="text" class="form-control" id="emp_cbo_descricao" readonly style="background:#f3f4f6;" placeholder="Preenchido pelo cargo" />
-                </div>
-              </div>
-
-              <div class="form-grid three-cols mt-md">
-                <div class="form-group">
-                  <label for="emp_supervisor">Supervisor do Colaborador</label>
-                  <select class="form-control" id="emp_supervisor"><option value="">— Sem vínculo —</option></select>
-                </div>
-                <div class="form-group">
-                  <label for="emp_responsavel_dpto">Responsável pelo Dpto</label>
-                  <select class="form-control" id="emp_responsavel_dpto"><option value="">— Sem vínculo —</option></select>
-                </div>
-                <div class="form-group">
-                  <label for="emp_diretor_dpto">Diretor Dpto</label>
-                  <select class="form-control" id="emp_diretor_dpto"><option value="">— Sem vínculo —</option></select>
                 </div>
               </div>
 
@@ -1062,6 +1192,25 @@
                 </div>
               </div>
 
+              <div class="section-title-bar">Hierarquia / Equipe</div>
+              <p id="emp_hierarchy_hint" class="text-muted" style="font-size:12px;margin:-4px 0 12px;">O supervisor escolhido vira a equipe no sistema (mesmo vínculo do Painel Master).</p>
+
+              <div class="form-grid three-cols mt-md" id="emp_hierarchy_grid">
+                <div class="form-group" id="emp_hier_supervisor_group">
+                  <label for="emp_supervisor">Equipe / Líder responsável</label>
+                  <select class="form-control" id="emp_supervisor"><option value="">— Sem líder de equipe —</option></select>
+                  <small id="emp_supervisor_warn" class="text-muted" style="display:none;font-size:11px;"></small>
+                </div>
+                <div class="form-group" id="emp_hier_responsavel_group">
+                  <label for="emp_responsavel_dpto">Responsável pelo Dpto</label>
+                  <select class="form-control" id="emp_responsavel_dpto"><option value="">— Sem vínculo —</option></select>
+                </div>
+                <div class="form-group" id="emp_hier_diretor_group">
+                  <label for="emp_diretor_dpto">Diretor Dpto</label>
+                  <select class="form-control" id="emp_diretor_dpto"><option value="">— Sem vínculo —</option></select>
+                </div>
+              </div>
+
               <div class="section-title-bar">Clube de Benefícios</div>
               <div class="form-grid">
                 <div class="form-group">
@@ -1103,47 +1252,47 @@
               <div class="form-grid">
                 <div class="form-group">
                   <label>Anexo Ficha Entrevista RH</label>
-                  <input type="file" class="form-control" id="emp_anexo_entrevista_rh" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <input type="file" class="form-control" id="emp_anexo_entrevista_rh" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
                 <div class="form-group">
-                  <label>Anexo Ficha RH</label>
-                  <input type="file" class="form-control" id="emp_anexo_ficha_rh" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <label>Ficha de empregado</label>
+                  <input type="file" class="form-control" id="emp_anexo_ficha_rh" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
               </div>
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label>Anexo Documento RG</label>
-                  <input type="file" class="form-control" id="emp_anexo_rg" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <input type="file" class="form-control" id="emp_anexo_rg" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
                 <div class="form-group">
                   <label>Anexo Exame Admissional</label>
-                  <input type="file" class="form-control" id="emp_anexo_exame_admissional" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <input type="file" class="form-control" id="emp_anexo_exame_admissional" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
               </div>
               <div class="form-group mt-md">
                 <label>Anexo Contrato Trabalho <span class="text-muted">(Opcional)</span></label>
-                <input type="file" class="form-control" id="emp_anexo_contrato" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                <input type="file" class="form-control" id="emp_anexo_contrato" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
               </div>
               
               <!-- Aditivos Contratuais -->
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 1 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" id="emp_anexo_aditivo_1" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_1" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 2 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" id="emp_anexo_aditivo_2" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_2" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
               </div>
               <div class="form-grid mt-md">
                 <div class="form-group">
                   <label>Anexo Aditivo Contrato Trabalho 3 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" id="emp_anexo_aditivo_3" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_3" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
                 <div class="form-group">
-                  <label>Anexo Aditivo Contrato Trabalho 4 <span class="text-muted">(Opcional)</span></label>
-                  <input type="file" class="form-control" id="emp_anexo_aditivo_4" accept=".pdf,.jpg,.jpeg,.png,.webp" />
+                  <label>Termo de adesão de benefício</label>
+                  <input type="file" class="form-control" id="emp_anexo_aditivo_4" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" />
                 </div>
               </div>
 
@@ -1406,168 +1555,7 @@
     </div>
   </div>
 
-  <!-- MODAL: Justificativa de Falta -->
-  <div class="modal-overlay" id="justificativaModal">
-    <div class="modal" style="max-width:780px;">
-      <div class="modal-header">
-        <h3 id="justificativaModalTitle">Justificativa de Falta</h3>
-        <button type="button" class="modal-close" onclick="closeModalRH('justificativaModal')"></button>
-      </div>
-      <div class="modal-body" style="max-height:78vh;overflow-y:auto;">
-        <form id="form-justificativa" onsubmit="salvarJustificativa(event)">
-          <input type="hidden" id="justif_id"/>
-
-          <div class="form-grid">
-            <div class="form-group">
-              <label for="justif_protocolo">Protocolo</label>
-              <input type="text" class="form-control text-center" id="justif_protocolo" style="font-weight:700;background:#f3f4f6;" readonly/>
-            </div>
-            <div class="form-group">
-              <label style="opacity:0;display:block;">Auto</label>
-              <span style="font-size:12px;color:var(--color-success);font-weight:700;line-height:38px;">GERAR AUTOMÁTICO</span>
-            </div>
-          </div>
-
-          <div class="form-grid mt-md">
-            <div class="form-group">
-              <label for="justif_employee">Colaborador</label>
-              <select class="form-control" id="justif_employee" required onchange="onJustifEmployeeChange()">
-                <option value="">Selecione...</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label style="opacity:0;display:block;">Buscar</label>
-              <button type="button" class="btn btn-accent btn-full" onclick="buscarDadosJustificativa()">BUSCAR DADOS</button>
-            </div>
-          </div>
-          <div id="justif_emp_info" hidden></div>
-
-          <div class="form-grid three-cols mt-md">
-            <div class="form-group">
-              <label for="justif_situacao">Situação</label>
-              <select class="form-control" id="justif_situacao" required>
-                <option value="abonada">Abonada</option>
-                <option value="descontada">Descontada</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="justif_dias">Dias</label>
-              <input type="number" class="form-control" id="justif_dias" min="0" step="1" placeholder="0"/>
-            </div>
-            <div class="form-group">
-              <label for="justif_protocolo_inss">Protocolo INSS</label>
-              <input type="text" class="form-control" id="justif_protocolo_inss" placeholder="Nº protocolo INSS (se houver)"/>
-            </div>
-          </div>
-
-          <div class="form-group mt-md">
-            <label for="justif_tipo">Tipo de justificativa</label>
-            <select class="form-control" id="justif_tipo" required onchange="onJustifTipoChange()">
-              <option value="atestado">Atestado médico</option>
-              <option value="justificada">Falta justificada</option>
-              <option value="injustificada">Falta injustificada</option>
-              <option value="abono">Abono / licença</option>
-            </select>
-          </div>
-
-          <div class="form-group mt-md">
-            <label for="justif_motivo">Justificativa</label>
-            <textarea class="form-control" id="justif_motivo" rows="2" placeholder="Descreva o motivo da falta ou afastamento..." required></textarea>
-          </div>
-
-          <div class="form-grid mt-md">
-            <div class="form-group">
-              <label for="justif_data_afastamento">Data afastamento</label>
-              <input type="date" class="form-control" id="justif_data_afastamento" onchange="onJustifDatasChange()"/>
-              <div class="rh-justif-hint">Inativar sistema</div>
-            </div>
-            <div class="form-group">
-              <label for="justif_data_retorno">Data retorno</label>
-              <input type="date" class="form-control" id="justif_data_retorno" onchange="onJustifDatasChange()"/>
-              <div class="rh-justif-hint">Ativar sistema</div>
-            </div>
-          </div>
-
-          <div class="rh-justif-panel" id="justif_medico_panel" style="display:none;">
-            <div class="rh-justif-panel__title">Atestado médico</div>
-            <div class="form-group cbo-search-wrap">
-              <label for="justif_cbo_search">CBO (ocupação)</label>
-              <input type="text" class="form-control" id="justif_cbo_search" placeholder="Buscar código ou nome CBO..." autocomplete="off"/>
-              <div id="justif_cbo_dropdown" class="cbo-dropdown" style="display:none;"></div>
-            </div>
-            <div class="form-grid mt-md">
-              <div class="form-group">
-                <label for="justif_cbo_cod">Código CBO</label>
-                <input type="text" class="form-control" id="justif_cbo_cod" readonly style="background:#f3f4f6;font-weight:700;"/>
-              </div>
-              <div class="form-group">
-                <label for="justif_cbo_descricao">Descrição CBO</label>
-                <input type="text" class="form-control" id="justif_cbo_descricao" readonly style="background:#f3f4f6;"/>
-              </div>
-            </div>
-            <div class="form-grid three-cols mt-md">
-              <div class="form-group">
-                <label for="justif_dias_atestado">Dias (atestado)</label>
-                <input type="number" class="form-control" id="justif_dias_atestado" min="0" step="1" placeholder="0"/>
-              </div>
-              <div class="form-group">
-                <label for="justif_intercalado">Atestado intercalado?</label>
-                <select class="form-control" id="justif_intercalado">
-                  <option value="nao">Não</option>
-                  <option value="sim">Sim</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="justif_protocolo_inss_med">Protocolo INSS</label>
-                <input type="text" class="form-control" id="justif_protocolo_inss_med" placeholder="INSS do atestado"/>
-              </div>
-            </div>
-            <div class="form-group mt-md">
-              <label for="justif_data_termino">Data término</label>
-              <input type="date" class="form-control" id="justif_data_termino"/>
-            </div>
-            <div class="rh-dem-anexos-panel mt-md">
-              <div class="rh-dem-anexos-panel__title">Anexo do atestado <span class="rh-justif-optional">(opcional)</span></div>
-              <div class="rh-dem-anexo-row">
-                <span class="rh-dem-anexo-row__label">Arquivo</span>
-                <span class="rh-dem-anexo-row__status" id="justif_atestado_status">Nenhum arquivo</span>
-                <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('justif_atestado_file')?.click()">Anexar</button>
-                <a href="#" id="justif_atestado_link" class="btn btn-ghost btn-sm" style="display:none;" target="_blank" rel="noopener">Ver anexo</a>
-                <input type="file" id="justif_atestado_file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onJustifAtestadoPick(this)"/>
-              </div>
-              <p class="rh-justif-hint">PDF ou imagem do atestado médico — não é obrigatório anexar.</p>
-            </div>
-          </div>
-
-          <div class="form-grid three-cols mt-md">
-            <div class="form-group">
-              <label for="justif_excecao_abono">Exceção de abono</label>
-              <select class="form-control" id="justif_excecao_abono">
-                <option value="nao">Não</option>
-                <option value="sim">Sim</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="justif_gerou_advertencia">Gerou advertência</label>
-              <select class="form-control" id="justif_gerou_advertencia">
-                <option value="nao">Não</option>
-                <option value="sim">Sim</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label for="justif_diretoria">Diretoria</label>
-              <input type="text" class="form-control" id="justif_diretoria" placeholder="Diretor / área"/>
-            </div>
-          </div>
-
-          <div class="flex gap-md mt-lg">
-            <button type="button" class="btn btn-outline" onclick="closeModalRH('justificativaModal')">Cancelar</button>
-            <button type="submit" class="btn btn-accent btn-lg btn-full">Salvar</button>
-          </div>
-        </form>
-      </div>
-    </div>
-  </div>
+  <!-- Modal Justificativa: pages/rh-justificativa-section.html (rh-justificativa-boot.js) -->
 
   <!-- MODAL: Registro Punição -->
   <div class="modal-overlay" id="punicaoModal">
@@ -1885,19 +1873,19 @@
               <span class="rh-dem-anexo-row__label">Anexo termo aviso</span>
               <span class="rh-dem-anexo-row__status" id="dem_anexo_aviso_status">Nenhum arquivo</span>
               <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('dem_anexo_aviso')?.click()">Anexar</button>
-              <input type="file" id="dem_anexo_aviso" accept=".pdf,.jpg,.jpeg,.png,.webp" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDemissaoAnexoPick('aviso', this)"/>
+              <input type="file" id="dem_anexo_aviso" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDemissaoAnexoPick('aviso', this)"/>
             </div>
             <div class="rh-dem-anexo-row">
               <span class="rh-dem-anexo-row__label">Anexo carta de demissão</span>
               <span class="rh-dem-anexo-row__status" id="dem_anexo_carta_status">Nenhum arquivo</span>
               <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('dem_anexo_carta')?.click()">Anexar</button>
-              <input type="file" id="dem_anexo_carta" accept=".pdf,.jpg,.jpeg,.png,.webp" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDemissaoAnexoPick('carta', this)"/>
+              <input type="file" id="dem_anexo_carta" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDemissaoAnexoPick('carta', this)"/>
             </div>
             <div class="rh-dem-anexo-row">
               <span class="rh-dem-anexo-row__label">Anexo entrevista demissão</span>
               <span class="rh-dem-anexo-row__status" id="dem_anexo_entrevista_status">Nenhum arquivo</span>
               <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('dem_anexo_entrevista')?.click()">Anexar</button>
-              <input type="file" id="dem_anexo_entrevista" accept=".pdf,.jpg,.jpeg,.png,.webp" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDemissaoAnexoPick('entrevista', this)"/>
+              <input type="file" id="dem_anexo_entrevista" accept=".pdf,.jpg,.jpeg,.png,.webp,.zip,.doc,.docx" class="painel-sonhos-file-hidden" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onDemissaoAnexoPick('entrevista', this)"/>
             </div>
           </div>
 
@@ -1914,22 +1902,25 @@
 
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
   <script charset="UTF-8" src="../js/config.js?v=nodelete-demo1"></script>
-  <script charset="UTF-8" src="../js/db.js?v=nodelete-demo1"></script>
+  <script charset="UTF-8" src="../js/db.js?v=trn-mural1"></script>
   <script charset="UTF-8" src="../js/fontedata.js?v=4"></script>
-  <script charset="UTF-8" src="../js/auth.js?v=1781813000"></script>
-  <script charset="UTF-8" src="../js/ui.js?v=rm-dbg1"></script>
-  <script charset="UTF-8" src="../js/partners-ui.js?v=partner-att-fix2"></script>
+  <script charset="UTF-8" src="../js/auth.js?v=bira-chamada1"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=neg-bal1"></script>
+  <script charset="UTF-8" src="../js/partners-ui.js?v=neg-bal1"></script>
   <script charset="UTF-8" src="../js/partners.js?v=97c411tier1"></script>
   <script charset="UTF-8" src="../js/cbo.js?v=1"></script>
-  <script charset="UTF-8" src="../js/sales-ranking.js?v=rank-export1"></script>
+  <script charset="UTF-8" src="../js/sales-ranking.js?v=bill-paid2"></script>
   <script charset="UTF-8" src="../js/folha-pagamento.js?v=xlsx-lazy1"></script>
   <script charset="UTF-8" src="../js/rh-relatorios.js?v=rel-nof1"></script>
-  <script charset="UTF-8" src="../js/painel-sonhos.js?v=mural-company1"></script>
-  <script charset="UTF-8" src="../js/withdrawal-rules.js"></script>
+  <script charset="UTF-8" src="../js/painel-sonhos.js?v=trn-mural2"></script>
+  <script charset="UTF-8" src="../js/withdrawal-rules.js?v=pix-min0"></script>
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=2"></script>
-  <script charset="UTF-8" src="../js/profile.js?v=1781810513726"></script>
+  <script charset="UTF-8" src="../js/profile.js?v=bill-upd1"></script>
   <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
-  <script charset="UTF-8" src="../js/rh-manager.js?v=rh-clube-lim1"></script>
-  <script charset="UTF-8" src="../js/rh-ops.js?v=rh-nav-dem2"></script>
+  <script charset="UTF-8" src="../js/rh-vagas.js?v=vagas1"></script>
+  <script charset="UTF-8" src="../js/rh-ui.js?v=neg-bal1"></script>
+  <script charset="UTF-8" src="../js/rh-manager.js?v=vagas1"></script>
+  <script charset="UTF-8" src="../js/rh-ops.js?v=justif-bs1"></script>
+  <script charset="UTF-8" src="../js/rh-justificativa-boot.js?v=justif-bs1"></script>
 <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

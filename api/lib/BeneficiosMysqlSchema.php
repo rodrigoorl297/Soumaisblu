@@ -58,6 +58,16 @@ function soublu_ensure_beneficios_tables(?PDO $pdo = null): array
     );
     $applied[] = 'beneficios_prestadores';
 
+    try {
+        $col = $pdo->query("SHOW COLUMNS FROM `beneficios_prestadores` LIKE 'whatsapp'")->fetch();
+        if (!$col) {
+            $pdo->exec('ALTER TABLE `beneficios_prestadores` ADD COLUMN `whatsapp` VARCHAR(32) NULL AFTER `categoria`');
+            $applied[] = 'beneficios_prestadores.whatsapp';
+        }
+    } catch (Throwable $e) {
+        /* coluna opcional — pedido WA usa fallback de config se ausente */
+    }
+
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS `beneficios_produtos` (
             `id` VARCHAR(64) NOT NULL,

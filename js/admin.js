@@ -95,10 +95,10 @@ async function ensureSectionScripts(sec) {
     secTrainingsManage: ['../js/trainings.js'],
     secTrainingsRh: ['../js/trainings.js'],
     secFornecedorFinanceiro: ['../js/fornecedor-financeiro.js'],
-    secContaCorrente: ['../js/conta-corrente.js?v=cc-hist-del1'],
-    secContaCorrenteGestao: ['../js/conta-corrente.js?v=cc-hist-del1'],
+    secContaCorrente: ['../js/conta-corrente.js?v=cc-money1'],
+    secContaCorrenteGestao: ['../js/conta-corrente.js?v=cc-money1'],
     secWithdrawals: ['../js/withdrawal-flow.js'],
-    secRanking: ['../js/sales-ranking.js?v=rank-emp-fix1', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
+    secRanking: ['../js/sales-ranking.js?v=bill-paid2', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
     secCreateProposal: ['../js/masterProposal.js', '../js/fontedata.js'],
     secPartnersForm: ['../js/fontedata.js'],
   };
@@ -185,6 +185,22 @@ function _isCommercialSupervisor() {
   return IS_SUPERVISOR && !IS_SUP_BACKOFFICE && !PARTNER_ROOT_ID;
 }
 
+/** Rede parceira (gestor ou equipe) — nunca vê faturamento por equipe. */
+function _isPartnerOrgUser() {
+  if (IS_PARCEIRO) return true;
+  if (PARTNER_ROOT_ID || getEffectivePartnerRootId()) return true;
+  const r = String(typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession()?.role : '').toLowerCase();
+  return r === 'parceiro';
+}
+
+/** Gráfico de faturamento: supervisores internos e cargos acima — nunca parceiros. */
+function _canViewTeamBillingChart() {
+  if (_isPartnerOrgUser()) return false;
+  return IS_SUPERVISOR
+    || IS_MASTER || IS_FUNDA || IS_GERENTE || IS_FINANCIAL || IS_RH
+    || IS_DIRETORIA || IS_DESENVOLVEDOR;
+}
+
 /** Supervisores que representam a mesma equipe comercial (várias supervisoras, um time). */
 const _SUPERVISOR_TEAM_MERGE_GROUPS = [
   {
@@ -260,6 +276,7 @@ async function _getMergedTeamEmployees() {
 }
 
 window._isCommercialSupervisor = _isCommercialSupervisor;
+window._canViewTeamBillingChart = _canViewTeamBillingChart;
 window._resolveMergedSupervisorAdminIds = _resolveMergedSupervisorAdminIds;
 window._getMergedTeamScopeIds = _getMergedTeamScopeIds;
 window._getMergedTeamMemberIds = _getMergedTeamMemberIds;
@@ -316,7 +333,7 @@ window.partnerOrgCan = partnerOrgCan;
 
 /** Parceiro (gestor) ou equipe autorizada — cadastro de vendedores/backoffice do parceiro. */
 function canManagePartnerTeam() {
-  if (_empPartnerRootOverride && (IS_MASTER || IS_FUNDA)) return true;
+  if (_empPartnerRootOverride && (IS_MASTER || IS_FUNDA || IS_GERENTE || IS_RH || IS_FINANCIAL)) return true;
   const root = PARTNER_ROOT_ID;
   if (!root) return false;
   if (IS_PARCEIRO) return true;
@@ -327,12 +344,25 @@ function canManagePartnerTeam() {
   return false;
 }
 
+function _userBelongsToPartnerRoot(user, partnerRootId) {
+  if (!user || !partnerRootId) return false;
+  const root = String(partnerRootId);
+  if (String(user.id) === root) return true;
+  if (String(user.partner_root_id || '') === root) return true;
+  if (String(user.admin_id || '') === root) return true;
+  return false;
+}
+
 async function openPartnerTeamManage(partnerUserId) {
   if (!partnerUserId) return;
-  if (!(IS_MASTER || IS_FUNDA || IS_PARCEIRO)) {
+  if (!(IS_MASTER || IS_FUNDA || IS_GERENTE || IS_RH || IS_FINANCIAL || IS_PARCEIRO)) {
     showToast('Sem permissão para cadastrar equipe do parceiro.', 'error');
     return;
   }
+  try {
+    if (typeof ensureScript === 'function') await ensureScript('../js/partners.js');
+  } catch (_) { /* PartnerPerms opcional no modal */ }
+
   _empPartnerRootOverride = String(partnerUserId);
   window._keepPartnerTeamOverride = true;
   const empSub = document.getElementById('empPageSubtitle');
@@ -342,11 +372,18 @@ async function openPartnerTeamManage(partnerUserId) {
     const nome = prt?.razao_social || u?.name || 'parceiro';
     empSub.textContent = `Equipe de ${nome} — vendedores, backoffice e operacional`;
   }
-  if (typeof navigateTo === 'function') navigateTo('secEmployees');
+
+  // Garante a seção visível (menu Funcionários fica oculto p/ master/fundador no hub RH).
+  document.querySelectorAll('.section').forEach((s) => s.classList.remove('active'));
+  document.getElementById('secEmployees')?.classList.add('active');
+  const tb = document.getElementById('topbarTitle');
+  if (tb) tb.textContent = 'Equipe do parceiro';
+
   await renderEmployeesTable();
-  openAddEmployeeModal();
+  showToast('Equipe do parceiro carregada. Use Editar na lista ou + Adicionar.', 'info', 4500);
 }
 window.openPartnerTeamManage = openPartnerTeamManage;
+window._userBelongsToPartnerRoot = _userBelongsToPartnerRoot;
 
 function _applyPortariaNavExtras() {
   if (!IS_PORTARIA) return;
@@ -382,11 +419,40 @@ function _wireLeadsManagerNav() {
   });
 }
 
+/** Rede SAK — única parceira autorizada a ver Clube de Benefícios. */
+function _isSakPartnerNetwork() {
+  const norm = (v) => String(v || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+  const razao = norm(window.PARTNER_RAZAO_SOCIAL || '');
+  if (razao.includes('SAK') && razao.includes('CADASTRAIS')) return true;
+  const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+  const name = norm(s?.name || '');
+  if (name.includes('SAK') && name.includes('CADASTRAIS')) return true;
+  const email = String(s?.email || '').toLowerCase();
+  if (email.includes('@sakpromotora.') || email.includes('@sakservicos.') || email.includes('@sak.')) return true;
+  return false;
+}
+window._isSakPartnerNetwork = _isSakPartnerNetwork;
+
+/** Clube no sidebar: interno SOU+BLU ok; parceiros só SAK. */
+function _canShowClubeBeneficiosNav() {
+  const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+  const role = String(s?.role || '').toLowerCase();
+  if (['master', 'fundador', 'financeiro', 'financial', 'admin', 'portaria', 'rh'].includes(role) && !PARTNER_ROOT_ID) {
+    return true;
+  }
+  if (PARTNER_ROOT_ID || role === 'parceiro') return _isSakPartnerNetwork();
+  return true;
+}
+
 function _wireBeneficiosNav() {
   const session = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
   const canAdmin = typeof Auth !== 'undefined' && typeof Auth.canManageBeneficios === 'function'
     ? Auth.canManageBeneficios(session?.role)
     : !!(IS_MASTER || IS_FUNDA || IS_FINANCIAL);
+  const canClube = _canShowClubeBeneficiosNav();
   const _absBenefHref = (filename) => {
     try {
       if (typeof Auth !== 'undefined' && Auth.pageHrefFresh) return Auth.pageHrefFresh(filename);
@@ -419,10 +485,19 @@ function _wireBeneficiosNav() {
   const adminBtn = document.getElementById('navGestaoBeneficios')
     || document.querySelector('.benefits-admin-nav');
 
-  if (clubeBtn) {
-    clubeBtn.style.display = '';
-    wire(clubeBtn, clubeHref, 'clube');
+  document.querySelectorAll('.benefits-clube-nav, #navClubeBeneficios').forEach((el) => {
+    el.style.display = canClube ? 'flex' : 'none';
+    if (!canClube) el.setAttribute('hidden', 'hidden');
+    else el.removeAttribute('hidden');
+  });
+  // Reforço: qualquer link residual do Clube some para parceiro não-SAK
+  if (!canClube) {
+    document.querySelectorAll('a[href*="clube-beneficios"], button[data-section="secClubeBeneficios"]').forEach((el) => {
+      el.style.display = 'none';
+      el.setAttribute('hidden', 'hidden');
+    });
   }
+  if (clubeBtn && canClube) wire(clubeBtn, clubeHref, 'clube');
   if (adminBtn) {
     adminBtn.style.display = canAdmin ? 'flex' : 'none';
     if (canAdmin) wire(adminBtn, adminHref, 'gestao');
@@ -434,6 +509,7 @@ function _applyAdminNavVisibility(cfg) {
   if (!cfg) return;
   if (window.SOUBLU_FINANCEIRO_PAGE) return;
   document.querySelectorAll('.master-only').forEach(el => {
+    if (el.classList.contains('team-billing-dash-nav')) return;
     el.style.display = cfg.canMasterPanel ? '' : 'none';
   });
   const canBeneficiosAdmin = typeof Auth.canManageBeneficios === 'function'
@@ -444,7 +520,10 @@ function _applyAdminNavVisibility(cfg) {
   });
   if (typeof _wireBeneficiosNav === 'function') _wireBeneficiosNav();
   document.querySelectorAll('.partner-dash-nav').forEach(el => {
-    el.style.display = (cfg.canMasterPanel || cfg.canPartnerDashboard) ? '' : 'none';
+    el.style.display = (cfg.canMasterPanel || cfg.canPartnerDashboard || cfg.canTeamBillingChart) ? '' : 'none';
+  });
+  document.querySelectorAll('.team-billing-dash-nav').forEach(el => {
+    el.style.display = (cfg.canMasterPanel || cfg.canPartnerDashboard || cfg.canTeamBillingChart) ? '' : 'none';
   });
   document.querySelectorAll('.financial-only').forEach(el => {
     el.style.display = cfg.canSaques ? '' : 'none';
@@ -479,12 +558,12 @@ function _applyAdminNavVisibility(cfg) {
     el.style.display = (cfg.canCadFunc && !employeesManagedInRhHub()) ? '' : 'none';
   });
   document.querySelectorAll('.ranking-nav').forEach(el => {
-    /* Ranking de Vendas só no hub Financeiro — não no sidebar do Painel Master. */
-    el.style.display = (window.SOUBLU_FINANCEIRO_PAGE && cfg.canRanking) ? '' : 'none';
+    /* Ranking interno SOU+BLU — nunca na rede de parceiros. */
+    el.style.display = cfg.canRanking ? '' : 'none';
   });
   const secRank = document.getElementById('secRanking');
   if (secRank) {
-    const showRankSec = !!(window.SOUBLU_FINANCEIRO_PAGE && cfg.canRanking);
+    const showRankSec = !!cfg.canRanking;
     secRank.style.display = showRankSec ? '' : 'none';
     if (!showRankSec) secRank.classList.remove('active');
   }
@@ -651,22 +730,33 @@ function _applyAdminNavVisibility(cfg) {
     btn.style.display = canTrn ? '' : 'none';
   })();
 
-  /* ── RH MANAGER (RH + Master) ── */
+  /* ── RH MANAGER (RH + Master + Supervisor/Vagas) ── */
   (function _injectRHNav() {
-    const canRH = (IS_RH && !window.PARTNER_ROOT_ID) || IS_MASTER || IS_FUNDA;
+    const roleLower = String(currentUser?.role || '').toLowerCase();
+    const isSup = roleLower === 'supervisor' || roleLower === 'sup_backoffice';
+    const canRH = (IS_RH && !window.PARTNER_ROOT_ID) || IS_MASTER || IS_FUNDA || isSup;
     let btn = document.getElementById('navRHManager');
     if (!btn) {
       btn = document.createElement('button');
       btn.id = 'navRHManager';
       btn.type = 'button';
       btn.className = 'nav-item';
-      btn.innerHTML = `<span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span><span class="nav-label">RH</span>`;
+      btn.innerHTML = `<span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></span><span class="nav-label">${isSup ? 'Vagas' : 'RH'}</span>`;
       btn.onclick = () => {
-        const href = typeof Auth !== 'undefined' && Auth.rhManagerPageHrefFresh
+        let href = typeof Auth !== 'undefined' && Auth.rhManagerPageHrefFresh
           ? Auth.rhManagerPageHrefFresh()
           : (typeof Auth !== 'undefined' && Auth.rhManagerPageHref
             ? Auth.rhManagerPageHref()
             : 'pages/rh-manager.html');
+        if (isSup) {
+          try {
+            const u = new URL(href, window.location.href);
+            u.searchParams.set('tab', 'vagas');
+            href = u.href;
+          } catch (_) {
+            href += (href.includes('?') ? '&' : '?') + 'tab=vagas';
+          }
+        }
         _navigateToHub(href);
       };
       const sidebarNav = document.querySelector('.sidebar-nav');
@@ -1281,7 +1371,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof renderAdminSidebar === 'function') renderAdminSidebar(me);
     const empSub = document.getElementById('empPageSubtitle');
     if (empSub && PARTNER_ROOT_ID) {
-      empSub.textContent = 'Equipe ELEVAN: vendedores, backoffice, operacional e supervisor backoffice (somente esta organização)';
+      const orgName = window.PARTNER_RAZAO_SOCIAL || me?.name || 'parceiro';
+      empSub.textContent = `Equipe ${orgName}: vendedores, backoffice, operacional e supervisor backoffice (somente esta organização)`;
     }
 
     // ── Permissões por planilha ───────────────────────────────────────
@@ -1302,8 +1393,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _globalRhFin = (IS_RH || IS_FINANCIAL) && !PARTNER_ROOT_ID;
     const canCadFunc     = p.canCadFunc !== undefined ? !!p.canCadFunc : (IS_MASTER || _globalRhFin || IS_GERENTE || IS_SUP_BACKOFFICE || IS_DIRETORIA || canManagePartnerTeam());
     const _partnerStaff = PARTNER_ROOT_ID && (IS_PARCEIRO || isPartnerOrgStaffRole(s.role));
-    const _partnerProp = _partnerStaff && (partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas'));
-    const canProposta    = p.canProposta !== undefined ? !!p.canProposta : (canMasterPanel || IS_SUPERVISOR || IS_BACKOFFICE || IS_OPERACIONAL || IS_SUP_BACKOFFICE || IS_VENDEDOR_ADM || (_partnerStaff && (partnerOrgCan('cadastrar_proposta') || partnerOrgCan('visualizar_propostas'))));
+    const _partnerProp = _partnerStaff && (
+      partnerOrgCan('cadastrar_proposta')
+      || partnerOrgCan('visualizar_propostas')
+      // Fallback se partners.js falhar: gestor parceiro vê propostas da própria equipe.
+      || (IS_PARCEIRO && typeof PartnerPerms === 'undefined')
+    );
+    const canProposta    = p.canProposta !== undefined ? !!p.canProposta : (
+      canMasterPanel || IS_SUPERVISOR || IS_BACKOFFICE || IS_OPERACIONAL || IS_SUP_BACKOFFICE || IS_VENDEDOR_ADM
+      || _partnerProp
+    );
     const canClientes    = p.canClientes !== undefined ? !!p.canClientes : (canMasterPanel || IS_SUPERVISOR || IS_BACKOFFICE || IS_OPERACIONAL || IS_SUP_BACKOFFICE || IS_VENDEDOR_ADM || (_partnerStaff && (partnerOrgCan('clientes') || partnerOrgCan('cadastrar_cliente') || partnerOrgCan('visualizar_propostas'))));
     const _inPartnerOrg  = !!PARTNER_ROOT_ID;
     const canPartnerOpsHub = p.canPartnerOpsHub !== undefined ? !!p.canPartnerOpsHub : (!_inPartnerOrg && (IS_OPERACIONAL || IS_BACKOFFICE || IS_MASTER || IS_FUNDA || IS_GERENTE || IS_DESENVOLVEDOR || IS_DIRETORIA || IS_FINANCIAL || IS_RH));
@@ -1317,14 +1416,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     const canSupervisorPanel = p.canSupervisorPanel !== undefined ? !!p.canSupervisorPanel : (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH || IS_DESENVOLVEDOR);
     CAN_EMPLOYEES_PANEL = canSupervisorPanel || IS_SUP_BACKOFFICE || canManagePartnerTeam() || (PARTNER_ROOT_ID && IS_PARCEIRO) || (PARTNER_ROOT_ID && _partnerStaff && partnerOrgCan('cadastrar_funcionario'));
     const canPartnerDashboard = p.canPartnerDashboard !== undefined ? !!p.canPartnerDashboard : ((IS_PARCEIRO && partnerOrgCan('dashboard')) || (PARTNER_ROOT_ID && _partnerStaff && (partnerOrgCan('dashboard') || partnerOrgCan('visualizar_propostas'))));
-    const canLeadsManager = p.canLeadsManager !== undefined ? !!p.canLeadsManager : ((!PARTNER_ROOT_ID && (IS_MASTER || IS_FUNDA || IS_SUPERVISOR || IS_GERENTE || IS_DESENVOLVEDOR || IS_FINANCIAL || IS_RH || IS_DIRETORIA || IS_SUP_BACKOFFICE)) || (_inPartnerOrg && partnerOrgCan('atendimento_leads')));
-    const canTreinamentos = p.canTreinamentos !== undefined ? !!p.canTreinamentos : (!_inPartnerOrg || partnerOrgCan('treinamentos'));
+    const canTeamBillingChart = p.canTeamBillingChart !== undefined ? !!p.canTeamBillingChart : _canViewTeamBillingChart();
+    const _sakPartnerNet = _inPartnerOrg && _isSakPartnerNetwork();
+    const canLeadsManager = p.canLeadsManager !== undefined ? !!p.canLeadsManager : (
+      (!_inPartnerOrg && (IS_MASTER || IS_FUNDA || IS_SUPERVISOR || IS_GERENTE || IS_DESENVOLVEDOR || IS_FINANCIAL || IS_RH || IS_DIRETORIA || IS_SUP_BACKOFFICE))
+      // Leads: só rede SAK entre parceiros
+      || (_sakPartnerNet && partnerOrgCan('atendimento_leads'))
+    );
+    const canTreinamentos = p.canTreinamentos !== undefined ? !!p.canTreinamentos : (
+      !_inPartnerOrg || (_sakPartnerNet && partnerOrgCan('treinamentos'))
+    );
     const canTimIndicacao = false;
     const canTimEsteira = false;
     const canContestacao = p.canContestacao !== undefined ? !!p.canContestacao : (!_inPartnerOrg || (IS_PARCEIRO && partnerOrgCan('contestacao')) || (_inPartnerOrg && partnerOrgCan('contestacao')));
     const canFiscalParceiro = p.canFiscalParceiro !== undefined ? !!p.canFiscalParceiro : (!_inPartnerOrg ? (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH || IS_GERENTE) : false);
     const canMarketplaceBlu = p.canMarketplaceBlu !== undefined ? !!p.canMarketplaceBlu : (
-      _inPartnerOrg
+      _sakPartnerNet
         ? ((IS_PARCEIRO && partnerOrgCan('marketplace_blu'))
           || (_partnerStaff && s.role !== 'vendedor' && partnerOrgCan('marketplace_blu')))
         : false
@@ -1347,7 +1454,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const _adminNavCfg = {
       canMasterPanel, canSaques, canCadFunc, canProposta, canClientes, _inPartnerOrg,
       canPartnerOpsHub, canRanking, canLoja, canSimulacao, canChamados, canSupervisorPanel,
-      canPartnerDashboard, canLeadsManager, canTreinamentos, canTimIndicacao, canTimEsteira,
+      canPartnerDashboard, canTeamBillingChart, canLeadsManager, canTreinamentos, canTimIndicacao, canTimEsteira,
       canContestacao, canFiscalParceiro, canMarketplaceBlu, canFornecedorFinanceiro, canContaCorrente,
       canFinanceiroHub, canMonitoriaAtendimento, canJuridicoHub, canWhatsApp,
       canMeetings: !_inPartnerOrg,
@@ -1357,7 +1464,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         canMasterPanel: false, canSaques: false, canCadFunc: false, canProposta: false,
         canClientes: false, canPartnerOpsHub: false, canRanking: false, canLoja: true,
         canSimulacao: false, canChamados: true, canSupervisorPanel: false,
-        canPartnerDashboard: false, canLeadsManager: false, canTreinamentos: false,
+        canPartnerDashboard: false, canTeamBillingChart: false, canLeadsManager: false,
+        // Portaria: treinamentos só se liberado explicitamente em permissions.canTreinamentos
+        canTreinamentos: p.canTreinamentos === true,
         canTimIndicacao: false, canTimEsteira: false, canContestacao: false,
         canFiscalParceiro: false, canMarketplaceBlu: false, canFornecedorFinanceiro: false,
         canContaCorrente: false, canFinanceiroHub: false, canMonitoriaAtendimento: false,
@@ -1386,7 +1495,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
     _bootShowLanding(landingSection);
-    if (landingSection === 'secRanking' && (!canRanking || !window.SOUBLU_FINANCEIRO_PAGE)) {
+    if (landingSection === 'secRanking' && !canRanking) {
       landingSection = _inPartnerOrg
         ? (canPartnerDashboard ? 'secDashboard' : (canProposta ? 'secManageProposals' : 'secMyProfile'))
         : 'secInicio';
@@ -1410,24 +1519,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    if (typeof Auth !== 'undefined' && typeof Auth.isFinanceiroOnly === 'function'
-      && Auth.isFinanceiroOnly() && !window.SOUBLU_SKIP_FINANCEIRO_REDIRECT) {
-      const finHref = typeof Auth.financeiroPageHrefFresh === 'function'
-        ? Auth.financeiroPageHrefFresh()
-        : Auth.financeiroPageHref();
-      window.location.replace(finHref);
-      return;
-    }
+    /* Financeiro mantém Painel Master no admin (hub Financeiro via nav). Sem redirect forçado. */
 
     const propSub = document.getElementById('manageProposalsSubtitle');
     if (propSub) {
-      if (_inPartnerOrg) {
-        propSub.textContent = 'Propostas da sua organização parceira (equipe e vendedores vinculados)';
-      } else if (canPartnerOpsHub) {
-        propSub.textContent = 'Propostas SOU+BLU — equipe interna (rede de parceiros em RH → Cadastrar Parceiro)';
-      } else {
-        propSub.textContent = 'Área Operacional (Backoffice)';
-      }
+      propSub.textContent = '';
+      propSub.style.display = 'none';
+      propSub.setAttribute('hidden', '');
     }
 
     initSidebarToggle(); initNav();
@@ -1495,6 +1593,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (CAN_EMPLOYEES_PANEL) bootTasks.unshift(renderEmployeesTable());
       if (landingSection === 'secManageProposals' && window.Proposals) {
         bootTasks.push(Proposals.renderAdminList().catch(e => console.warn('[proposals boot]', e)));
+      }
+      if (canTeamBillingChart) {
+        bootTasks.push(renderDashboard().catch(e => console.warn('[dashboard boot]', e)));
+        bootTasks.push(renderTeamBillingChart().catch(e => console.warn('[team billing boot]', e)));
+      }
+      if (canRanking) {
+        bootTasks.push(renderAdminRanking().catch(e => console.warn('[ranking boot]', e)));
       }
       await _bootSettle(bootTasks);
       try { if (typeof updateMeetingsBadge === 'function') updateMeetingsBadge(); } catch (_) { /* noop */ }
@@ -1584,12 +1689,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (sec==='secWithdrawals') await renderWithdrawalsTable();
         if (sec==='secDashboard')   {
           await renderDashboard();
-          if (IS_MASTER || IS_FUNDA || IS_GERENTE || IS_FINANCIAL || IS_RH || IS_DIRETORIA || IS_DESENVOLVEDOR) {
+          if (_canViewTeamBillingChart()) {
             await renderTeamBillingChart();
           }
         }
         if (sec==='secRanking') {
-          if (!window.SOUBLU_FINANCEIRO_PAGE || !window.__ADMIN_NAV_CFG__?.canRanking) return;
+          if (!window.__ADMIN_NAV_CFG__?.canRanking) return;
           if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
           await renderAdminRanking();
           return;
@@ -1753,7 +1858,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (Auth.getSession() && typeof navigateTo === 'function') {
       const _sess = Auth.getSession();
-      if (landingSection === 'secRanking' && (!window.__ADMIN_NAV_CFG__?.canRanking || !window.SOUBLU_FINANCEIRO_PAGE)) {
+      if (landingSection === 'secRanking' && !window.__ADMIN_NAV_CFG__?.canRanking) {
         const _cfg = window.__ADMIN_NAV_CFG__ || {};
         landingSection = _cfg._inPartnerOrg
           ? (_cfg.canPartnerDashboard ? 'secDashboard' : (_cfg.canProposta ? 'secManageProposals' : 'secMyProfile'))
@@ -1959,8 +2064,7 @@ async function _renderDashboardBody() {
       _ordersForRole(),
       _transactionsForRole(),
       prodProm,
-      typeof DB.listProposalsLite === 'function' ? DB.listProposalsLite({ limit: 800 })
-        : (typeof DB.listProposals === 'function' ? DB.listProposals() : DB.list('proposals')),
+      _loadBillingProposals(true),
     ]);
     emps = rEmps.status === 'fulfilled' ? (rEmps.value || []) : [];
     orders = rOrders.status === 'fulfilled' ? (rOrders.value || []) : [];
@@ -1993,9 +2097,11 @@ async function _renderDashboardBody() {
       const usersByVendorName = typeof _buildUsersByVendorName === 'function'
         ? _buildUsersByVendorName(_allUsersCache || [])
         : new Map();
-      const rawProps = typeof DB.listProposalsLite === 'function'
-        ? await DB.listProposalsLite({ limit: 800 }).catch(() => [])
-        : (typeof DB.listProposals === 'function' ? await DB.listProposals().catch(() => []) : []);
+      const rawProps = typeof DB._fetchProposalsForVendorIds === 'function'
+        ? await DB._fetchProposalsForVendorIds(teamIds).catch(() => [])
+        : (typeof DB.listProposalsLite === 'function'
+          ? await DB.listProposalsLite({ all: true }).catch(() => [])
+          : []);
       allProps = (rawProps || []).filter((p) => {
         const vid = typeof _resolveProposalVendorId === 'function'
           ? _resolveProposalVendorId(p, usersByVendorName)
@@ -2039,7 +2145,7 @@ async function _renderDashboardBody() {
       : PARTNER_ROOT_ID ? 'Equipe do parceiro'
       : IS_DESENVOLVEDOR ? 'Time Desenvolvimento' : 'Minha Equipe';
 
-  if (PARTNER_ROOT_ID) {
+  if (_isPartnerOrgUser()) {
     const card = document.getElementById('teamBillingCard');
     if (card) card.style.display = 'none';
   }
@@ -2102,20 +2208,30 @@ async function _renderDashboardBody() {
   }
 
   const fmtR = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-  const propAmtDash = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
-  const alignWithBillingChart = _hasCompanyWideDashboard() || _isCommercialSupervisor();
+  const dashStatusKey = _teamBillingStatusFilter || 'total';
+  const propAmtDash = (p) => (typeof DB.proposalChartBillingAmount === 'function'
+    ? DB.proposalChartBillingAmount(p, dashStatusKey)
+    : (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0));
+  const propBrutoDash = (p) => (typeof DB.proposalGrossAmount === 'function' ? DB.proposalGrossAmount(p) : propAmtDash(p));
+  const alignWithBillingChart = _canViewTeamBillingChart();
   const dashBillingProps = alignWithBillingChart
     ? _filterPropsForTeamBilling(allProps || [], _teamBillingFilter, _teamBillingStatusFilter)
     : (allProps || []).filter((p) => (typeof DB.isPaidProposal === 'function' ? DB.isPaidProposal(p) : false));
   const dashPropCount = alignWithBillingChart ? dashBillingProps.length : (allProps || []).length;
   const dashBillingTotal = dashBillingProps.reduce((s, p) => s + propAmtDash(p), 0);
+  const dashBillingTotalBruto = dashBillingProps.reduce((s, p) => s + propBrutoDash(p), 0);
   window._dashBillingTotal = dashBillingTotal;
+  window._dashBillingTotalBruto = dashBillingTotalBruto;
   window._dashPropCount = dashPropCount;
   const dashBillingSub = alignWithBillingChart
-    ? 'valor final · mesmo período do gráfico'
+    ? (dashStatusKey === 'pagas'
+      ? `Bruto: ${fmtR(dashBillingTotalBruto)} · mesmo período do gráfico`
+      : 'valor bruto · mesmo período do gráfico')
     : `${dashBillingProps.filter((p) => propAmtDash(p) > 0).length} pagas com valor`;
   const dashBillingLabel = alignWithBillingChart
-    ? (_TEAM_BILLING_STATUS_LABELS[_teamBillingStatusFilter || 'total'] || 'Faturamento')
+    ? (dashStatusKey === 'pagas'
+      ? 'Faturamento Pago (final)'
+      : (_TEAM_BILLING_STATUS_LABELS[dashStatusKey] || 'Faturamento Bruto'))
     : 'Faturamento (Pagas)';
 
   _ds.innerHTML = [
@@ -2160,12 +2276,16 @@ async function _renderDashboardBody() {
           const st = p.statusOp || p.status || '—';
           const badge = st === 'Pago' ? 'badge-success' : st === 'Cancelado' ? 'badge-danger' : 'badge-warning';
           const val = propAmtDash(p);
+          const bruto = propBrutoDash(p);
+          const valLabel = alignWithBillingChart && dashStatusKey === 'pagas' && bruto > 0 && Math.abs(bruto - val) > 0.01
+            ? `${fmtR(val)} <span style="font-size:10px;color:var(--color-text-muted);">(bruto ${fmtR(bruto)})</span>`
+            : fmtR(val > 0 ? val : bruto);
           return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);">
             <div style="flex:1;">
               <div style="font-weight:700;font-size:13px;">${p.numero || p.id} · ${p.clientName || p.client_name || '—'}</div>
               <div style="font-size:11px;color:var(--color-text-muted);">${p.vendorName || p.vendor_name || '—'}</div>
             </div>
-            <span style="font-weight:800;font-size:13px;color:var(--color-success);">${val > 0 ? fmtR(val) : '—'}</span>
+            <span style="font-weight:800;font-size:13px;color:var(--color-success);">${valLabel}</span>
             <span class="badge ${badge}">${st}</span>
           </div>`;
         }).join('');
@@ -2198,6 +2318,39 @@ let _allProposalsCache = null;
 let _allUsersCache     = null;
 let _teamBillingChartInstance = null;
 
+/** Carrega todas as propostas para faturamento/gráfico (sem teto de 800). */
+async function _loadBillingProposals(force = false) {
+  if (force && typeof DB !== 'undefined' && typeof DB._invalidateProposalsCache === 'function') {
+    DB._invalidateProposalsCache();
+  }
+  // Cache legado (versão antiga limitava a 800) — força recarga completa.
+  if (!force && _allProposalsCache?.length === 800) {
+    force = true;
+    if (typeof DB !== 'undefined' && typeof DB._invalidateProposalsCache === 'function') {
+      DB._invalidateProposalsCache();
+    }
+  }
+  if (!force && Array.isArray(_allProposalsCache) && _allProposalsCache.length > 0) {
+    return _allProposalsCache;
+  }
+  let rows = [];
+  if (typeof DB.listProposalsLite === 'function') {
+    if (_isCommercialSupervisor() && typeof DB._fetchProposalsForVendorIds === 'function') {
+      const teamIds = await _getMergedTeamScopeIds();
+      rows = await DB._fetchProposalsForVendorIds(teamIds).catch(() => []);
+    } else {
+      rows = await DB.listProposalsLite({ all: true }).catch(() => []);
+    }
+  } else if (typeof DB.listProposals === 'function') {
+    rows = await DB.listProposals().catch(() => []);
+  } else if (typeof DB.list === 'function') {
+    rows = await DB.list('proposals').catch(() => []);
+  }
+  _allProposalsCache = rows || [];
+  window._dashProposalsCache = _allProposalsCache;
+  return _allProposalsCache;
+}
+
 async function _ensureChartJs() {
   if (typeof Chart !== 'undefined') return;
   await ensureScript('https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js');
@@ -2215,7 +2368,29 @@ function _teamBillingChartLabel(name) {
   return out.toUpperCase();
 }
 
-function _paintTeamBillingChart(teamData, colors, fmtR) {
+function _teamBillingChartAmt(p, statusKey) {
+  if (typeof DB.proposalChartBillingAmount === 'function') {
+    return DB.proposalChartBillingAmount(p, statusKey);
+  }
+  if (String(statusKey || 'total').toLowerCase() === 'pagas' && typeof DB.proposalAmount === 'function') {
+    return DB.proposalAmount(p);
+  }
+  return typeof DB.proposalGrossAmount === 'function' ? DB.proposalGrossAmount(p) : 0;
+}
+
+function _teamBillingBrutoAmt(p) {
+  return typeof DB.proposalGrossAmount === 'function' ? DB.proposalGrossAmount(p) : 0;
+}
+
+function _recalcTeamBillingRowTotals(row, statusKey) {
+  const props = row.props || [];
+  row.count = props.length;
+  row.total = props.reduce((s, p) => s + _teamBillingChartAmt(p, statusKey), 0);
+  row.totalBruto = props.reduce((s, p) => s + _teamBillingBrutoAmt(p), 0);
+  return row;
+}
+
+function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
   const chartHost = document.getElementById('teamBillingChart');
   if (!chartHost) return;
   chartHost.className = 'team-billing-chart-host';
@@ -2238,6 +2413,14 @@ function _paintTeamBillingChart(teamData, colors, fmtR) {
   const labels = teamData.map((d) => _teamBillingChartLabel(d.sup.name));
   const barColors = teamData.map((_, i) => colors[i % colors.length]);
   const maxCount = Math.max(...teamData.map((d) => d.count), 1);
+  const isPagas = String(statusKey || 'total').toLowerCase() === 'pagas';
+  const barLabel = isPagas ? 'Valor final pago' : 'Valor bruto';
+  const fmtShort = (val) => {
+    if (!val) return '0';
+    if (val >= 1e6) return (val / 1e6).toFixed(1).replace('.', ',') + ' mi';
+    if (val >= 1e3) return (val / 1e3).toFixed(0) + ' mil';
+    return String(Math.round(val));
+  };
   const valueLabelPlugin = {
     id: 'teamBillingValueLabels',
     afterDatasetsDraw(chart) {
@@ -2246,15 +2429,22 @@ function _paintTeamBillingChart(teamData, colors, fmtR) {
       const { ctx } = chart;
       meta.data.forEach((bar, i) => {
         const val = teamData[i]?.total;
-        if (!val) return;
-        const short = val >= 1e6
-          ? (val / 1e6).toFixed(1).replace('.', ',') + ' mi'
-          : val >= 1e3 ? (val / 1e3).toFixed(0) + ' mil' : String(Math.round(val));
+        const bruto = teamData[i]?.totalBruto;
+        if (!val && !bruto) return;
         ctx.save();
         ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 12px Nunito, system-ui, sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('R$ ' + short, bar.x, Math.max(bar.y - 8, 14));
+        if (isPagas && bruto > 0 && Math.abs(bruto - val) > 0.01) {
+          ctx.font = 'bold 11px Nunito, system-ui, sans-serif';
+          ctx.fillStyle = '#64748b';
+          ctx.fillText('bruto R$ ' + fmtShort(bruto), bar.x, Math.max(bar.y - 22, 14));
+          ctx.fillStyle = '#0f172a';
+          ctx.font = 'bold 12px Nunito, system-ui, sans-serif';
+          ctx.fillText('R$ ' + fmtShort(val), bar.x, Math.max(bar.y - 8, 26));
+        } else {
+          ctx.font = 'bold 12px Nunito, system-ui, sans-serif';
+          ctx.fillText('R$ ' + fmtShort(val || bruto), bar.x, Math.max(bar.y - 8, 14));
+        }
         ctx.restore();
       });
     },
@@ -2265,7 +2455,7 @@ function _paintTeamBillingChart(teamData, colors, fmtR) {
       labels,
       datasets: [
         {
-          label: 'Faturamento',
+          label: barLabel,
           data: teamData.map((d) => d.total),
           backgroundColor: barColors.map((c) => c + 'E6'),
           borderColor: barColors,
@@ -2278,7 +2468,7 @@ function _paintTeamBillingChart(teamData, colors, fmtR) {
         },
         {
           type: 'line',
-          label: 'Propostas',
+          label: 'Propostas (qtd)',
           data: teamData.map((d) => d.count),
           borderColor: '#1e293b',
           backgroundColor: '#1e293b',
@@ -2322,7 +2512,17 @@ function _paintTeamBillingChart(teamData, colors, fmtR) {
               return teamData[i]?.sup?.name || labels[i] || '';
             },
             label: (ctx) => {
-              if (ctx.datasetIndex === 0) return `Faturamento: ${fmtR(ctx.parsed.y)}`;
+              const i = ctx.dataIndex ?? 0;
+              const row = teamData[i] || {};
+              if (ctx.datasetIndex === 0) {
+                const lines = [];
+                if (isPagas) lines.push(`Final pago: ${fmtR(ctx.parsed.y)}`);
+                else lines.push(`Bruto: ${fmtR(ctx.parsed.y)}`);
+                if (row.totalBruto > 0 && (isPagas || Math.abs(row.totalBruto - ctx.parsed.y) > 0.01)) {
+                  lines.push(`Bruto: ${fmtR(row.totalBruto)}`);
+                }
+                return lines;
+              }
               return `Propostas: ${ctx.parsed.y}`;
             },
           },
@@ -2344,7 +2544,7 @@ function _paintTeamBillingChart(teamData, colors, fmtR) {
           grace: '12%',
           title: {
             display: true,
-            text: 'Faturamento (R$)',
+            text: isPagas ? 'Valor final pago (R$)' : 'Valor bruto (R$)',
             font: { size: 13, weight: '800' },
             color: '#0f172a',
             padding: { bottom: 8 },
@@ -2446,42 +2646,41 @@ function _isTeamVendorMember(u, supIds) {
   return teamRoles.includes(r) && supIds.has(String(u.admin_id || ''));
 }
 
-function _attachUnassignedTeamBillingProps(rows, inRange, propAmt) {
-  const assignedKeys = new Set();
+function _attachUnassignedTeamBillingProps(rows, inRange, statusKey) {
+  const assignedProps = new Set();
   (rows || []).forEach((r) => (r.props || []).forEach((p) => {
-    const k = _proposalRowKey(p);
-    if (k) assignedKeys.add(k);
+    assignedProps.add(p);
   }));
-  const missing = (inRange || []).filter((p) => {
-    const k = _proposalRowKey(p);
-    return !k || !assignedKeys.has(k);
-  });
+  const missing = (inRange || []).filter((p) => !assignedProps.has(p));
   if (!missing.length) return rows;
+  
   let parceiros = rows.find((r) => r.sup?.name === 'Parceiros');
   if (parceiros) {
-    const propKeys = new Set((parceiros.props || []).map(_proposalRowKey).filter(Boolean));
-    missing.forEach((p) => {
-      const k = _proposalRowKey(p);
-      if (k && propKeys.has(k)) return;
-      if (k) propKeys.add(k);
-      parceiros.props.push(p);
-    });
-    parceiros.total = parceiros.props.reduce((s, p) => s + propAmt(p), 0);
-    parceiros.count = parceiros.props.length;
+    missing.forEach((p) => parceiros.props.push(p));
+    _recalcTeamBillingRowTotals(parceiros, statusKey);
   } else {
-    rows.push({
+    const row = {
       sup: { name: 'Parceiros', id: null },
       team: [],
       props: missing,
-      total: missing.reduce((s, p) => s + propAmt(p), 0),
+      total: 0,
+      totalBruto: 0,
       count: missing.length,
-    });
+    };
+    _recalcTeamBillingRowTotals(row, statusKey);
+    rows.push(row);
   }
   return rows.sort((a, b) => b.total - a.total);
 }
 
-function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName) {
-  const propAmt = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
+function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, statusKey) {
+  const sk = statusKey || _teamBillingStatusFilter || 'total';
+  const propAmt = (p) => _teamBillingChartAmt(p, sk);
+  const propBruto = (p) => _teamBillingBrutoAmt(p);
+  const sumRow = (props) => ({
+    total: props.reduce((s, p) => s + propAmt(p), 0),
+    totalBruto: props.reduce((s, p) => s + propBruto(p), 0),
+  });
   const processedSupIds = new Set();
   const rows = [];
 
@@ -2504,7 +2703,7 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName) {
       },
       team,
       props,
-      total: props.reduce((s, p) => s + propAmt(p), 0),
+      ...sumRow(props),
       count: props.length,
     });
   }
@@ -2522,7 +2721,7 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName) {
       sup,
       team,
       props,
-      total: props.reduce((s, p) => s + propAmt(p), 0),
+      ...sumRow(props),
       count: props.length,
     });
   }
@@ -2537,18 +2736,18 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName) {
     if (!vid) return true;
     return !internalVendorIds.has(String(vid));
   });
-  const orphanTotal = orphanProps.reduce((s, p) => s + propAmt(p), 0);
-  if (orphanTotal > 0 || orphanProps.length > 0) {
+  const orphanSums = sumRow(orphanProps);
+  if (orphanSums.total > 0 || orphanProps.length > 0) {
     rows.push({
       sup: { name: 'Parceiros', id: null },
       team: [],
       props: orphanProps,
-      total: orphanTotal,
+      ...orphanSums,
       count: orphanProps.length,
     });
   }
 
-  const withUnassigned = _attachUnassignedTeamBillingProps(rows, inRange, propAmt);
+  const withUnassigned = _attachUnassignedTeamBillingProps(rows, inRange, sk);
   const poolTotal = (inRange || []).reduce((s, p) => s + propAmt(p), 0);
   const teamTotal = withUnassigned.reduce((s, r) => s + (r.total || 0), 0);
   // #region agent log
@@ -2595,9 +2794,7 @@ function _mergeTeamBillingRows(rows) {
     if (row.sup?.name) cur.sup._mergedFrom.push(row.sup.name);
   }
   for (const cur of merged.values()) {
-    const propAmt = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
-    cur.count = cur.props.length;
-    cur.total = cur.props.reduce((s, p) => s + propAmt(p), 0);
+    _recalcTeamBillingRowTotals(cur, _teamBillingStatusFilter || 'total');
     cur.sup._mergedFrom = [...new Set(cur.sup._mergedFrom || [])];
     passthrough.push(cur);
   }
@@ -2738,9 +2935,7 @@ window.addEventListener('pagehide', () => { _stopAdminLiveRefresh(); });
 
 async function renderTeamBillingChart() {
   const card = document.getElementById('teamBillingCard');
-  const canBilling = _hasCompanyWideDashboard()
-    || IS_MASTER || IS_GERENTE || IS_FINANCIAL || IS_RH || IS_DIRETORIA || IS_DESENVOLVEDOR || IS_FUNDA
-    || _isCommercialSupervisor();
+  const canBilling = _canViewTeamBillingChart();
   // #region agent log
   fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H4',location:'admin.js:team-billing',message:'renderTeamBillingChart gate',data:{canBilling:!!canBilling,companyWide:!!_hasCompanyWideDashboard(),IS_SUP_BACKOFFICE:!!IS_SUP_BACKOFFICE,cardFound:!!card,propsCacheLen:(_allProposalsCache||[]).length},timestamp:Date.now()})}).catch(()=>{});
   // #endregion
@@ -2748,21 +2943,24 @@ async function renderTeamBillingChart() {
   if (!canBilling) { card.style.display = 'none'; return; }
   card.style.display = '';
 
-  if (!_allProposalsCache) {
-    _allProposalsCache = typeof DB.listProposalsLite === 'function'
-      ? await DB.listProposalsLite({ limit: 800 }).catch(() => [])
-      : (typeof DB.listProposals === 'function'
-        ? await DB.listProposals().catch(() => [])
-        : await DB.list('proposals').catch(() => []));
+  if (!_allProposalsCache?.length) {
+    await _loadBillingProposals(true);
+  } else {
+    await _loadBillingProposals(false);
   }
-  if (!_allUsersCache?.length) _allUsersCache = await DB.getAllUsers().catch(() => []);
 
   let proposals = _allProposalsCache || [];
+  if (!_allUsersCache?.length) _allUsersCache = await DB.getAllUsers().catch(() => []);
   const users = _allUsersCache || [];
   const usersByVendorName = _buildUsersByVendorName(users);
   if (_isCommercialSupervisor()) {
     const teamIds = await _getMergedTeamScopeIds();
     const teamSet = new Set(teamIds.map(String));
+    const teamUsers = users.filter((u) => teamSet.has(String(u.id)));
+    const mariliaHits = teamUsers.filter((u) => /maril/i.test(String(u.name || '')));
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'laryssa-marilia',hypothesisId:'H1-H3',location:'admin.js:team-billing-scope',message:'supervisor team scope',data:{viewerId:Auth.getSession()?.id,viewerName:Auth.getSession()?.name,teamIdsCount:teamIds.length,teamUsers:teamUsers.map(u=>({id:u.id,name:u.name,role:u.role,admin_id:u.admin_id,active:u.active})),mariliaInScope:mariliaHits.map(u=>({id:u.id,name:u.name,admin_id:u.admin_id}))},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     proposals = proposals.filter((p) => {
       const vid = _resolveProposalVendorId(p, usersByVendorName);
       return vid && teamSet.has(String(vid));
@@ -2776,7 +2974,9 @@ async function renderTeamBillingChart() {
   const f = _teamBillingFilter;
   const statusKey = _teamBillingStatusFilter || 'total';
   const statusLabel = _TEAM_BILLING_STATUS_LABELS[statusKey] || 'Fatura Total';
-  const propAmt = (p) => (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0);
+  const isPagas = statusKey === 'pagas';
+  const propAmt = (p) => _teamBillingChartAmt(p, statusKey);
+  const propBruto = (p) => _teamBillingBrutoAmt(p);
 
   let inRange = _filterPropsForTeamBilling(proposals, f, statusKey);
   let periodHint = '';
@@ -2787,7 +2987,7 @@ async function renderTeamBillingChart() {
     </div>`;
   }
 
-  let teamData = _buildTeamBillingData(supervisors, users, inRange, usersByVendorName);
+  let teamData = _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, statusKey);
   if (_isCommercialSupervisor()) {
     const myGroup = _supervisorMergeGroup(Auth.getSession()?.name);
     if (myGroup) {
@@ -2797,12 +2997,15 @@ async function renderTeamBillingChart() {
 
   const fmtR = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   const poolTotal = inRange.reduce((s, p) => s + propAmt(p), 0);
+  const poolTotalBruto = inRange.reduce((s, p) => s + propBruto(p), 0);
   const poolCount = inRange.length;
   const grandTotal = poolTotal;
+  const grandTotalBruto = poolTotalBruto;
   const grandCount = poolCount;
   window._dashBillingFilter = f;
   window._dashBillingStatusFilter = statusKey;
   window._dashBillingTotal = grandTotal;
+  window._dashBillingTotalBruto = grandTotalBruto;
   window._dashPropCount = grandCount;
   // #region agent log
   fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'dash-total-fix',hypothesisId:'H1',location:'admin.js:team-billing-kpi',message:'chart KPI vs pool',data:{filter:f,status:statusKey,poolTotal,poolCount,teamTotal:teamData.reduce((s,d)=>s+d.total,0),teamCount:teamData.reduce((s,d)=>s+d.count,0)},timestamp:Date.now()})}).catch(()=>{});
@@ -2815,14 +3018,48 @@ async function renderTeamBillingChart() {
     : statusKey === 'canceladas' ? 'Propostas Canceladas'
     : statusKey === 'digitadas' ? 'Propostas Digitadas'
     : 'Total de Propostas';
-  const billKpiLabel = statusKey === 'total' ? 'Faturamento Total' : `Faturamento (${statusLabel})`;
+  const billKpiLabel = isPagas ? 'Faturamento Pago (final)'
+    : statusKey === 'total' ? 'Faturamento Bruto' : `Faturamento Bruto (${statusLabel})`;
+  const propsLoadedHint = proposals.length
+    ? `<div class="team-billing-meta">${proposals.length} proposta(s) carregadas do banco</div>`
+    : '';
 
-  document.getElementById('teamBillingKpis').innerHTML = (periodHint || '') + [
+  /* Layout original (statKpiHtml) — revert kpi-align experiments */
+  const kpiCards = [
     statKpiHtml({ icon: 'proposals', colorClass: 'blue', label: propKpiLabel, value: grandCount, valueColor: '#3b82f6' }),
-    statKpiHtml({ icon: 'billing', colorClass: 'green', label: billKpiLabel, value: fmtR(grandTotal), valueColor: '#10b981' }),
+    statKpiHtml({
+      icon: 'billing',
+      colorClass: 'green',
+      label: billKpiLabel,
+      value: fmtR(grandTotal),
+      valueColor: '#10b981',
+      valueStyle: isPagas ? 'font-size:17px;' : '',
+    }),
+    ...(isPagas ? [statKpiHtml({
+      icon: 'chart',
+      colorClass: 'teal',
+      label: 'Valor Bruto',
+      value: fmtR(grandTotalBruto),
+      valueColor: '#06b6d4',
+    })] : []),
     statKpiHtml({ icon: 'users', colorClass: 'purple', label: 'Equipes Ativas', value: teamData.filter(d => d.count > 0).length, valueColor: '#8b5cf6' }),
     statKpiHtml({ icon: 'calendar', colorClass: 'yellow', label: 'Período', value: periodStatusLabel, valueColor: '#f59e0b', valueStyle: 'font-size:14px;line-height:1.3;' }),
-  ].join('');
+  ];
+  const kpisEl = document.getElementById('teamBillingKpis');
+  if (kpisEl) {
+    kpisEl.innerHTML = (periodHint || '') + propsLoadedHint + kpiCards.join('');
+    // #region agent log
+    try {
+      const cs = getComputedStyle(kpisEl);
+      const kids = Array.from(kpisEl.children).map((c) => ({
+        cls: c.className || c.tagName,
+        display: getComputedStyle(c).display,
+        flexDir: getComputedStyle(c).flexDirection,
+      }));
+      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'kpi-revert1',hypothesisId:'H1',location:'admin.js:teamBillingKpis',message:'KPI revert applied',data:{build:'kpi-revert1',kpiCount:kpiCards.length,rootDisplay:cs.display,rootCols:cs.gridTemplateColumns,children:kids},timestamp:Date.now()})}).catch(()=>{});
+    } catch (_) { /* noop */ }
+    // #endregion
+  }
 
   const statusSel = document.getElementById('teamBillingStatusFilter');
   if (statusSel && statusSel.value !== statusKey) statusSel.value = statusKey;
@@ -2836,7 +3073,7 @@ async function renderTeamBillingChart() {
   }
   try {
     await _ensureChartJs();
-    _paintTeamBillingChart(teamData, colors, fmtR);
+    _paintTeamBillingChart(teamData, colors, fmtR, statusKey);
   } catch (chartErr) {
     console.warn('[teamBillingChart]', chartErr);
     if (chartEl) {
@@ -2846,25 +3083,33 @@ async function renderTeamBillingChart() {
 
   // ── Tabela detalhada ─────────────────────────────────────────────────
   document.getElementById('teamBillingTable').innerHTML = `
-    <h4 style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--color-text-muted);">Detalhes por Equipe</h4><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--color-border);text-align:left;"><th style="padding:8px 12px;font-weight:700;">#</th><th style="padding:8px 12px;font-weight:700;">Supervisor</th><th style="padding:8px 12px;font-weight:700;">Tamanho Equipe</th><th style="padding:8px 12px;font-weight:700;">Propostas</th><th style="padding:8px 12px;font-weight:700;">Faturamento</th><th style="padding:8px 12px;font-weight:700;">% do Total</th><th style="padding:8px 12px;font-weight:700;"></th></tr></thead><tbody>
+    <h4 style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--color-text-muted);">Detalhes por Equipe</h4><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--color-border);text-align:left;"><th style="padding:8px 12px;font-weight:700;">#</th><th style="padding:8px 12px;font-weight:700;">Supervisor</th><th style="padding:8px 12px;font-weight:700;">Tamanho Equipe</th><th style="padding:8px 12px;font-weight:700;">Propostas</th><th style="padding:8px 12px;font-weight:700;">${isPagas ? 'Final pago' : 'Valor bruto'}</th>${isPagas ? '<th style="padding:8px 12px;font-weight:700;">Valor bruto</th>' : ''}<th style="padding:8px 12px;font-weight:700;">% do Total</th><th style="padding:8px 12px;font-weight:700;"></th></tr></thead><tbody>
           ${teamData.map((d, i) => {
             const cor   = colors[i % colors.length];
             const share = grandTotal > 0 ? Math.round((d.total / grandTotal) * 100) : 0;
             const supSub = d.sup._mergedFrom?.length
               ? `Supervisores: ${d.sup._mergedFrom.join(' · ')} · ${d.team.length} funcionário(s)`
               : `${d.team.length} funcionário(s)`;
+            const propValHtml = (p) => {
+              const finalV = propAmt(p);
+              const brutoV = propBruto(p);
+              if (isPagas && brutoV > 0 && Math.abs(brutoV - finalV) > 0.01) {
+                return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV)}</div><div style="font-size:10px;color:var(--color-text-muted);">bruto ${fmtR(brutoV)}</div>`;
+              }
+              return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV || brutoV)}</div>`;
+            };
             return `
-            <tr style="border-bottom:1px solid var(--color-border);" id="trow_${i}"><td style="padding:8px 12px;"><span style="font-weight:800;color:${cor};">#${i+1}</span></td><td style="padding:8px 12px;"><span style="font-weight:700;">${d.sup.name}</span><div style="font-size:11px;color:var(--color-text-muted);">${supSub}</div></td><td style="padding:8px 12px;">${d.team.length}</td><td style="padding:8px 12px;font-weight:700;">${d.count}</td><td style="padding:8px 12px;font-weight:800;color:${cor};">${fmtR(d.total)}</td><td style="padding:8px 12px;"><div style="display:flex;align-items:center;gap:8px;"><div style="background:var(--color-surface-2);border-radius:4px;height:6px;width:80px;overflow:hidden;"><div style="height:6px;width:${share}%;background:${cor};border-radius:4px;"></div></div><span style="font-size:12px;">${share}%</span></div></td><td style="padding:8px 12px;"><button class="btn btn-ghost btn-sm" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver</button></td></tr><tr id="tdetail_${i}" style="display:none;background:var(--color-surface-2);"><td colspan="7" style="padding:12px 20px;">
+            <tr style="border-bottom:1px solid var(--color-border);" id="trow_${i}"><td style="padding:8px 12px;"><span style="font-weight:800;color:${cor};">#${i+1}</span></td><td style="padding:8px 12px;"><span style="font-weight:700;">${d.sup.name}</span><div style="font-size:11px;color:var(--color-text-muted);">${supSub}</div></td><td style="padding:8px 12px;">${d.team.length}</td><td style="padding:8px 12px;font-weight:700;">${d.count}</td><td style="padding:8px 12px;font-weight:800;color:${cor};">${fmtR(d.total)}</td>${isPagas ? `<td style="padding:8px 12px;font-weight:700;color:var(--color-text-muted);">${fmtR(d.totalBruto || 0)}</td>` : ''}<td style="padding:8px 12px;"><div style="display:flex;align-items:center;gap:8px;"><div style="background:var(--color-surface-2);border-radius:4px;height:6px;width:80px;overflow:hidden;"><div style="height:6px;width:${share}%;background:${cor};border-radius:4px;"></div></div><span style="font-size:12px;">${share}%</span></div></td><td style="padding:8px 12px;"><button class="btn btn-ghost btn-sm" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver</button></td></tr><tr id="tdetail_${i}" style="display:none;background:var(--color-surface-2);"><td colspan="${isPagas ? 8 : 7}" style="padding:12px 20px;">
                 ${!d.props.length
                   ? '<span style="color:var(--color-text-muted);font-size:12px;">Nenhuma proposta neste período.</span>'
                   : `<div style="display:flex;flex-wrap:wrap;gap:8px;">
                       ${d.props.slice(0,20).map(p => `
-                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;min-width:180px;"><div style="font-weight:700;font-size:12px;">${p.numero || p.id}</div><div style="font-size:11px;color:var(--color-text-muted);">${p.clientName||'—'} · ${p.convenio||'—'}</div><div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(propAmt(p))}</div><div style="font-size:10px;background:${cor}18;color:${cor};padding:2px 6px;border-radius:99px;display:inline-block;margin-top:3px;">${p.statusOp||p.status||'—'}</div></div>`).join('')}
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;min-width:180px;"><div style="font-weight:700;font-size:12px;">${p.numero || p.id}</div><div style="font-size:11px;color:var(--color-text-muted);">${p.clientName||'—'} · ${p.convenio||'—'}</div>${propValHtml(p)}<div style="font-size:10px;background:${cor}18;color:${cor};padding:2px 6px;border-radius:99px;display:inline-block;margin-top:3px;">${p.statusOp||p.status||'—'}</div></div>`).join('')}
                       ${d.props.length > 20 ? `<div style="font-size:12px;color:var(--color-text-muted);align-self:center;">+${d.props.length-20} mais...</div>` : ''}
                     </div>`}
               </td></tr>`;
           }).join('')}
-        </tbody><tfoot><tr style="border-top:2px solid var(--color-border);font-weight:800;"><td colspan="3" style="padding:10px 12px;">TOTAL GERAL</td><td style="padding:10px 12px;">${grandCount}</td><td style="padding:10px 12px;color:var(--color-success);">${fmtR(grandTotal)}</td><td colspan="2" style="padding:10px 12px;">100%</td></tr></tfoot></table></div>`;
+        </tbody><tfoot><tr style="border-top:2px solid var(--color-border);font-weight:800;"><td colspan="3" style="padding:10px 12px;">TOTAL GERAL</td><td style="padding:10px 12px;">${grandCount}</td><td style="padding:10px 12px;color:var(--color-success);">${fmtR(grandTotal)}</td>${isPagas ? `<td style="padding:10px 12px;color:var(--color-text-muted);">${fmtR(grandTotalBruto)}</td>` : ''}<td colspan="2" style="padding:10px 12px;">100%</td></tr></tfoot></table></div>`;
 
   _syncTeamBillingFilterUI(periodHint ? 'all' : f);
   _wireTeamBillingDatePickers();
@@ -4683,17 +4928,62 @@ async function openCreateUserModal() {
 }
 
 async function masterEditUser(id) {
-  if (employeesManagedInRhHub()) {
+  if (!id) return;
+  const u = await DB.getUser(id, true); if (!u) return;
+
+  // Rede parceira: edita no fluxo de equipe do parceiro (não manda para o RH).
+  let partnerRoot = u.partner_root_id || null;
+  if (!partnerRoot && u.admin_id) {
+    const boss = await DB.getUser(u.admin_id).catch(() => null);
+    if (boss?.role === 'parceiro') partnerRoot = boss.id;
+  }
+  if (!partnerRoot && u.role === 'parceiro') partnerRoot = u.id;
+  if (partnerRoot && (IS_MASTER || IS_FUNDA || IS_GERENTE || IS_RH || IS_FINANCIAL)) {
+    _empPartnerRootOverride = String(partnerRoot);
+    window._keepPartnerTeamOverride = true;
+    document.querySelectorAll('.section').forEach((s) => s.classList.remove('active'));
+    document.getElementById('secEmployees')?.classList.add('active');
+    await renderEmployeesTable();
+    await editEmployee(id);
+    return;
+  }
+
+  // Hub RH: só redireciona se já existir ficha RH; usuários só no login
+  // precisam continuar editáveis pelo modal Master.
+  if (employeesManagedInRhHub() && typeof DB.getRhEmployees === 'function') {
+    try {
+      const list = await DB.getRhEmployees().catch(() => []);
+      const cpf = String(u?.cpf || '').replace(/\D/g, '');
+      const email = String(u?.email || '').trim().toLowerCase();
+      const hasRh = (list || []).some((e) =>
+        String(e.user_id || '') === String(id)
+        || (cpf.length === 11 && String(e.cpf || '').replace(/\D/g, '') === cpf)
+        || (email && String(e.email || e.email_pessoal || '').trim().toLowerCase() === email)
+      );
+      if (hasRh) {
+        goToRhFuncionarios(id);
+        return;
+      }
+    } catch (_) {
+      /* fallback: edita no modal master */
+    }
+  } else if (employeesManagedInRhHub()) {
     goToRhFuncionarios(id);
     return;
   }
-  const u = await DB.getUser(id, true); if (!u) return;
   document.getElementById('masterUserModalTitle').textContent = ' Editar Usuário';
   document.getElementById('masterUserId').value    = u.id;
   document.getElementById('masterUserName').value  = u.name;
   document.getElementById('masterUserEmail').value = u.email;
   document.getElementById('masterUserMat').value   = u.matricula || '';
   document.getElementById('masterUserPwd').value   = u.password || '';
+  const roleSel = document.getElementById('masterUserRole');
+  if (roleSel && u.role && ![...roleSel.options].some((o) => o.value === u.role)) {
+    const opt = document.createElement('option');
+    opt.value = u.role;
+    opt.textContent = u.role;
+    roleSel.appendChild(opt);
+  }
   document.getElementById('masterUserRole').value  = u.role;
   document.getElementById('masterUserDept').value  = u.department || 'Vendas';
   document.getElementById('masterUserPts').value   = u.points || u.balance || 0;
@@ -4732,9 +5022,12 @@ function onMasterRoleChange(role) {
 }
 
 async function _populateMasterTeamSelect(selected) {
-  const leaders = (await DB.getAllUsers()).filter(u =>
-    ['supervisor', 'parceiro', 'sup_backoffice'].includes(u.role) && u.active !== false
-  );
+  if (typeof DB.clearAllUsersCache === 'function') DB.clearAllUsersCache();
+  const leaders = (await DB.getAllUsers(true)).filter(u => {
+    const a = u?.active;
+    const active = !(a === false || a === 0 || a === '0' || a === 'false');
+    return active && ['supervisor', 'parceiro', 'sup_backoffice'].includes(String(u.role || '').toLowerCase());
+  });
   const sel = document.getElementById('masterUserTeam');
   const roleTag = (r) => ({
     parceiro: 'Parceiro',
@@ -4832,18 +5125,18 @@ async function masterToggleUser(id) {
 }
 
 async function masterDeleteUser(id, name) {
-  if (!confirm(`Excluir "${name}" permanentemente?\n\nEsta ação não pode ser desfeita.`)) return;
-  showLoading('Excluindo...');
+  if (!confirm(`Desativar "${name}"?\n\nA conta será desativada (não apagada). Propostas e histórico permanecem vinculados.`)) return;
+  showLoading('Desativando...');
   try {
     await DB.deleteUser(id);
     if (typeof invalidateSouBluCaches === 'function') invalidateSouBluCaches();
     await renderMasterPanel();
     // Atualizar tabela de funcionários se estiver visível
     if (document.getElementById('employeesTbody')) await renderEmployeesTable();
-    showToast(`"${name}" excluído.`, 'success');
+    showToast(`"${name}" desativado.`, 'success');
   } catch(err) {
     console.error('[masterDeleteUser]', err);
-    showToast('Erro ao excluir: ' + (err.message||'tente novamente'), 'error');
+    showToast('Erro ao desativar: ' + (err.message||'tente novamente'), 'error');
   } finally { hideLoading(); }
 }
 
@@ -5051,10 +5344,11 @@ async function renderEmployeesTable() {
     return;
   }
   const empReadOnly = (IS_SUPERVISOR && !partnerRoot) || (partnerRoot && !canAddTeam);
+  const hidePartnerDelete = !!partnerRoot;
   tbody.innerHTML = emps.map(e=>{ const dispName = _fmtPersonName(e.name); return `<tr><td><div class="employee-avatar-cell">${avatarHtml(dispName,'avatar-sm',e.photo_url||'')}
       <div><div style="font-weight:700;">${dispName}</div><div style="font-size:12px;color:var(--color-text-muted);">${e.email}</div></div></div></td><td><code style="font-size:12px;background:var(--color-surface-2);padding:2px 6px;border-radius:4px;">${e.matricula}</code></td><td><span class="badge badge-muted">${e.department}${roleShort[e.role] ? ' · ' + roleShort[e.role] : ''}</span></td><td><span class="emp-pts-value" style="font-family:var(--font-display);font-weight:900;${userPts(e)<0?'color:var(--color-danger);':''}">${formatCurrency(userPts(e), e)}</span></td><td><div class="points-bar-wrap emp-pts-progress"><div class="points-bar"><div class="points-bar-fill" style="width:${userPts(e)<0?0:Math.round((userPts(e)/maxB)*100)}%;${userPts(e)<0?'background:var(--color-danger);':''}"></div></div></div></td><td>${e.active?'<span class="badge badge-success">Ativo</span>':'<span class="badge badge-danger">Inativo</span>'}</td><td><div style="display:flex;gap:6px;flex-wrap:wrap;">
       ${empReadOnly ? '<span style="font-size:12px;color:var(--color-text-muted);">Somente leitura</span>' : `
-        ${(typeof canSouBluManagePoints === 'function' ? canSouBluManagePoints(e) : true) ? `<button class="btn btn-primary btn-sm" onclick="quickAddPoints('${e.id}','${dispName.replace(/'/g,"\\'")}')">Pontos</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="${(roleShort[e.role] && !partnerRoot) ? `masterEditUser('${e.id}')` : `editEmployee('${e.id}')`}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></button><button class="btn btn-ghost btn-sm" onclick="toggleEmployee('${e.id}')">${e.active?'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-danger);vertical-align: middle;" title="Desativar"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>':'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-success);vertical-align: middle;" title="Ativar"><polyline points="20 6 9 17 4 12"></polyline></svg>'}</button><button class="btn btn-ghost btn-sm" style="color:var(--color-danger);" onclick="delEmployee('${e.id}','${dispName.replace(/'/g,"\\'")}')" title="Apagar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-danger);vertical-align: middle;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>
+        ${(typeof canSouBluManagePoints === 'function' ? canSouBluManagePoints(e) : true) ? `<button class="btn btn-primary btn-sm" onclick="quickAddPoints('${e.id}','${dispName.replace(/'/g,"\\'")}')">Pontos</button>` : ''}<button class="btn btn-ghost btn-sm" onclick="${(roleShort[e.role] && !partnerRoot) ? `masterEditUser('${e.id}')` : `editEmployee('${e.id}')`}" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle;"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg></button><button class="btn btn-ghost btn-sm" onclick="toggleEmployee('${e.id}')">${e.active?'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-danger);vertical-align: middle;" title="Desativar"><circle cx="12" cy="12" r="10"></circle><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line></svg>':'<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-success);vertical-align: middle;" title="Ativar"><polyline points="20 6 9 17 4 12"></polyline></svg>'}</button>${hidePartnerDelete ? '' : `<button class="btn btn-ghost btn-sm" style="color:var(--color-danger);" onclick="delEmployee('${e.id}','${dispName.replace(/'/g,"\\'")}')" title="Apagar"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:var(--color-danger);vertical-align: middle;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg></button>`}
       `}
     </div></td></tr>`; }).join('');
 }
@@ -5091,28 +5385,43 @@ async function editEmployee(id) {
   _wireEmpCpfLookup();
   const e=await DB.getUser(id, true); if(!e)return;
   const teamRoot = partnerRoot;
-  if (!IS_MASTER && !((IS_FINANCIAL || IS_RH) && !teamRoot) && e.admin_id !== ADMIN_ID && e.admin_id !== teamRoot) return;
+  const belongs = teamRoot ? _userBelongsToPartnerRoot(e, teamRoot) : false;
+  const canEdit = IS_MASTER || IS_FUNDA || IS_GERENTE
+    || (teamRoot && canManagePartnerTeam() && belongs)
+    || ((IS_FINANCIAL || IS_RH) && !teamRoot)
+    || e.admin_id === ADMIN_ID
+    || (teamRoot && e.admin_id === teamRoot);
+  if (!canEdit) {
+    showToast('Sem permissão para editar este funcionário.', 'warning');
+    return;
+  }
   document.getElementById('empModalTitle').textContent = teamRoot ? 'Editar membro da equipe' : 'Editar Funcionário';
   document.getElementById('editEmpId').value=e.id;
   document.getElementById('empCpf').value=_formatCpf(e.cpf || '');
   document.getElementById('empName').value=e.name;
   document.getElementById('empContato').value=e.phone || e.phone1 || '';
   document.getElementById('empEmail').value=e.email;
-  document.getElementById('empMatricula').value=e.matricula;
+  document.getElementById('empMatricula').value=e.matricula || '';
   _setEmpCpfStatus('', '');
-  document.getElementById('empPassword').value=e.password;
+  document.getElementById('empPassword').value=e.password || '';
   _togglePartnerTeamRoleField(!!teamRoot);
   const teamSel = document.getElementById('empTeamRole');
   if (teamRoot && teamSel) {
     const partnerRoles = (typeof PartnerPerms !== 'undefined' && PartnerPerms.TEAM_ROLES)
       ? PartnerPerms.TEAM_ROLES.map(r => r.value)
-      : ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'];
-    teamSel.value = partnerRoles.includes(e.role) ? e.role : 'vendedor';
+      : ['vendedor', 'backoffice', 'operacional', 'sup_backoffice', 'rh', 'financeiro'];
+    if (e.role && !partnerRoles.includes(e.role) && ![...teamSel.options].some((o) => o.value === e.role)) {
+      const opt = document.createElement('option');
+      opt.value = e.role;
+      opt.textContent = e.role;
+      teamSel.appendChild(opt);
+    }
+    teamSel.value = partnerRoles.includes(e.role) || e.role ? e.role : 'vendedor';
     _syncEmpDeptFromTeamRole();
   } else {
-    document.getElementById('empDept').value=e.department;
+    document.getElementById('empDept').value=e.department || 'Vendas';
   }
-  document.getElementById('empBalance').value=(e.balance||0).toFixed(2);
+  document.getElementById('empBalance').value=Number(e.balance||e.points||0).toFixed(2);
   openModal('addEmployeeModal');
 }
 async function saveEmployee() {
@@ -5148,6 +5457,10 @@ async function saveEmployee() {
     phone: (document.getElementById('empContato')?.value || '').trim() || null,
   };
   if (partnerRoot) data.partner_root_id = partnerRoot;
+  else if (id) {
+    const existing = await DB.getUser(id, true).catch(() => null);
+    if (existing?.partner_root_id) data.partner_root_id = existing.partner_root_id;
+  }
   if(!data.name||!data.email){showToast('Nome e e-mail obrigatórios.','warning');return;}
   if (cpfDigits.length === 11) {
     const dup = typeof DB.getUserByCpf === 'function'
@@ -5207,19 +5520,23 @@ async function toggleEmployee(id){
   if (IS_RH && !confirm(`Alterar status de ${(await DB.getUser(id))?.name}?`)) return;
   const e=await DB.getUser(id);if(!e)return;await DB.updateUser(id,{active:!e.active});await renderEmployeesTable();showToast(`${e.name} ${!e.active?'ativado':'desativado'}.`,'info');}
 async function delEmployee(id,name){
+  if (PARTNER_ROOT_ID || IS_PARCEIRO) {
+    showToast('Parceiros não podem apagar membros da equipe. Desative o acesso se necessário.','warning');
+    return;
+  }
   if ((IS_SUPERVISOR && !PARTNER_ROOT_ID) || !canManagePartnerTeam()){showToast('Sem permissão para excluir.','error');return;}
-  confirmAction(`Excluir ${name}?`,async()=>{
-    showLoading('Excluindo...');
+  confirmAction(`Desativar ${name}?\n\nA conta será desativada (não apagada). Propostas permanecem.`,async()=>{
+    showLoading('Desativando...');
     try{
       await DB.deleteUser(id);
       if (typeof invalidateSouBluCaches === 'function') invalidateSouBluCaches();
       await renderEmployeesTable();
       await renderDashboard();
       if (IS_MASTER||IS_GERENTE||IS_FINANCIAL||IS_RH||IS_DESENVOLVEDOR) await renderMasterPanel();
-      showToast(`${name} removido.`,'success');
+      showToast(`${name} desativado.`,'success');
     }catch(err){
       console.error('[delEmployee]',err);
-      showToast('Erro ao excluir: '+(err.message||'tente novamente'),'error');
+      showToast('Erro ao desativar: '+(err.message||'tente novamente'),'error');
     }finally{hideLoading();}
   });
 }
@@ -5581,9 +5898,19 @@ async function renderWithdrawalsTable(){
       ? `<button type="button" class="btn btn-ghost btn-sm" style="font-size:10px;margin-top:4px;padding:2px 6px;"
            onclick="refreshWdPixStatus('${w.id}')" title="Consultar status na Efi">↻ Atualizar</button>`
       : '';
-    const retryPixBtn = (gwConfigured && (IS_MASTER || IS_FUNDA || IS_FINANCIAL) && pixNeedsBank && !pixConfirmed)
+    const retryPixBtn = (gwConfigured && (IS_MASTER || IS_FUNDA || IS_FINANCIAL) && pixNeedsBank && !pixConfirmed
+      && String(w.pix_status || '').toLowerCase() !== 'manual' && w.status !== 'pago')
       ? `<button type="button" class="btn btn-outline btn-sm" style="font-size:10px;margin-top:4px;padding:2px 6px;"
            onclick="retryWdPixPay('${w.id}')" title="Enviar PIX de novo para o banco">↻ Reenviar PIX</button>`
+      : '';
+
+    const btnManualPaid = ((IS_MASTER || IS_FUNDA || IS_FINANCIAL)
+        && !['pago', 'rejeitado'].includes(w.status)
+        && !pixConfirmed
+        && String(w.pix_status || '').toLowerCase() !== 'manual')
+      ? `<button type="button" class="btn btn-outline btn-sm" style="width:100%;margin-top:4px;font-size:11px;border-color:#0d9488;color:#0f766e;"
+           onclick="markWdManuallyPaid('${w.id}')"
+           title="Já pagou fora do sistema? Marca como aprovado/pago sem enviar PIX automático">Pago manual</button>`
       : '';
 
     const pixBankCell = `${typeof pixWdStatusBadge === 'function' ? pixWdStatusBadge(w) : '—'}${refreshPixBtn}${retryPixBtn}`;
@@ -5604,8 +5931,8 @@ async function renderWithdrawalsTable(){
         ${cardMaster}
         ${cardFin}
       </div>
-      ${(!['pago','rejeitado'].includes(w.status)&&(IS_MASTER||IS_FINANCIAL))
-        ? `<div style="margin-top:6px;">${btnReject}</div>`
+      ${(!['pago','rejeitado'].includes(w.status)&&(IS_MASTER||IS_FUNDA||IS_FINANCIAL))
+        ? `<div style="margin-top:6px;">${btnManualPaid}${btnReject}</div>`
         : ''}
     </td></tr>`;
     } catch (rowErr) {
@@ -5652,6 +5979,22 @@ async function retryWdPixPay(id) {
     }
   } catch (e) {
     showToast((e && e.message) ? e.message : String(e), 'error', 10000);
+  } finally { hideLoading(); }
+}
+
+/** Marca saque como pago fora do sistema (sem disparar PIX automático). */
+async function markWdManuallyPaid(id) {
+  if (!(IS_MASTER || IS_FUNDA || IS_FINANCIAL)) { showToast('Sem permissão.', 'error'); return; }
+  if (!confirm('Confirmar pagamento MANUAL deste saque?\n\nO sistema NÃO enviará PIX. Use só se o valor já foi pago por fora.')) return;
+  const note = document.getElementById('note_' + id)?.value || '';
+  showLoading('Marcando como pago manual...');
+  try {
+    await DB.markWdManualPaid(id, note);
+    await renderWithdrawalsTable();
+    await updateWithdrawalsBadge();
+    showToast('Saque marcado como pago manualmente (sem PIX automático).', 'success');
+  } catch (e) {
+    showToast('Erro: ' + (e.message || e), 'error');
   } finally { hideLoading(); }
 }
 
@@ -5815,7 +6158,7 @@ async function _usersForAdminRanking() {
 }
 
 async function renderAdminRanking() {
-  if (!window.SOUBLU_FINANCEIRO_PAGE) return;
+  if (_isPartnerOrgUser()) return;
   if (window.__ADMIN_NAV_CFG__ && !window.__ADMIN_NAV_CFG__.canRanking) return;
   if (typeof SalesRanking !== 'undefined' && SalesRanking.renderAdmin) {
     return SalesRanking.renderAdmin();

@@ -1,7 +1,7 @@
 /* Regras de saque (R$) + chave PIX salva (saque sempre via PIX) */
 
 const WithdrawalRules = {
-  MIN_BRL: 50,
+  MIN_BRL: 0,
   MAX_PER_MONTH: 3,
   IRPF_THRESHOLD: 5000,
   IRPF_RATE: 0.035,
@@ -258,7 +258,7 @@ const WithdrawalRules = {
     }
 
     if (!partnerWallet) {
-      if (amt < this.MIN_BRL) {
+      if (this.MIN_BRL > 0 && amt < this.MIN_BRL) {
         return { ok: false, msg: `Valor mínimo para saque: R$ ${this.MIN_BRL.toFixed(2).replace('.', ',')}.` };
       }
     } else if (partnerWallet && (partnerFee + irpjTax) > 0 && amt <= partnerFee + irpjTax) {
@@ -350,7 +350,7 @@ const WithdrawalRules = {
         }).catch(() => {});
         return;
       }
-      let hint = `Mín. R$ ${this.MIN_BRL.toFixed(2).replace('.', ',')} · máx. ${this.MAX_PER_MONTH} saques/mês · IRPF 3,5% acima de R$ 5.000,00`;
+      let hint = `Sem valor mínimo · máx. ${this.MAX_PER_MONTH} saques/mês · IRPF 3,5% acima de R$ 5.000,00`;
       if (!partnerWallet && typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
         const wd = VendorTierPoints.canWithdrawToday(emp);
         hint = `Saque de pontos: dias ${VendorTierPoints.WITHDRAW_DAY_MIN} a ${VendorTierPoints.WITHDRAW_DAY_MAX} · crédito de faixa todo dia ${VendorTierPoints.CREDIT_DAY}`;
@@ -414,7 +414,7 @@ const WithdrawalRules = {
     const rulesHtml = `
       <input type="hidden" id="wdPayMethod" value="pix"/>
       <div id="wdRulesHint" style="margin-bottom:12px;padding:10px 12px;background:var(--color-surface-2);border-radius:var(--radius-md);font-size:12px;line-height:1.5;color:var(--color-text-secondary);">
-        <strong>Regras:</strong> mínimo R$ 50,00 · até 3 saques por mês · acima de R$ 5.000,00 retém 3,5% (IRPF).
+        <strong>Regras:</strong> sem valor mínimo · até 3 saques por mês · acima de R$ 5.000,00 retém 3,5% (IRPF).
         Fracionar valores para fugir do imposto gera retenção automática no próximo saque.
       </div>
       <div id="wdRulesPreview" style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);display:none;"></div>

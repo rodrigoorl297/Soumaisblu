@@ -20,15 +20,15 @@
   ]);
   const RH_REPORT_ROLES = new Set(['master', 'fundador', 'rh', 'gerente', 'gerencia']);
 
+  /* Employee catalog: courses only. Company avisos (training_mural) live on Painel Inicial. */
   const CATEGORIES = [
-    { id: 'mural', label: 'Mural / Comunicados', icon: '📢' },
-    { id: 'obrigatorio', label: 'Treinamentos obrigatórios', icon: '⚠️' },
-    { id: 'video_vendas', label: 'Vídeos técnicas de vendas', icon: '🎬' },
-    { id: 'curso_institucional', label: 'Cursos institucionais', icon: '🏛️' },
-    { id: 'regimento', label: 'Regimento interno', icon: '📋' },
+    { id: 'obrigatorio', label: 'Treinamentos obrigatórios', icon: '' },
+    { id: 'video_vendas', label: 'Vídeos técnicas de vendas', icon: '' },
+    { id: 'curso_institucional', label: 'Cursos institucionais', icon: '' },
+    { id: 'regimento', label: 'Regimento interno', icon: '' },
   ];
 
-  const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.filter(c => c.id !== 'mural').map(c => [c.id, c.label]));
+  const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map(c => [c.id, c.label]));
 
   const MAX_QUESTIONS = 50;
   const QUIZ_DRAW = 5;
@@ -121,12 +121,6 @@
     const root = await partnerRootForUser(user);
     const all = await DB.getTrainings({ partnerRootId: root, activeOnly: true, category });
     return all.filter(t => audienceMatch(t, user));
-  }
-
-  async function muralForUser(user) {
-    const root = await partnerRootForUser(user);
-    const all = await DB.getTrainingMuralPosts({ partnerRootId: root, activeOnly: true });
-    return all.filter(p => audienceMatch(p, user));
   }
 
   function statusLabel(st, passed, deadline) {
@@ -226,7 +220,7 @@
       else main.appendChild(sec);
     },
 
-    _activeCategory: 'mural',
+    _activeCategory: 'obrigatorio',
 
     async _renderTrainingCards(list, user) {
       if (!list.length) {
@@ -255,28 +249,14 @@
       return cards.join('');
     },
 
-    async _renderMuralBlock(user) {
-      const posts = await muralForUser(user);
-      if (!posts.length) {
-        return '<div class="empty-state" style="padding:24px;"><p class="text-muted">Nenhum comunicado no mural.</p></div>';
-      }
-      return posts.map(p => `<div class="card card-padded" style="margin-bottom:12px;${p.pinned ? 'border-left:4px solid var(--color-primary);' : ''}">
-        <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-          <h4 style="margin:0 0 8px;">${p.pinned ? '📌 ' : ''}${esc(p.title)}</h4>
-          <small class="text-muted">${fmtDt(p.created_at)}</small>
-        </div>
-        <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;">${esc(p.body || '')}</div>
-      </div>`).join('');
-    },
-
     _categoryTabsHtml(active) {
       return `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">${
-        CATEGORIES.map(c => `<button type="button" class="btn btn-sm ${active === c.id ? 'btn-primary' : 'btn-outline'}" onclick="Trainings.switchCategory('${c.id}')">${c.icon} ${esc(c.label)}</button>`).join('')
+        CATEGORIES.map(c => `<button type="button" class="btn btn-sm ${active === c.id ? 'btn-primary' : 'btn-outline'}" onclick="Trainings.switchCategory('${c.id}')">${esc(c.label)}</button>`).join('')
       }</div>`;
     },
 
     async switchCategory(catId) {
-      this._activeCategory = catId || 'mural';
+      this._activeCategory = catId === 'mural' ? 'obrigatorio' : (catId || 'obrigatorio');
       await this.renderEmployee();
     },
 
@@ -286,15 +266,12 @@
       if (!root) return;
       const user = await Auth.getCurrentUser();
       if (!user) return;
-      const cat = this._activeCategory || 'mural';
-      let bodyHtml = '';
-      if (cat === 'mural') {
-        bodyHtml = await this._renderMuralBlock(user);
-      } else {
-        const list = await trainingsForUser(user, cat);
-        bodyHtml = await this._renderTrainingCards(list, user);
-      }
-      root.innerHTML = `<div class="page-header"><div class="page-header-text"><h2>Treinamentos</h2><p>Mural, conteúdos obrigatórios, vídeos, cursos e regimento interno</p></div></div>
+      let cat = this._activeCategory || 'obrigatorio';
+      if (cat === 'mural') cat = 'obrigatorio';
+      this._activeCategory = cat;
+      const list = await trainingsForUser(user, cat);
+      const bodyHtml = await this._renderTrainingCards(list, user);
+      root.innerHTML = `<div class="page-header"><div class="page-header-text"><h2>Treinamentos</h2><p>Conteúdos obrigatórios, vídeos, cursos e regimento interno</p></div></div>
         ${this._categoryTabsHtml(cat)}
         <div id="trainingsCategoryBody">${bodyHtml}</div>`;
       await this.updateBadge();
@@ -312,6 +289,12 @@
       if (!root) return;
       const s = Auth.getSession();
       const partnerRoot = window.PARTNER_ROOT_ID || (s?.role === 'parceiro' ? s.id : await DB.getPartnerRootForUser(s.id));
+      // #region agent log
+      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'E',location:'trainings.js:renderAdminManage:beforePurge',message:'before legacy purge',data:{href:String(location.href||'')},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (window.TrainingTracks?.purgeLegacySeedCourses) {
+        await TrainingTracks.purgeLegacySeedCourses().catch(() => null);
+      }
       const tab = this._adminTab || 'treinamentos';
       root.innerHTML = `
         <div class="page-header">
@@ -323,10 +306,19 @@
         </div>
         <div style="display:flex;gap:8px;margin-bottom:16px;">
           <button type="button" class="btn btn-sm ${tab === 'treinamentos' ? 'btn-primary' : 'btn-outline'}" onclick="Trainings.switchAdminTab('treinamentos')">Conteúdos</button>
+          <button type="button" class="btn btn-sm ${tab === 'trilhas' ? 'btn-primary' : 'btn-outline'}" onclick="Trainings.switchAdminTab('trilhas')">Trilhas</button>
           <button type="button" class="btn btn-sm ${tab === 'mural' ? 'btn-primary' : 'btn-outline'}" onclick="Trainings.switchAdminTab('mural')">Mural</button>
         </div>
         <div id="trainingsAdminTabBody"></div>`;
       const body = document.getElementById('trainingsAdminTabBody');
+      if (tab === 'trilhas') {
+        if (window.TrainingTracks && typeof TrainingTracks.renderAdminTracksTable === 'function') {
+          await TrainingTracks.renderAdminTracksTable(body);
+        } else {
+          body.innerHTML = '<p class="text-muted">Módulo de trilhas não carregado. Abra a página Treinamentos e atualize (Ctrl+F5).</p>';
+        }
+        return;
+      }
       if (tab === 'mural') {
         const posts = await DB.getTrainingMuralPosts({ partnerRootId: partnerRoot });
         body.innerHTML = `<div class="card card-padded"><div class="table-wrap"><table class="data-table"><thead><tr>
@@ -350,6 +342,9 @@
         return;
       }
       const list = await DB.getTrainings({ partnerRootId: partnerRoot });
+      // #region agent log
+      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'D',location:'trainings.js:renderAdminManage:list',message:'admin conteúdos list',data:{n:(list||[]).length,ids:(list||[]).slice(0,10).map(t=>({id:t.id,title:t.title})),online:!!(typeof DB!=='undefined'&&DB.online),partnerRoot:partnerRoot||null},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
       body.innerHTML = `<div class="card card-padded"><div class="table-wrap"><table class="data-table"><thead><tr>
         <th>Título</th><th>Categoria</th><th>Tipo</th><th>Prazo</th><th>Nota mín.</th><th>Penalidade</th><th>Ativo</th><th></th>
       </tr></thead><tbody id="trainingsAdminTbody"></tbody></table></div></div>`;
@@ -574,10 +569,53 @@
     },
 
     async remove(id) {
-      if (!confirm('Excluir este treinamento e todas as notas?')) return;
-      await DB.deleteTraining(id);
-      showToast('Treinamento excluído.', 'success');
-      await this.renderAdminManage();
+      // #region agent log
+      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'A',location:'trainings.js:remove:entry',message:'remove called',data:{id:String(id||''),hasDB:typeof DB!=='undefined',hasDelete:typeof DB?.deleteTraining==='function',scriptProbe:(document.querySelector('script[src*=\"trainings.js\"]')||{}).src||''},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (!id) {
+        showToast('ID do treinamento inválido.', 'error');
+        return;
+      }
+      const okConfirm = confirm('Excluir este treinamento e todas as notas?');
+      // #region agent log
+      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'B',location:'trainings.js:remove:confirm',message:'confirm result',data:{id:String(id),okConfirm:!!okConfirm},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      if (!okConfirm) return;
+      showLoading('Excluindo...');
+      try {
+        await DB.deleteTraining(id);
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'C',location:'trainings.js:remove:afterDelete',message:'deleteTraining returned',data:{id:String(id)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        const still = await DB.getTraining(id, { bypassCache: true }).catch(() => null);
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'D',location:'trainings.js:remove:verify',message:'post-delete getTraining',data:{id:String(id),stillExists:!!still,stillTitle:still?.title||null},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (still) {
+          throw new Error('O servidor não removeu o registro. Tente novamente ou avise o suporte.');
+        }
+        showToast('Treinamento excluído.', 'success');
+        await this.renderAdminManage();
+        // #region agent log
+        const rows = [...document.querySelectorAll('#trainingsAdminTabBody tr')].map(tr => (tr.querySelector('td')||{}).textContent||'').slice(0,8);
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'E',location:'trainings.js:remove:afterRender',message:'list after renderAdminManage',data:{id:String(id),rowTitles:rows},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (document.getElementById('trainingsRoot')) await this.renderEmployee();
+        if (document.getElementById('catalogRoot') && window.LMS?.renderCatalog) {
+          await LMS.renderCatalog().catch(() => null);
+        }
+        if (document.getElementById('tracksRoot') && window.TrainingTracks?.renderTracks) {
+          await TrainingTracks.renderTracks('tracksRoot').catch(() => null);
+        }
+      } catch (e) {
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'C',location:'trainings.js:remove:catch',message:'remove error',data:{id:String(id),err:String(e&&e.message||e)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        console.error('[Trainings] remove:', e);
+        showToast('Erro ao excluir: ' + (e.message || e), 'error');
+      } finally {
+        hideLoading();
+      }
     },
 
     openMuralEditor(id) {
@@ -612,15 +650,21 @@
         ? ['*']
         : audRaw.split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
       const partnerRoot = window.PARTNER_ROOT_ID || (s.role === 'parceiro' ? s.id : null);
+      const editId = document.getElementById('muralEditId').value || '';
+      let existing = null;
+      if (editId) {
+        try { existing = await DB.getTrainingMuralPost(editId); } catch (_) { /* noop */ }
+      }
       const row = {
-        id: document.getElementById('muralEditId').value || undefined,
+        id: editId || undefined,
         title: document.getElementById('muralTitle').value.trim(),
         body: document.getElementById('muralBody').value.trim(),
         pinned: document.getElementById('muralPinned').checked,
         active: document.getElementById('muralActive').checked,
         audience_roles,
         partner_root_id: partnerRoot || null,
-        created_by: s.id,
+        created_by: existing?.created_by || s.id,
+        created_at: existing?.created_at,
       };
       if (!row.title) { showToast('Informe o título.', 'warning'); return; }
       showLoading('Salvando...');
@@ -636,10 +680,22 @@
     },
 
     async removeMural(id) {
+      if (!id) {
+        showToast('ID do comunicado inválido.', 'error');
+        return;
+      }
       if (!confirm('Excluir este comunicado do mural?')) return;
-      await DB.deleteTrainingMuralPost(id);
-      showToast('Comunicado excluído.', 'success');
-      await this.renderAdminManage();
+      showLoading('Excluindo...');
+      try {
+        await DB.deleteTrainingMuralPost(id);
+        showToast('Comunicado excluído.', 'success');
+        await this.renderAdminManage();
+      } catch (e) {
+        console.error('[Trainings] removeMural:', e);
+        showToast('Erro ao excluir: ' + (e.message || e), 'error');
+      } finally {
+        hideLoading();
+      }
     },
 
     async getPendingForUser(user) {
@@ -721,7 +777,7 @@
       if (tr.description) html += `<p>${esc(tr.description)}</p>`;
       if (tr.content_body) html += `<div style="margin:12px 0;padding:12px;background:var(--color-surface-2);border-radius:8px;white-space:pre-wrap;">${esc(tr.content_body)}</div>`;
       if (tr.video_url) html += _embedVideo(tr.video_url);
-      if (tr.resource_url) html += `<p><a href="${esc(tr.resource_url)}" target="_blank" rel="noopener">📎 Material de apoio</a></p>`;
+      if (tr.resource_url) html += `<p><a href="${esc(tr.resource_url)}" target="_blank" rel="noopener">Material de apoio</a></p>`;
       if (drawn.length) {
         const total = (tr.questions || []).length;
         const note = total > QUIZ_DRAW
@@ -805,6 +861,9 @@
 
       if (document.getElementById('trainingsRoot')) await this.renderEmployee();
       if (document.getElementById('trainingsAdminRoot')) await this.renderAdminManage();
+      if (typeof LMS !== 'undefined' && typeof LMS.renderCatalog === 'function' && document.getElementById('catalogRoot')) {
+        try { await LMS.renderCatalog(); } catch (_) { /* noop */ }
+      }
       await this.updateBadge();
     },
 

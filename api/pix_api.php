@@ -816,7 +816,10 @@ function pix_can_pay_withdrawal(array $wd): bool
     $status = (string) ($wd['status'] ?? '');
     $pixStatus = (string) ($wd['pix_status'] ?? '');
 
-    if (in_array($pixStatus, ['pago', 'REALIZADO'], true)) {
+    if (in_array($pixStatus, ['pago', 'REALIZADO', 'manual'], true)) {
+        return false;
+    }
+    if (strcasecmp($pixStatus, 'manual') === 0) {
         return false;
     }
     if (!empty($wd['pix_e2e_id']) && $pixStatus === 'pago') {

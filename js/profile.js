@@ -8,9 +8,12 @@ var currentUser = null;
 /** Usuário da área do colaborador (respeita ?preview= para admin visualizando vendedor). */
 async function resolveEmployeeUser() {
   if (window.__PREVIEW_USER_ID__) {
-    return await DB.getUser(window.__PREVIEW_USER_ID__);
+    return await DB.getUser(window.__PREVIEW_USER_ID__, true);
   }
-  return await Auth.getCurrentUser();
+  const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+  if (!s?.id) return null;
+  /* forceRefresh: evita carteira 0 por cache sessionStorage antigo após crédito em outro PC */
+  return await DB.getUser(s.id, true);
 }
 window.resolveEmployeeUser = resolveEmployeeUser;
 
@@ -321,6 +324,19 @@ async function renderProfile() {
     const spent = txList
       .filter(t => !(typeof txIsCredit === 'function' ? txIsCredit(t) : t.type === 'credit'))
       .reduce((s, t) => s + (typeof txAmount === 'function' ? txAmount(t) : Number(t.amount) || 0), 0);
+    /* Se o extrato tem crédito e a carteira ainda veio 0 (cache antigo), relê o usuário. */
+    let walletBal = typeof userWalletBalance === 'function'
+      ? userWalletBalance(currentUser)
+      : (currentUser.points ?? currentUser.balance ?? 0);
+    if ((Number(walletBal) || 0) <= 0 && earned > spent) {
+      const fresh = await DB.getUser(currentUser.id, true).catch(() => null);
+      if (fresh) {
+        currentUser = fresh;
+        walletBal = typeof userWalletBalance === 'function'
+          ? userWalletBalance(currentUser)
+          : (currentUser.points ?? currentUser.balance ?? 0);
+      }
+    }
     const canSacar = typeof userCanSacarPix === 'function'
       ? await userCanSacarPix(currentUser)
       : true;
@@ -337,9 +353,6 @@ async function renderProfile() {
         } catch (_) { /* noop */ }
       }
     }
-    const walletBal = typeof userWalletBalance === 'function'
-      ? userWalletBalance(currentUser)
-      : (currentUser.points ?? currentUser.balance ?? 0);
     const moneyWallet = typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(currentUser);
     const walletLabel = moneyWallet ? 'saldo disponível (R$)' : 'pontos disponíveis';
     const fmtBal = formatCurrency(walletBal, currentUser);
@@ -508,16 +521,22 @@ async function _renderPropDashboard(proposals) {
 
   const propAmt = (p) => {
     if (typeof DB !== 'undefined' && typeof DB.proposalAmount === 'function') return DB.proposalAmount(p);
+    const vf = parseFloat(p?.valorFinal ?? p?.valor_final ?? 0);
     const v = parseFloat(p?.valor ?? 0);
+    if (Number.isFinite(vf) && vf > 0) return vf;
     if (Number.isFinite(v) && v > 0) return v;
-    return parseFloat(p?.valorFinal ?? p?.valor_final) || 0;
+    return 0;
+  };
+  const propBruto = (p) => {
+    if (typeof DB !== 'undefined' && typeof DB.proposalGrossAmount === 'function') return DB.proposalGrossAmount(p);
+    return parseFloat(p?.valor ?? 0) || propAmt(p);
   };
   const isPaid = (p) => (typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
     ? DB.isPaidProposal(p)
     : String(p?.statusOp || p?.status || '').toUpperCase().includes('PAGO'));
   const billingDate = (p) => (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function'
     ? DB.proposalBillingDate(p)
-    : new Date(p.createdAt || p.created_at || 0));
+    : new Date(p.updatedAt || p.updated_at || p.createdAt || p.created_at || 0));
 
   const doMes = proposals.filter(p => {
     const d = billingDate(p);
@@ -527,7 +546,9 @@ async function _renderPropDashboard(proposals) {
   const pagasGeral = proposals.filter(isPaid);
 
   const totalFinalMes = pagasMes.reduce((s, p) => s + propAmt(p), 0);
+  const totalBrutoMes = pagasMes.reduce((s, p) => s + propBruto(p), 0);
   const totalGeral = pagasGeral.reduce((s, p) => s + propAmt(p), 0);
+  const totalBrutoGeral = pagasGeral.reduce((s, p) => s + propBruto(p), 0);
 
   const meRef = currentUser || await resolveEmployeeUser();
   const meUser = meRef || (Auth.getSession()?.id ? await DB.getUser(Auth.getSession().id).catch(() => null) : null);
@@ -537,8 +558,20 @@ async function _renderPropDashboard(proposals) {
   if (propKpis && typeof statKpiHtml === 'function') {
     propKpis.innerHTML = [
       statKpiHtml({ icon: 'proposals', colorClass: 'blue', label: 'Propostas no Mês', value: doMes.length, valueColor: '#3b82f6' }),
-      statKpiHtml({ icon: 'billing', colorClass: 'green', label: 'Valor Final Mês', value: fmtR(totalFinalMes), valueColor: '#10b981' }),
-      statKpiHtml({ icon: 'chart', colorClass: 'teal', label: 'Total Faturado', value: fmtR(totalGeral), valueColor: '#06b6d4' }),
+      statKpiHtml({
+        icon: 'billing',
+        colorClass: 'green',
+        label: 'Pago no Mês (final)',
+        value: `${fmtR(totalFinalMes)}<div style="font-size:10px;color:var(--color-text-muted);margin-top:3px;font-weight:600;">Bruto ${fmtR(totalBrutoMes)}</div>`,
+        valueColor: '#10b981',
+      }),
+      statKpiHtml({
+        icon: 'chart',
+        colorClass: 'teal',
+        label: 'Total Pago (final)',
+        value: `${fmtR(totalGeral)}<div style="font-size:10px;color:var(--color-text-muted);margin-top:3px;font-weight:600;">Bruto ${fmtR(totalBrutoGeral)}</div>`,
+        valueColor: '#06b6d4',
+      }),
       statKpiHtml({ icon: 'trophy', colorClass: 'yellow', label: 'Meus Pontos', value: meusPontos.toLocaleString('pt-BR'), valueColor: '#f59e0b' }),
     ].join('');
   }
@@ -573,6 +606,7 @@ async function _renderPropDashboard(proposals) {
 
   const statusColors = {
     'Em Andamento': '#3b82f6', 'AG. BOLETO': '#f59e0b', 'AG. VÍDEO': '#8b5cf6',
+    'AG. DOCS GARANTIA': '#d97706',
     'PROPOSTA DIGITADA': '#06b6d4', 'AVERBADO': '#10b981', 'PAGO': '#22c55e',
     'Cancelado': '#ef4444', 'Pendenciado': '#f97316', 'AG. ASS TERMO': '#6366f1',
     'AG. QUITAÇÃO': '#14b8a6', 'BOLETO QUITADO': '#84cc16', 'AG. LIBERAÇÃO MARGEM': '#a855f7',

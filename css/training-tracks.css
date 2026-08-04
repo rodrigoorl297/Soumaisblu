@@ -1,0 +1,166 @@
+/* Trilhas — Universidade Corporativa (Bootstrap + tema SOU+BLU) */
+.tt-hero__title {
+  font-family: var(--font-display, 'Nunito', system-ui, sans-serif);
+  font-weight: 800;
+  font-size: 1.45rem;
+  color: var(--color-text, #1e293b);
+  margin: 0;
+}
+
+.tt-hero__sub {
+  color: var(--color-text-muted, #64748b);
+  font-size: 0.95rem;
+}
+
+.tt-sector__title {
+  font-weight: 800;
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 2px solid var(--color-primary, #4a7fff);
+  display: inline-block;
+}
+
+.tt-card {
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: var(--radius-md, 12px);
+  box-shadow: none;
+}
+
+.tt-card__title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  margin: 0 0 0.35rem;
+}
+
+.tt-card__desc {
+  font-size: 0.9rem;
+  min-height: 2.4em;
+}
+
+.tt-pct {
+  font-weight: 800;
+  color: var(--color-primary, #4a7fff);
+}
+
+.tt-progress {
+  height: 0.55rem;
+  background: var(--color-surface-2, #f1f5f9);
+}
+
+.tt-progress .progress-bar {
+  background: var(--color-primary, #4a7fff);
+}
+
+.tt-lessons {
+  margin: 0;
+  padding: 0;
+}
+
+.tt-lesson {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.92rem;
+}
+
+.tt-lesson__mark {
+  width: 1.1rem;
+  text-align: center;
+  color: var(--color-text-muted, #94a3b8);
+  font-weight: 700;
+}
+
+.tt-lesson.is-done .tt-lesson__mark {
+  color: #16a34a;
+}
+
+.tt-lesson__link {
+  border: 0;
+  background: transparent;
+  color: var(--color-text, #1e293b);
+  text-align: left;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.tt-lesson__link:hover {
+  color: var(--color-primary, #4a7fff);
+}
+
+.tt-course-pick {
+  display: grid;
+  gap: 0.4rem;
+  max-height: 280px;
+  overflow: auto;
+  border: 1px solid var(--color-border, #e2e8f0);
+  border-radius: 8px;
+  padding: 0.65rem;
+}
+
+.tt-course-pick__item {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  margin: 0;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.tt-cert {
+  border: 2px solid var(--color-primary, #4a7fff);
+  border-radius: 12px;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  background: linear-gradient(180deg, #f8fbff 0%, #ffffff 55%);
+}
+
+.tt-cert__brand {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #64748b);
+  font-weight: 700;
+}
+
+.tt-cert__heading {
+  font-family: var(--font-display, 'Nunito', system-ui, sans-serif);
+  font-weight: 900;
+  margin: 0.75rem 0 1rem;
+  color: var(--color-primary, #4a7fff);
+}
+
+.tt-cert__name {
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0.35rem 0 0.75rem;
+}
+
+.tt-cert__track {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0.25rem 0 1rem;
+}
+
+.tt-cert__meta {
+  font-size: 0.9rem;
+  color: var(--color-text-muted, #64748b);
+  margin: 0.25rem 0;
+}
+
+@media print {
+  body * { visibility: hidden !important; }
+  #ttCertPrint, #ttCertPrint * { visibility: visible !important; }
+  #ttCertPrint {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    border: 2px solid #4a7fff;
+  }
+  .modal-header, .modal-footer, .btn-close { display: none !important; }
+}

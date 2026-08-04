@@ -22,12 +22,16 @@ final class PostgRestCompat
         'finance_proposta_ops' => 500,
         'beneficios_vouchers' => 500,
         'rh_employees' => 500,
+        'internal_chat_messages' => 300,
+        'internal_chat_threads' => 200,
     ];
 
     private const ALLOWED = [
         'users', 'partners', 'products', 'transactions', 'orders', 'withdrawals',
         'clients', 'proposals', 'feedbacks', 'tickets', 'meetings',
         'trainings', 'training_attempts', 'training_mural',
+        'training_mural_reads', 'training_mural_likes', 'training_mural_comments',
+        'training_tracks', 'training_track_completions',
         'lead_batches', 'leads', 'lead_weekly_assignments', 'lead_daily_progress', 'lead_unlock_requests',
         'tim_referrals', 'contestations', 'partner_fiscal',
         'marketplace_services', 'marketplace_orders',
@@ -35,9 +39,11 @@ final class PostgRestCompat
         'finance_adiantamento', 'finance_reembolso', 'finance_proposta_ops',
         'rh_companies', 'rh_resumes', 'rh_jobs', 'rh_employees',
         'rh_absence_justifications', 'rh_punishments', 'rh_dismissals',
+        'rh_vagas', 'rh_vaga_candidatos',
         'rh_cbo', 'monitoria_atendimento',
         'bolao_copa_picks', 'bolao_copa_results',
         'beneficios_limites', 'beneficios_prestadores', 'beneficios_produtos', 'beneficios_vouchers', 'beneficios_fechamentos',
+        'internal_chat_threads', 'internal_chat_messages',
     ];
 
     /** Nome na API (snake_case) → coluna física no MySQL. */
@@ -75,8 +81,9 @@ final class PostgRestCompat
         'tickets' => ['messages', 'thread'],
         'meetings' => ['target_roles', 'acknowledgements', 'participant_ids'],
         'trainings' => ['questions', 'audience_roles'],
-        'training_attempts' => ['answers'],
+        'training_attempts' => ['answers', 'lesson_progress'],
         'training_mural' => ['audience_roles'],
+        'training_tracks' => ['training_ids', 'audience_roles'],
         'partners' => ['permissions', 'meta'],
         'proposals' => ['attachments', 'history', 'meta', 'credito_retorno', 'credito_esteira'],
         'clients' => ['documents'],
@@ -92,8 +99,10 @@ final class PostgRestCompat
         'finance_adiantamento' => ['attachments'],
         'finance_reembolso' => ['attachments'],
         'rh_employees' => ['change_history', 'fontedata_meta', 'attachments', 'permissions', 'audit_log'],
-        'rh_resumes' => ['attachments', 'fontedata_meta'],
+        'rh_resumes' => ['attachments', 'fontedata_meta', 'avaliacao'],
         'rh_jobs' => ['attachments'],
+        'rh_vagas' => ['history'],
+        'rh_vaga_candidatos' => ['history'],
         'rh_dismissals' => ['checklist'],
         'monitoria_atendimento' => ['evidence_attachments'],
         'beneficios_limites' => ['distribuicao'],
@@ -384,6 +393,7 @@ final class PostgRestCompat
         static $boolCols = [
             'active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial',
             'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner',
+            'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned',
         ];
         if (!in_array($col, $boolCols, true)) {
             return $val;
@@ -486,6 +496,10 @@ final class PostgRestCompat
             'beneficios_produtos' => 'ben_prd_',
             'beneficios_vouchers' => 'ben_vou_',
             'beneficios_fechamentos' => 'ben_fec_',
+            'training_tracks' => 'trktrk_',
+            'training_track_completions' => 'trkcmp_',
+            'internal_chat_threads' => 'ich_th_',
+            'internal_chat_messages' => 'ich_msg_',
         ];
         if (!isset($prefixes[$table])) {
             return $row;
@@ -542,7 +556,7 @@ final class PostgRestCompat
                     $row[$k] = $decoded;
                 }
             }
-            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner'], true)) {
+            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner', 'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned'], true)) {
                 $row[$k] = (bool) (int) $v;
             }
         }

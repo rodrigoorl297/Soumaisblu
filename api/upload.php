@@ -94,6 +94,18 @@ if ($bucket === 'proposal-attachments') {
     if (!in_array($ext, $allowed, true)) {
         soublu_json(['ok' => false, 'error' => 'Tipo de arquivo não permitido.'], 400);
     }
+} elseif (in_array($bucket, ['tim-docs', 'contestacao-docs', 'finance-docs', 'ticket-docs', 'rh-docs', 'rh-justificativa', 'rh-demissao'], true)) {
+    /* Documentos RH/financeiro: PDF, imagens, ZIP e Office comuns. */
+    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'zip', 'doc', 'docx', 'xls', 'xlsx'];
+    if (!in_array($ext, $allowed, true)) {
+        soublu_json(['ok' => false, 'error' => 'Tipo de arquivo não permitido. Use PDF, imagem, ZIP, DOC ou XLS.'], 400);
+    }
+} elseif ($bucket === 'docs') {
+    /* Materiais de treinamento / docs: PDF, imagens e Office (incl. PPTX). */
+    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip'];
+    if (!in_array($ext, $allowed, true)) {
+        soublu_json(['ok' => false, 'error' => 'Tipo de arquivo não permitido. Use PDF, Office ou imagem.'], 400);
+    }
 } else {
     $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
     if (!in_array($ext, $allowed, true)) {

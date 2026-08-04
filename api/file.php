@@ -16,8 +16,8 @@ $fetchUrl = trim((string) ($_GET['fetch_url'] ?? ''));
 $allowedBuckets = [
     'proposal-attachments', 'tim-docs', 'contestacao-docs', 'finance-docs',
     'ticket-docs', 'partner-docs', 'profile-photos', 'product-images',
-    'rh-demissao', 'rh-docs', 'monitoria-atendimento', 'partner-nf', 'sonhos', 'misc',
-    'whatsapp-media',
+    'rh-demissao', 'rh-docs', 'monitoria-atendimento', 'partner-nf', 'sonhos', 'mural', 'misc',
+    'whatsapp-media', 'docs',
 ];
 
 $bucket = '';

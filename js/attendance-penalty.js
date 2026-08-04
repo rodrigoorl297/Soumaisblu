@@ -185,7 +185,9 @@ const AttendancePenalty = (() => {
     if (!user?.id || user.active === false) return false;
     const role = String(user.role || '').trim().toLowerCase();
     if (EXEMPT_ROLES.has(role)) return false;
+    if (user.partner_root_id) return false;
     if (typeof DB !== 'undefined' && DB._isPartnerWalletUser?.(user)) return false;
+    if (typeof isUserInPartnerNetworkSync === 'function' && isUserInPartnerNetworkSync(user)) return false;
     if (typeof window !== 'undefined' && window.__PREVIEW_USER_ID__) return false;
     return true;
   }

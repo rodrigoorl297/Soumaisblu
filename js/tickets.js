@@ -64,13 +64,48 @@ if (id) this.openTicketDetail(id);
       'vendedor', 'employee', 'backoffice', 'supervisor', 'sup_backoffice',
       'gerencia', 'gerente', 'master', 'fundador', 'financeiro', 'financial',
       'rh', 'operacional', 'juridico', 'diretoria', 'ouvidoria', 'desenvolvedor', 'admin',
-      'portaria',
+      'portaria', 'parceiro',
     ].includes(role);
+  },
+
+  /** Rede parceira: só chamados abertos pela própria equipe. */
+  _filterTicketsForPartnerOrg: async function(tickets) {
+    const rootId = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+    if (!rootId || !Array.isArray(tickets)) return tickets;
+    const teamIds = new Set([String(rootId)]);
+    try {
+      if (typeof DB.getPartnerTeamIds === 'function') {
+        const set = await DB.getPartnerTeamIds(rootId);
+        if (set && typeof set.forEach === 'function') {
+          set.forEach((id) => teamIds.add(String(id)));
+        } else if (Array.isArray(set)) {
+          set.forEach((id) => teamIds.add(String(id)));
+        }
+      }
+    } catch (_) { /* noop */ }
+    return tickets.filter((t) => {
+      const opener = String(t.openedById || t.employee_id || '');
+      return opener && teamIds.has(opener);
+    });
   },
 
   _isPortariaOnly: function() {
     const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
     return String(s?.role || '').toLowerCase() === 'portaria';
+  },
+
+  _canSeeAllTickets: function() {
+    if (typeof Auth !== 'undefined' && typeof Auth.canSeeAllTickets === 'function') {
+      return !!Auth.canSeeAllTickets();
+    }
+    if (typeof Auth !== 'undefined' && typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
+    if (typeof Auth !== 'undefined' && typeof Auth.hasMasterPanel === 'function' && Auth.hasMasterPanel()) return true;
+    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+    const role = String(s?.role || '').toLowerCase();
+    if (role === 'master' || role === 'fundador' || role === 'diretoria' || role === 'desenvolvedor'
+      || role === 'financeiro' || role === 'financial' || role === 'rh') return true;
+    const p = (s?.permissions && typeof s.permissions === 'object') ? s.permissions : {};
+    return !!(p.canSeeAllTickets || p.canMasterPanel);
   },
 
   /** Formulário "Abrir chamado" dentro do admin (supervisores usam admin, não employee). */
@@ -94,8 +129,9 @@ if (id) this.openTicketDetail(id);
         </div>
         <textarea id="ticketDesc" class="form-control" placeholder="Descreva o problema/solicitação..." style="margin-top:15px;"></textarea>
         <div style="margin-top:15px;">
-          <label>Anexo (Opcional)</label>
-          <input type="file" id="ticketFile" class="form-control" accept="*/*">
+          <label>Anexos (opcional — pode selecionar vários)</label>
+          <input type="file" id="ticketFile" class="form-control" accept="*/*" multiple>
+          <small style="display:block;margin-top:6px;color:var(--color-text-muted);">Máximo 10 arquivos por chamado.</small>
         </div>
         <button type="button" class="btn btn-primary" style="margin-top: 20px;" onclick="Tickets.submit()">Abrir Chamado</button>
       </div>
@@ -150,6 +186,27 @@ if (id) this.openTicketDetail(id);
     });
   },
 
+  _normalizeAttachments: function(msg) {
+    if (!msg) return [];
+    const list = [];
+    const seen = new Set();
+    const push = (url, name) => {
+      if (!url || seen.has(url)) return;
+      seen.add(url);
+      list.push({ url, name: name || 'Anexo' });
+    };
+    if (Array.isArray(msg.attachments)) {
+      msg.attachments.forEach((a) => {
+        if (!a) return;
+        if (typeof a === 'string') push(a, 'Anexo');
+        else push(a.url || a.attachment || a.file_url, a.name || a.attachmentName || a.file_name || 'Anexo');
+      });
+    }
+    const legacy = msg.attachment || msg.attachment_url || msg.file_url || null;
+    if (legacy) push(legacy, msg.attachmentName || msg.attachment_name || msg.file_name || 'Anexo');
+    return list;
+  },
+
   _parseThread: function(raw) {
     if (!raw) return [];
     if (typeof raw === 'string') {
@@ -157,14 +214,16 @@ if (id) this.openTicketDetail(id);
     }
     if (!Array.isArray(raw)) return [];
     return raw.map((m) => {
-      const att = m.attachment || m.attachment_url || m.file_url || m.url || null;
+      const attachments = this._normalizeAttachments(m);
+      const first = attachments[0] || null;
       return {
         ...m,
         senderName: m.senderName || m.sender_name || '—',
         senderRole: m.senderRole || m.sender_role,
         message: m.message || m.text || m.body || '',
-        attachment: att,
-        attachmentName: m.attachmentName || m.attachment_name || m.file_name || '',
+        attachment: first?.url || null,
+        attachmentName: first?.name || '',
+        attachments,
         date: m.date || m.created_at || m.createdAt,
       };
     });
@@ -195,6 +254,11 @@ if (id) this.openTicketDetail(id);
   _isImageUrl: function(url, name) {
     const blob = String(url || '') + ' ' + String(name || '');
     return /^data:image\//i.test(url) || /\.(jpe?g|png|gif|webp)(\?|$)/i.test(blob);
+  },
+
+  _isDownloadPreferred: function(url, name) {
+    const blob = String(url || '') + ' ' + String(name || '');
+    return /\.(zip|rar|7z|doc|docx|xls|xlsx|ppt|pptx)(\?|$)/i.test(blob);
   },
 
   _resolveAttachmentUrl: function(url) {
@@ -239,6 +303,27 @@ if (id) this.openTicketDetail(id);
     return idx;
   },
 
+  _triggerDownload: function(url, name) {
+    let href = url;
+    const safeName = String(name || 'anexo').replace(/[\\/:*?"<>|]/g, '_').trim() || 'anexo';
+    try {
+      const u = new URL(href, window.location.origin);
+      if (/\/api\/file\.php$/i.test(u.pathname) || u.pathname.endsWith('/file.php')) {
+        u.searchParams.set('download', '1');
+        u.searchParams.set('name', safeName);
+        href = u.toString();
+      }
+    } catch (_) { /* noop */ }
+    const a = document.createElement('a');
+    a.href = href;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.setAttribute('download', safeName);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  },
+
   openAttachment: function(cacheIdxOrUrl, nome) {
     let url = '';
     let name = nome || 'Anexo';
@@ -259,8 +344,14 @@ if (id) this.openTicketDetail(id);
     if (displayUrl !== url && String(displayUrl).startsWith('blob:')) {
       this._lastAttachmentBlobUrl = displayUrl;
     }
+    if (this._isDownloadPreferred(url, name) || String(url).startsWith('data:')) {
+      this._triggerDownload(displayUrl, name);
+      return;
+    }
     const w = window.open(displayUrl, '_blank', 'noopener,noreferrer');
-    if (!w) alert('Não foi possível abrir o anexo. Verifique se pop-ups estão permitidos.');
+    if (!w) {
+      this._triggerDownload(displayUrl, name);
+    }
   },
 
   _attachmentHtml: function(url, name) {
@@ -271,11 +362,20 @@ if (id) this.openTicketDetail(id);
     const idx = this._cacheAttachment(url, label);
     const resolved = this._resolveAttachmentUrl(url);
     const safeResolved = resolved.replace(/"/g, '&quot;');
+    const safeLabel = this._escAttr(label);
+    const preferDownload = this._isDownloadPreferred(url, label);
+    const btnText = preferDownload ? 'Baixar' : 'Ver anexo';
     let preview = '';
     if (this._isImageUrl(url, label)) {
-      preview = `<div style="margin-top:8px;"><img src="${safeResolved}" alt="${label.replace(/"/g, '&quot;')}" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--color-border);cursor:pointer;object-fit:contain;" onclick="Tickets.openAttachment(${idx})" title="Clique para ampliar"/></div>`;
+      preview = `<div style="margin-top:8px;"><img src="${safeResolved}" alt="${safeLabel}" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--color-border);cursor:pointer;object-fit:contain;" onclick="Tickets.openAttachment(${idx})" title="Clique para ampliar"/></div>`;
     }
-    return `${preview}<div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="Tickets.openAttachment(${idx})">Ver anexo</button></div>`;
+    return `${preview}<div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="Tickets.openAttachment(${idx})">${btnText}${label && label !== 'Anexo' ? ': ' + safeLabel : ''}</button></div>`;
+  },
+
+  _attachmentsHtml: function(listOrMsg) {
+    const list = Array.isArray(listOrMsg) ? listOrMsg : this._normalizeAttachments(listOrMsg);
+    if (!list.length) return '';
+    return list.map((a) => this._attachmentHtml(a.url, a.name)).join('');
   },
 
   async _uploadTicketAttachment(file, ticketId) {
@@ -294,6 +394,21 @@ if (id) this.openTicketDetail(id);
     }
     throw new Error('Não foi possível enviar o anexo (arquivo grande). Tente de novo ou use uma imagem menor.');
   },
+
+  async _uploadTicketFiles(fileList, ticketId) {
+    const files = Array.from(fileList || []).filter(Boolean);
+    if (!files.length) return [];
+    if (files.length > 10) {
+      throw new Error('Selecione no máximo 10 arquivos.');
+    }
+    const out = [];
+    for (const file of files) {
+      const up = await this._uploadTicketAttachment(file, ticketId);
+      if (up?.url) out.push(up);
+    }
+    return out;
+  },
+
   submit: async function() {
     const user = Auth.getSession();
     const dept = document.getElementById('ticketDept').value;
@@ -306,19 +421,17 @@ if (id) this.openTicketDetail(id);
     }
 
     const ticketId = 'TKT-' + Date.now();
-    let attachment = null;
-    let attachmentName = '';
-    const file = document.getElementById('ticketFile')?.files?.[0];
-    if (file) {
+    let attachments = [];
+    const fileInput = document.getElementById('ticketFile');
+    if (fileInput?.files?.length) {
       try {
-        const up = await this._uploadTicketAttachment(file, ticketId);
-        attachment = up.url;
-        attachmentName = up.name;
+        attachments = await this._uploadTicketFiles(fileInput.files, ticketId);
       } catch(e) {
         alert(e.message || "Erro ao anexar arquivo.");
         return;
       }
     }
+    const first = attachments[0] || null;
 
     const ticket = {
       id: ticketId,
@@ -338,8 +451,9 @@ if (id) this.openTicketDetail(id);
           senderName: user.name,
           senderRole: user.role,
           message: desc,
-          attachment: attachment,
-          attachmentName: attachmentName,
+          attachment: first?.url || null,
+          attachmentName: first?.name || '',
+          attachments,
           date: new Date().toISOString()
         }
       ]
@@ -418,7 +532,9 @@ alert("Erro ao abrir chamado: " + e.message);
       if (sub) {
         sub.textContent = portariaOnly
           ? 'Abra um chamado para o departamento desejado'
-          : 'Chamados direcionados ao seu departamento';
+          : (this._canSeeAllTickets()
+            ? 'Todos os chamados da empresa'
+            : 'Chamados direcionados ao seu departamento');
       }
     }
 
@@ -436,13 +552,19 @@ alert("Erro ao abrir chamado: " + e.message);
     if (!tbody) return;
 
     const tickets = (await DB.list('tickets') || []).map((t) => this._normTicket(t));
+    const seeAll = this._canSeeAllTickets();
 
-    let filteredTickets = tickets.filter(t => {
-      if (typeof Auth.canReplyToTicket === 'function') {
-        return Auth.canReplyToTicket(t.targetDept);
-      }
-      return true;
-    });
+    let filteredTickets = seeAll
+      ? tickets.slice()
+      : tickets.filter(t => {
+          if (typeof Auth.canReplyToTicket === 'function') {
+            return Auth.canReplyToTicket(t.targetDept);
+          }
+          return true;
+        });
+    if (!seeAll) {
+      filteredTickets = await this._filterTicketsForPartnerOrg(filteredTickets);
+    }
 
     filteredTickets.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
@@ -500,8 +622,9 @@ try {
     const attBox = document.getElementById('manageTicketAttachment');
     const firstAtt = ticket.thread?.[0];
     if (attBox) {
-      attBox.innerHTML = firstAtt?.attachment
-        ? `<strong style="font-size:12px;">Anexo da abertura:</strong>${this._attachmentHtml(firstAtt.attachment, firstAtt.attachmentName)}`
+      const openAttHtml = this._attachmentsHtml(firstAtt);
+      attBox.innerHTML = openAttHtml
+        ? `<strong style="font-size:12px;">Anexo(s) da abertura:</strong>${openAttHtml}`
         : '';
     }
 
@@ -510,6 +633,8 @@ try {
 
     const replyEl = document.getElementById('manageTicketReply');
     if (replyEl) replyEl.value = '';
+    const replyFiles = document.getElementById('manageTicketFiles');
+    if (replyFiles) replyFiles.value = '';
 
     const infoTop = document.getElementById('manageTicketInfoTop');
     if (infoTop) {
@@ -520,7 +645,7 @@ try {
     const user = Auth.getSession() || {};
     if (ticket.thread?.length) {
       ticket.thread.forEach(msg => {
-        const attHtml = msg.attachment ? this._attachmentHtml(msg.attachment, msg.attachmentName) : '';
+        const attHtml = this._attachmentsHtml(msg);
         const isSelf = (msg.senderName === user.name);
         const align = isSelf 
           ? 'align-self: flex-end; background: #d9fdd3; border-radius: 8px 0 8px 8px; margin-left: 20%;' 
@@ -579,9 +704,11 @@ alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift
     if (document.getElementById('manageTicketStatus')) {
       newStatus = document.getElementById('manageTicketStatus').value;
     }
+    const replyFilesEl = document.getElementById('manageTicketFiles');
+    const hasFiles = !!(replyFilesEl?.files?.length);
 
-    if (!replyText && newStatus === ticket.status) {
-      alert("Digite uma resposta ou altere o status.");
+    if (!replyText && !hasFiles && newStatus === ticket.status) {
+      alert("Digite uma resposta, anexe arquivo(s) ou altere o status.");
       return;
     }
 
@@ -592,13 +719,25 @@ alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift
     ticket.updatedAt = new Date().toISOString();
     ticket.updated_at = ticket.updatedAt;
 
-    if (replyText) {
+    if (replyText || hasFiles) {
+      let attachments = [];
+      if (hasFiles) {
+        try {
+          attachments = await this._uploadTicketFiles(replyFilesEl.files, ticket.id);
+        } catch (e) {
+          alert(e.message || 'Erro ao anexar arquivo.');
+          return;
+        }
+      }
+      const first = attachments[0] || null;
       ticket.thread = ticket.thread || [];
       ticket.thread.push({
         senderName: user.name,
         senderRole: user.role,
-        message: replyText,
-        attachment: null,
+        message: replyText || (attachments.length ? '(anexo)' : ''),
+        attachment: first?.url || null,
+        attachmentName: first?.name || '',
+        attachments,
         date: new Date().toISOString()
       });
     }
@@ -618,6 +757,7 @@ alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift
     }
 
     document.getElementById('manageTicketModal').classList.remove('open');
+    if (replyFilesEl) replyFilesEl.value = '';
 
     if (document.getElementById('manageTicketsTbody')) {
       this.renderAdminList();

@@ -34,6 +34,11 @@
    const _bgRefresh = new Set();
    /** Incrementado em cada escrita — evita GET em voo regravar cache após DELETE/PATCH. */
    const _tableWriteGen = Object.create(null);
+   /** Tabelas em tempo quase-real: nunca cachear GET (chat interno etc.). */
+   function _isNoCacheTable(table) {
+     const t = String(table || '');
+     return t.startsWith('internal_chat_');
+   }
 
    /** Debug ingest desligado em produção (evita spam localhost + /api/debug-session-log). */
    function _dbgSessionLog() { /* noop */ }
@@ -312,7 +317,7 @@
           return await localSupaMock(method, table, body, params);
       }
 
-     const cacheKey = method === 'GET' ? `${table}${params}` : null;
+     const cacheKey = (method === 'GET' && !_isNoCacheTable(table)) ? `${table}${params}` : null;
      if (cacheKey) {
        const hit = _cacheGet(cacheKey);
        if (hit) return hit;

@@ -362,17 +362,20 @@ function _renderEmpInfoPanel(panelId, emp) {
   const panel = document.getElementById(panelId);
   if (!panel) return;
   if (!emp) {
-    panel.hidden = true;
+    if (window.RhUi) RhUi.hide(panel);
+    else { panel.hidden = true; panel.classList.add('d-none'); }
     panel.innerHTML = '';
     return;
   }
-  panel.hidden = false;
+  panel.classList.add('alert', 'alert-secondary', 'small', 'mb-3');
   panel.innerHTML = `
     <strong>${_esc(emp.nome)}</strong><br/>
     CPF: ${_esc(emp.cpf || '—')} · Matrícula: ${_esc(emp.matricula || '—')}<br/>
     Cargo: ${_esc(emp.cargo || '—')} · Depto: ${_esc(emp.departamento || '—')}<br/>
     Supervisor: ${_esc(emp.supervisor || '—')} · Advertências: ${parseInt(emp.advertencias, 10) || 0} · Suspensões: ${parseInt(emp.suspensoes, 10) || 0}
   `;
+  if (window.RhUi) RhUi.show(panel);
+  else { panel.hidden = false; panel.classList.remove('d-none'); }
 }
 
 function _gerarProtocoloRh(prefix) {
@@ -401,6 +404,27 @@ function _diffDays(start, end) {
   const ms = b - a;
   if (ms < 0) return 0;
   return Math.floor(ms / 86400000) + 1;
+}
+
+function _parseJustifHoras(v) {
+  const n = parseFloat(String(v ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+}
+
+function _formatJustifHoras(n) {
+  const h = _parseJustifHoras(n);
+  if (!h) return '';
+  return h % 1 === 0 ? String(h) : h.toFixed(1).replace(/\.0$/, '');
+}
+
+function _formatJustifDuracao(r) {
+  const dias = parseInt(r?.dias, 10) || 0;
+  const horas = _parseJustifHoras(r?.horas);
+  const parts = [];
+  if (dias > 0) parts.push(`${dias} dia${dias !== 1 ? 's' : ''}`);
+  const hLabel = _formatJustifHoras(horas);
+  if (hLabel) parts.push(`${hLabel}h`);
+  return parts.length ? parts.join(' + ') : '—';
 }
 
 async function _findUserForEmployee(emp) {
@@ -620,9 +644,11 @@ function _resetJustifAtestadoUi() {
   if (link) {
     if (_justifAtestadoUrl) {
       link.href = _justifAtestadoUrl;
-      link.style.display = '';
+      if (window.RhUi) RhUi.show(link);
+      else link.style.display = '';
     } else {
-      link.style.display = 'none';
+      if (window.RhUi) RhUi.hide(link);
+      else link.style.display = 'none';
       link.href = '#';
     }
   }
@@ -643,7 +669,10 @@ function openJustificativaModal(row) {
   _renderEmpInfoPanel('justif_emp_info', null);
 
   const medico = document.getElementById('justif_medico_panel');
-  if (medico) medico.style.display = 'none';
+  if (medico) {
+    if (window.RhUi) RhUi.hide(medico);
+    else medico.classList.add('d-none');
+  }
 
   if (row) {
     document.getElementById('justif_id').value = row.id;
@@ -652,6 +681,7 @@ function openJustificativaModal(row) {
     document.getElementById('justif_employee').value = row.employee_id || '';
     document.getElementById('justif_situacao').value = row.situacao || 'abonada';
     document.getElementById('justif_dias').value = row.dias ?? '';
+    document.getElementById('justif_horas').value = _formatJustifHoras(row.horas) || '';
     document.getElementById('justif_protocolo_inss').value = row.protocolo_inss || '';
     document.getElementById('justif_tipo').value = row.tipo || 'justificada';
     document.getElementById('justif_motivo').value = row.motivo || row.justificativa || '';
@@ -660,6 +690,7 @@ function openJustificativaModal(row) {
     document.getElementById('justif_cbo_cod').value = row.cbo_cod || '';
     document.getElementById('justif_cbo_descricao').value = row.cbo_descricao || '';
     document.getElementById('justif_dias_atestado').value = row.dias_atestado ?? '';
+    document.getElementById('justif_horas_atestado').value = _formatJustifHoras(row.horas_atestado) || '';
     document.getElementById('justif_intercalado').value = row.atestado_intercalado ? 'sim' : 'nao';
     document.getElementById('justif_protocolo_inss_med').value = row.protocolo_inss_atestado || '';
     document.getElementById('justif_data_termino').value = (row.data_termino || '').slice(0, 10);
@@ -698,20 +729,30 @@ function buscarDadosJustificativa() {
 function onJustifTipoChange() {
   const tipo = document.getElementById('justif_tipo')?.value;
   const panel = document.getElementById('justif_medico_panel');
-  if (panel) panel.style.display = tipo === 'atestado' ? '' : 'none';
+  if (!panel) return;
+  if (window.RhUi) RhUi.toggle(panel, tipo === 'atestado');
+  else panel.classList.toggle('d-none', tipo !== 'atestado');
 }
 
 function onJustifDatasChange() {
   const ini = document.getElementById('justif_data_afastamento')?.value;
   const fim = document.getElementById('justif_data_retorno')?.value;
   const diasEl = document.getElementById('justif_dias');
-  if (ini && fim && diasEl && !diasEl.value) {
-    diasEl.value = String(_diffDays(ini, fim));
+  const horasEl = document.getElementById('justif_horas');
+  if (ini && fim && diasEl && diasEl.value === '') {
+    diasEl.value = ini === fim ? '0' : String(_diffDays(ini, fim));
+  }
+  if (ini && fim && ini === fim && horasEl && horasEl.value === '') {
+    horasEl.placeholder = 'Ex: 4 (período vespertino)';
   }
   if (document.getElementById('justif_tipo')?.value === 'atestado') {
     const diasAtest = document.getElementById('justif_dias_atestado');
-    if (ini && fim && diasAtest && !diasAtest.value) {
-      diasAtest.value = String(_diffDays(ini, fim));
+    if (ini && fim && diasAtest && diasAtest.value === '') {
+      diasAtest.value = ini === fim ? '0' : String(_diffDays(ini, fim));
+    }
+    const horasAtest = document.getElementById('justif_horas_atestado');
+    if (ini && fim && ini === fim && horasAtest && horasAtest.value === '') {
+      horasAtest.placeholder = 'Ex: 4';
     }
     const term = document.getElementById('justif_data_termino');
     if (term && fim && !term.value) term.value = fim;
@@ -750,6 +791,16 @@ async function salvarJustificativa(event) {
 
   const dataAfast = document.getElementById('justif_data_afastamento').value;
   const dataRet = document.getElementById('justif_data_retorno').value;
+  const dias = parseInt(document.getElementById('justif_dias').value, 10) || 0;
+  const horas = _parseJustifHoras(document.getElementById('justif_horas').value);
+  if (!dias && !horas) {
+    alert('Informe a duração da falta em dias e/ou horas.');
+    return;
+  }
+
+  if (typeof DB.ensureRhTablesOnline === 'function') {
+    await DB.ensureRhTablesOnline(true).catch(() => null);
+  }
 
   const row = {
     id: id || undefined,
@@ -760,7 +811,8 @@ async function salvarJustificativa(event) {
     situacao: document.getElementById('justif_situacao').value,
     status: 'aprovada',
     tipo: document.getElementById('justif_tipo').value,
-    dias: parseInt(document.getElementById('justif_dias').value, 10) || 0,
+    dias,
+    horas: horas || null,
     protocolo_inss: document.getElementById('justif_protocolo_inss').value.trim(),
     motivo,
     justificativa: motivo,
@@ -770,6 +822,7 @@ async function salvarJustificativa(event) {
     cbo_cod: document.getElementById('justif_cbo_cod').value.trim(),
     cbo_descricao: document.getElementById('justif_cbo_descricao').value.trim(),
     dias_atestado: parseInt(document.getElementById('justif_dias_atestado').value, 10) || 0,
+    horas_atestado: _parseJustifHoras(document.getElementById('justif_horas_atestado').value) || null,
     atestado_intercalado: document.getElementById('justif_intercalado').value === 'sim',
     protocolo_inss_atestado: document.getElementById('justif_protocolo_inss_med').value.trim(),
     excecao_abono: document.getElementById('justif_excecao_abono').value === 'sim',
@@ -813,7 +866,7 @@ function renderJustificativaList() {
       <td><strong>${_esc(r.protocolo || '—')}</strong></td>
       <td>${_esc(r.employee_nome)}</td>
       <td>${_esc(_JUSTIF_SITUACAO[r.situacao] || r.situacao || '—')}</td>
-      <td>${r.dias != null ? r.dias : '—'}</td>
+      <td>${_esc(_formatJustifDuracao(r))}</td>
       <td>${_fmtDate(r.data_afastamento)}</td>
       <td>${_fmtDate(r.data_retorno)}</td>
       <td><button type="button" class="btn btn-xs btn-outline" onclick="editJustificativa('${_esc(r.id)}')">Editar</button></td>

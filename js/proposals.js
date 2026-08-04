@@ -211,7 +211,8 @@ window.Proposals = {
     { v: 'AG. BOLETO', l: 'Aguardando boleto' },
     { v: 'PROPOSTA DIGITADA', l: 'Proposta digitada' },
     { v: 'AG. ASS TERMO', l: 'Aguardando assinatura do termo' },
-    { v: 'AG. VÍDEO', l: 'Aguardando vídeo' },
+    { v: 'AG. VÍDEO', l: 'Aguardando Vídeo' },
+    { v: 'AG. DOCS GARANTIA', l: 'Aguardando Documentos de Garantia' },
     { v: 'AG. ASS PROPOSTA', l: 'Aguardando assinatura da proposta' },
     { v: 'BOLETO VALIDADO', l: 'Boleto validado' },
     { v: 'AG. QUITAÇÃO', l: 'Aguardando quitação' },
@@ -364,18 +365,35 @@ window.Proposals = {
   _initStaticProposalSelects: function() {
     this._initProposalCatalogSelects();
     this._initBankSelects();
-    ['propEtapaVendedor', 'empPropEtapa'].forEach(id => {
+    ['propEtapaVendedor', 'empPropEtapa', 'managePropStatusOp'].forEach(id => {
       const el = document.getElementById(id);
       if (!el || el.dataset.situLoaded) return;
       const cur = el.value;
       el.innerHTML = this._vendorSituacaoOptionsHtml(cur);
       el.dataset.situLoaded = '1';
     });
+    this._fillAdminStatusFilterSelect();
     const tabFin = document.getElementById('managePropTabela');
     if (tabFin && !tabFin.dataset.tabelaLoaded) {
       this._fillTabelaSelect('managePropTabela', tabFin.value);
       tabFin.dataset.tabelaLoaded = '1';
     }
+  },
+
+  /** Filtro de status da lista admin/financeiro — espelha _VENDOR_SITUACOES. */
+  _fillAdminStatusFilterSelect: function() {
+    const sel = document.getElementById('proposalStatusFilterHeader');
+    if (!sel || sel.dataset.situLoaded === '1') return;
+    const cur = sel.value;
+    let html = '<option value="">STATUS</option><option value="todos">TODOS OS STATUS</option>';
+    (this._VENDOR_SITUACOES || []).forEach(o => {
+      const val = o.v || o;
+      const lbl = String(o.l || o.v || o).toUpperCase();
+      html += `<option value="${this._escAttr(val)}">${this._escHtml(lbl)}</option>`;
+    });
+    sel.innerHTML = html;
+    if (cur) sel.value = cur;
+    sel.dataset.situLoaded = '1';
   },
 
   _fillEntidadeSelect: function(selectId, convenio, currentValue) {
@@ -415,7 +433,7 @@ window.Proposals = {
     }
   },
 
-  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '' },
+  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '', dateFrom: '', dateTo: '' },
   _employeeList: { page: 1, pageSize: 20, total: 0 },
   _employeeEditCache: {},
   _adminEditCache: {},
@@ -423,6 +441,7 @@ window.Proposals = {
   _adminListCacheAt: 0,
   _ADMIN_LIST_CACHE_TTL: 120000,
   _searchDebounce: null,
+  _PROP_TZ: 'America/Sao_Paulo',
 
   _propPerfLog: function() { /* noop — debug desligado */ },
 
@@ -675,11 +694,15 @@ window.Proposals = {
   _filterProposalsToPartnerOrg: async function(proposals) {
     const rootId = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
     if (!rootId || !Array.isArray(proposals)) return proposals;
-    const teamIds = await DB.getPartnerTeamIds(rootId).catch(() => new Set());
+    let teamIds = await DB.getPartnerTeamIds(rootId).catch(() => null);
+    if (!(teamIds instanceof Set)) teamIds = new Set();
+    if (!teamIds.size) teamIds.add(String(rootId));
     return proposals.filter(p => {
+      const pr = p.partner_root_id || p.partnerRootId;
+      if (pr && String(pr) === String(rootId)) return true;
       const ids = typeof DB._proposalVendorIds === 'function'
         ? DB._proposalVendorIds(p)
-        : [p.vendorId, p.vendor_id, p.employee_id, p.vendorId];
+        : [p.vendorId, p.vendor_id, p.employee_id];
       return ids.some(id => id && teamIds.has(String(id)));
     });
   },
@@ -767,7 +790,13 @@ window.Proposals = {
       if (val === want) return true;
       if (want === 'ag. boleto' && (val === 'ag. boleto' || val === 'aguardando boleto')) return true;
       if (want === 'ag. ass termo' && (val === 'ag. ass termo' || val === 'aguardando assinatura do termo')) return true;
-      if (want === 'ag. vídeo' && (val === 'ag. vídeo' || val === 'aguardando vídeo' || val === 'ag. video' || val === 'aguardando video')) return true;
+      if (want === 'ag. vídeo' && (val === 'ag. vídeo' || val === 'aguardando vídeo' || val === 'ag. video' || val === 'aguardando video' || val === 'aguardando vídeo')) return true;
+      if (want === 'ag. docs garantia' && (
+        val === 'ag. docs garantia'
+        || val === 'aguardando documentos de garantia'
+        || val === 'aguardando docs garantia'
+        || val === 'ag. documentos garantia'
+      )) return true;
       if (want === 'ag. ass proposta' && (val === 'ag. ass proposta' || val === 'aguardando assinatura da proposta')) return true;
       if (want === 'ag. quitação' && (val === 'ag. quitação' || val === 'aguardando quitação' || val === 'ag. quitacao' || val === 'aguardando quitacao')) return true;
       if (want === 'ag. liberação margem' && (val === 'ag. liberação margem' || val === 'aguardando liberação margem' || val === 'ag. liberacao margem' || val === 'aguardando liberacao margem')) return true;
@@ -1000,7 +1029,16 @@ window.Proposals = {
   },
 
   initAnexoFolders: function() {
-    if (!this._folderDynamicSlots || !Object.keys(this._folderDynamicSlots).length) {
+    /* Slots herdados de outro contexto (empProp/manageProp) geravam inputs com IDs
+       duplicados no DOM e anexos duplicados/trocados no save — reinicia se houver id
+       com prefixo diferente do contexto atual. */
+    const p = this._folderPrefix || 'prop';
+    const stale = Object.values(this._folderDynamicSlots || {}).some((list) =>
+      (list || []).some((s) => !String(s.id || '').startsWith(p)));
+    // #region agent log
+    if(stale){fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-D',location:'proposals.js:initAnexoFolders',message:'slots obsoletos de outro contexto — reset',data:{prefix:p,ctx:this._folderRootId},timestamp:Date.now()})}).catch(()=>{});}
+    // #endregion
+    if (!this._folderDynamicSlots || !Object.keys(this._folderDynamicSlots).length || stale) {
       this._initDynamicFolderSlots();
     }
     this._renderAnexoFolders();
@@ -1027,15 +1065,15 @@ window.Proposals = {
       const numbered = [];
 
       Object.keys(parsed).forEach((k) => {
-        if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
+        if (this._isAttachmentMetaKey(k)) return;
         const m = k.match(new RegExp('^' + esc + '(\\d+)$'));
         if (m) numbered.push(parseInt(m[1], 10));
       });
 
       if (!numbered.length) return;
       const maxN = Math.max(...numbered, slots.length);
-      while (slots.length < maxN) {
-        const n = slots.length + 1;
+      /* for com limite fixo (o while anterior travava se o grupo já existisse no Set) */
+      for (let n = slots.length + 1; n <= maxN; n++) {
         let slot;
         if (def.initialSlots && n <= def.initialSlots.length) {
           slot = { ...def.initialSlots[n - 1] };
@@ -1133,22 +1171,57 @@ window.Proposals = {
   _collectAttachments: async function(proposalId) {
     if (!proposalId) throw new Error('ID da proposta é obrigatório para anexos.');
     const maxBytes = (this.PROPOSAL_MAX_FILE_MB || 50) * 1024 * 1024;
-    const getFile = id => document.getElementById(id)?.files?.[0];
     const attachments = {};
     const defs = this._getAllAnexoFieldDefs();
-    await Promise.all(defs.map(async ({ id, grupo, customNameId }) => {
-      const f = getFile(id);
+    // #region agent log
+    try{const _dbgDefs=defs.map(d=>{const els=document.querySelectorAll('#'+(window.CSS&&CSS.escape?CSS.escape(d.id):d.id));const f=document.getElementById(d.id)?.files?.[0];return{id:d.id,grupo:d.grupo,domCount:els.length,file:f?f.name+'|'+f.size:null};});fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-B',location:'proposals.js:_collectAttachments:entry',message:'defs no save',data:{proposalId,ctx:this._folderRootId,defs:_dbgDefs},timestamp:Date.now()})}).catch(()=>{});}catch(_){/* noop */}
+    // #endregion
+
+    /* Anti-duplicação: slots obsoletos (contexto trocado / modal reaberto) podem gerar
+       defs repetidos ou ids duplicados no DOM apontando para o MESMO input — o que
+       subia o mesmo boleto 2x em grupos vizinhos (boleto_3 e boleto_4). */
+    const seenGrupos = new Set();
+    const seenInputs = new Set();
+    const seenFilesByFolder = {};
+    const jobs = [];
+    defs.forEach(({ id, grupo, customNameId }) => {
+      if (!grupo || seenGrupos.has(grupo)) return;
+      seenGrupos.add(grupo);
+      const inp = document.getElementById(id);
+      const f = inp?.files?.[0];
       if (!f) return;
-      if (f.size > maxBytes) {
-        throw new Error(`"${f.name}" excede ${this.PROPOSAL_MAX_FILE_MB || 50} MB.`);
+      if (seenInputs.has(inp)) {
+        console.warn('[Proposals] input duplicado ignorado no upload:', id, grupo);
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-A',location:'proposals.js:_collectAttachments:seenInputs',message:'input duplicado bloqueado',data:{id,grupo,file:f.name},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return;
       }
-      attachments[grupo] = await (window.DB || DB).uploadProposalFile(f, proposalId, grupo);
-      this._applyProposalUploadResult(attachments, grupo, attachments[grupo], f.name);
-      if (customNameId) {
-        const folderName = (document.getElementById(customNameId)?.value || '').trim();
-        if (folderName) attachments[grupo + '_pasta'] = folderName;
+      seenInputs.add(inp);
+      const folder = grupo.replace(/\d+$/, '');
+      const sig = `${f.name}|${f.size}|${f.lastModified}`;
+      const set = seenFilesByFolder[folder] = seenFilesByFolder[folder] || new Set();
+      if (set.has(sig)) {
+        console.warn('[Proposals] arquivo repetido na mesma pasta ignorado no upload:', grupo, f.name);
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-B',location:'proposals.js:_collectAttachments:sameFile',message:'arquivo repetido na pasta bloqueado',data:{grupo,file:f.name,folder},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return;
       }
-    }));
+      set.add(sig);
+      jobs.push((async () => {
+        if (f.size > maxBytes) {
+          throw new Error(`"${f.name}" excede ${this.PROPOSAL_MAX_FILE_MB || 50} MB.`);
+        }
+        attachments[grupo] = await (window.DB || DB).uploadProposalFile(f, proposalId, grupo);
+        this._applyProposalUploadResult(attachments, grupo, attachments[grupo], f.name);
+        if (customNameId) {
+          const folderName = (document.getElementById(customNameId)?.value || '').trim();
+          if (folderName) attachments[grupo + '_pasta'] = folderName;
+        }
+      })());
+    });
+    await Promise.all(jobs);
     return attachments;
   },
 
@@ -1180,6 +1253,8 @@ window.Proposals = {
     if (u === 'EM ANDAMENTO') return 'badge-info';
     if (u === 'DIGITAÇÃO' || u === 'DIGITACAO') return 'badge-accent';
     if (u === 'AG. BOLETO') return 'badge-warning';
+    if (u === 'AG. VÍDEO' || u === 'AG. VIDEO') return 'badge-warning';
+    if (u === 'AG. DOCS GARANTIA') return 'badge-warning';
     if (u === 'PAGO') return 'badge-success';
     if (u === 'CANCELADO') return 'badge-danger';
     if (u === 'PENDENCIADO' || u === 'PENDENTE') return 'badge-warning';
@@ -1203,11 +1278,50 @@ window.Proposals = {
     return proposal;
   },
 
+  _proposalSearchUserTyped: false,
+  _EMAIL_ONLY_RE: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+
+  _markProposalSearchTyped: function() {
+    this._proposalSearchUserTyped = true;
+  },
+
+  _onProposalSearchFocus: function(el) {
+    if (el) el.removeAttribute('readonly');
+  },
+
+  /** Chrome costuma injetar e-mail salvo no campo de busca (parece login). Não confundir com busca legítima. */
+  _isAutofillJunkSearchQuery: function(raw) {
+    const n = String(raw || '').trim().toLowerCase();
+    if (!n || !this._EMAIL_ONLY_RE.test(n)) return false;
+    const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    const sessEmail = String(session?.email || '').trim().toLowerCase();
+    if (sessEmail && n === sessEmail) return true;
+    // E-mail puro sem digitação/paste do usuário = autofill (busca de propostas não usa e-mail de login).
+    if (!this._proposalSearchUserTyped) return true;
+    return false;
+  },
+
+  _scrubProposalSearchAutofill: function() {
+    const el = document.getElementById('proposalSearch');
+    if (!el) return '';
+    const raw = el.value || '';
+    if (this._isAutofillJunkSearchQuery(raw)) {
+      el.value = '';
+      return '';
+    }
+    return String(raw).toLowerCase().trim();
+  },
+
   _getProposalSearchQuery: function() {
-    return (document.getElementById('proposalSearch')?.value || '').toLowerCase().trim();
+    return this._scrubProposalSearchAutofill();
   },
 
   _onProposalSearchInput: function() {
+    // Autofill do Chrome dispara input sem keydown — limpa e-mail lixo antes de filtrar.
+    if (!this._proposalSearchUserTyped && this._isAutofillJunkSearchQuery(document.getElementById('proposalSearch')?.value)) {
+      const el = document.getElementById('proposalSearch');
+      if (el) el.value = '';
+    }
     clearTimeout(this._searchDebounce);
     this._searchDebounce = setTimeout(() => {
       this._adminList.page = 1;
@@ -1248,6 +1362,82 @@ window.Proposals = {
     this._adminList.page = 1;
     this.renderAdminList();
   },
+
+  /** YYYY-MM-DD em America/Sao_Paulo (calendário civil BR). */
+  _ymdInPropTz: function(dateOrRaw) {
+    if (dateOrRaw == null || dateOrRaw === '') return '';
+    const d = dateOrRaw instanceof Date ? dateOrRaw : new Date(dateOrRaw);
+    if (Number.isNaN(d.getTime())) return '';
+    try {
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: this._PROP_TZ,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).formatToParts(d);
+      const y = parts.find(p => p.type === 'year')?.value;
+      const m = parts.find(p => p.type === 'month')?.value;
+      const day = parts.find(p => p.type === 'day')?.value;
+      if (y && m && day) return `${y}-${m}-${day}`;
+      // en-CA costuma devolver YYYY-MM-DD direto
+      const flat = new Intl.DateTimeFormat('en-CA', {
+        timeZone: this._PROP_TZ,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(d);
+      return String(flat).slice(0, 10);
+    } catch (_) {
+      return '';
+    }
+  },
+
+  /** Mesma data da coluna DATA (created_at), dia civil SP. */
+  _proposalCreatedDayKey: function(p) {
+    return this._ymdInPropTz(p?.createdAt || p?.created_at || '');
+  },
+
+  _getAdminDateFilter: function() {
+    const fromEl = document.getElementById('proposalDateFrom');
+    const toEl = document.getElementById('proposalDateTo');
+    let from = fromEl ? String(fromEl.value || '').trim() : (this._adminList.dateFrom || '');
+    let to = toEl ? String(toEl.value || '').trim() : (this._adminList.dateTo || '');
+    if (from && to && from > to) {
+      const tmp = from;
+      from = to;
+      to = tmp;
+      if (fromEl) fromEl.value = from;
+      if (toEl) toEl.value = to;
+    }
+    this._adminList.dateFrom = from;
+    this._adminList.dateTo = to;
+    return { dateFrom: from, dateTo: to };
+  },
+
+  _matchesDateFilter: function(p, dateFrom, dateTo) {
+    if (!dateFrom && !dateTo) return true;
+    const day = this._proposalCreatedDayKey(p);
+    if (!day) return false;
+    if (dateFrom && day < dateFrom) return false;
+    if (dateTo && day > dateTo) return false;
+    return true;
+  },
+
+  _syncAdminDateInputs: function(from, to) {
+    const fromEl = document.getElementById('proposalDateFrom');
+    const toEl = document.getElementById('proposalDateTo');
+    if (fromEl) fromEl.value = from || '';
+    if (toEl) toEl.value = to || '';
+    this._adminList.dateFrom = from || '';
+    this._adminList.dateTo = to || '';
+  },
+
+  onAdminDateFilter: function() {
+    this._getAdminDateFilter();
+    this._adminList.page = 1;
+    this.renderAdminList();
+  },
+
 
   adminSetPage: function(page) {
     this._adminList.page = Math.max(1, page);
@@ -1393,6 +1583,11 @@ window.Proposals = {
     return String(s ?? '').replace(/"/g, '&quot;');
   },
 
+  /** Chaves auxiliares do JSON de anexos (metadados) — nunca são arquivos. */
+  _isAttachmentMetaKey: function(k) {
+    return k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho') || k.endsWith('_public');
+  },
+
   _parseAttachments: function(att) {
     if (typeof DB !== 'undefined' && DB._parseProposalAttachments) {
       return DB._parseProposalAttachments(att);
@@ -1477,10 +1672,44 @@ window.Proposals = {
     if (rel) att[grupo + '_caminho'] = this._normalizeStorageCaminho(rel);
   },
 
+  /** Dedup defensivo: remove chaves numéricas da mesma pasta apontando para a mesma URL/caminho. */
+  _dedupeAttachmentsByUrl: function(parsed) {
+    const numKeys = Object.keys(parsed || {}).filter((k) =>
+      !this._isAttachmentMetaKey(k) && /^(.+_)(\d+)$/.test(k)
+    );
+    numKeys.sort((a, b) => {
+      const ma = a.match(/^(.+_)(\d+)$/);
+      const mb = b.match(/^(.+_)(\d+)$/);
+      if (ma[1] !== mb[1]) return ma[1] < mb[1] ? -1 : 1;
+      return parseInt(ma[2], 10) - parseInt(mb[2], 10);
+    });
+    const seenByFolder = {};
+    numKeys.forEach((k) => {
+      const folder = k.match(/^(.+_)(\d+)$/)[1];
+      const sig = String(parsed[k + '_caminho'] || parsed[k] || '').trim();
+      if (!sig || /^data:/i.test(sig)) return;
+      const set = seenByFolder[folder] = seenByFolder[folder] || new Set();
+      if (set.has(sig)) {
+        console.warn('[Proposals] anexo duplicado removido no save:', k, sig.slice(0, 120));
+        // #region agent log
+        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-C',location:'proposals.js:_dedupeAttachmentsByUrl',message:'anexo duplicado removido antes de gravar',data:{key:k,sig:sig.slice(0,120)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        delete parsed[k];
+        delete parsed[k + '_nome'];
+        delete parsed[k + '_caminho'];
+        delete parsed[k + '_public'];
+        delete parsed[k + '_pasta'];
+      } else {
+        set.add(sig);
+      }
+    });
+    return parsed;
+  },
+
   _validateAttachmentsBeforeSave: function(att) {
     const parsed = this._parseAttachments(att);
     Object.keys(parsed || {}).forEach((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho') || k.endsWith('_public')) return;
+      if (this._isAttachmentMetaKey(k)) return;
       const v = parsed[k];
       if (!v || /^data:/i.test(String(v))) return;
       let caminho = String(parsed[k + '_caminho'] || '').replace(/^\/+/, '')
@@ -1504,7 +1733,7 @@ window.Proposals = {
         if (served) parsed[k] = served;
       }
     });
-    return parsed;
+    return this._dedupeAttachmentsByUrl(parsed);
   },
 
   _attachmentCaminho: function(raw, att, key) {
@@ -1845,7 +2074,7 @@ window.Proposals = {
   _hasProposalAttachments: function(att) {
     const parsed = this._parseAttachments(att);
     return Object.keys(parsed || {}).some((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
+      if (this._isAttachmentMetaKey(k)) return false;
       const url = this._normalizeAttachmentUrl(parsed[k]);
       return this._isValidAttachmentUrl(url);
     });
@@ -1999,7 +2228,7 @@ window.Proposals = {
     const out = { ...att };
     const jobs = [];
     Object.keys(out).forEach((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
+      if (this._isAttachmentMetaKey(k)) return;
       const v = out[k];
       if (typeof v !== 'string' || !this._isLocawebProposalUploadUrl(v)) return;
       if (this._attachmentAlreadyOnStorage(out, k)) return;
@@ -2030,7 +2259,7 @@ window.Proposals = {
     const out = { ...att };
     const jobs = [];
     Object.keys(out).forEach((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
+      if (this._isAttachmentMetaKey(k)) return;
       const v = out[k];
       if (typeof v !== 'string' || !/^data:/i.test(v)) return;
       jobs.push((async () => {
@@ -2075,11 +2304,11 @@ window.Proposals = {
       }
     }
     const needsDataUpload = Object.keys(base).some((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
+      if (this._isAttachmentMetaKey(k)) return false;
       return typeof base[k] === 'string' && /^data:/i.test(base[k]);
     });
     const needsLocawebMigrate = Object.keys(base).some((k) => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return false;
+      if (this._isAttachmentMetaKey(k)) return false;
       if (this._attachmentAlreadyOnStorage(base, k)) return false;
       return typeof base[k] === 'string' && this._isLocawebProposalUploadUrl(base[k]);
     });
@@ -2575,19 +2804,12 @@ window.Proposals = {
     return typeof Auth !== 'undefined' && Auth.isMaster();
   },
 
-  /** Master/gerente; na rede parceira: gestor, sup. backoffice e backoffice. */
+  /** Master/gerente; parceiros NÃO excluem propostas (só veem/editam a própria rede). */
   _canDeleteProposal: function() {
-    if (this._isMaster()) return true;
+    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return false;
     const role = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
-    if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
-      if (role === 'parceiro') {
-        return typeof partnerOrgCan === 'function' && partnerOrgCan('cadastrar_proposta');
-      }
-      if (['sup_backoffice', 'backoffice'].includes(role)) {
-        return typeof partnerOrgCan === 'function' && partnerOrgCan('cadastrar_proposta');
-      }
-      return false;
-    }
+    if (role === 'parceiro') return false;
+    if (this._isMaster()) return true;
     return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
   },
 
@@ -3220,6 +3442,9 @@ window.Proposals = {
       alert("Proposta enviada com sucesso!");
       
       document.getElementById('propFormContainer').style.display = 'none';
+      /* Limpa slots e arquivos selecionados — evita anexos "fantasma" na próxima proposta. */
+      this._setFolderContext('propAnexosFolders', 'prop');
+      this.resetAnexoFolders();
       
       if (document.getElementById('manageProposalsTbody')) {
         this._adminList.page = 1;
@@ -3355,6 +3580,8 @@ window.Proposals = {
     const statusFilter = this._getAdminStatusFilter();
     this._adminList.statusFilter = statusFilter;
 
+    const { dateFrom, dateTo } = this._getAdminDateFilter();
+
     const headerVendor = document.getElementById('proposalVendorFilterHeader');
     if (headerVendor) {
       if (vendorId && vendorId !== 'todos') headerVendor.classList.add('filter-active');
@@ -3365,6 +3592,16 @@ window.Proposals = {
       if (statusFilter && statusFilter !== 'todos') headerStatus.classList.add('filter-active');
       else headerStatus.classList.remove('filter-active');
     }
+    const dateFromEl = document.getElementById('proposalDateFrom');
+    const dateToEl = document.getElementById('proposalDateTo');
+    if (dateFromEl) {
+      if (dateFrom) dateFromEl.classList.add('filter-active');
+      else dateFromEl.classList.remove('filter-active');
+    }
+    if (dateToEl) {
+      if (dateTo) dateToEl.classList.add('filter-active');
+      else dateToEl.classList.remove('filter-active');
+    }
 
     const vendorFilterHeaderEl = document.getElementById('proposalVendorFilterHeader');
     if (vendorFilterHeaderEl) {
@@ -3374,8 +3611,10 @@ window.Proposals = {
 
     const partnerRoot = !isVendorSession && typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
     const propOpts = partnerRoot ? { partnerRootId: partnerRoot } : {};
+    const hasDateFilter = !!(dateFrom || dateTo);
     const canUseCache = !forceRefresh && !partnerRoot && !isVendorSession && !q && !vendorId
       && (!statusFilter || statusFilter === 'todos')
+      && !hasDateFilter
       && this._adminListCache && (opts.fromCache || (Date.now() - this._adminListCacheAt) < this._ADMIN_LIST_CACHE_TTL);
 
     let rawRows;
@@ -3391,7 +3630,7 @@ window.Proposals = {
           : DB.getProposals(null, null, propOpts),
       ]);
       rawRows = fetched;
-      if (!partnerRoot && !isVendorSession && !q && !vendorId && (!statusFilter || statusFilter === 'todos')) {
+      if (!partnerRoot && !isVendorSession && !q && !vendorId && (!statusFilter || statusFilter === 'todos') && !hasDateFilter) {
         this._adminListCache = Array.isArray(rawRows) ? rawRows.slice() : [];
         this._adminListCacheAt = Date.now();
       }
@@ -3411,6 +3650,7 @@ window.Proposals = {
     proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
     proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
+    proposals = proposals.filter(p => this._matchesDateFilter(p, dateFrom, dateTo));
     if (this._isDigitacaoStatus(statusFilter)) {
       proposals = this._sortProposalsDigitacaoFifo(proposals);
     } else {
@@ -3421,7 +3661,7 @@ window.Proposals = {
       ms: Date.now() - t0, count: proposals.length, partnerRoot: !!window.PARTNER_ROOT_ID, fromCache: !!canUseCache,
     }, 'B');
 
-    return { proposals, q, vendorId, statusFilter, isVendorSession };
+    return { proposals, q, vendorId, statusFilter, dateFrom, dateTo, isVendorSession };
   },
 
   _mergeAdminListCacheRow: function(proposal) {
@@ -3528,6 +3768,9 @@ window.Proposals = {
     const tbody = document.getElementById('manageProposalsTbody');
     if (!tbody) return;
 
+    // Limpa e-mail injetado pelo autofill do Chrome antes de filtrar a lista.
+    this._scrubProposalSearchAutofill();
+
     const colspan = this._adminListColspan();
     const finGestao = this._isFinanceiroGestao();
     const emptyMsg = (q) => `<tr><td colspan="${colspan}" style="text-align:center;color:var(--color-text-muted);padding:24px;">${q ? 'Nenhuma proposta encontrada para esta busca.' : 'Nenhuma proposta cadastrada.'}</td></tr>`;
@@ -3537,7 +3780,7 @@ window.Proposals = {
     }
 
     try {
-      const { proposals: allFiltered, q, vendorId } = await this._fetchAdminProposalsFiltered(opts);
+      const { proposals: allFiltered, q, vendorId, dateFrom, dateTo } = await this._fetchAdminProposalsFiltered(opts);
 
       this._adminList.total = allFiltered.length;
       let proposals = allFiltered.slice(
@@ -3546,7 +3789,7 @@ window.Proposals = {
       );
 
       if (proposals.length === 0) {
-        tbody.innerHTML = emptyMsg(q || vendorId);
+        tbody.innerHTML = emptyMsg(q || vendorId || dateFrom || dateTo);
         this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
         return;
       }
@@ -3619,7 +3862,7 @@ window.Proposals = {
     const items = (seedItems || []).map(i => ({ ...i, legado: i.legado || [] }));
     const seen = new Set(items.map(i => i.key));
     Object.keys(att || {}).forEach(k => {
-      if (k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
+      if (this._isAttachmentMetaKey(k)) return;
       if (k.startsWith(prefix) && !seen.has(k)) {
         seen.add(k);
         items.push({ key: k, legado: [] });
@@ -3662,6 +3905,7 @@ window.Proposals = {
         <div style="display:flex;gap:8px;flex-wrap:wrap;">`;
       let algum = false;
       itens.forEach((item) => {
+        if (usedKeys.has(item.key)) return; /* já exibido via legado de outro item — evita duplicar */
         const doc = _resolve(item);
         if (!doc) return;
         algum = true;
@@ -3677,13 +3921,13 @@ window.Proposals = {
 
     const customGroupIds = new Set();
     Object.keys(att).forEach(k => {
-      if (!k.startsWith('custom_') || k.endsWith('_nome') || k.endsWith('_pasta') || k.endsWith('_caminho')) return;
+      if (!k.startsWith('custom_') || this._isAttachmentMetaKey(k)) return;
       const m = k.match(/^custom_(.+)_(\d+)$/);
       if (m) customGroupIds.add(m[1]);
     });
     customGroupIds.forEach(groupId => {
       const keys = Object.keys(att).filter(k =>
-        k.startsWith('custom_' + groupId + '_') && !k.endsWith('_nome') && !k.endsWith('_pasta') && !k.endsWith('_caminho')
+        k.startsWith('custom_' + groupId + '_') && !this._isAttachmentMetaKey(k)
       ).sort();
       const titulo = att['custom_' + groupId + '_1_pasta'] || att[keys[0] + '_pasta'] || '📁 Pasta extra';
       html += `<div>
@@ -3703,7 +3947,7 @@ window.Proposals = {
     });
 
     const miscKeys = Object.keys(att).filter(k =>
-      !k.endsWith('_nome') && !k.endsWith('_pasta') && !k.endsWith('_caminho') && !usedKeys.has(k)
+      !this._isAttachmentMetaKey(k) && !usedKeys.has(k)
     );
     if (miscKeys.length) {
       html += `<div>
@@ -3929,12 +4173,24 @@ window.Proposals = {
     if (etapa && String(etapa) !== String(oldStatusOp || oldStatus)) {
       empAction = `Status: [${oldStatusOp || oldStatus || '—'}] → [${etapa}]`;
     }
-    proposal.history.push({
+    const empHistEntry = {
       date: new Date().toISOString(),
       actorName: user.name,
       action: empAction,
       note: proposal.obs || ''
-    });
+    };
+    const wasPaidEmp = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+      ? DB.isPaidProposal({ status: oldStatus, statusOp: oldStatusOp, status_op: oldStatusOp })
+      : String(oldStatus || '').toUpperCase().includes('PAGO');
+    const isPaidEmp = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+      ? DB.isPaidProposal(proposal)
+      : String(etapa || proposal.status || '').toUpperCase().includes('PAGO');
+    if (!wasPaidEmp && isPaidEmp) {
+      empHistEntry.kind = 'paid';
+      proposal._billingPaidAt = empHistEntry.date;
+      proposal._billingPaidBy = user.name;
+    }
+    proposal.history.push(empHistEntry);
 
     if (typeof showLoading === 'function') showLoading('Salvando proposta…');
     const saveT0 = Date.now();
@@ -4038,7 +4294,8 @@ window.Proposals = {
     if (canPickVendor) {
       const vendorSel = document.getElementById('managePropVendor');
       if (vendorSel) {
-        const scopeAdmin = this._proposalVendorScopeAdmin(user);
+        // Usar escopo mesclado (Ana Bela / Viviane) — não só session.id
+        const scopeAdmin = await this._proposalVendorScopeForSession(user);
         let vendors = await DB.getVendorsForSelect(scopeAdmin).catch(() => []);
 
         const vid = proposal.vendorId || proposal.employee_id || '';
@@ -4297,12 +4554,24 @@ window.Proposals = {
          const pctLabel = Math.round((this._tabelaPct[novaTabela]??1)*100);
          action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
        }
-       proposal.history.push({
+       const histEntry = {
          date: new Date().toISOString(),
          actorName: user.name,
          action,
          note: note
-       });
+       };
+       const wasPaid = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+         ? DB.isPaidProposal({ status: oldStatus, statusOp: oldStatusOp, status_op: oldStatusOp })
+         : String(oldStatus || '').toUpperCase().includes('PAGO');
+       const isPaidNow = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+         ? DB.isPaidProposal(proposal)
+         : String(newStatus || '').toUpperCase().includes('PAGO');
+       if (!wasPaid && isPaidNow) {
+         histEntry.kind = 'paid';
+         proposal._billingPaidAt = histEntry.date;
+         proposal._billingPaidBy = user.name;
+       }
+       proposal.history.push(histEntry);
     }
 
     this._setFolderContext('managePropAnexosFolders', 'manageProp');
@@ -4334,9 +4603,21 @@ window.Proposals = {
       }
 
     const saveT0 = Date.now();
-      const becamePaid = String(oldStatus || '').toUpperCase() !== 'PAGO' && String(newStatus || '').toUpperCase() === 'PAGO';
-      if (becamePaid && typeof DB.awardRouletteOnProposalPaid === 'function') {
-        await DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null);
+      const wasPaidBefore = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+        ? DB.isPaidProposal({ status: oldStatus, statusOp: oldStatusOp, status_op: oldStatusOp })
+        : String(oldStatus || '').toUpperCase() === 'PAGO';
+      const isPaidAfter = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+        ? DB.isPaidProposal(proposal)
+        : String(newStatus || '').toUpperCase() === 'PAGO';
+      const becamePaid = !wasPaidBefore && isPaidAfter;
+      if (becamePaid) {
+        if (!proposal._billingPaidAt) {
+          proposal._billingPaidAt = new Date().toISOString();
+          proposal._billingPaidBy = user.name;
+        }
+        if (typeof DB.awardRouletteOnProposalPaid === 'function') {
+          await DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null);
+        }
       }
       try {
         await this._saveProposalClientData(proposal, 'manage');
@@ -4397,9 +4678,9 @@ window.Proposals = {
       return;
     }
     const nome = label || id;
-    if (!confirm(`Excluir a proposta "${nome}" permanentemente?\n\nEsta ação não pode ser desfeita.`)) return;
+    if (!confirm(`Cancelar a proposta "${nome}"?\n\nEla NÃO será apagada — o status muda para Cancelado e o histórico é preservado.`)) return;
 
-    if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
+    if (typeof showLoading === 'function') showLoading('Cancelando proposta...');
     try {
       if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
         const raw = await DB.getProposal(id);
@@ -4412,21 +4693,22 @@ window.Proposals = {
           }
         }
       }
-      await DB.deleteProposal(id);
+      const session = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      await DB.deleteProposal(id, { by: session?.name || session?.email || 'admin' });
       delete this._adminEditCache[id];
       delete this._employeeEditCache[id];
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) {
         SalesRanking.invalidateCache();
       }
       if (fromModal) closeModal('manageProposalModal');
-      if (typeof showToast === 'function') showToast('Proposta excluída.', 'success');
+      if (typeof showToast === 'function') showToast('Proposta cancelada (registro preservado).', 'success');
       await this.renderAdminList();
       if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
         try { await renderAdminRanking(); } catch (_) { /* noop */ }
       }
     } catch (e) {
       console.error('[masterDeleteProposal]', e);
-      alert('Erro ao excluir proposta: ' + (e.message || 'tente novamente'));
+      alert('Erro ao cancelar proposta: ' + (e.message || 'tente novamente'));
     } finally {
       if (typeof hideLoading === 'function') hideLoading();
     }

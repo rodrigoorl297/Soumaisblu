@@ -16,67 +16,36 @@
   <link rel="stylesheet" href="../css/layout.css?v=esteira1"/>
   <link rel="stylesheet" href="../css/store.css?v=1781704178"/>
   <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
-  <!-- estilos movidos para CSS externo -->
+  <link rel="stylesheet" href="../css/clube-beneficios.css?v=clube-logo2"/>
 </head>
-<body>
+<body class="clube-beneficios-app clube-no-sidebar">
   <div class="app-layout">
-    <!-- Sidebar -->
-    <nav class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <div class="sidebar-logo"><img src="../images/logo.png" width="32" height="32" alt="SOU+BLU"/></div>
-        <span class="sidebar-title">SOU <span>+ BLU</span></span>
-      </div>
-      <div class="sidebar-nav">
-        <span class="sidebar-section-label">Principal</span>
-        <button class="nav-item" onclick="window.history.back()"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg></span><span class="nav-label">Voltar</span></button>
-
-        <button class="nav-item active" id="nav-meus-limites" onclick="navSwitchTab('meus-limites', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span><span class="nav-label">Clube Benefícios</span></button>
-
-        <button class="nav-item" id="nav-restaurante" onclick="navSwitchTab('restaurante', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg></span><span class="nav-label">Restaurante</span></button>
-
-        <button class="nav-item" id="nav-tem-saude" onclick="navSwitchTab('tem-saude', this)"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></span><span class="nav-label">Tem Saúde</span></button>
-
-
-        <!-- Loja de Prêmios — visível conforme role -->
-        <button class="nav-item store-shop-nav" id="nav-loja" onclick="navSwitchTab('loja', this)" style="display:none;"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path><line x1="3" y1="6" x2="21" y2="6"></line><path d="M16 10a4 4 0 0 1-8 0"></path></svg></span><span class="nav-label">Loja de Prêmios</span></button>
-
-        <!-- Tabs Admin: gestão embutida + página completa (visível para master/financeiro) -->
-        <button class="nav-item benefits-admin-nav" id="nav-gestao" onclick="openGestaoTab('loja-premios', this)" style="display:none;">
-          <span class="nav-icon">⚙️</span>
-          <span class="nav-label">Gestão Benefícios</span>
-        </button>
-        <button class="nav-item benefits-admin-nav" id="nav-produtos" onclick="openGestaoTab('produtos-loja', this)" style="display:none;">
-          <span class="nav-icon">📦</span>
-          <span class="nav-label">Produtos da Loja</span>
-        </button>
-        <button class="nav-item benefits-admin-nav" id="nav-pedidos" onclick="openGestaoTab('pedidos-loja', this)" style="display:none;">
-          <span class="nav-icon">🛒</span>
-          <span class="nav-label">Pedidos da Loja</span>
-        </button>
-        <a class="nav-item benefits-admin-nav" id="nav-admin-benef" href="#" onclick="event.preventDefault();location.href=(typeof Auth!=='undefined'&&Auth.adminBeneficiosPageHref?Auth.adminBeneficiosPageHref():(typeof soubluPage==='function'?soubluPage('admin-beneficios.html'):'/pages/admin-beneficios.html'))" style="display:none;text-decoration:none;">
-          <span class="nav-icon">📋</span>
-          <span class="nav-label">Esteira / Prestadores</span>
-        </a>
-      </div>
-      <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="avatar avatar-sm" id="sidebarAvatar" style="background:var(--color-primary)"></div>
-          <div class="sidebar-user-info">
-            <div class="sidebar-user-name" id="sidebarName">–</div>
-            <div class="sidebar-user-role" id="sidebarRole">Funcionário</div>
-          </div>
-        </div>
-      </div>
-    </nav>
-
-    <!-- Main Content Area -->
+    <!-- Main Content Area (sem menu lateral) -->
     <div class="main-area" id="mainArea">
-      <header class="topbar">
-        <span class="topbar-title" id="topbarTitle">ZS Clube Benefícios</span>
+      <header class="topbar clube-topbar">
+        <div class="clube-topbar-left">
+          <button type="button" class="clube-back-btn" onclick="window.history.back()" title="Voltar ao painel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            <span>Voltar</span>
+          </button>
+          <img src="../images/zs-clube-beneficios.png?v=clube-logo2" class="clube-topbar-logo" alt="ZS Clube de Benefícios" title="Início do Clube" onclick="navSwitchTab('meus-limites', null)"/>
+          <span class="topbar-title clube-topbar-section" id="topbarTitle"></span>
+        </div>
         <div class="topbar-actions">
-          <div style="font-size:14px;font-weight:700;color:var(--color-primary);display:flex;align-items:center;gap:4px;">
-            <span>Saldo Clube:</span>
-            <span id="topbarBalance">R$ 0,00</span>
+          <button class="clube-gestao-btn benefits-admin-nav" id="nav-admin-benef" type="button" onclick="openGestaoTab('esteira-limites', this)" style="display:none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            <span>Gestão</span>
+          </button>
+          <div class="clube-topbar-balance" title="Saldo disponível no Clube">
+            <span class="clube-wallet-label">Saldo Clube</span>
+            <span class="clube-wallet-value" id="topbarBalance">R$ 0,00</span>
+          </div>
+          <div class="clube-topbar-user">
+            <div class="avatar avatar-sm" id="sidebarAvatar" style="background:var(--color-primary)"></div>
+            <div class="clube-topbar-user-info">
+              <div class="clube-topbar-user-name" id="sidebarName">–</div>
+              <div class="clube-topbar-user-role" id="sidebarRole">Funcionário</div>
+            </div>
           </div>
         </div>
       </header>
@@ -86,45 +55,75 @@
 
         <!-- 1. MEUS LIMITES -->
         <div id="tab-meus-limites" class="tab-content">
-          <div class="grid" style="display:grid;grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 20px;">
-            <div class="benefit-card" style="text-align: center;">
-              <div class="benefit-title">💰 Limite Aprovado</div>
-              <div class="limit-value" id="valAprovado">R$ 0,00</div>
+          <section class="clube-hero">
+            <div class="clube-hero-kicker">ZS Clube Benefícios</div>
+            <h2>Seus benefícios em um só lugar</h2>
+            <p>Acompanhe saldo e vouchers e use restaurante, saúde e loja como um cartão de benefícios.</p>
+            <div class="clube-hero-meta">
+              <div class="clube-chip">Disponível agora: <strong id="heroDisponivelHint">—</strong></div>
             </div>
-            <div class="benefit-card" style="text-align: center;">
-              <div class="benefit-title">💸 Limite Utilizado</div>
-              <div class="limit-value" id="valUtilizado" style="color:var(--color-danger);">R$ 0,00</div>
+          </section>
+
+          <div class="clube-metrics">
+            <div class="clube-metric is-used">
+              <div class="clube-metric-label">Utilizado</div>
+              <div class="limit-value" id="valUtilizado">R$ 0,00</div>
             </div>
-            <div class="benefit-card" style="text-align: center;">
-              <div class="benefit-title">✅ Limite Disponível</div>
-              <div class="limit-value" id="valDisponivel" style="color:var(--color-success);">R$ 0,00</div>
+            <div class="clube-metric is-ok">
+              <div class="clube-metric-label">Disponível</div>
+              <div class="limit-value" id="valDisponivel">R$ 0,00</div>
             </div>
           </div>
 
-          <div class="benefit-card">
-            <div class="benefit-title">⚖️ Distribuir Meus Limites</div>
-            <p class="form-hint" style="margin-bottom: 15px;">Permitido alterar apenas a cada 45 dias. Total disponível: <strong id="distTotalAvailable">R$ 0,00</strong></p>
-            <div id="distribList">
-              <!-- Prestadores/Categorias list -->
-            </div>
-            <button class="btn btn-primary" id="saveDistBtn" onclick="saveDistribution()" style="margin-top: 15px;">Salvar Alteração</button>
+          <div class="clube-hub" aria-label="Benefícios do Clube">
+            <button type="button" class="clube-hub-tile clube-hub-rest" onclick="clubeGoTab('restaurante')">
+              <span class="clube-hub-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/><line x1="6" y1="1" x2="6" y2="4"/><line x1="10" y1="1" x2="10" y2="4"/><line x1="14" y1="1" x2="14" y2="4"/></svg>
+              </span>
+              <span class="clube-hub-copy">
+                <strong>Restaurante</strong>
+                <small>Peça entrega ou retirada com seu saldo</small>
+              </span>
+              <span class="clube-hub-go">Abrir →</span>
+            </button>
+            <button type="button" class="clube-hub-tile clube-hub-saude" onclick="clubeGoTab('tem-saude')">
+              <span class="clube-hub-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+              </span>
+              <span class="clube-hub-copy">
+                <strong>Tem Saúde</strong>
+                <small>Agende consultas e veja coberturas</small>
+              </span>
+              <span class="clube-hub-go">Abrir →</span>
+            </button>
+            <button type="button" class="clube-hub-tile clube-hub-loja store-shop-nav" onclick="clubeGoTab('loja')" style="display:none;">
+              <span class="clube-hub-icon" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              </span>
+              <span class="clube-hub-copy">
+                <strong>Loja de Prêmios</strong>
+                <small>Troque pontos por produtos</small>
+              </span>
+              <span class="clube-hub-go">Abrir →</span>
+            </button>
           </div>
 
-          <div class="benefit-card">
-            <div class="benefit-title">🎫 Meus Vouchers</div>
+          <div class="benefit-card clube-panel">
+            <div class="benefit-title">Meus vouchers</div>
             <div class="table-wrap">
               <table class="data-table">
                 <thead>
                   <tr>
                     <th>Nº Voucher</th>
                     <th>Estabelecimento</th>
+                    <th>Descrição do pedido</th>
                     <th>Valor</th>
                     <th>Situação</th>
                     <th>Data</th>
                   </tr>
                 </thead>
                 <tbody id="vouchersTbody">
-                  <tr><td colspan="5" class="text-center">Nenhum voucher emitido.</td></tr>
+                  <tr><td colspan="6" class="text-center">Nenhum voucher emitido.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -133,54 +132,118 @@
 
         <!-- 2. RESTAURANTE -->
         <div id="tab-restaurante" class="tab-content" style="display:none;">
-          <div class="benefit-card">
-            <div class="benefit-title">🍽️ Solicitar Pedido - Restaurante</div>
-            <div style="display:flex; gap: 10px; margin-bottom: 20px;">
-              <button class="btn btn-primary" id="btnModeEntrega" onclick="setOrderMode('entrega')">Solicitar Pedido Entrega</button>
-              <button class="btn btn-outline" id="btnModeRetirada" onclick="setOrderMode('retirada')">Solicitar Pedido Retirada</button>
+          <button type="button" class="clube-back-home" onclick="clubeGoTab('meus-limites')">← Voltar ao Clube</button>
+          <section class="clube-hero">
+            <div class="clube-hero-kicker">Alimentação</div>
+            <h2>Restaurante corporativo</h2>
+            <p>Peça entrega ou retirada com o crédito do seu Clube — rápido, organizado e transparente.</p>
+          </section>
+
+          <div class="benefit-card clube-panel">
+            <div class="benefit-title">Solicitar pedido</div>
+            <p class="clube-panel-lead">Escolha a marmita/itens e a quantidade. Ao confirmar, o WhatsApp do restaurante abre com o pedido já preenchido — sem precisar postar o cardápio todo dia.</p>
+
+            <div class="clube-segment" role="group" aria-label="Modo do pedido">
+              <button type="button" class="is-active btn btn-primary" id="btnModeEntrega" onclick="setOrderMode('entrega')">Entrega</button>
+              <button type="button" class="btn btn-outline" id="btnModeRetirada" onclick="setOrderMode('retirada')">Retirada</button>
             </div>
 
             <form id="orderForm" onsubmit="submitFoodOrder(event)">
               <div class="form-group">
-                <label>Dados do Funcionário</label>
+                <label for="orderEmpName">Dados do funcionário</label>
                 <input type="text" id="orderEmpName" class="form-control" readonly/>
               </div>
 
-              <!-- DELIVERY ONLY FIELDS -->
               <div id="deliveryFields">
                 <div class="form-group">
-                  <label>Horário de Entrega?</label>
+                  <label for="orderDeliveryTime">Horário de entrega</label>
                   <input type="time" id="orderDeliveryTime" class="form-control"/>
                 </div>
               </div>
 
-              <div class="form-group">
-                <label>Valor do Pedido (R$)</label>
-                <input type="number" id="orderValue" class="form-control" placeholder="0,00" step="0.01" min="0" required/>
+              <div class="clube-menu" id="clubeMenu">
+                <div class="clube-menu-title">Cardápio</div>
+                <div class="clube-menu-item" data-sku="marca" data-price="18" data-name="Opção marca">
+                  <div class="clube-menu-info">
+                    <strong>Opção marca</strong>
+                    <small>Prato / combinação do dia</small>
+                  </div>
+                  <div class="clube-menu-price">R$ 18,00</div>
+                  <div class="clube-qty">
+                    <button type="button" class="clube-qty-btn" onclick="clubeMenuQty('marca', -1)" aria-label="Diminuir">−</button>
+                    <input type="number" id="qty_marca" class="clube-qty-val" value="0" min="0" max="20" readonly/>
+                    <button type="button" class="clube-qty-btn" onclick="clubeMenuQty('marca', 1)" aria-label="Aumentar">+</button>
+                  </div>
+                </div>
+                <div class="clube-menu-item" data-sku="coca_lata" data-price="5" data-name="Coca-Cola lata">
+                  <div class="clube-menu-info">
+                    <strong>Coca-Cola lata</strong>
+                    <small>350 ml</small>
+                  </div>
+                  <div class="clube-menu-price">R$ 5,00</div>
+                  <div class="clube-qty">
+                    <button type="button" class="clube-qty-btn" onclick="clubeMenuQty('coca_lata', -1)" aria-label="Diminuir">−</button>
+                    <input type="number" id="qty_coca_lata" class="clube-qty-val" value="0" min="0" max="20" readonly/>
+                    <button type="button" class="clube-qty-btn" onclick="clubeMenuQty('coca_lata', 1)" aria-label="Aumentar">+</button>
+                  </div>
+                </div>
+                <div class="clube-menu-item" data-sku="coca_600" data-price="8" data-name="Coca-Cola 600ml">
+                  <div class="clube-menu-info">
+                    <strong>Coca-Cola 600 ml</strong>
+                    <small>Garrafa</small>
+                  </div>
+                  <div class="clube-menu-price">R$ 8,00</div>
+                  <div class="clube-qty">
+                    <button type="button" class="clube-qty-btn" onclick="clubeMenuQty('coca_600', -1)" aria-label="Diminuir">−</button>
+                    <input type="number" id="qty_coca_600" class="clube-qty-val" value="0" min="0" max="20" readonly/>
+                    <button type="button" class="clube-qty-btn" onclick="clubeMenuQty('coca_600', 1)" aria-label="Aumentar">+</button>
+                  </div>
+                </div>
+                <div class="clube-menu-total">
+                  <span>Total do pedido</span>
+                  <strong id="orderMenuTotal">R$ 0,00</strong>
+                </div>
               </div>
+              <input type="hidden" id="orderValue" value="0"/>
 
               <div class="form-group">
-                <label>Observações</label>
-                <textarea id="orderObs" class="form-control" rows="2" placeholder="Ex: Sem cebola, talheres descartáveis..."></textarea>
+                <label for="orderObs">Observações</label>
+                <textarea id="orderObs" class="form-control" rows="3" placeholder="Ex: Sem cebola, talheres descartáveis..."></textarea>
               </div>
 
-              <button type="submit" class="btn btn-primary btn-full">Salvar Pedido</button>
+              <button type="submit" class="btn btn-primary btn-full">Confirmar pedido e abrir WhatsApp</button>
+              <p class="form-hint" style="margin-top:10px;text-align:center;">O crédito do Clube é debitado e a mensagem já informa que o pedido foi feito.</p>
             </form>
           </div>
         </div>
 
         <!-- 3. TEM SAÚDE -->
         <div id="tab-tem-saude" class="tab-content" style="display:none;">
-          <div class="benefit-card">
-            <div class="benefit-title">🩺 Tem Saúde - Assistência Médica</div>
-            <p style="margin-bottom: 20px; color:var(--color-text-secondary);">Agende consultas e tire dúvidas com o suporte credenciado Banco BMG.</p>
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 20px;">
-              <a href="https://api.whatsapp.com/send?1=pt_BR&phone=551151287754" target="_blank" class="btn btn-primary" style="text-align: center; display: block; text-decoration: none;">
-                📞 Agendar Consulta (WhatsApp)
-              </a>
-              <a href="https://www.bancobmg.com.br/seguros/bmg-med/" target="_blank" class="btn btn-outline" style="text-align: center; display: block; text-decoration: none;">
-                ℹ️ Dúvidas &amp; Coberturas
-              </a>
+          <button type="button" class="clube-back-home" onclick="clubeGoTab('meus-limites')">← Voltar ao Clube</button>
+          <section class="clube-hero">
+            <div class="clube-hero-kicker">Bem-estar</div>
+            <h2>Tem Saúde</h2>
+            <p>Assistência médica credenciada para agendar consultas e esclarecer coberturas com o Banco BMG.</p>
+          </section>
+
+          <div class="benefit-card clube-panel">
+            <div class="clube-service-visual">
+              <div class="clube-service-copy">
+                <h2>Atendimento com suporte credenciado</h2>
+                <p class="clube-panel-lead">Agende pelo WhatsApp ou consulte coberturas no portal oficial — tudo no mesmo benefício.</p>
+                <div class="clube-cta-row">
+                  <a href="https://api.whatsapp.com/send?1=pt_BR&phone=551151287754" target="_blank" rel="noopener" class="btn btn-primary">
+                    Agendar consulta
+                  </a>
+                  <a href="https://www.bancobmg.com.br/seguros/bmg-med/" target="_blank" rel="noopener" class="btn btn-outline">
+                    Dúvidas e coberturas
+                  </a>
+                </div>
+              </div>
+              <aside class="clube-service-aside">
+                <strong>Rede BMG Med</strong>
+                <span>Consultas e orientações com canal oficial.</span>
+              </aside>
             </div>
           </div>
         </div>
@@ -189,11 +252,12 @@
 
         <!-- 5. LOJA DE PRÊMIOS -->
         <div id="tab-loja" class="tab-content" style="display:none;">
+          <button type="button" class="clube-back-home" onclick="clubeGoTab('meus-limites')">← Voltar ao Clube</button>
           <div class="benefit-card">
             <div class="benefit-title">🛍️ Loja de Prêmios</div>
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
               <div style="display:flex;gap:10px;align-items:center;">
-                <input type="text" id="storeSearch" class="form-control" placeholder="Buscar produto..." oninput="filterProducts()" style="max-width:260px;"/>
+                <input type="search" id="storeSearch" name="q-buscar-produtos" autocomplete="off" class="form-control" placeholder="Buscar produto..." oninput="filterProducts()" style="max-width:260px;"/>
               </div>
               <button class="btn btn-primary" onclick="openCart()">🛒 Carrinho <span id="cartCount">(0)</span></button>
             </div>
@@ -231,29 +295,93 @@
 
           <!-- Sub-tabs dentro da gestão -->
           <div style="display:flex;gap:0;border-bottom:2px solid var(--color-border);margin-bottom:var(--space-lg);overflow-x:auto;" id="gestaoSubTabs">
-            <div class="menu-tab active" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-primary);border-bottom:3px solid var(--color-primary);white-space:nowrap;" onclick="switchGestaoTab('loja-premios', this)">🛍️ Loja de Prêmios</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('esteira-limites', this)">📋 Esteira de Acompanhamento</div>
+            <div class="menu-tab active" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-primary);border-bottom:3px solid var(--color-primary);white-space:nowrap;" onclick="switchGestaoTab('cadastro-parceiros', this)">🏢 Cadastrar Prestador</div>
             <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('cadastro-produtos', this)">🍱 Produtos ZS</div>
             <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('controle-pedidos', this)">🍔 Pedidos ZS</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('fechamentos', this)">🗓️ Fechamentos</div>
+            <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('relatorios-prestador', this)">📊 Área do Prestador</div>
             <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('produtos-loja', this)">📦 Produtos</div>
             <div class="menu-tab" style="display:flex;padding:10px 14px;cursor:pointer;font-weight:700;font-size:13px;color:var(--color-text-secondary);border-bottom:3px solid transparent;white-space:nowrap;" onclick="switchGestaoTab('pedidos-loja', this)">🛒 Pedidos (Esteira)</div>
-
           </div>
 
-          <!-- Loja de Prêmios (admin view) -->
-          <div id="gtab-loja-premios" class="gtab-content">
+          <!-- Esteira de Acompanhamento de Limites -->
+          <div id="gtab-esteira-limites" class="gtab-content" style="display:none;">
             <div class="benefit-card">
-              <div class="benefit-title" style="justify-content:space-between;">
-                🛍️ Loja de Prêmios
-                <button class="btn btn-primary" onclick="(function(){window.SOUBLU_ADMIN_PROFILE=true;StoreShop.init();})()">🔄 Atualizar</button>
+              <div class="benefit-title">📋 Acompanhamento de Limites</div>
+              <p class="form-hint" style="margin-bottom:12px;">Valores em tempo real (aprovado, usado e disponível). Use <strong>Lançar débito</strong> para compras anteriores ao sistema.</p>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Funcionário</th>
+                      <th>Telefones</th>
+                      <th>Status</th>
+                      <th>Limite (tempo real)</th>
+                      <th>Documento</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="limitesTbody">
+                    <tr><td colspan="6" class="text-center">Nenhum limite cadastrado.</td></tr>
+                  </tbody>
+                </table>
               </div>
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
-                <input type="text" id="adminStoreSearch" class="form-control" placeholder="Buscar produto..." oninput="StoreShop.filterProducts&&StoreShop.filterProducts()" style="max-width:260px;"/>
-                <button class="btn btn-outline" onclick="openCart()">🛒 Ver Carrinho</button>
-              </div>
-              <div id="adminCategoryFilter" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
-              <div id="adminProductGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;">
-                
-              </div>
+            </div>
+          </div>
+
+          <!-- Cadastro de Prestador (Farmácia / Restaurante / etc.) -->
+          <div id="gtab-cadastro-parceiros" class="gtab-content">
+            <div class="benefit-card">
+              <div class="benefit-title">🏢 Cadastrar Prestador de Serviços</div>
+              <p class="form-hint" style="margin-bottom:14px;">Cadastre farmácias, restaurantes e demais prestadores do Clube ZS Benefícios.</p>
+              <form onsubmit="saveProvider(event)" id="providerForm">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>CNPJ / CPF</label>
+                    <input type="text" id="provCpfCnpj" class="form-control" placeholder="CNPJ ou CPF" required/>
+                  </div>
+                  <div class="form-group">
+                    <label>Nome Fantasia</label>
+                    <input type="text" id="provNome" class="form-control" placeholder="Nome Fantasia do Estabelecimento" required/>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Chave PIX para Pagamento</label>
+                    <input type="text" id="provPix" class="form-control" placeholder="Chave PIX" required/>
+                  </div>
+                  <div class="form-group">
+                    <label>Dia de Pagamento</label>
+                    <input type="number" id="provDiaPgto" class="form-control" min="1" max="31" value="5" required/>
+                  </div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Categoria</label>
+                    <select id="provCategoria" class="form-control" required>
+                      <option value="Restaurante">Restaurante</option>
+                      <option value="Farmácia">Farmácia</option>
+                      <option value="Saúde">Saúde</option>
+                      <option value="Transporte">Transporte</option>
+                      <option value="Outros">Outros</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Pagamento Automático?</label>
+                    <select id="provAutoPgto" class="form-control">
+                      <option value="NÃO">NÃO</option>
+                      <option value="SIM">SIM</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label>WhatsApp do restaurante (com DDI)</label>
+                  <input type="tel" id="provWhatsapp" class="form-control" placeholder="Ex.: 5511999999999" inputmode="numeric"/>
+                  <p class="form-hint" style="margin-top:6px;">Usado no pedido de marmita: abre o WhatsApp com a mensagem do pedido já preenchida.</p>
+                </div>
+                <button type="submit" class="btn btn-primary">Salvar Prestador</button>
+              </form>
             </div>
           </div>
 
@@ -347,7 +475,120 @@
             </div>
           </div>
 
+          <!-- Fechamentos -->
+          <div id="gtab-fechamentos" class="gtab-content" style="display:none;">
+            <div class="benefit-card">
+              <div class="benefit-title">🗓️ Gerar Fechamento Prestador de Serviços</div>
+              <form onsubmit="generateClosing(event)" id="closingForm">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Prestador de Serviço</label>
+                    <select id="closeProvider" class="form-control" onchange="loadProviderVouchers()" required>
+                      <option value="">Selecione...</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Data Inicial</label>
+                    <input type="date" id="closeDateStart" class="form-control" onchange="loadProviderVouchers()" required/>
+                  </div>
+                  <div class="form-group">
+                    <label>Data Final</label>
+                    <input type="date" id="closeDateEnd" class="form-control" onchange="loadProviderVouchers()" required/>
+                  </div>
+                </div>
+                <div class="form-row" style="align-items: flex-end;">
+                  <div class="form-group">
+                    <label>Vouchers Carregados</label>
+                    <input type="text" id="closeVouchersQty" class="form-control" readonly value="0"/>
+                  </div>
+                  <div class="form-group">
+                    <label>Valor Total Vouchers (R$)</label>
+                    <input type="text" id="closeTotalVal" class="form-control" readonly value="R$ 0,00"/>
+                  </div>
+                  <div class="form-group">
+                    <button type="submit" class="btn btn-primary btn-full">Gerar Fechamento</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+            <div class="benefit-card">
+              <div class="benefit-title">💳 Aprovar Fechamento (Dupla Aprovação Master/Financeiro)</div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Protocolo</th>
+                      <th>Prestador</th>
+                      <th>Período</th>
+                      <th>Valor</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fechamentosTbody">
+                    <tr><td colspan="6" class="text-center">Nenhum fechamento pendente.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
+          <!-- Área do Prestador -->
+          <div id="gtab-relatorios-prestador" class="gtab-content" style="display:none;">
+            <div class="benefit-card">
+              <div class="benefit-title">📊 Relatório de Vouchers do Fechamento</div>
+              <div class="form-row" style="align-items: flex-end;">
+                <div class="form-group">
+                  <label>Número do Protocolo do Fechamento</label>
+                  <input type="text" id="repProtocol" class="form-control" placeholder="ZS-DIAMESANO-XXXX"/>
+                </div>
+                <button class="btn btn-primary" onclick="loadReportVouchers()">Carregar Vouchers</button>
+              </div>
+              <div class="table-wrap" style="margin-top: 15px;">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Nº Voucher</th>
+                      <th>Funcionário</th>
+                      <th>Valor</th>
+                      <th>Data</th>
+                    </tr>
+                  </thead>
+                  <tbody id="repVouchersTbody">
+                    <tr><td colspan="4" class="text-center">Digite um protocolo e carregue os dados.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="benefit-card">
+              <div class="benefit-title">🔍 Consulta Individual por Voucher</div>
+              <div class="form-row" style="align-items: flex-end;">
+                <div class="form-group">
+                  <label>Digite o Número do Voucher</label>
+                  <input type="text" id="searchVoucherNo" class="form-control" placeholder="ZS-DDMMYYYY-XXXX"/>
+                </div>
+                <button class="btn btn-outline" onclick="searchSingleVoucher()">Consultar</button>
+              </div>
+              <div id="voucherSearchResult" style="margin-top: 15px; display: none; background:var(--color-surface-2); padding: 15px; border-radius: var(--radius-md);"></div>
+            </div>
+            <div class="benefit-card">
+              <div class="benefit-title">🧾 Histórico de Fechamentos Emitidos</div>
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>Protocolo</th>
+                      <th>Prestador</th>
+                      <th>Período</th>
+                      <th>Valor</th>
+                      <th>Situação</th>
+                    </tr>
+                  </thead>
+                  <tbody id="fechamentosEmitidosTbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
 
         </div><!-- /tab-gestao-beneficios -->
 
@@ -356,7 +597,7 @@
   </div>
 
   <!-- Modal Aprovação de Limite -->
-  <div class="modal-overlay" id="approveLimitModal" style="display:none;">
+  <div class="modal-overlay" id="approveLimitModal">
     <div class="modal" style="max-width:480px;">
       <div class="modal-header">
         <h3>Definir Limite de Crédito</h3>
@@ -376,13 +617,37 @@
     </div>
   </div>
 
+  <!-- Modal Débito Manual (compras anteriores ao sistema) -->
+  <div class="modal-overlay" id="manualDebitModal">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3>Lançar débito manual</h3>
+        <button class="modal-close" onclick="closeManualDebitModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="manualDebitLimitId"/>
+        <input type="hidden" id="manualDebitEmployeeId"/>
+        <div class="form-group"><label>Funcionário</label><input type="text" id="manualDebitName" class="form-control" readonly/></div>
+        <div class="form-group"><label>Disponível agora</label><input type="text" id="manualDebitDisponivel" class="form-control" readonly/></div>
+        <div class="form-group"><label>Valor do débito (R$)</label><input type="number" id="manualDebitValor" class="form-control" min="0.01" step="0.01" placeholder="0,00" required/></div>
+        <div class="form-group"><label>Descrição / o que foi comprado</label><input type="text" id="manualDebitDesc" class="form-control" placeholder="Ex.: Marmitas semana 10/07" required/></div>
+        <div class="form-group"><label>Estabelecimento (opcional)</label><input type="text" id="manualDebitPrestador" class="form-control" placeholder="Ex.: Restaurante ZS"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeManualDebitModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmManualDebit()">Lançar débito</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../js/config.js?v=nodelete-demo1"></script>
-  <script src="../js/db.js?v=nodelete-demo1"></script>
+  <script src="../js/db.js?v=rh-clube-fix3"></script>
   <script src="../js/auth.js?v=1781813000"></script>
   <script src="../js/ui.js?v=1781813000"></script>
   <script src="../js/store-shop.js?v=1781704178"></script>
-  <script src="../js/admin-beneficios.js?v=benef-fix4"></script>
-  <script src="../js/clube-beneficios.js?v=benef-fix5"></script>
+  <script src="../js/admin-beneficios.js?v=manual-debit2"></script>
+  <script src="../js/pedido-alert.js?v=pedido-notes1"></script>
+  <script src="../js/clube-beneficios.js?v=rest-wa2"></script>
 
   <script>
   // ── Navegação por sidebar: troca seção sem sair da página ──
@@ -396,15 +661,18 @@
     if (panel) panel.style.display = 'block';
 
     const titles = {
-      'meus-limites':      'ZS Clube Benefícios',
+      'meus-limites':      '',
       'restaurante':       'Restaurante',
       'tem-saude':         'Tem Saúde',
       'loja':              'Loja de Prêmios',
-      'gestao-beneficios': 'Gestão Benefícios'
+      'gestao-beneficios': 'Gestão'
     };
     const t = document.getElementById('topbarTitle');
-    if (t) t.textContent = titles[tabId] || 'ZS Clube Benefícios';
+    if (t) t.textContent = titles[tabId] ?? '';
 
+    if (tabId === 'meus-limites' && typeof loadUserData === 'function') {
+      loadUserData();
+    }
     if (tabId === 'loja' && window.StoreShop) {
       StoreShop.init();
     }
@@ -413,19 +681,33 @@
     }
   }
 
+  function clubeGoTab(tabId) {
+    if (tabId === 'meus-limites') {
+      const home = document.getElementById('nav-meus-limites');
+      navSwitchTab('meus-limites', home);
+      return;
+    }
+    // Benefícios: entra pelos cards — menu lateral não muda de item
+    navSwitchTab(tabId, null);
+    document.querySelectorAll('.sidebar-nav .nav-item').forEach((b) => b.classList.remove('active'));
+  }
+
   function openGestaoTab(subTabId, el) {
     navSwitchTab('gestao-beneficios', el);
     const map = {
-      'loja-premios': 0,
-      'cadastro-produtos': 1,
-      'controle-pedidos': 2,
-      'produtos-loja': 3,
-      'pedidos-loja': 4,
+      'esteira-limites': 0,
+      'cadastro-parceiros': 1,
+      'cadastro-produtos': 2,
+      'controle-pedidos': 3,
+      'fechamentos': 4,
+      'relatorios-prestador': 5,
+      'produtos-loja': 6,
+      'pedidos-loja': 7,
     };
     const tabs = document.querySelectorAll('#gestaoSubTabs .menu-tab');
     const idx = map[subTabId];
     const tabEl = (idx != null && tabs[idx]) ? tabs[idx] : tabs[0];
-    switchGestaoTab(subTabId || 'loja-premios', tabEl);
+    switchGestaoTab(subTabId || 'esteira-limites', tabEl);
   }
 
   // ── Sub-tabs dentro da Gestão Benefícios ──
@@ -442,14 +724,13 @@
     const p = document.getElementById('gtab-' + tabId);
     if (p) p.style.display = 'block';
 
-    if (tabId === 'loja-premios' && window.StoreShop) { window.SOUBLU_ADMIN_PROFILE = true; StoreShop.init(); }
     if (tabId === 'produtos-loja' && typeof renderProductsTable === 'function') {
       renderProductsTable();
     }
     if (tabId === 'pedidos-loja' && typeof renderOrdersTable === 'function') {
       renderOrdersTable();
     }
-    if ((tabId === 'cadastro-produtos' || tabId === 'controle-pedidos') && window.BeneficiosAdmin) {
+    if (['esteira-limites', 'cadastro-parceiros', 'cadastro-produtos', 'controle-pedidos', 'fechamentos', 'relatorios-prestador'].includes(tabId) && window.BeneficiosAdmin) {
       BeneficiosAdmin.loadAllData();
     }
   }
@@ -467,6 +748,11 @@
       }
       if (IS_MASTER) {
         document.querySelectorAll('.benefits-admin-nav').forEach(el => el.style.display = 'flex');
+      }
+      const hash = String(location.hash || '').replace(/^#/, '');
+      if (hash === 'controle-pedidos' && IS_MASTER && typeof openGestaoTab === 'function') {
+        const nav = document.getElementById('nav-admin-benef');
+        openGestaoTab('controle-pedidos', nav);
       }
     } catch(e) {}
   }, 300);

@@ -124,10 +124,11 @@ const Auth = {
     return r === 'master' || r === 'fundador' || r === 'financeiro' || r === 'financial';
   },
 
-  /** Painel Master (Dashboard + Painel Master) — master e fundador. */
+  /** Painel Master (Dashboard + Painel Master) — master, fundador, financeiro e RH. */
   hasMasterPanel() {
     const s = this.getSession();
-    return !!(s && (s.role === 'master' || s.role === 'fundador' || s.role === 'financeiro' || s.role === 'rh'));
+    const role = String(s?.role || '').toLowerCase();
+    return !!(s && (role === 'master' || role === 'fundador' || role === 'financeiro' || role === 'financial' || role === 'rh'));
   },
 
   isFinanceiroOnly() {
@@ -228,6 +229,15 @@ const Auth = {
     this.clearWaSessionStorage();
     const session = this._sessionFromUser(user, Date.now());
     this._writeSession(session);
+    if (typeof DB !== 'undefined' && typeof DB.relinkOrphanProposalsForUser === 'function') {
+      try {
+        DB.relinkOrphanProposalsForUser(user).catch((e) =>
+          console.warn('[Auth] relink orphans:', e?.message || e)
+        );
+      } catch (e) {
+        console.warn('[Auth] relink orphans:', e);
+      }
+    }
     if (typeof AttendancePenalty !== 'undefined' && AttendancePenalty.onLogin) {
       // try { await AttendancePenalty.onLogin(user); } catch (e) { console.warn('[Auth] attendance:', e); }
     }
@@ -400,11 +410,23 @@ const Auth = {
     return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Jurídico', 'Diretoria', 'Ouvidoria', 'Desenvolvimento'].includes(department);
   },
 
+  /** Visão global da esteira de chamados (Painel Master). */
+  canSeeAllTickets() {
+    const s = this.getSession();
+    if (!s) return false;
+    if (this.isMaster()) return true;
+    if (typeof this.hasMasterPanel === 'function' && this.hasMasterPanel()) return true;
+    const role = String(s.role || '').toLowerCase();
+    if (role === 'diretoria' || role === 'desenvolvedor') return true;
+    const p = (s.permissions && typeof s.permissions === 'object') ? s.permissions : {};
+    return !!(p.canSeeAllTickets || p.canMasterPanel);
+  },
+
   canReplyToTicket(department) {
     const s = this.getSession();
     if (!s) return false;
+    if (this.canSeeAllTickets()) return true;
     const role = String(s.role || '').toLowerCase();
-    if (role === 'master' || role === 'fundador' || role === 'diretoria') return true;
 
     // "quem trata (responde)"
     switch (department) {

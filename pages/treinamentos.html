@@ -3,12 +3,16 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
+  <meta http-equiv="Pragma" content="no-cache"/>
+  <meta http-equiv="Expires" content="0"/>
   <script>window.SOUBLU_TREINAMENTOS_PAGE = true;</script>
   <script>window.SOUBLU_SKIP_BACK_TRAP = true;</script>
-  <script charset="UTF-8" src="../js/base-path.js"></script>
-  <script charset="UTF-8" src="../js/db-connect.js?v=1781813000"></script>
+  <script charset="UTF-8" src="../js/base-path.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/db-connect.js?v=trn-quiz4"></script>
   <title>Treinamentos · SOU+BLU</title>
   <meta name="description" content="Plataforma de Treinamentos - SOU+BLU"/>
+  <!-- LMS_BUILD=trn-quiz13-final-cachebust-7e786d -->
   <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
   <link rel="apple-touch-icon" href="../images/logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -18,128 +22,118 @@
   <link rel="stylesheet" href="../css/global.css?v=modal-bs1"/>
   <link rel="stylesheet" href="../css/layout.css?v=esteira1"/>
   <link rel="stylesheet" href="../css/colors-orange.css"/>
-  <link rel="stylesheet" href="../css/leads.css"/>
-  <link rel="stylesheet" href="../css/trainings.css?v=1781705201"/>
+  <link rel="stylesheet" href="../css/trainings.css?v=trn-quiz4"/>
+  <link rel="stylesheet" href="../css/training-tracks.css?v=trn-quiz4"/>
 </head>
-<body class="leads-app">
+<body class="treinamentos-app trn-no-sidebar">
   <!-- Loader -->
   <div id="globalLoader" class="loader-overlay">
     <div class="loader-spinner"></div>
     <p class="loader-text">Carregando Treinamentos...</p>
   </div>
 
+  <!-- Hidden compat elements for legacy JS references -->
+  <span id="pageTitle" style="display:none;"></span>
+  <button id="menuToggle" style="display:none;"></button>
+
   <div class="app-layout" id="appLayout" style="display:none;">
-    <!-- Sidebar -->
-    <aside class="sidebar" id="sidebar">
-      <div class="sidebar-header">
-        <div class="logo-icon" style="display:flex;align-items:center;justify-content:center;">
-          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg>
+    <div class="main-area" id="mainArea">
+
+      <!-- ── Topbar (Clube-style) ── -->
+      <header class="topbar trn-topbar">
+        <div class="trn-topbar-left">
+          <button type="button" class="trn-back-btn" onclick="navigateBack()" title="Voltar ao painel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            <span>Voltar</span>
+          </button>
+          <span class="trn-topbar-brand">SOU+BLU Treinamentos</span>
+          <span class="trn-topbar-section" id="trnTopbarSection"></span>
         </div>
-        <div class="logo-text">SOU <span>+ BLU</span></div>
-      </div>
-
-      <nav class="sidebar-nav">
-        <div class="nav-section-label">Treinamentos</div>
-
-        <a class="nav-item active" data-tab="tab-catalog" onclick="switchTab('tab-catalog')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg></span> Catálogo de Cursos
-        </a>
-
-        <a class="nav-item" data-tab="tab-meus" onclick="switchTab('tab-meus')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg></span> Meu Progresso
-        </a>
-
-        <a class="nav-item trainings-manage-nav" data-tab="tab-gestao" onclick="switchTab('tab-gestao')" style="display:none;">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg></span> Gestão de Cursos
-        </a>
-
-        <a class="nav-item trainings-rh-nav" data-tab="tab-notas" onclick="switchTab('tab-notas')" style="display:none;">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span> Notas do RH
-        </a>
-
-        <div class="nav-section-label">Sistema</div>
-        <a class="nav-item" onclick="navigateBack()">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span> Voltar ao Painel
-        </a>
-        <a class="nav-item" onclick="Auth.logout()">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span> Sair
-        </a>
-      </nav>
-
-      <div class="sidebar-footer">
-        <div class="sidebar-user" id="sidebarUser">
-          <div class="user-avatar" id="userAvatar">?</div>
-          <div class="user-info">
-            <div class="user-name" id="userName">Carregando...</div>
-            <div class="user-role" id="userRole">—</div>
+        <div class="trn-topbar-actions">
+          <button type="button" class="trn-nav-btn" id="trnNavCatalogo" onclick="trnGoTab('tab-catalog')" title="Catálogo de cursos">Catálogo</button>
+          <button type="button" class="trn-nav-btn" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado">Trilhas</button>
+          <button type="button" class="trn-gestao-btn trainings-manage-nav" id="trnNavGestao" onclick="trnGoTab('tab-gestao')" style="display:none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Gestão
+          </button>
+          <button type="button" class="trn-nav-btn trainings-rh-nav" id="trnNavNotas" onclick="trnGoTab('tab-notas')" style="display:none;">Notas RH</button>
+          <div class="trn-topbar-user">
+            <div class="trn-topbar-avatar" id="userAvatar">?</div>
+            <div>
+              <div class="trn-topbar-user-name" id="userName">–</div>
+              <div class="trn-topbar-user-role" id="userRole">Colaborador</div>
+            </div>
           </div>
-        </div>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="main-content">
-      <!-- Topbar -->
-      <header class="topbar">
-        <div class="topbar-left">
-          <button class="btn btn-ghost btn-sm" id="menuToggle" onclick="toggleSidebar()" style="display:none;font-size:20px;">☰</button>
-          <h1 id="pageTitle">Mural de Comunicados</h1>
-        </div>
-        <div class="topbar-right">
-          <span id="topbarUserName" style="font-size:13px;color:var(--color-text-muted);font-weight:600;"></span>
         </div>
       </header>
 
-      <!-- ═══ TAB: Catálogo de Cursos ═══ -->
-      <div class="tab-content active" id="tab-catalog">
-        <div class="page-content" id="catalogRoot">
-          <div class="lms-empty">
-            <div class="lms-empty-icon">📚</div>
-            <div class="lms-empty-text">Carregando cursos...</div>
+      <!-- ── Page content ── -->
+      <main class="page-content" id="trnPageContent">
+
+        <!-- ═══ TAB: Catálogo de Cursos ═══ -->
+        <div class="tab-content active" id="tab-catalog">
+          <div id="catalogRoot">
+            <div class="lms-empty"><div class="lms-empty-text">Carregando cursos...</div></div>
           </div>
         </div>
-      </div>
 
-      <!-- ═══ TAB: Meu Progresso ═══ -->
-      <div class="tab-content" id="tab-meus" style="display:none;">
-        <div class="page-content" id="progressRoot">
-          <div class="lms-empty">
-            <div class="lms-empty-icon">📊</div>
-            <div class="lms-empty-text">Carregando progresso...</div>
+        <!-- ═══ TAB: Universidade / Trilhas ═══ -->
+        <div class="tab-content" id="tab-trilhas" style="display:none;">
+          <div id="tracksRoot">
+            <div class="lms-empty"><div class="lms-empty-text">Carregando trilhas...</div></div>
           </div>
         </div>
-      </div>
 
-      <!-- ═══ TAB: Gestão de Cursos ═══ -->
-      <div class="tab-content" id="tab-gestao" style="display:none;">
-        <div class="page-content" id="gestaoRoot">
-          <div id="trainingsAdminRoot"></div>
+        <!-- ═══ TAB: Gestão de Cursos ═══ -->
+        <div class="tab-content" id="tab-gestao" style="display:none;">
+          <div id="gestaoRoot">
+            <div id="trainingsAdminRoot"></div>
+          </div>
         </div>
-      </div>
 
-      <!-- ═══ TAB: Notas do RH ═══ -->
-      <div class="tab-content" id="tab-notas" style="display:none;">
-        <div class="page-content" id="notasRoot">
-          <div id="trainingsRhRoot"></div>
+        <!-- ═══ TAB: Notas do RH ═══ -->
+        <div class="tab-content" id="tab-notas" style="display:none;">
+          <div id="notasRoot">
+            <div id="trainingsRhRoot"></div>
+          </div>
         </div>
-      </div>
 
-      <!-- ═══ PLAYER DE CURSO (oculto inicialmente) ═══ -->
-      <div id="coursePlayerRoot" style="display:none;"></div>
+        <!-- ═══ PLAYER DE CURSO (oculto inicialmente) ═══ -->
+        <div id="coursePlayerRoot" style="display:none;"></div>
 
-    </main>
+      </main>
+    </div>
   </div>
 
   <!-- Scripts -->
   <script charset="UTF-8" src="../js/security-guard.js"></script>
-  <script charset="UTF-8" src="../js/config.js"></script>
-  <script charset="UTF-8" src="../js/db.js"></script>
-  <script charset="UTF-8" src="../js/auth.js?v=1781813000"></script>
-  <script charset="UTF-8" src="../js/trainings.js?v=1781705201"></script>
+  <script charset="UTF-8" src="../js/config.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/db.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/auth.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/trainings.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/training-tracks.js?v=trn-quiz4"></script>
   <script>
+    /* ── Tab labels for topbar section ── */
+    const _TAB_LABELS = {
+      'tab-catalog': '',
+      'tab-meus':    '',
+      'tab-trilhas': 'Trilhas',
+      'tab-gestao':  'Gestão',
+      'tab-notas':   'Notas RH',
+    };
+    const _TAB_NAV_IDS = {
+      'tab-catalog': 'trnNavCatalogo',
+      'tab-meus':    'trnNavCatalogo',
+      'tab-trilhas': 'trnNavTrilhas',
+      'tab-gestao':  'trnNavGestao',
+      'tab-notas':   'trnNavNotas',
+    };
+
     /* ── Tab switching ── */
     function switchTab(tabId) {
-      // Hide player if visible
+      if (tabId === 'tab-meus') tabId = 'tab-catalog';
+
       const player = document.getElementById('coursePlayerRoot');
       if (player) player.style.display = 'none';
 
@@ -152,28 +146,34 @@
         target.classList.add('active');
         target.style.display = '';
       }
-      document.querySelectorAll('.sidebar-nav .nav-item').forEach(el => el.classList.remove('active'));
-      const navItem = document.querySelector(`.sidebar-nav .nav-item[data-tab="${tabId}"]`);
-      if (navItem) {
-        navItem.classList.add('active');
-        const label = navItem.textContent.trim();
-        document.getElementById('pageTitle').textContent = label;
+
+      // Update topbar section label
+      const sec = document.getElementById('trnTopbarSection');
+      if (sec) sec.textContent = _TAB_LABELS[tabId] ?? '';
+
+      // Update nav button active state
+      Object.values(_TAB_NAV_IDS).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('is-active');
+      });
+      const activeNavId = _TAB_NAV_IDS[tabId];
+      if (activeNavId) {
+        const activeNav = document.getElementById(activeNavId);
+        if (activeNav) activeNav.classList.add('is-active');
       }
 
-      // Trigger rendering
       if (tabId === 'tab-catalog') LMS.renderCatalog();
-      if (tabId === 'tab-meus') LMS.renderProgress();
+      if (tabId === 'tab-trilhas' && window.TrainingTracks) TrainingTracks.renderTracks('tracksRoot');
       if (tabId === 'tab-gestao' && window.Trainings) Trainings.renderAdminManage();
       if (tabId === 'tab-notas' && window.Trainings) Trainings.renderRhReport();
     }
 
-    /* ── Sidebar toggle (mobile) ── */
-    function toggleSidebar() {
-      const sb = document.getElementById('sidebar');
-      sb.classList.toggle('sidebar-open');
+    /* ── Navigate to tab (from topbar buttons) ── */
+    function trnGoTab(tabId) {
+      switchTab(tabId);
     }
 
-    /* ── Navigate back ── */
+    /* ── Navigate back to panel ── */
     function navigateBack() {
       const href = typeof Auth !== 'undefined' && Auth.adminPageHrefFresh
         ? Auth.adminPageHrefFresh()
@@ -194,8 +194,8 @@
           return;
         }
         const activeTab = document.querySelector('.tab-content.active')?.id || 'tab-catalog';
-        if (activeTab === 'tab-catalog' && window.LMS) await LMS.renderCatalog();
-        else if (activeTab === 'tab-meus' && window.LMS) await LMS.renderProgress();
+        if ((activeTab === 'tab-catalog' || activeTab === 'tab-meus') && window.LMS) await LMS.renderCatalog();
+        else if (activeTab === 'tab-trilhas' && window.TrainingTracks) await TrainingTracks.renderTracks('tracksRoot');
         else if (activeTab === 'tab-gestao' && window.Trainings) await Trainings.renderAdminManage();
         else if (activeTab === 'tab-notas' && window.Trainings) await Trainings.renderRhReport();
       } catch (e) {
@@ -226,31 +226,34 @@
     function filterMeusTreinamentos() {}
     function filterGestaoColab() {}
     function filterRhNotas() {}
+    function filterProducts() {}
+    function toggleSidebar() {}
     function openNovoTreinamentoModal() {
       if (window.Trainings) Trainings.openEditor();
     }
 
     /* ══════════════════════════════════════════════
-       LMS — Lógica do catálogo e player estilo Udemy
+       LMS — Catálogo, progresso e player
        ══════════════════════════════════════════════ */
     const LMS = {
-      _currentCategory: 'mural',
+      _currentCategory: 'all',
       _courseData: null,
       _currentTraining: null,
       _currentLessonIdx: 0,
       _currentModuleIdx: 0,
+      _playerView: 'lesson',
+      _quizModuleIdx: null,
+      _userId: null,
+      /** @type {Map<string, object>} trainingId -> attempt (in-memory for catalog/player) */
+      _attemptsByTraining: new Map(),
+      /** Soft-migrate localStorage → DB once per training+user */
+      _migratedKeys: new Set(),
 
       _CATEGORY_COLORS: {
-        obrigatorio: 'cat-obrigatorio',
-        video_vendas: 'cat-video_vendas',
-        curso_institucional: 'cat-curso_institucional',
-        regimento: 'cat-regimento',
-      },
-      _CATEGORY_ICONS: {
-        obrigatorio: '⚠️',
-        video_vendas: '🎬',
-        curso_institucional: '🏛️',
-        regimento: '📋',
+        obrigatorio: 'trn-hub-obrigatorio',
+        video_vendas: 'trn-hub-vendas',
+        curso_institucional: 'trn-hub-institucional',
+        regimento: 'trn-hub-regimento',
       },
       _CATEGORY_LABELS: {
         obrigatorio: 'Obrigatório',
@@ -258,22 +261,111 @@
         curso_institucional: 'Institucional',
         regimento: 'Regimento',
       },
-
-      /* ── Progress helpers ── */
-      _progressKey(trainingId, userId) {
-        return `lms_progress_${trainingId}_${userId}`;
+      _categorySvg(cat) {
+        const common = 'xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"';
+        if (cat === 'obrigatorio') {
+          return `<svg ${common}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>`;
+        }
+        if (cat === 'video_vendas') {
+          return `<svg ${common}><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
+        }
+        if (cat === 'regimento') {
+          return `<svg ${common}><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
+        }
+        return `<svg ${common}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`;
       },
-      getProgress(trainingId, userId) {
+
+      _progressKey(trainingId, userId) {
+        // v3: invalida progresso local antigo que remigrava após reset no servidor
+        return `lms_progress_v3_${trainingId}_${userId}`;
+      },
+      _clearLegacyLocalProgress(trainingId, userId) {
+        try {
+          localStorage.removeItem(`lms_progress_${trainingId}_${userId}`);
+          localStorage.removeItem(`lms_progress_v2_${trainingId}_${userId}`);
+        } catch { /* noop */ }
+      },
+      _localProgress(trainingId, userId) {
         try {
           return JSON.parse(localStorage.getItem(this._progressKey(trainingId, userId)) || '{}');
         } catch { return {}; }
       },
+      _writeLocalProgress(trainingId, userId, p) {
+        try {
+          localStorage.setItem(this._progressKey(trainingId, userId), JSON.stringify(p || {}));
+        } catch { /* noop */ }
+      },
+      _progressFromAttempt(att) {
+        const lp = att?.lesson_progress;
+        if (lp && typeof lp === 'object') {
+          let completed = lp.completed;
+          if (Array.isArray(completed)) completed = {};
+          if (!completed || typeof completed !== 'object') completed = {};
+          let scores = lp.module_quiz_scores;
+          if (Array.isArray(scores)) scores = {};
+          if (!scores || typeof scores !== 'object') scores = {};
+          return {
+            completed: { ...completed },
+            percent: lp.percent,
+            module_quiz_scores: { ...scores },
+          };
+        }
+        return { completed: {}, module_quiz_scores: {} };
+      },
+      getProgress(trainingId, userId) {
+        const att = this._attemptsByTraining.get(String(trainingId));
+        const fromDb = this._progressFromAttempt(att);
+        const fromLocal = this._localProgress(trainingId, userId);
+        const dbKeys = Object.keys(fromDb.completed || {});
+        const localKeys = Object.keys(fromLocal.completed || {});
+        // Após reset no servidor (pending + lesson_progress zerado), ignorar localStorage antigo.
+        if (att?.lesson_progress && typeof att.lesson_progress === 'object'
+          && (att.status === 'pending' || att.status == null) && !att.passed
+          && dbKeys.length === 0
+          && Number(att.lesson_progress.percent) === 0
+          && (att.score == null || att.score === '')) {
+          this._writeLocalProgress(trainingId, userId, { completed: {}, percent: 0, module_quiz_scores: {} });
+          return { completed: {}, percent: 0, module_quiz_scores: {} };
+        }
+        if (!dbKeys.length && !localKeys.length) return { completed: {}, module_quiz_scores: {} };
+        if (!dbKeys.length) return fromLocal;
+        if (!localKeys.length) return fromDb;
+        // Union: DB is source of truth, keep any local-only keys until next persist.
+        return {
+          completed: { ...fromLocal.completed, ...fromDb.completed },
+          percent: fromDb.percent != null ? fromDb.percent : fromLocal.percent,
+          module_quiz_scores: { ...(fromLocal.module_quiz_scores || {}), ...(fromDb.module_quiz_scores || {}) },
+        };
+      },
       setLessonComplete(trainingId, userId, moduleIdx, lessonIdx) {
         const p = this.getProgress(trainingId, userId);
         if (!p.completed) p.completed = {};
-        const key = `${moduleIdx}_${lessonIdx}`;
-        p.completed[key] = true;
-        localStorage.setItem(this._progressKey(trainingId, userId), JSON.stringify(p));
+        p.completed[`${moduleIdx}_${lessonIdx}`] = true;
+        this._writeLocalProgress(trainingId, userId, p);
+        const att = this._attemptsByTraining.get(String(trainingId)) || {};
+        att.lesson_progress = {
+          completed: { ...p.completed },
+          percent: p.percent,
+          module_quiz_scores: { ...(p.module_quiz_scores || {}) },
+        };
+        this._attemptsByTraining.set(String(trainingId), att);
+        return p;
+      },
+      setModuleQuizComplete(trainingId, userId, moduleIdx, score) {
+        const p = this.getProgress(trainingId, userId);
+        if (!p.completed) p.completed = {};
+        p.completed[`quiz_${moduleIdx}`] = true;
+        if (!p.module_quiz_scores) p.module_quiz_scores = {};
+        p.module_quiz_scores[String(moduleIdx)] = score;
+        this._writeLocalProgress(trainingId, userId, p);
+        const att = this._attemptsByTraining.get(String(trainingId)) || {};
+        att.lesson_progress = {
+          completed: { ...p.completed },
+          percent: p.percent,
+          module_quiz_scores: { ...p.module_quiz_scores },
+        };
+        this._attemptsByTraining.set(String(trainingId), att);
+        return p;
       },
       isLessonComplete(trainingId, userId, moduleIdx, lessonIdx) {
         const p = this.getProgress(trainingId, userId);
@@ -292,17 +384,131 @@
         return { total, done, pct: total ? Math.round((done / total) * 100) : 0 };
       },
 
-      /* ── Parse modules from training ── */
-      _getModules(training) {
-        if (!training) return [];
-        // Try parsing content_body as course JSON
+      async _loadAttemptsForUser(userId) {
+        this._attemptsByTraining = new Map();
+        if (!userId || typeof DB === 'undefined') return;
         try {
-          const parsed = JSON.parse(training.content_body || '');
-          if (parsed && parsed.type === 'course' && Array.isArray(parsed.modules)) {
-            return parsed.modules;
+          const rows = await DB.getTrainingAttempts({ userId, limit: 2000 });
+          for (const r of rows || []) {
+            if (r?.training_id) this._attemptsByTraining.set(String(r.training_id), r);
           }
-        } catch {}
-        // If not a course, create a single-lesson "module" from legacy fields
+        } catch (e) {
+          console.warn('[LMS] load attempts:', e);
+        }
+      },
+
+      /** Soft-migrate localStorage → DB when attempt has no lesson_progress yet. */
+      async _migrateLocalProgress(trainingId, userId) {
+        const key = `${trainingId}_${userId}`;
+        if (this._migratedKeys.has(key)) return;
+        this._migratedKeys.add(key);
+        const local = this._localProgress(trainingId, userId);
+        const localDone = local?.completed && Object.keys(local.completed).length;
+        if (!localDone) return;
+        const att = this._attemptsByTraining.get(String(trainingId));
+        const rawCompleted = att?.lesson_progress?.completed;
+        const dbCompleted = Array.isArray(rawCompleted) ? {} : (rawCompleted && typeof rawCompleted === 'object' ? rawCompleted : {});
+        const dbDone = Object.keys(dbCompleted).length > 0;
+        // Servidor foi resetado (pending + 0%): NÃO reenviar progresso antigo do navegador.
+        const serverReset = !!(att?.lesson_progress && typeof att.lesson_progress === 'object'
+          && (att.status === 'pending' || att.status == null) && !att.passed
+          && Number(att.lesson_progress.percent) === 0
+          && !dbDone
+          && (att.score == null || att.score === ''));
+        if (serverReset) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'post-fix',hypothesisId:'RESET',location:'treinamentos.html:_migrateLocalProgress',message:'blocked local remigrate after server reset',data:{trainingId,localKeys:Object.keys(local.completed||{}).length},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          this._writeLocalProgress(trainingId, userId, { completed: {}, percent: 0, module_quiz_scores: {} });
+          return;
+        }
+        if (dbDone) {
+          // Prefer DB as source of truth; refresh local cache.
+          this._writeLocalProgress(trainingId, userId, this._progressFromAttempt(att));
+          return;
+        }
+        try {
+          const saved = await DB.saveTrainingLessonProgress(trainingId, userId, {
+            completed: local.completed,
+            percent: local.percent,
+          });
+          if (saved) this._attemptsByTraining.set(String(trainingId), saved);
+        } catch (e) {
+          console.warn('[LMS] migrate progress:', e);
+        }
+      },
+
+      async _persistLessonProgress(trainingId, userId) {
+        const progress = this.getCourseProgress(
+          this._currentTraining || { id: trainingId },
+          userId
+        );
+        const p = this.getProgress(trainingId, userId);
+        const payload = {
+          completed: p.completed || {},
+          percent: progress.pct,
+          module_quiz_scores: p.module_quiz_scores || {},
+        };
+        this._writeLocalProgress(trainingId, userId, payload);
+        try {
+          const saved = await DB.saveTrainingLessonProgress(trainingId, userId, payload);
+          if (saved) this._attemptsByTraining.set(String(trainingId), saved);
+        } catch (e) {
+          console.warn('[LMS] save progress:', e);
+        }
+      },
+
+      _getAttempt(trainingId) {
+        return this._attemptsByTraining.get(String(trainingId)) || null;
+      },
+
+      _statusForCourse(att, progress) {
+        if (att?.passed || att?.status === 'passed') {
+          return { text: 'Aprovado', kind: 'ok', go: 'REVER' };
+        }
+        if (att?.status === 'penalized') {
+          return { text: 'Penalizado', kind: 'bad', go: 'CONTINUAR' };
+        }
+        if (att?.status === 'failed' || (att?.score != null && !att.passed)) {
+          return { text: 'Reprovado', kind: 'bad', go: 'CONTINUAR' };
+        }
+        if (progress.done > 0) {
+          return { text: 'Em andamento', kind: 'progress', go: 'CONTINUAR' };
+        }
+        return { text: 'Pendente', kind: 'pending', go: 'ABRIR' };
+      },
+
+      _dbgLog(hypothesisId, location, message, data) {
+        const payload = { sessionId: '7e786d', runId: 'post-fix', hypothesisId, location, message, data: data || {}, timestamp: Date.now() };
+        try {
+          const key = 'debug_7e786d_logs';
+          const prev = JSON.parse(sessionStorage.getItem(key) || '[]');
+          prev.push(payload);
+          sessionStorage.setItem(key, JSON.stringify(prev.slice(-80)));
+        } catch { /* noop */ }
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify(payload)}).catch(()=>{});
+        // #endregion
+      },
+
+      _parseCourse(training) {
+        if (!training) return null;
+        try {
+          let raw = training.content_body;
+          if (raw && typeof raw === 'object') {
+            return (raw.type === 'course' && Array.isArray(raw.modules)) ? raw : null;
+          }
+          if (typeof raw === 'string' && raw.trim()) {
+            const parsed = JSON.parse(raw);
+            if (parsed && parsed.type === 'course' && Array.isArray(parsed.modules)) return parsed;
+          }
+        } catch { /* noop */ }
+        return null;
+      },
+
+      _getModules(training) {
+        const course = this._parseCourse(training);
+        if (course) return course.modules;
         const lessons = [];
         if (training.video_url) lessons.push({ id: 'v1', title: training.title || 'Vídeo', type: 'video', url: training.video_url });
         if (training.resource_url) lessons.push({ id: 'r1', title: 'Material de apoio', type: 'pdf', url: training.resource_url });
@@ -314,6 +520,188 @@
       },
       _isJson(str) {
         try { const p = JSON.parse(str); return p && typeof p === 'object'; } catch { return false; }
+      },
+
+      _getFinalQuestions(tr) {
+        const course = this._parseCourse(tr);
+        const raw = course?.final_quiz?.questions || course?.final_questions || [];
+        return (raw || []).map((q) => this._normQuestion(q)).filter(Boolean);
+      },
+
+      _finalQuizTitle(tr) {
+        const course = this._parseCourse(tr);
+        return course?.final_quiz?.title || 'Perguntas Gerais';
+      },
+
+      _isFinalQuizComplete(tr, userId) {
+        const p = this.getProgress(tr.id, userId);
+        return !!(p.completed && p.completed.quiz_final);
+      },
+
+      _finalQuizScore(tr, userId) {
+        const p = this.getProgress(tr.id, userId);
+        const score = p.module_quiz_scores?.final;
+        return score != null ? Number(score) : null;
+      },
+
+      _allModuleQuizzesDone(tr, userId) {
+        const modules = this._getModules(tr);
+        for (let i = 0; i < modules.length; i++) {
+          const qs = this._getModuleQuestions(tr, i, modules[i], modules);
+          if (!qs.length) continue;
+          if (!this._isModuleQuizComplete(tr, userId, i)) return false;
+        }
+        return true;
+      },
+
+      _isFinalQuizUnlocked(tr, userId) {
+        const modules = this._getModules(tr);
+        const lessonsDone = modules.every((_, i) => this._isModuleLessonsComplete(tr, userId, i));
+        return lessonsDone && this._allModuleQuizzesDone(tr, userId);
+      },
+
+      _resolveMediaUrl(url) {
+        const raw = String(url || '').trim();
+        if (!raw) return '';
+        if (/^data:/i.test(raw)) return raw;
+        if (typeof resolvePhotoUrl === 'function') return resolvePhotoUrl(raw);
+        if (typeof resolveFileUrl === 'function') return resolveFileUrl(raw);
+        const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
+        if (/^https?:\/\//i.test(raw)) {
+          if (/supabase\.co\/storage/i.test(raw)) {
+            const m = raw.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
+            if (m) return `${base}/api/file.php?path=${encodeURIComponent(m[1] + '/' + m[2])}`;
+          }
+          return raw;
+        }
+        if (/^(?:\/)?api\/file\.php/i.test(raw)) {
+          return `${base}${raw.startsWith('/') ? raw : '/' + raw}`;
+        }
+        const rel = raw.replace(/^\.\//, '').replace(/^\//, '');
+        const storageBuckets = 'docs|profile-photos|product-images|partner-docs|ticket-docs|sonhos|misc|proposal-attachments|finance-docs|rh-docs|mural';
+        if (new RegExp(`^(${storageBuckets})/`, 'i').test(rel) || /^uploads\//i.test(rel)) {
+          const path = rel.replace(/^uploads\//i, '');
+          return `${base}/api/file.php?path=${encodeURIComponent(path)}`;
+        }
+        return `${base}/${rel}`;
+      },
+
+      _normQuestion(item) {
+        if (!item || typeof item !== 'object') return null;
+        const q = String(item.q || item.question || '').trim();
+        const options = (item.options || []).map(o => String(o ?? '').trim()).filter(Boolean);
+        if (!q || options.length < 2) return null;
+        let correct = parseInt(item.correct ?? item.correctIndex ?? 0, 10);
+        if (!Number.isFinite(correct) || correct < 0 || correct >= options.length) correct = 0;
+        return { q, options, correct };
+      },
+
+      _getModuleQuestions(tr, modIdx, module, modules) {
+        const modQs = (module?.questions || []).map(q => this._normQuestion(q)).filter(Boolean);
+        if (modQs.length) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'using module.questions',data:{modIdx,count:modQs.length,firstQ:(modQs[0]&&modQs[0].q||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          return modQs;
+        }
+        const all = (tr?.questions || []).map(q => this._normQuestion(q)).filter(Boolean);
+        if (!all.length || !modules?.length) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'no questions available',data:{modIdx,courseQ:all.length,modules:(modules||[]).length},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          return [];
+        }
+        const n = modules.length;
+        // Distribui o banco entre os módulos; se sobrar pouco, cada um usa o banco inteiro.
+        if (all.length < n) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'course bank smaller than modules — reuse all',data:{modIdx,courseQ:all.length,n,firstQ:(all[0]&&all[0].q||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          return all.slice();
+        }
+        const perMod = Math.floor(all.length / n);
+        const extra = all.length % n;
+        let start = 0;
+        for (let i = 0; i < modIdx; i++) start += perMod + (i < extra ? 1 : 0);
+        const count = perMod + (modIdx < extra ? 1 : 0);
+        const slice = all.slice(start, start + count);
+        const out = slice.length ? slice : all.slice();
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'split course questions',data:{modIdx,courseQ:all.length,n,start,count,outCount:out.length,firstQ:(out[0]&&out[0].q||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        return out;
+      },
+
+      _courseHasQuizzes(tr, modules) {
+        const mods = modules || this._getModules(tr);
+        if ((tr?.questions || []).length) return true;
+        return mods.some((m) => (m.questions || []).length > 0);
+      },
+
+      _driveFileId(url) {
+        const u = String(url || '');
+        const m = u.match(/\/d\/([\w-]+)/) || u.match(/[?&]id=([\w-]+)/);
+        return m ? m[1] : '';
+      },
+
+      _mediaFallback(url, label) {
+        const u = String(url || '').trim();
+        const safe = this._esc(u);
+        return `<div class="lms-media-fallback">
+          <div class="lms-media-fallback__icon" aria-hidden="true">▶</div>
+          <p class="lms-media-fallback__title">${this._esc(label || 'Não foi possível embutir o conteúdo')}</p>
+          <p class="lms-media-fallback__hint">Abra em uma nova aba ou confira o link do material na Gestão.</p>
+          ${u ? `<a class="lms-media-fallback__btn" href="${safe}" target="_blank" rel="noopener">Abrir conteúdo</a>` : ''}
+        </div>`;
+      },
+
+      _lessonMediaHtml(lesson) {
+        if (!lesson) return this._mediaFallback('', 'Aula sem conteúdo');
+        const rawUrl = String(lesson.url || '').trim();
+        let type = String(lesson.type || 'text').toLowerCase();
+        if (rawUrl) {
+          if (/\.(pptx?|docx?|xlsx?)(\?|#|$)/i.test(rawUrl)) type = 'office';
+          else if (/\.pdf(\?|#|$)/i.test(rawUrl)) type = 'pdf';
+          else if (/\.(mp4|webm|ogg|mov)(\?|#|$)/i.test(rawUrl)) type = 'video';
+          else if (/(youtube\.com|youtu\.be|vimeo\.com)/i.test(rawUrl)) type = 'video';
+        }
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'A,B',location:'treinamentos.html:_lessonMediaHtml',message:'lesson media resolve',data:{rawType:lesson.type,resolvedType:type,urlHost:(()=>{try{return new URL(rawUrl,location.origin).host}catch(_){return ''}})(),ext:(rawUrl.split('?')[0].split('.').pop()||'').slice(0,8),hasUrl:!!rawUrl},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (type === 'video') {
+          if (!rawUrl) return this._mediaFallback('', 'Vídeo sem URL cadastrada');
+          return this._embedVideo(rawUrl) || this._mediaFallback(rawUrl, 'Vídeo indisponível');
+        }
+        if (type === 'office') {
+          if (!rawUrl) return this._mediaFallback('', 'Material sem URL cadastrada');
+          return this._embedOffice(rawUrl);
+        }
+        if (type === 'pdf') {
+          if (!rawUrl) return this._mediaFallback('', 'PDF sem URL cadastrada');
+          return this._embedPdf(rawUrl) || this._mediaFallback(rawUrl, 'PDF indisponível');
+        }
+        if (type === 'text' || lesson.content) {
+          return `<div class="lms-text-content">${this._esc(lesson.content || '')}</div>`;
+        }
+        if (rawUrl) return this._embedVideo(rawUrl) || this._mediaFallback(rawUrl, 'Conteúdo indisponível');
+        return this._mediaFallback('', 'Aula sem conteúdo');
+      },
+
+      _isModuleLessonsComplete(tr, userId, modIdx) {
+        const lessons = this._getModules(tr)[modIdx]?.lessons || [];
+        if (!lessons.length) return true;
+        return lessons.every((_, lIdx) => this.isLessonComplete(tr.id, userId, modIdx, lIdx));
+      },
+
+      _isModuleQuizComplete(tr, userId, modIdx) {
+        const p = this.getProgress(tr.id, userId);
+        return !!(p.completed && p.completed[`quiz_${modIdx}`]);
+      },
+
+      _moduleQuizScore(tr, userId, modIdx) {
+        const p = this.getProgress(tr.id, userId);
+        const score = p.module_quiz_scores?.[String(modIdx)];
+        return score != null ? Number(score) : null;
       },
 
       _esc(s) {
@@ -329,18 +717,30 @@
         const user = await this._getUser();
         if (!user) return;
 
-        // Load trainings
         const all = await this._getAllTrainingsForUser(user);
-        const cat = this._currentCategory;
-        const filtered = cat === 'all' ? all : all.filter(t => t.category === cat);
-        // Also load mural posts
-        const muralPosts = cat === 'all' || cat === 'mural' ? await this._getMuralPosts(user) : [];
+        await this._loadAttemptsForUser(user.id);
+        // Descarta progresso local legado e alinha com reset do servidor.
+        for (const tr of all) {
+          this._clearLegacyLocalProgress(tr.id, user.id);
+          const att = this._getAttempt(tr.id);
+          const lp = att?.lesson_progress;
+          const completed = lp?.completed;
+          const emptyCompleted = !completed || (typeof completed === 'object' && Object.keys(Array.isArray(completed) ? {} : completed).length === 0)
+            || (Array.isArray(completed) && completed.length === 0);
+          if (att && emptyCompleted && Number(lp?.percent) === 0 && (att.status === 'pending' || !att.score)) {
+            this._writeLocalProgress(tr.id, user.id, { completed: {}, percent: 0, module_quiz_scores: {} });
+          }
+        }
+        // Soft-migrate local progress for visible courses (non-blocking batch).
+        await Promise.all(all.map(tr => this._migrateLocalProgress(tr.id, user.id).catch(() => null)));
 
-        // Stats
+        const cat = this._currentCategory === 'mural' ? 'all' : this._currentCategory;
+        this._currentCategory = cat;
+        const filtered = cat === 'all' ? all : all.filter(t => t.category === cat);
+
         let totalCourses = all.length, completed = 0, inProgress = 0, pending = 0;
         for (const tr of all) {
-          const att = await DB.getTrainingAttempt(tr.id, user.id).catch(() => null);
-          const modules = this._getModules(tr);
+          const att = this._getAttempt(tr.id);
           const progress = this.getCourseProgress(tr, user.id);
           if (att?.passed) completed++;
           else if (progress.done > 0) inProgress++;
@@ -348,183 +748,132 @@
         }
 
         let html = `
-          <div class="lms-header">
-            <div>
-              <h2 class="lms-header-title">🎓 Plataforma de Ensino</h2>
-              <p class="lms-header-subtitle">Desenvolva suas habilidades com nossos cursos e treinamentos</p>
+          <div class="trn-catalog">
+            <section class="trn-hero">
+              <div class="trn-hero-kicker">SOU+BLU Treinamentos</div>
+              <h2>Seus cursos em um só lugar</h2>
+              <p>Aprenda no seu ritmo — conteúdos, provas e progresso salvos automaticamente.</p>
+              <div class="trn-hero-meta">
+                <div class="trn-chip">${totalCourses} curso${totalCourses !== 1 ? 's' : ''} disponíve${totalCourses !== 1 ? 'is' : 'l'}</div>
+              </div>
+            </section>
+
+            <div class="trn-metrics" aria-label="Resumo do progresso">
+              <div class="trn-metric is-progress">
+                <div class="trn-metric-label">Em andamento</div>
+                <div class="trn-metric-value">${inProgress}</div>
+              </div>
+              <div class="trn-metric is-ok">
+                <div class="trn-metric-label">Concluídos</div>
+                <div class="trn-metric-value">${completed}</div>
+              </div>
+              <div class="trn-metric is-pending">
+                <div class="trn-metric-label">Pendentes</div>
+                <div class="trn-metric-value">${pending}</div>
+              </div>
             </div>
-          </div>
 
-          <div class="lms-stats">
-            <div class="lms-stat"><div class="lms-stat-value accent">${totalCourses}</div><div class="lms-stat-label">Total de Cursos</div></div>
-            <div class="lms-stat"><div class="lms-stat-value success">${completed}</div><div class="lms-stat-label">Concluídos</div></div>
-            <div class="lms-stat"><div class="lms-stat-value warning">${inProgress}</div><div class="lms-stat-label">Em Andamento</div></div>
-            <div class="lms-stat"><div class="lms-stat-value danger">${pending}</div><div class="lms-stat-label">Pendentes</div></div>
-          </div>
+            <div class="trn-filters" role="tablist" aria-label="Categorias">
+              <button type="button" class="trn-filter ${cat === 'all' ? 'active' : ''}" onclick="LMS.filterCategory('all')">Todos</button>
+              <button type="button" class="trn-filter ${cat === 'obrigatorio' ? 'active' : ''}" onclick="LMS.filterCategory('obrigatorio')">Obrigatórios</button>
+              <button type="button" class="trn-filter ${cat === 'video_vendas' ? 'active' : ''}" onclick="LMS.filterCategory('video_vendas')">Vendas</button>
+              <button type="button" class="trn-filter ${cat === 'curso_institucional' ? 'active' : ''}" onclick="LMS.filterCategory('curso_institucional')">Institucionais</button>
+              <button type="button" class="trn-filter ${cat === 'regimento' ? 'active' : ''}" onclick="LMS.filterCategory('regimento')">Regimento</button>
+            </div>`;
 
-          <div class="lms-category-tabs">
-            <button class="lms-cat-tab ${cat === 'all' ? 'active' : ''}" onclick="LMS.filterCategory('all')">📚 Todos</button>
-            <button class="lms-cat-tab ${cat === 'mural' ? 'active' : ''}" onclick="LMS.filterCategory('mural')">📢 Mural</button>
-            <button class="lms-cat-tab ${cat === 'obrigatorio' ? 'active' : ''}" onclick="LMS.filterCategory('obrigatorio')">⚠️ Obrigatórios</button>
-            <button class="lms-cat-tab ${cat === 'video_vendas' ? 'active' : ''}" onclick="LMS.filterCategory('video_vendas')">🎬 Vendas</button>
-            <button class="lms-cat-tab ${cat === 'curso_institucional' ? 'active' : ''}" onclick="LMS.filterCategory('curso_institucional')">🏛️ Institucionais</button>
-            <button class="lms-cat-tab ${cat === 'regimento' ? 'active' : ''}" onclick="LMS.filterCategory('regimento')">📋 Regimento</button>
-          </div>`;
-
-        if (cat === 'mural') {
-          // Show mural posts
-          if (!muralPosts.length) {
-            html += '<div class="lms-empty"><div class="lms-empty-icon">📢</div><div class="lms-empty-text">Nenhum comunicado no mural</div></div>';
-          } else {
-            html += muralPosts.map(p => `
-              <div class="card card-padded" style="margin-bottom:12px;${p.pinned ? 'border-left:4px solid #667eea;' : ''}">
-                <div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                  <h4 style="margin:0 0 8px;">${p.pinned ? '📌 ' : ''}${this._esc(p.title)}</h4>
-                  <small class="text-muted">${this._fmtDt(p.created_at)}</small>
-                </div>
-                <div style="white-space:pre-wrap;font-size:14px;line-height:1.6;">${this._esc(p.body || '')}</div>
-              </div>`).join('');
-          }
+        if (!filtered.length) {
+          html += '<div class="trn-empty"><p>Nenhum curso nesta categoria</p></div>';
         } else {
-          // Show course cards
-          if (!filtered.length) {
-            html += '<div class="lms-empty"><div class="lms-empty-icon">📚</div><div class="lms-empty-text">Nenhum curso nesta categoria</div></div>';
-          } else {
-            html += '<div class="lms-catalog">';
-            for (const tr of filtered) {
-              html += await this._renderCourseCard(tr, user);
-            }
-            html += '</div>';
+          html += '<div class="trn-hub" aria-label="Catálogo de cursos">';
+          for (const tr of filtered) {
+            html += this._renderCourseCard(tr, user);
           }
+          html += '</div>';
         }
 
+        html += '</div>';
         root.innerHTML = html;
       },
 
-      async _renderCourseCard(tr, user) {
-        const att = await DB.getTrainingAttempt(tr.id, user.id).catch(() => null);
+      _renderCourseCard(tr, user) {
+        const att = this._getAttempt(tr.id);
         const modules = this._getModules(tr);
         const progress = this.getCourseProgress(tr, user.id);
-        const catColor = this._CATEGORY_COLORS[tr.category] || '';
-        const catIcon = this._CATEGORY_ICONS[tr.category] || '📚';
-        const catLabel = this._CATEGORY_LABELS[tr.category] || tr.category || '';
+        const tileClass = this._CATEGORY_COLORS[tr.category] || 'trn-hub-institucional';
+        const catLabel = this._CATEGORY_LABELS[tr.category] || tr.category || 'Curso';
         const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
-
-        let statusClass = 'pending', statusText = 'Pendente';
-        let btnClass = '', btnText = 'Iniciar Curso';
-        if (att?.passed) {
-          statusClass = 'passed'; statusText = 'Concluído';
-          btnClass = 'btn-review'; btnText = '↻ Rever';
-        } else if (progress.done > 0) {
-          statusClass = 'in-progress'; statusText = `${progress.pct}% concluído`;
-          btnClass = 'btn-continue'; btnText = '▶ Continuar';
-        }
+        const id = this._esc(tr.id);
+        const status = this._statusForCourse(att, progress);
+        const notaText = att?.score != null ? String(att.score) : '—';
+        const prazoText = tr.deadline_at ? this._fmtDt(tr.deadline_at).split(',')[0] : '—';
+        const lessonsHint = totalLessons
+          ? `${progress.done}/${totalLessons} aula${totalLessons !== 1 ? 's' : ''}`
+          : '';
 
         return `
-          <div class="lms-course-card" onclick="LMS.openCourse('${this._esc(tr.id)}')">
-            <div class="lms-card-thumb">
-              <div class="lms-card-thumb-bg ${catColor}"></div>
-              <div class="lms-card-thumb-icon">${catIcon}</div>
-              <span class="lms-card-badge">${this._esc(catLabel)}</span>
-              <span class="lms-card-status-badge ${statusClass}">${statusText}</span>
-            </div>
-            <div class="lms-card-body">
-              <h3 class="lms-card-title">${this._esc(tr.title)}</h3>
-              <div class="lms-card-meta">
-                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline></svg> ${totalLessons} aula${totalLessons !== 1 ? 's' : ''}</span>
-                <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg> ${modules.length} módulo${modules.length !== 1 ? 's' : ''}</span>
-                ${tr.deadline_at ? `<span>📅 ${this._fmtDt(tr.deadline_at).split(',')[0]}</span>` : ''}
-              </div>
-              ${tr.description ? `<p style="font-size:13px;color:var(--color-text-muted);margin:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${this._esc(tr.description)}</p>` : ''}
-              <div class="lms-card-progress-wrap">
-                <div class="lms-card-progress-bar"><div class="lms-card-progress-fill" style="width:${progress.pct}%"></div></div>
-                <div class="lms-card-progress-text">${progress.done}/${progress.total} aulas</div>
-              </div>
-            </div>
-            <div class="lms-card-footer">
-              <button class="lms-card-btn ${btnClass}" onclick="event.stopPropagation(); LMS.openCourse('${this._esc(tr.id)}')">${btnText}</button>
-            </div>
-          </div>`;
+          <button type="button" class="trn-hub-tile ${tileClass}" onclick="LMS.openCourse('${id}')">
+            <span class="trn-hub-top">
+              <span class="trn-hub-icon" aria-hidden="true">${this._categorySvg(tr.category)}</span>
+              <span class="trn-hub-badges">
+                <span class="trn-hub-cat">${this._esc(catLabel)}</span>
+                <span class="trn-hub-status is-${status.kind}">${this._esc(status.text)}</span>
+              </span>
+            </span>
+            <span class="trn-hub-copy">
+              <strong>${this._esc(tr.title)}</strong>
+              ${lessonsHint ? `<small>${this._esc(lessonsHint)}</small>` : ''}
+            </span>
+            <span class="trn-hub-facts" aria-label="Prazo e nota">
+              <span class="trn-hub-fact"><span class="trn-hub-fact-label">Prazo</span><span class="trn-hub-fact-value">${this._esc(prazoText)}</span></span>
+              <span class="trn-hub-fact"><span class="trn-hub-fact-label">Nota</span><span class="trn-hub-fact-value">${this._esc(notaText)}</span></span>
+            </span>
+            <span class="trn-hub-meta" aria-label="Progresso">
+              <span class="trn-hub-progress">
+                <span class="trn-hub-progress-bar" role="progressbar" aria-valuenow="${progress.pct}" aria-valuemin="0" aria-valuemax="100">
+                  <span class="trn-hub-progress-fill" style="width:${progress.pct}%"></span>
+                </span>
+                <span class="trn-hub-progress-pct">${progress.pct}%</span>
+              </span>
+            </span>
+            <span class="trn-hub-go">${status.go}</span>
+          </button>`;
       },
 
-      /* ══════════════════════════
-         PROGRESS RENDERING
-         ══════════════════════════ */
+      /** @deprecated Progresso agora vive nos cards do Catálogo; mantido para compat. */
       async renderProgress() {
-        const root = document.getElementById('progressRoot');
-        if (!root) return;
-        const user = await this._getUser();
-        if (!user) return;
-
-        const all = await this._getAllTrainingsForUser(user);
-        let rows = '';
-        for (const tr of all) {
-          const att = await DB.getTrainingAttempt(tr.id, user.id).catch(() => null);
-          const progress = this.getCourseProgress(tr, user.id);
-          const catLabel = this._CATEGORY_LABELS[tr.category] || tr.category;
-          let statusBadge = '<span class="badge badge-muted">Pendente</span>';
-          if (att?.passed) statusBadge = '<span class="badge badge-success">Aprovado</span>';
-          else if (att?.status === 'failed') statusBadge = '<span class="badge badge-danger">Reprovado</span>';
-          else if (att?.status === 'penalized') statusBadge = '<span class="badge badge-danger">Penalizado</span>';
-          else if (progress.done > 0) statusBadge = '<span class="badge badge-warning">Em andamento</span>';
-
-          rows += `<tr>
-            <td><strong>${this._esc(tr.title)}</strong></td>
-            <td><span class="badge badge-accent">${this._esc(catLabel)}</span></td>
-            <td>${tr.deadline_at ? this._fmtDt(tr.deadline_at) : '—'}</td>
-            <td><strong>${att?.score != null ? att.score + '%' : '—'}</strong></td>
-            <td>
-              <div style="display:flex;align-items:center;gap:8px;">
-                <div style="flex:1;height:6px;background:var(--color-border,#e5e7eb);border-radius:10px;overflow:hidden;">
-                  <div style="height:100%;width:${progress.pct}%;background:linear-gradient(90deg,#667eea,#764ba2);border-radius:10px;"></div>
-                </div>
-                <span style="font-size:12px;font-weight:600;color:var(--color-text-muted);">${progress.pct}%</span>
-              </div>
-            </td>
-            <td>${statusBadge}</td>
-            <td><button class="btn btn-primary btn-sm" onclick="LMS.openCourse('${this._esc(tr.id)}')">Acessar</button></td>
-          </tr>`;
-        }
-
-        root.innerHTML = `
-          <div class="lms-header">
-            <div>
-              <h2 class="lms-header-title">📊 Meu Progresso</h2>
-              <p class="lms-header-subtitle">Acompanhe seu desempenho em todos os cursos</p>
-            </div>
-          </div>
-          <div class="card card-padded">
-            <div class="table-wrap">
-              <table class="data-table">
-                <thead>
-                  <tr>
-                    <th>Curso</th>
-                    <th>Categoria</th>
-                    <th>Prazo</th>
-                    <th>Nota</th>
-                    <th>Progresso</th>
-                    <th>Status</th>
-                    <th>Ações</th>
-                  </tr>
-                </thead>
-                <tbody>${rows || '<tr><td colspan="7" class="text-center text-muted" style="padding:32px;">Nenhum treinamento atribuído</td></tr>'}</tbody>
-              </table>
-            </div>
-          </div>`;
+        return this.renderCatalog();
       },
 
       /* ══════════════════════════
          COURSE PLAYER
          ══════════════════════════ */
       async openCourse(trainingId) {
-        const tr = await DB.getTraining(trainingId);
+        const tr = await DB.getTraining(trainingId, { bypassCache: true });
         if (!tr) return;
         const user = await this._getUser();
         if (!user) return;
 
+        if (!this._attemptsByTraining.has(String(trainingId))) {
+          try {
+            const att = await DB.getTrainingAttempt(trainingId, user.id);
+            if (att) this._attemptsByTraining.set(String(trainingId), att);
+          } catch { /* noop */ }
+        }
+        await this._migrateLocalProgress(trainingId, user.id);
+
         const modules = this._getModules(tr);
+        const course = this._parseCourse(tr);
+        const finalQ = this._getFinalQuestions(tr);
+        this._dbgLog('A', 'treinamentos.html:openCourse', 'opened course with cache bypass', {
+          trainingId,
+          modules: modules.length,
+          hasCourse: !!course,
+          finalQ: finalQ.length,
+          finalTitle: this._finalQuizTitle(tr),
+          bodyType: typeof tr.content_body,
+          bodyHasFinal: typeof tr.content_body === 'string' ? /"final_quiz"/.test(tr.content_body) : !!(course && course.final_quiz),
+        });
         if (!modules.length) {
-          // Legacy training with no modules — open the old take modal
           if (window.Trainings) Trainings.openTake(trainingId);
           return;
         }
@@ -532,15 +881,16 @@
         this._currentTraining = tr;
         this._currentModuleIdx = 0;
         this._currentLessonIdx = 0;
+        this._playerView = 'lesson';
+        this._quizModuleIdx = null;
         this._userId = user.id;
 
-        // Find first incomplete lesson
         for (let mi = 0; mi < modules.length; mi++) {
           for (let li = 0; li < (modules[mi].lessons || []).length; li++) {
             if (!this.isLessonComplete(tr.id, user.id, mi, li)) {
               this._currentModuleIdx = mi;
               this._currentLessonIdx = li;
-              mi = modules.length; // break outer
+              mi = modules.length;
               break;
             }
           }
@@ -556,46 +906,71 @@
         const userId = this._userId;
         const mi = this._currentModuleIdx;
         const li = this._currentLessonIdx;
-        const lesson = modules[mi]?.lessons?.[li];
+        const inFinalQuiz = this._playerView === 'quiz' && this._quizModuleIdx === 'final';
+        const inQuiz = this._playerView === 'quiz' && this._quizModuleIdx != null;
+        const lesson = inQuiz ? null : modules[mi]?.lessons?.[li];
         const progress = this.getCourseProgress(tr, userId);
-        const hasQuiz = !!(tr.questions && tr.questions.length);
+        const finalQuestions = this._getFinalQuestions(tr);
+        this._dbgLog('A', 'treinamentos.html:_renderPlayer', 'final quiz render state', {
+          finalQ: finalQuestions.length,
+          inFinalQuiz,
+          unlocked: this._isFinalQuizUnlocked(tr, userId),
+          done: this._isFinalQuizComplete(tr, userId),
+          title: this._finalQuizTitle(tr),
+        });
 
-        // Hide all tabs, show player
         document.querySelectorAll('.tab-content').forEach(el => { el.classList.remove('active'); el.style.display = 'none'; });
         const playerRoot = document.getElementById('coursePlayerRoot');
         playerRoot.style.display = '';
 
-        // Render main content area
         let contentHtml = '';
-        if (lesson) {
-          if (lesson.type === 'video' && lesson.url) {
-            contentHtml = this._embedVideo(lesson.url);
-          } else if (lesson.type === 'pdf' && lesson.url) {
-            contentHtml = this._embedPdf(lesson.url);
-          } else if (lesson.type === 'text') {
-            contentHtml = `<div class="lms-text-content">${this._esc(lesson.content || '')}</div>`;
-          }
+        let lessonTitle = 'Aula';
+        let lessonDesc = tr.description || '';
+        let navHtml = '';
+
+        if (inFinalQuiz) {
+          lessonTitle = this._finalQuizTitle(tr);
+          lessonDesc = 'Prova geral do módulo — responda as questões abaixo.';
+          contentHtml = this._renderQuizForm(finalQuestions, 'final');
+          navHtml = `
+            <button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
+            <button class="lms-nav-btn btn-next" onclick="LMS._submitFinalQuiz()">Enviar prova geral</button>`;
+        } else if (inQuiz) {
+          const modIdx = this._quizModuleIdx;
+          const mod = modules[modIdx] || {};
+          const modQuestions = this._getModuleQuestions(tr, modIdx, mod, modules);
+          lessonTitle = `Prova — ${mod.title || 'Treinamento ' + (modIdx + 1)}`;
+          lessonDesc = 'Responda as questões abaixo para concluir este treinamento.';
+          contentHtml = this._renderQuizForm(modQuestions, modIdx);
+          navHtml = `
+            <button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
+            <button class="lms-nav-btn btn-next" onclick="LMS._submitModuleQuiz()">Enviar prova</button>`;
+        } else {
+          contentHtml = this._lessonMediaHtml(lesson);
+          lessonTitle = lesson?.title || 'Aula';
+          lessonDesc = lesson?.description || tr.description || '';
+
+          const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
+          let flatIdx = 0;
+          for (let i = 0; i < mi; i++) flatIdx += (modules[i].lessons?.length || 0);
+          flatIdx += li;
+          const isFirst = flatIdx === 0;
+          const isLast = flatIdx >= totalLessons - 1;
+          const isComplete = this.isLessonComplete(tr.id, userId, mi, li);
+          navHtml = `
+            <button class="lms-nav-btn" onclick="LMS._prevLesson()" ${isFirst ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>← Anterior</button>
+            <button class="lms-nav-btn btn-next" onclick="LMS._nextLesson()" ${isLast ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>Próxima →</button>
+            <button class="lms-nav-btn btn-complete ${isComplete ? 'completed' : ''}" onclick="LMS._markComplete()">
+              ${isComplete ? '✓ Concluída' : '☐ Marcar como concluída'}
+            </button>`;
         }
 
-        // Lesson info
-        const lessonTitle = lesson?.title || 'Aula';
-        const lessonDesc = lesson?.description || tr.description || '';
-
-        // Navigation
-        const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
-        let flatIdx = 0;
-        for (let i = 0; i < mi; i++) flatIdx += (modules[i].lessons?.length || 0);
-        flatIdx += li;
-        const isFirst = flatIdx === 0;
-        const isLast = flatIdx >= totalLessons - 1;
-        const isComplete = this.isLessonComplete(tr.id, userId, mi, li);
-
-        // Build sidebar modules
+        const showModuleQuizzes = this._courseHasQuizzes(tr, modules);
         let sidebarHtml = '';
         modules.forEach((mod, modIdx) => {
           const lessons = mod.lessons || [];
           const doneLessons = lessons.filter((_, lIdx) => this.isLessonComplete(tr.id, userId, modIdx, lIdx)).length;
-          const isOpen = modIdx === mi;
+          const isOpen = inFinalQuiz ? false : (inQuiz ? modIdx === this._quizModuleIdx : modIdx === mi);
           sidebarHtml += `
             <div class="lms-module ${isOpen ? 'open' : ''}" data-module="${modIdx}">
               <div class="lms-module-header" onclick="LMS._toggleModule(${modIdx})">
@@ -605,30 +980,62 @@
               </div>
               <div class="lms-lessons-list">
                 ${lessons.map((l, lIdx) => {
-                  const active = modIdx === mi && lIdx === li;
+                  const active = !inQuiz && modIdx === mi && lIdx === li;
                   const completed = this.isLessonComplete(tr.id, userId, modIdx, lIdx);
-                  const typeIcon = l.type === 'video' ? '🎬' : l.type === 'pdf' ? '📄' : '📝';
+                  const url = String(l.url || '');
+                  let typeLabel = 'Texto';
+                  if (l.type === 'video' || /(youtube|youtu\.be|vimeo)/i.test(url)) typeLabel = 'Vídeo';
+                  else if (/\.(pptx?|docx?|xlsx?)(\?|#|$)/i.test(url)) typeLabel = 'Material';
+                  else if (l.type === 'pdf' || /\.pdf(\?|#|$)/i.test(url)) typeLabel = 'PDF';
                   return `
                     <div class="lms-lesson-item ${active ? 'active' : ''} ${completed ? 'completed' : ''}" onclick="LMS._goToLesson(${modIdx}, ${lIdx})">
                       <div class="lms-lesson-check">${completed ? '✓' : ''}</div>
-                      <span class="lms-lesson-type-icon">${typeIcon}</span>
+                      <span class="lms-lesson-type-icon" title="${typeLabel}">${typeLabel.charAt(0)}</span>
                       <span class="lms-lesson-name">${this._esc(l.title || 'Aula')}</span>
                       ${l.duration ? `<span class="lms-lesson-duration">${this._esc(l.duration)}</span>` : ''}
                     </div>`;
                 }).join('')}
+                ${showModuleQuizzes && this._getModuleQuestions(tr, modIdx, mod, modules).length ? (() => {
+                  const quizUnlocked = this._isModuleLessonsComplete(tr, userId, modIdx);
+                  const quizDone = this._isModuleQuizComplete(tr, userId, modIdx);
+                  const quizActive = inQuiz && !inFinalQuiz && this._quizModuleIdx === modIdx;
+                  const quizScore = this._moduleQuizScore(tr, userId, modIdx);
+                  const statusLabel = quizDone
+                    ? (quizScore != null ? `${quizScore}%` : '✓')
+                    : (quizUnlocked ? 'Liberada' : 'Bloqueada');
+                  return `
+                    <div class="lms-lesson-item lms-quiz-item ${quizActive ? 'active' : ''} ${quizDone ? 'completed' : ''} ${quizUnlocked ? '' : 'is-locked'}"
+                      onclick="LMS._openModuleQuiz(${modIdx})">
+                      <div class="lms-lesson-check">${quizDone ? '✓' : ''}</div>
+                      <span class="lms-lesson-type-icon" title="Prova">?</span>
+                      <span class="lms-lesson-name">Prova — ${this._esc(mod.title || 'Treinamento ' + (modIdx + 1))}</span>
+                      <span class="lms-lesson-duration">${this._esc(statusLabel)}</span>
+                    </div>`;
+                })() : ''}
               </div>
             </div>`;
         });
 
-        // If has quiz, add quiz "module"
-        if (hasQuiz) {
-          const allDone = progress.pct === 100;
+        if (finalQuestions.length) {
+          const unlocked = this._isFinalQuizUnlocked(tr, userId);
+          const done = this._isFinalQuizComplete(tr, userId);
+          const score = this._finalQuizScore(tr, userId);
+          const statusLabel = done ? (score != null ? `${score}%` : '✓') : (unlocked ? 'Liberada' : 'Bloqueada');
           sidebarHtml += `
-            <div class="lms-module">
-              <div class="lms-module-header" onclick="LMS._openQuiz()" style="opacity:${allDone ? '1' : '.5'}; cursor:${allDone ? 'pointer' : 'not-allowed'};">
-                <span class="lms-module-chevron">📝</span>
-                <span class="lms-module-name">Prova Final</span>
-                <span class="lms-module-progress">${allDone ? 'Liberada' : 'Bloqueada'}</span>
+            <div class="lms-module ${inFinalQuiz ? 'open' : ''}">
+              <div class="lms-module-header" style="cursor:default;">
+                <span class="lms-module-chevron">▶</span>
+                <span class="lms-module-name">${this._esc(this._finalQuizTitle(tr))}</span>
+                <span class="lms-module-progress">${statusLabel}</span>
+              </div>
+              <div class="lms-lessons-list" style="display:block;">
+                <div class="lms-lesson-item lms-quiz-item ${inFinalQuiz ? 'active' : ''} ${done ? 'completed' : ''} ${unlocked ? '' : 'is-locked'}"
+                  onclick="LMS._openFinalQuiz()">
+                  <div class="lms-lesson-check">${done ? '✓' : ''}</div>
+                  <span class="lms-lesson-type-icon" title="Prova geral">?</span>
+                  <span class="lms-lesson-name">${this._esc(this._finalQuizTitle(tr))}</span>
+                  <span class="lms-lesson-duration">${this._esc(statusLabel)}</span>
+                </div>
               </div>
             </div>`;
         }
@@ -649,22 +1056,35 @@
                 <h2 class="lms-lesson-title">${this._esc(lessonTitle)}</h2>
                 ${lessonDesc ? `<p class="lms-lesson-desc">${this._esc(lessonDesc)}</p>` : ''}
               </div>
-              <div class="lms-lesson-nav">
-                <button class="lms-nav-btn" onclick="LMS._prevLesson()" ${isFirst ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>← Anterior</button>
-                <button class="lms-nav-btn btn-next" onclick="LMS._nextLesson()" ${isLast ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>Próxima →</button>
-                <button class="lms-nav-btn btn-complete ${isComplete ? 'completed' : ''}" onclick="LMS._markComplete()">
-                  ${isComplete ? '✓ Concluída' : '☐ Marcar como concluída'}
-                </button>
-              </div>
+              <div class="lms-lesson-nav">${navHtml}</div>
             </div>
             <div class="lms-player-sidebar">
               <div class="lms-sidebar-header">
                 <div class="lms-sidebar-title">Conteúdo do curso</div>
-                <div class="lms-sidebar-subtitle">${progress.done} de ${progress.total} aulas concluídas</div>
+                <div class="lms-sidebar-subtitle">${progress.done} de ${progress.total} aulas concluídas${finalQuestions.length ? ' · + Perguntas Gerais' : ''}</div>
               </div>
               <div class="lms-modules-list">${sidebarHtml}</div>
             </div>
           </div>`;
+      },
+
+      _renderQuizForm(questions, modIdx) {
+        if (!questions.length) {
+          return '<div class="lms-text-content">Nenhuma questão cadastrada para este treinamento.</div>';
+        }
+        return `<div class="lms-quiz-form" style="padding:24px 32px;max-width:800px;margin:0 auto;">
+          ${questions.map((item, i) => {
+            const opts = (item.options || []).map((o, j) =>
+              `<label style="display:block;margin:8px 0;font-size:15px;cursor:pointer;">
+                <input type="radio" name="lmsQ_${modIdx}_${i}" value="${j}" style="margin-right:8px;"/> ${this._esc(o)}
+              </label>`
+            ).join('');
+            return `<div class="lms-quiz-question" style="margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--color-border,#eee);">
+              <div style="font-weight:700;margin-bottom:10px;font-size:16px;">${i + 1}. ${this._esc(item.q)}</div>
+              ${opts}
+            </div>`;
+          }).join('')}
+        </div>`;
       },
 
       _toggleModule(modIdx) {
@@ -673,6 +1093,8 @@
       },
 
       _goToLesson(modIdx, lessonIdx) {
+        this._playerView = 'lesson';
+        this._quizModuleIdx = null;
         this._currentModuleIdx = modIdx;
         this._currentLessonIdx = lessonIdx;
         this._renderPlayer();
@@ -704,20 +1126,215 @@
 
       _markComplete() {
         const tr = this._currentTraining;
-        if (!tr) return;
+        if (!tr || !this._userId) return;
         this.setLessonComplete(tr.id, this._userId, this._currentModuleIdx, this._currentLessonIdx);
+        this._persistLessonProgress(tr.id, this._userId);
         this._renderPlayer();
       },
 
+      _openModuleQuiz(modIdx) {
+        const tr = this._currentTraining;
+        if (!tr || !this._userId) return;
+        if (!this._isModuleLessonsComplete(tr, this._userId, modIdx)) {
+          if (typeof showToast === 'function') showToast('Complete todas as aulas deste treinamento antes da prova.', 'warning');
+          return;
+        }
+        const modules = this._getModules(tr);
+        const qs = this._getModuleQuestions(tr, modIdx, modules[modIdx], modules);
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_openModuleQuiz',message:'opening module quiz',data:{modIdx,qCount:qs.length,titles:qs.map(q=>String(q.q||'').slice(0,60))},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        this._playerView = 'quiz';
+        this._quizModuleIdx = modIdx;
+        this._renderPlayer();
+      },
+
+      _exitQuiz() {
+        this._playerView = 'lesson';
+        this._quizModuleIdx = null;
+        this._renderPlayer();
+      },
+
+      async _submitModuleQuiz() {
+        const tr = this._currentTraining;
+        const userId = this._userId;
+        const modIdx = this._quizModuleIdx;
+        if (!tr || !userId || modIdx == null) return;
+        if (modIdx === 'final') return this._submitFinalQuiz();
+        const modules = this._getModules(tr);
+        const mod = modules[modIdx] || {};
+        const questions = this._getModuleQuestions(tr, modIdx, mod, modules);
+        if (!questions.length) return;
+
+        let correct = 0;
+        const answers = [];
+        for (let i = 0; i < questions.length; i++) {
+          const picked = document.querySelector(`input[name="lmsQ_${modIdx}_${i}"]:checked`);
+          const idx = picked ? parseInt(picked.value, 10) : -1;
+          answers.push({ picked: idx, moduleIdx: modIdx, qIndex: i });
+          if (idx === questions[i].correct) correct++;
+        }
+        const unanswered = answers.filter(a => a.picked < 0).length;
+        if (unanswered > 0) {
+          if (typeof showToast === 'function') showToast(`Responda todas as ${questions.length} questões antes de enviar.`, 'warning');
+          return;
+        }
+
+        const score = Math.round((correct / questions.length) * 100);
+        const passing = tr.passing_score || 70;
+        this.setModuleQuizComplete(tr.id, userId, modIdx, score);
+        await this._persistLessonProgress(tr.id, userId);
+
+        if (score >= passing) {
+          if (typeof showToast === 'function') showToast(`Prova aprovada! Nota: ${score}%`, 'success');
+        } else {
+          if (typeof showToast === 'function') showToast(`Nota: ${score}% — mínimo ${passing}%. Você pode tentar novamente.`, 'warning');
+          const p = this.getProgress(tr.id, userId);
+          if (p.completed) delete p.completed[`quiz_${modIdx}`];
+          this._writeLocalProgress(tr.id, userId, p);
+          await this._persistLessonProgress(tr.id, userId);
+          this._renderPlayer();
+          return;
+        }
+
+        await this._checkCourseCompletion(tr, userId);
+        this._playerView = 'lesson';
+        this._quizModuleIdx = null;
+        this._renderPlayer();
+      },
+
+      _openFinalQuiz() {
+        const tr = this._currentTraining;
+        if (!tr || !this._userId) return;
+        const qs = this._getFinalQuestions(tr);
+        this._dbgLog('B', 'treinamentos.html:_openFinalQuiz', 'open final quiz attempt', {
+          qCount: qs.length,
+          unlocked: this._isFinalQuizUnlocked(tr, this._userId),
+          modsDone: this._allModuleQuizzesDone(tr, this._userId),
+        });
+        if (!qs.length) {
+          if (typeof showToast === 'function') showToast('Prova geral ainda não cadastrada.', 'warning');
+          return;
+        }
+        if (!this._isFinalQuizUnlocked(tr, this._userId)) {
+          if (typeof showToast === 'function') showToast('Conclua todas as aulas e provas dos treinamentos antes da prova geral.', 'warning');
+          return;
+        }
+        this._playerView = 'quiz';
+        this._quizModuleIdx = 'final';
+        this._renderPlayer();
+      },
+
+      async _submitFinalQuiz() {
+        const tr = this._currentTraining;
+        const userId = this._userId;
+        if (!tr || !userId) return;
+        const questions = this._getFinalQuestions(tr);
+        if (!questions.length) return;
+
+        let correct = 0;
+        const answers = [];
+        for (let i = 0; i < questions.length; i++) {
+          const picked = document.querySelector(`input[name="lmsQ_final_${i}"]:checked`);
+          const idx = picked ? parseInt(picked.value, 10) : -1;
+          answers.push({ picked: idx, qIndex: i });
+          if (idx === questions[i].correct) correct++;
+        }
+        const unanswered = answers.filter(a => a.picked < 0).length;
+        if (unanswered > 0) {
+          if (typeof showToast === 'function') showToast(`Responda todas as ${questions.length} questões antes de enviar.`, 'warning');
+          return;
+        }
+
+        const score = Math.round((correct / questions.length) * 100);
+        const passing = tr.passing_score || 70;
+        this._dbgLog('D', 'treinamentos.html:_submitFinalQuiz', 'final quiz scored', {
+          correct, total: questions.length, score, passing,
+        });
+        this.setModuleQuizComplete(tr.id, userId, 'final', score);
+        await this._persistLessonProgress(tr.id, userId);
+
+        if (score >= passing) {
+          if (typeof showToast === 'function') showToast(`Prova geral aprovada! Nota: ${score}%`, 'success');
+        } else {
+          if (typeof showToast === 'function') showToast(`Nota: ${score}% — mínimo ${passing}%. Você pode tentar novamente.`, 'warning');
+          const p = this.getProgress(tr.id, userId);
+          if (p.completed) delete p.completed.quiz_final;
+          this._writeLocalProgress(tr.id, userId, p);
+          await this._persistLessonProgress(tr.id, userId);
+          this._renderPlayer();
+          return;
+        }
+
+        await this._checkCourseCompletion(tr, userId);
+        this._playerView = 'lesson';
+        this._quizModuleIdx = null;
+        this._renderPlayer();
+      },
+
+      async _checkCourseCompletion(tr, userId) {
+        const modules = this._getModules(tr);
+        const progress = this.getCourseProgress(tr, userId);
+        if (progress.pct < 100) return;
+
+        let quizCount = 0;
+        let totalScore = 0;
+        for (let i = 0; i < modules.length; i++) {
+          const qs = this._getModuleQuestions(tr, i, modules[i], modules);
+          if (!qs.length) continue;
+          quizCount++;
+          if (!this._isModuleQuizComplete(tr, userId, i)) return;
+          totalScore += this._moduleQuizScore(tr, userId, i) || 0;
+        }
+
+        const finalQs = this._getFinalQuestions(tr);
+        if (finalQs.length) {
+          if (!this._isFinalQuizComplete(tr, userId)) {
+            // #region agent log
+            fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'D',location:'treinamentos.html:_checkCourseCompletion',message:'waiting final quiz before course complete',data:{quizCount,finalQ:finalQs.length},timestamp:Date.now()})}).catch(()=>{});
+            // #endregion
+            return;
+          }
+          quizCount++;
+          totalScore += this._finalQuizScore(tr, userId) || 0;
+        }
+
+        if (!quizCount) return;
+
+        const avgScore = Math.round(totalScore / quizCount);
+        const passed = avgScore >= (tr.passing_score || 70);
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'D',location:'treinamentos.html:_checkCourseCompletion',message:'course completion saved',data:{quizCount,avgScore,passed,hasFinal:!!finalQs.length},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        try {
+          const saved = await DB.saveTrainingAttempt({
+            training_id: tr.id,
+            user_id: userId,
+            score: avgScore,
+            passed,
+            status: passed ? 'passed' : 'failed',
+            completed_at: new Date().toISOString(),
+          });
+          if (saved) this._attemptsByTraining.set(String(tr.id), saved);
+          if (passed && typeof showToast === 'function') {
+            showToast(`Curso concluído! Nota final: ${avgScore}%`, 'success', 6000);
+          }
+        } catch (e) {
+          console.warn('[LMS] save attempt:', e);
+        }
+      },
+
+      /** @deprecated Use _openModuleQuiz — mantido para compatibilidade */
       _openQuiz() {
         const tr = this._currentTraining;
         if (!tr) return;
-        const progress = this.getCourseProgress(tr, this._userId);
-        if (progress.pct < 100) {
-          if (typeof showToast === 'function') showToast('Complete todas as aulas antes de realizar a prova.', 'warning');
-          return;
+        const modules = this._getModules(tr);
+        for (let i = 0; i < modules.length; i++) {
+          if (this._getModuleQuestions(tr, i, modules[i], modules).length) {
+            this._openModuleQuiz(i);
+            return;
+          }
         }
-        // Use legacy take modal
         this._closePlayer();
         if (window.Trainings) Trainings.openTake(tr.id);
       },
@@ -728,43 +1345,111 @@
         switchTab('tab-catalog');
       },
 
-      /* ── Video embed ── */
       _embedVideo(url) {
-        const u = String(url || '').trim();
+        const resolved = this._resolveMediaUrl(url);
+        const u = resolved || String(url || '').trim();
         if (!u) return '';
+
+        const driveId = this._driveFileId(u) || this._driveFileId(url);
+        if (driveId) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'A',location:'treinamentos.html:_embedVideo',message:'embed path drive',data:{driveId},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          return `<iframe class="lms-pdf-viewer" src="https://drive.google.com/file/d/${driveId}/preview" allow="autoplay" allowfullscreen></iframe>
+            <div style="padding:12px 32px;"><a href="https://drive.google.com/file/d/${driveId}/view" target="_blank" rel="noopener" style="color:#667eea;font-weight:600;font-size:13px;">Abrir vídeo no Google Drive</a></div>`;
+        }
+
         let embed = u;
-        const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([\w-]+)/i);
-        if (yt) embed = `https://www.youtube.com/embed/${yt[1]}`;
+        const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([\w-]+)/i);
+        if (yt) embed = `https://www.youtube-nocookie.com/embed/${yt[1]}?rel=0`;
         else {
-          const vm = u.match(/vimeo\.com\/(\d+)/i);
+          const vm = u.match(/vimeo\.com\/(?:video\/)?(\d+)/i);
           if (vm) embed = `https://player.vimeo.com/video/${vm[1]}`;
         }
-        if (/youtube\.com\/embed|player\.vimeo\.com/.test(embed)) {
-          return `<iframe src="${this._esc(embed)}" allowfullscreen loading="lazy" style="width:100%;aspect-ratio:16/9;border:0;display:block;border-radius:12px;"></iframe>`;
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'A,D',location:'treinamentos.html:_embedVideo',message:'embed path chosen',data:{isYt:!!yt,embedHost:(()=>{try{return new URL(embed).host}catch(_){return ''}})(),cspFrame:(document.querySelector('meta[http-equiv="Content-Security-Policy"]')||{}).content||'header-only',frameSrcHint:String((performance.getEntriesByType&&'')||'')},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (/youtube\.com\/embed|youtube-nocookie\.com\/embed|player\.vimeo\.com/.test(embed)) {
+          return `<div class="lms-video-frame"><iframe src="${this._esc(embed)}" title="Vídeo" allowfullscreen loading="lazy" referrerpolicy="strict-origin-when-cross-origin" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" style="width:100%;aspect-ratio:16/9;border:0;display:block;border-radius:12px;background:#000;"></iframe></div>
+            <div style="padding:12px 32px;"><a href="${this._esc(u)}" target="_blank" rel="noopener" style="color:#667eea;font-weight:600;font-size:13px;">Abrir no YouTube / Vimeo</a></div>`;
         }
+
         return `
-          <video controls controlsList="nodownload" style="width:100%;max-height:65vh;background:#000;border-radius:12px;margin:0 auto;display:block;">
+          <video controls playsinline controlsList="nodownload" style="width:100%;max-height:65vh;background:#000;border-radius:12px;margin:0 auto;display:block;">
             <source src="${this._esc(u)}">
-            <div style="padding:40px;text-align:center;"><a href="${this._esc(u)}" target="_blank" rel="noopener" style="color:#667eea;font-weight:700;font-size:16px;">▶ Assistir vídeo externamente</a></div>
           </video>
+          <div style="padding:12px 32px;"><a href="${this._esc(u)}" target="_blank" rel="noopener" style="color:#667eea;font-weight:600;font-size:13px;">Abrir vídeo em nova aba</a></div>
         `;
       },
 
-      /* ── PDF embed ── */
-      _embedPdf(url) {
-        const u = String(url || '').trim();
-        if (!u) return '';
-        // Google Drive direct viewer
-        if (u.includes('drive.google.com')) {
-          const match = u.match(/\/d\/([\w-]+)/);
-          if (match) {
-            return `<iframe class="lms-pdf-viewer" src="https://drive.google.com/file/d/${match[1]}/preview" allowfullscreen></iframe>`;
-          }
+      _embedOffice(url) {
+        // Office Online costuma falhar no nosso host ("Arquivo não encontrado").
+        // Materiais foram convertidos para PDF — usar visualizador nativo.
+        const resolved = this._resolveMediaUrl(url);
+        const u = resolved || String(url || '').trim();
+        if (!u) return this._mediaFallback('', 'Material indisponível');
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'post-fix',hypothesisId:'E',location:'treinamentos.html:_embedOffice',message:'office avoided — route to pdf/fallback',data:{urlHost:(()=>{try{return new URL(u,location.origin).host}catch(_){return ''}})(),ext:(u.split('?')[0].split('.').pop()||'').slice(0,8)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        if (/\.pdf(\?|#|$)/i.test(u) || /file\.php/i.test(u)) {
+          return this._embedPdf(u);
         }
-        // Google Docs Viewer for other URLs
-        const encoded = encodeURIComponent(u);
-        return `<iframe class="lms-pdf-viewer" src="https://docs.google.com/viewer?url=${encoded}&embedded=true" allowfullscreen></iframe>
-          <div style="padding:12px 32px;"><a href="${this._esc(u)}" target="_blank" rel="noopener" style="color:#667eea;font-weight:600;font-size:13px;">📎 Baixar PDF diretamente</a></div>`;
+        return this._mediaFallback(u, 'Abra o material em nova aba para navegar os slides');
+      },
+
+      _embedPdf(url) {
+        const resolved = this._resolveMediaUrl(url);
+        let u = resolved || String(url || '').trim();
+        if (!u) return '';
+
+        if (/\.(pptx?|docx?|xlsx?)(\?|#|$)/i.test(u) || /\.(pptx?|docx?|xlsx?)(\?|#|$)/i.test(url)) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'post-fix',hypothesisId:'B',location:'treinamentos.html:_embedPdf',message:'still pptx url unexpected',data:{u:u.slice(0,120)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          return this._mediaFallback(u, 'Material em formato antigo — peça atualização do PDF');
+        }
+
+        const driveId = this._driveFileId(u) || this._driveFileId(url);
+        if (driveId) {
+          return `<iframe class="lms-pdf-viewer" src="https://drive.google.com/file/d/${driveId}/preview" allowfullscreen></iframe>`;
+        }
+
+        // Carrega via blob: evita CSP do file.php que quebra o PDF no iframe.
+        const mountId = `lmsPdf_${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+        const cleanUrl = u.split('#')[0];
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'post-fix',hypothesisId:'B,E',location:'treinamentos.html:_embedPdf',message:'pdf blob hydrate scheduled',data:{mountId,host:(()=>{try{return new URL(cleanUrl,location.origin).host}catch(_){return ''}})(),isFilePhp:/file\.php/i.test(cleanUrl)},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        setTimeout(() => { try { this._hydratePdfViewer(mountId, cleanUrl); } catch (_) {} }, 0);
+        return `<div id="${mountId}" class="lms-pdf-mount">
+          <div class="lms-media-fallback"><p class="lms-media-fallback__title">Carregando slides...</p></div>
+        </div>`;
+      },
+
+      async _hydratePdfViewer(mountId, url) {
+        const el = document.getElementById(mountId);
+        if (!el) return;
+        try {
+          const bust = url.includes('?') ? `&_cb=${Date.now()}` : `?_cb=${Date.now()}`;
+          const fetchUrl = url.split('#')[0] + bust;
+          const res = await fetch(fetchUrl, { credentials: 'same-origin', cache: 'no-store' });
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          const buf = await res.arrayBuffer();
+          const head = new Uint8Array(buf.slice(0, 5));
+          const sig = String.fromCharCode(...head);
+          const blobUrl = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'post-fix',hypothesisId:'B,E',location:'treinamentos.html:_hydratePdfViewer',message:'pdf blob ready',data:{mountId,bytes:buf.byteLength,sig,ok:sig==='%PDF-',fetchUrlHost:(()=>{try{return new URL(fetchUrl).pathname.slice(-40)}catch(_){return ''}})()},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          if (sig !== '%PDF-') throw new Error('Arquivo não é PDF válido');
+          el.innerHTML = `<iframe class="lms-pdf-viewer" src="${blobUrl}#toolbar=1&navpanes=0&view=FitH" title="Slides do treinamento"></iframe>
+            <div class="lms-slide-hint">Use as setas do visualizador ou o scroll para passar os slides.</div>`;
+        } catch (e) {
+          // #region agent log
+          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'post-fix',hypothesisId:'B,E',location:'treinamentos.html:_hydratePdfViewer',message:'pdf hydrate failed',data:{mountId,err:String(e&&e.message||e)},timestamp:Date.now()})}).catch(()=>{});
+          // #endregion
+          el.innerHTML = this._mediaFallback(url, 'Não foi possível exibir os slides no navegador');
+        }
       },
 
       _fmtDt(iso) {
@@ -773,7 +1458,7 @@
       },
 
       filterCategory(cat) {
-        this._currentCategory = cat;
+        this._currentCategory = cat === 'mural' ? 'all' : (cat || 'all');
         this.renderCatalog();
       },
 
@@ -790,21 +1475,6 @@
         const all = await DB.getTrainings({ partnerRootId: root, activeOnly: true });
         return all.filter(t => {
           const roles = t.audience_roles || ['*'];
-          if (roles.includes('*')) return true;
-          const ur = String(user.role || '').trim().toLowerCase();
-          return roles.map(x => String(x).trim().toLowerCase()).includes(ur);
-        });
-      },
-      async _getMuralPosts(user) {
-        if (!user) return [];
-        let root = null;
-        try {
-          if (String(user.role || '').toLowerCase() === 'parceiro') root = user.id;
-          else root = await DB.getPartnerRootForUser(user.id);
-        } catch {}
-        const all = await DB.getTrainingMuralPosts({ partnerRootId: root, activeOnly: true });
-        return all.filter(p => {
-          const roles = p.audience_roles || ['*'];
           if (roles.includes('*')) return true;
           const ur = String(user.role || '').trim().toLowerCase();
           return roles.map(x => String(x).trim().toLowerCase()).includes(ur);
@@ -836,21 +1506,21 @@
       if (loader) loader.style.display = 'none';
       if (layout) layout.style.display = '';
 
-      // Fill user info
+      // Fill topbar user info
       try {
         const u = Auth.getSession() || {};
         const name = u.name || 'Usuário';
         const role = (u.role || 'colaborador').toLowerCase();
-        document.getElementById('userName').textContent = name;
-        document.getElementById('userRole').textContent = role.charAt(0).toUpperCase() + role.slice(1);
-        document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
-        if (document.getElementById('topbarUserName')) {
-          document.getElementById('topbarUserName').textContent = name;
-        }
 
-        // Show manage/rh tabs based on role
+        const elName = document.getElementById('userName');
+        const elRole = document.getElementById('userRole');
+        const elAvatar = document.getElementById('userAvatar');
+        if (elName) elName.textContent = name;
+        if (elRole) elRole.textContent = role.charAt(0).toUpperCase() + role.slice(1);
+        if (elAvatar) elAvatar.textContent = name.charAt(0).toUpperCase();
+
         const canManage = ['master','dev','desenvolvedor','supervisor','gerente','gerencia','rh','financeiro','backoffice','admin','fundador','parceiro'].includes(role);
-        const canRh = ['master','dev','desenvolvedor','rh','supervisor','gerente','gerencia','fundador'].includes(role);
+        const canRh     = ['master','dev','desenvolvedor','rh','supervisor','gerente','gerencia','fundador'].includes(role);
 
         document.querySelectorAll('.trainings-manage-nav').forEach(el => {
           el.style.display = canManage ? '' : 'none';
@@ -858,14 +1528,9 @@
         document.querySelectorAll('.trainings-rh-nav').forEach(el => {
           el.style.display = canRh ? '' : 'none';
         });
-      } catch(e) { console.warn('User info:', e); }
+      } catch(e) { console.warn('[Treinamentos] user info:', e); }
 
-      // Mobile menu toggle
-      if (window.innerWidth <= 768) {
-        document.getElementById('menuToggle').style.display = '';
-      }
-
-      // Initialize trainings module (for admin/modals/etc)
+      // Initialize trainings module
       if (window.Trainings && typeof Trainings.init === 'function') {
         try { Trainings.init(); } catch (e) { console.warn('[Trainings] init:', e); }
       }
@@ -873,6 +1538,9 @@
       // Render catalog
       try {
         await LMS.renderCatalog();
+        // Highlight catalog nav
+        const catNav = document.getElementById('trnNavCatalogo');
+        if (catNav) catNav.classList.add('is-active');
       } catch (e) {
         console.error('[Treinamentos] catalog:', e);
         const root = document.getElementById('catalogRoot');

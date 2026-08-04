@@ -13,6 +13,31 @@
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
   }
 
+  function _formatPedidoDescricao(v) {
+    let d = v?.detalhes_pedido;
+    if (typeof d === 'string') {
+      try { d = JSON.parse(d); } catch (_) { d = null; }
+    }
+    if (!d || typeof d !== 'object') return '—';
+    const parts = [];
+    const itens = Array.isArray(d.itens) ? d.itens : [];
+    if (itens.length) {
+      parts.push(itens.map((it) => {
+        const nome = String(it.name || it.nome || it.sku || 'Item').trim();
+        const qtd = parseInt(it.qty ?? it.qtd ?? it.quantidade ?? 1, 10) || 1;
+        return `${qtd}x ${nome}`;
+      }).join(', '));
+    }
+    if (d.modo) {
+      parts.push(d.modo === 'entrega' ? 'Entrega' : (d.modo === 'retirada' ? 'Retirada' : String(d.modo)));
+    }
+    if (d.horario_entrega) parts.push(`Horário: ${d.horario_entrega}`);
+    if (d.observacoes) parts.push(`Obs: ${d.observacoes}`);
+    if (d.origem === 'mercadinho') parts.push('Mercadinho');
+    if (Array.isArray(d.carnes) && d.carnes.length) parts.push(`Carnes: ${d.carnes.join(', ')}`);
+    return parts.length ? parts.join(' · ') : '—';
+  }
+
   function switchTab(tabId, el) {
     document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.tab-content').forEach(c => { c.style.display = 'none'; });
@@ -21,58 +46,301 @@
     if (panel) panel.style.display = 'block';
   }
 
+  const _VOUCHER_DEBIT_STATUSES = new Set(['em_analise', 'utilizado', 'em_processamento', 'pago']);
+
+  function _sumVoucherUtilizado(vouchers) {
+    return (Array.isArray(vouchers) ? vouchers : [])
+      .filter((v) => _VOUCHER_DEBIT_STATUSES.has(String(v.status || '').toLowerCase()))
+      .reduce((acc, v) => acc + (parseFloat(v.valor) || 0), 0);
+  }
+
+  function _limitBalances(aprovado, utilizado) {
+    const approved = Math.max(0, Math.round((parseFloat(aprovado) || 0) * 100) / 100);
+    const used = Math.max(0, Math.min(approved, Math.round((parseFloat(utilizado) || 0) * 100) / 100));
+    const available = Math.max(0, Math.round((approved - used) * 100) / 100);
+    return { aprovado: approved, utilizado: used, disponivel: available };
+  }
+
+  function _escAttr(s) {
+    return String(s ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function _ensureManualDebitModal() {
+    let modal = document.getElementById('manualDebitModal');
+    if (modal) return modal;
+    document.body.insertAdjacentHTML('beforeend', `
+<div class="modal-overlay" id="manualDebitModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>Lançar débito manual</h3>
+      <button type="button" class="modal-close" onclick="closeManualDebitModal()"></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="manualDebitLimitId"/>
+      <input type="hidden" id="manualDebitEmployeeId"/>
+      <div class="form-group"><label>Funcionário</label><input type="text" id="manualDebitName" class="form-control" readonly/></div>
+      <div class="form-group"><label>Disponível agora</label><input type="text" id="manualDebitDisponivel" class="form-control" readonly/></div>
+      <div class="form-group"><label>Valor do débito (R$)</label><input type="number" id="manualDebitValor" class="form-control" min="0.01" step="0.01" placeholder="0,00"/></div>
+      <div class="form-group"><label>Descrição / o que foi comprado</label><input type="text" id="manualDebitDesc" class="form-control" placeholder="Ex.: Marmitas semana 10/07"/></div>
+      <div class="form-group"><label>Estabelecimento (opcional)</label><input type="text" id="manualDebitPrestador" class="form-control" placeholder="Ex.: Restaurante ZS"/></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeManualDebitModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="confirmManualDebit()">Lançar débito</button>
+    </div>
+  </div>
+</div>`);
+    return document.getElementById('manualDebitModal');
+  }
+
   async function loadLimitRequests() {
-    const list = await supaReq('GET', 'beneficios_limites', null, '?order=created_at.desc');
     const tbody = document.getElementById('limitesTbody');
     if (!tbody) return;
-    tbody.innerHTML = '';
+    tbody.innerHTML = '<tr><td colspan="7" class="text-center">Carregando acompanhamento…</td></tr>';
 
-    if (!list || list.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-center">Nenhuma solicitação cadastrada.</td></tr>';
+    let list = [];
+    let vouchers = [];
+    try {
+      if (typeof _cacheDel === 'function') {
+        try { _cacheDel('beneficios_limites'); _cacheDel('beneficios_vouchers'); } catch (_) { /* noop */ }
+      }
+      [list, vouchers] = await Promise.all([
+        supaReq('GET', 'beneficios_limites', null, '?order=created_at.desc&limit=500'),
+        supaReq('GET', 'beneficios_vouchers', null, '?select=id,employee_id,valor,status&limit=2000'),
+      ]);
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="7" class="text-center">Erro ao carregar: ${e.message || e}</td></tr>`;
       return;
     }
 
-    list.forEach(item => {
+    list = Array.isArray(list) ? list : [];
+    vouchers = Array.isArray(vouchers) ? vouchers : [];
+    const usedByEmp = {};
+    vouchers.forEach((v) => {
+      const eid = String(v.employee_id || '');
+      if (!eid) return;
+      if (!_VOUCHER_DEBIT_STATUSES.has(String(v.status || '').toLowerCase())) return;
+      usedByEmp[eid] = (usedByEmp[eid] || 0) + (parseFloat(v.valor) || 0);
+    });
+
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="7" class="text-center">Nenhum limite cadastrado.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = '';
+    list.forEach((item) => {
       const tr = document.createElement('tr');
       const phones = `${item.contato1 || '—'}<br/>${item.contato2 || ''}`;
       let docBtn = '—';
       if (item.documento_url) {
-        docBtn = `<a href="${item.documento_url}" target="_blank" class="btn btn-outline btn-sm">📎 Ver</a>`;
+        docBtn = `<a href="${_escAttr(item.documento_url)}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">📎 Ver</a>`;
       }
+      const empId = String(item.employee_id || '');
+      const aprovado = parseFloat(item.limite_aprovado) || 0;
+      const usedFromVouchers = empId ? (usedByEmp[empId] || 0) : (parseFloat(item.limite_utilizado) || 0);
+      const bal = _limitBalances(aprovado, usedFromVouchers);
+      const status = String(item.status || '');
       let actionBtn = '—';
-      if (item.status === 'solicitado') {
-        const safeName = String(item.employee_name || '').replace(/'/g, "\\'");
-        actionBtn = `<button class="btn btn-primary btn-sm" onclick="openApproveModal('${item.id}', '${safeName}')">Aprovar / Recusar</button>`;
+      if (status === 'solicitado') {
+        actionBtn = `<button type="button" class="btn btn-primary btn-sm js-approve-limit" data-limit-id="${_escAttr(item.id)}" data-emp-name="${_escAttr(item.employee_name || '')}">Aprovar / Recusar</button>`;
+      } else if (status === 'aprovado') {
+        actionBtn = `<button type="button" class="btn btn-outline btn-sm js-manual-debit" data-limit-id="${_escAttr(item.id)}" data-emp-id="${_escAttr(empId)}" data-emp-name="${_escAttr(item.employee_name || '')}" data-disponivel="${bal.disponivel}">Lançar débito</button>`;
       }
+      const valorCell = status === 'aprovado'
+        ? `<div style="font-size:12px;line-height:1.45;">
+            <div><strong>${formatCurrency(bal.aprovado)}</strong> aprovado</div>
+            <div style="color:var(--color-text-muted);">Usado: ${formatCurrency(bal.utilizado)}</div>
+            <div style="color:#059669;font-weight:700;">Disponível: ${formatCurrency(bal.disponivel)}</div>
+          </div>`
+        : `<div style="font-size:12px;line-height:1.45;">
+            <div>${formatCurrency(aprovado || 0)}</div>
+            <div style="color:var(--color-text-muted);">Aguardando aprovação</div>
+          </div>`;
       tr.innerHTML = `
-        <td><strong>${item.employee_name}</strong></td>
+        <td><strong>${_escAttr(item.employee_name || '—')}</strong></td>
         <td>${phones}</td>
-        <td><span class="badge ${item.status === 'aprovado' ? 'badge-success' : 'badge-warning'}">${item.status}</span></td>
-        <td>${formatCurrency(item.limite_aprovado)}</td>
+        <td><span class="badge ${status === 'aprovado' ? 'badge-success' : 'badge-warning'}">${_escAttr(status || '—')}</span></td>
+        <td>${valorCell}</td>
         <td>${docBtn}</td>
         <td>${actionBtn}</td>
       `;
       tbody.appendChild(tr);
     });
+
+    if (!tbody._benLimitesBound) {
+      tbody._benLimitesBound = true;
+      tbody.addEventListener('click', (ev) => {
+        const debitBtn = ev.target.closest('.js-manual-debit');
+        if (debitBtn) {
+          openManualDebitModal(
+            debitBtn.getAttribute('data-limit-id'),
+            debitBtn.getAttribute('data-emp-id'),
+            debitBtn.getAttribute('data-emp-name')
+          );
+          return;
+        }
+        const approveBtn = ev.target.closest('.js-approve-limit');
+        if (approveBtn) {
+          openApproveModal(
+            approveBtn.getAttribute('data-limit-id'),
+            approveBtn.getAttribute('data-emp-name')
+          );
+        }
+      });
+    }
   }
 
   function openApproveModal(id, name) {
-    document.getElementById('modalReqId').value = id;
-    document.getElementById('modalReqName').value = name;
-    document.getElementById('approveLimitModal').style.display = 'flex';
+    const modal = document.getElementById('approveLimitModal');
+    const idEl = document.getElementById('modalReqId');
+    const nameEl = document.getElementById('modalReqName');
+    if (idEl) idEl.value = id || '';
+    if (nameEl) nameEl.value = name || '';
+    if (modal) {
+      modal.style.display = '';
+      modal.classList.add('open');
+    }
   }
 
   function closeApproveModal() {
-    document.getElementById('approveLimitModal').style.display = 'none';
+    const modal = document.getElementById('approveLimitModal');
+    if (modal) {
+      modal.classList.remove('open');
+      modal.style.display = '';
+    }
+  }
+
+  async function openManualDebitModal(limitId, employeeId, name) {
+    const modal = _ensureManualDebitModal();
+    if (!modal) {
+      alert('Modal de débito não encontrado. Atualize a página (Ctrl+F5).');
+      return;
+    }
+    document.getElementById('manualDebitLimitId').value = limitId || '';
+    document.getElementById('manualDebitEmployeeId').value = employeeId || '';
+    document.getElementById('manualDebitName').value = name || '';
+    document.getElementById('manualDebitValor').value = '';
+    document.getElementById('manualDebitDesc').value = '';
+    document.getElementById('manualDebitPrestador').value = '';
+    let disponivelTxt = '—';
+    try {
+      if (typeof _cacheDel === 'function') {
+        try { _cacheDel('beneficios_limites'); _cacheDel('beneficios_vouchers'); } catch (_) { /* noop */ }
+      }
+      const [rows, vouchers] = await Promise.all([
+        supaReq('GET', 'beneficios_limites', null, `?id=eq.${encodeURIComponent(limitId)}&limit=1`),
+        employeeId
+          ? supaReq('GET', 'beneficios_vouchers', null, `?employee_id=eq.${encodeURIComponent(employeeId)}&select=valor,status&limit=500`)
+          : Promise.resolve([]),
+      ]);
+      const row = Array.isArray(rows) && rows[0] ? rows[0] : null;
+      if (row) {
+        const used = _sumVoucherUtilizado(vouchers);
+        const bal = _limitBalances(row.limite_aprovado, used);
+        disponivelTxt = formatCurrency(bal.disponivel);
+        modal.dataset.aprovado = String(bal.aprovado);
+        modal.dataset.utilizado = String(bal.utilizado);
+        modal.dataset.disponivel = String(bal.disponivel);
+      }
+    } catch (e) {
+      console.warn('[Beneficios] openManualDebitModal:', e?.message || e);
+    }
+    document.getElementById('manualDebitDisponivel').value = disponivelTxt;
+    modal.style.display = '';
+    modal.classList.add('open');
+  }
+
+  function closeManualDebitModal() {
+    const modal = document.getElementById('manualDebitModal');
+    if (modal) {
+      modal.classList.remove('open');
+      modal.style.display = '';
+    }
+  }
+
+  async function confirmManualDebit() {
+    const modal = document.getElementById('manualDebitModal');
+    const limitId = document.getElementById('manualDebitLimitId')?.value;
+    const employeeId = document.getElementById('manualDebitEmployeeId')?.value;
+    const employeeName = document.getElementById('manualDebitName')?.value || '';
+    const valor = Math.round((parseFloat(document.getElementById('manualDebitValor')?.value) || 0) * 100) / 100;
+    const desc = String(document.getElementById('manualDebitDesc')?.value || '').trim();
+    const prestadorName = String(document.getElementById('manualDebitPrestador')?.value || '').trim() || 'Débito Manual';
+    if (!limitId) {
+      alert('Registro de limite inválido.');
+      return;
+    }
+    if (!employeeId) {
+      alert('Este limite não está vinculado a um login. Vincule o colaborador no RH antes de lançar o débito.');
+      return;
+    }
+    if (valor <= 0) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
+    if (!desc) {
+      alert('Informe a descrição do que foi comprado.');
+      return;
+    }
+    const disponivel = parseFloat(modal?.dataset?.disponivel) || 0;
+    if (valor > disponivel + 0.009) {
+      alert(`O valor excede o limite disponível (${formatCurrency(disponivel)}).`);
+      return;
+    }
+    try {
+      const today = new Date();
+      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const voucherNo = `MAN-${today.getDate().toString().padStart(2, '0')}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getFullYear()}-${rand}`;
+      const voucherPayload = {
+        id: _benId('ben_vou_'),
+        voucher_no: voucherNo,
+        employee_id: employeeId,
+        employee_name: employeeName,
+        prestador_id: 'manual',
+        prestador_name: prestadorName,
+        categoria: 'Débito Manual',
+        valor,
+        status: 'utilizado',
+        detalhes_pedido: {
+          origem: 'debito_manual',
+          observacoes: desc,
+          itens: [{ name: desc, qty: 1 }],
+        },
+      };
+      await supaReq('POST', 'beneficios_vouchers', voucherPayload);
+      const aprovado = parseFloat(modal?.dataset?.aprovado) || 0;
+      const utilizadoAtual = parseFloat(modal?.dataset?.utilizado) || 0;
+      const balances = _limitBalances(aprovado, utilizadoAtual + valor);
+      await supaReq('PATCH', 'beneficios_limites', {
+        limite_utilizado: balances.utilizado,
+        limite_disponivel: balances.disponivel,
+        status: 'aprovado',
+      }, `?id=eq.${encodeURIComponent(limitId)}`);
+      alert(`Débito lançado: ${formatCurrency(valor)}\nVoucher: ${voucherNo}`);
+      closeManualDebitModal();
+      await loadAllData();
+    } catch (e) {
+      alert('Erro ao lançar débito: ' + (e.message || e));
+    }
   }
 
   async function confirmLimitApproval() {
     const id = document.getElementById('modalReqId').value;
     const val = parseFloat(document.getElementById('modalReqLimit').value) || 0;
     try {
+      const existing = await supaReq('GET', 'beneficios_limites', null, `?id=eq.${encodeURIComponent(id)}&limit=1`);
+      const row = Array.isArray(existing) && existing[0] ? existing[0] : null;
+      const utilizado = row ? (parseFloat(row.limite_utilizado) || 0) : 0;
+      const disponivel = Math.max(0, Math.round((val - utilizado) * 100) / 100);
       await supaReq('PATCH', 'beneficios_limites', {
         limite_aprovado: val,
-        limite_disponivel: val,
+        limite_utilizado: utilizado,
+        limite_disponivel: disponivel,
         status: 'aprovado',
         contrato_url: 'uploads/contract_' + Date.now() + '.pdf',
         promissoria_url: 'uploads/promissory_' + Date.now() + '.pdf',
@@ -103,18 +371,36 @@
   async function saveProvider(e) {
     e.preventDefault();
     try {
+      const waRaw = String(document.getElementById('provWhatsapp')?.value || '').replace(/\D/g, '');
+      const cnpj = String(document.getElementById('provCpfCnpj').value || '').replace(/\D/g, '');
       const payload = {
-        id: _benId('ben_pre_'),
-        codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
         nome_fantasia: document.getElementById('provNome').value,
         cnpj_cpf: document.getElementById('provCpfCnpj').value,
         chave_pix: document.getElementById('provPix').value,
         dia_pagamento: parseInt(document.getElementById('provDiaPgto').value, 10) || 5,
         categoria: document.getElementById('provCategoria').value,
         pagamento_automatico: document.getElementById('provAutoPgto').value,
+        whatsapp: waRaw || null,
       };
-      await supaReq('POST', 'beneficios_prestadores', payload);
-      alert('Prestador cadastrado com sucesso!');
+      let existing = null;
+      if (cnpj) {
+        try {
+          const rows = await supaReq('GET', 'beneficios_prestadores', null,
+            `?cnpj_cpf=eq.${encodeURIComponent(cnpj)}&limit=1`);
+          existing = Array.isArray(rows) && rows[0] ? rows[0] : null;
+        } catch (_) { existing = null; }
+      }
+      if (existing?.id) {
+        await supaReq('PATCH', 'beneficios_prestadores', payload, `?id=eq.${encodeURIComponent(existing.id)}`);
+        alert('Prestador atualizado (WhatsApp/dados salvos)!');
+      } else {
+        await supaReq('POST', 'beneficios_prestadores', {
+          id: _benId('ben_pre_'),
+          codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
+          ...payload,
+        });
+        alert('Prestador cadastrado com sucesso!');
+      }
       document.getElementById('providerForm').reset();
       await loadAllData();
     } catch (err) {
@@ -156,23 +442,21 @@
     }
     list.forEach(v => {
       const tr = document.createElement('tr');
-      const detalhes = v.detalhes_pedido || {};
-      let detailsStr = `Modo: ${detalhes.modo || 'Geral'}`;
-      if (detalhes.modo === 'entrega') {
-        detailsStr += `<br/>Hora: ${detalhes.horario_entrega || '—'}<br/>Carnes: ${(detalhes.carnes || []).join(', ')}`;
-      }
-      let actionBtn = '—';
+      const detailsStr = _formatPedidoDescricao(v).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const vid = _escAttr(v.id);
+      const actions = [];
       if (v.status === 'em_analise') {
-        actionBtn = `<button class="btn btn-outline btn-sm btn-success" onclick="approveOrder('${v.id}')">Aprovar</button>`;
+        actions.push(`<button type="button" class="btn btn-outline btn-sm btn-success" onclick="approveOrder('${vid}')">Aprovar</button>`);
       }
+      actions.push(`<button type="button" class="btn btn-outline btn-sm" style="color:#b91c1c;border-color:#fca5a5;" onclick="deleteMealOrder('${vid}')">Apagar</button>`);
       tr.innerHTML = `
-        <td><strong>${v.voucher_no}</strong></td>
-        <td>${v.employee_name}</td>
-        <td>${v.prestador_name}</td>
+        <td><strong>${_escAttr(v.voucher_no)}</strong></td>
+        <td>${_escAttr(v.employee_name || '—')}</td>
+        <td>${_escAttr(v.prestador_name || '—')}</td>
         <td>${formatCurrency(v.valor)}</td>
-        <td style="font-size:12px; line-height:1.4;">${detailsStr}</td>
-        <td><span class="badge ${v.status === 'pago' ? 'badge-success' : 'badge-warning'}">${v.status}</span></td>
-        <td>${actionBtn}</td>
+        <td style="font-size:12px; line-height:1.4; max-width:320px;">${detailsStr}</td>
+        <td><span class="badge ${v.status === 'pago' ? 'badge-success' : 'badge-warning'}">${_escAttr(v.status || '—')}</span></td>
+        <td style="white-space:nowrap;display:flex;gap:6px;flex-wrap:wrap;">${actions.join('')}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -180,11 +464,49 @@
 
   async function approveOrder(id) {
     try {
-      await supaReq('PATCH', 'beneficios_vouchers', { status: 'utilizado' }, `?id=eq.${id}`);
+      await supaReq('PATCH', 'beneficios_vouchers', { status: 'utilizado' }, `?id=eq.${encodeURIComponent(id)}`);
       alert('Pedido/Voucher aprovado com sucesso!');
       await loadAllData();
     } catch (e) {
       alert('Erro ao aprovar pedido: ' + e.message);
+    }
+  }
+
+  /** Apaga pedido de teste / incorreto e estorna o valor no limite do colaborador. */
+  async function deleteMealOrder(id) {
+    if (!id) return;
+    if (!confirm('Apagar este pedido? Se o valor estava debitado no Clube, ele será estornado.')) return;
+    try {
+      const rows = await supaReq('GET', 'beneficios_vouchers', null,
+        `?id=eq.${encodeURIComponent(id)}&select=id,employee_id,valor,status,voucher_no&limit=1`);
+      const v = Array.isArray(rows) && rows[0] ? rows[0] : null;
+      if (!v) {
+        alert('Pedido não encontrado.');
+        return;
+      }
+      await supaReq('DELETE', 'beneficios_vouchers', null, `?id=eq.${encodeURIComponent(id)}`);
+
+      const st = String(v.status || '').toLowerCase();
+      const empId = String(v.employee_id || '').trim();
+      const valor = parseFloat(v.valor) || 0;
+      if (empId && valor > 0 && _VOUCHER_DEBIT_STATUSES.has(st)) {
+        const lims = await supaReq('GET', 'beneficios_limites', null,
+          `?employee_id=eq.${encodeURIComponent(empId)}&order=created_at.desc&limit=1`);
+        const lim = Array.isArray(lims) && lims[0] ? lims[0] : null;
+        if (lim?.id) {
+          const used = Math.max(0, (parseFloat(lim.limite_utilizado) || 0) - valor);
+          const bal = _limitBalances(lim.limite_aprovado, used);
+          await supaReq('PATCH', 'beneficios_limites', {
+            limite_utilizado: bal.utilizado,
+            limite_disponivel: bal.disponivel,
+          }, `?id=eq.${encodeURIComponent(lim.id)}`);
+        }
+      }
+
+      alert(`Pedido ${v.voucher_no || id} apagado.`);
+      await loadAllData();
+    } catch (e) {
+      alert('Erro ao apagar pedido: ' + (e.message || e));
     }
   }
 
@@ -194,10 +516,17 @@
     const dateStart = document.getElementById('closeDateStart').value || '1970-01-01';
     const dateEnd = document.getElementById('closeDateEnd').value || new Date().toISOString().split('T')[0];
     try {
+      const select = document.getElementById('closeProvider');
+      const provName = (select?.options[select.selectedIndex]?.text || '').split(' (')[0].trim().toUpperCase();
       const vouchers = await supaReq('GET', 'beneficios_vouchers', null,
-        `?prestador_id=eq.${provId}&status=eq.utilizado&fechamento_protocolo=is.null`);
+        '?status=eq.utilizado&order=created_at.desc&limit=1000');
       selectedVouchersForClose = (vouchers || []).filter(v => {
-        const d = v.created_at.split('T')[0];
+        if (v.fechamento_protocolo) return false;
+        const sameId = String(v.prestador_id) === String(provId);
+        const sameName = provName && String(v.prestador_name || '').trim().toUpperCase() === provName;
+        if (!sameId && !sameName) return false;
+        // created_at pode vir "2026-07-16 13:20:00" (MySQL) ou ISO com "T"
+        const d = String(v.created_at || '').slice(0, 10);
         return d >= dateStart && d <= dateEnd;
       });
       document.getElementById('closeVouchersQty').value = selectedVouchersForClose.length;
@@ -425,9 +754,13 @@
     openApproveModal,
     closeApproveModal,
     confirmLimitApproval,
+    openManualDebitModal,
+    closeManualDebitModal,
+    confirmManualDebit,
     saveProvider,
     saveProduct,
     approveOrder,
+    deleteMealOrder,
     loadProviderVouchers,
     generateClosing,
     approveClosing,
@@ -441,9 +774,13 @@
     openApproveModal,
     closeApproveModal,
     confirmLimitApproval,
+    openManualDebitModal,
+    closeManualDebitModal,
+    confirmManualDebit,
     saveProvider,
     saveProduct,
     approveOrder,
+    deleteMealOrder,
     loadProviderVouchers,
     generateClosing,
     approveClosing,

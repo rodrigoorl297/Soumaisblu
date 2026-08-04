@@ -53,7 +53,7 @@
       <main class="page-content">
         <div id="beneficiosLoadError" class="wa-alert" style="display:none;margin-bottom:16px;"></div>
         <div class="menu-tabs">
-          <div class="menu-tab active" onclick="switchTab('esteira-limites', this)">Esteira de Análise</div>
+          <div class="menu-tab active" onclick="switchTab('esteira-limites', this)">Esteira de Acompanhamento</div>
           <div class="menu-tab" onclick="switchTab('cadastro-parceiros', this)">Cadastrar Prestador</div>
           <div class="menu-tab" onclick="switchTab('cadastro-produtos', this)">Cadastrar Produtos</div>
           <div class="menu-tab" onclick="switchTab('controle-pedidos', this)">Controle de Pedidos</div>
@@ -61,10 +61,11 @@
           <div class="menu-tab" onclick="switchTab('relatorios-prestador', this)">Área do Prestador</div>
         </div>
 
-        <!-- 1. ESTEIRA DE ANÁLISE -->
+        <!-- 1. ESTEIRA DE ACOMPANHAMENTO -->
         <div id="tab-esteira-limites" class="tab-content">
           <div class="benefit-card">
-            <div class="benefit-title">⚖️ Solicitações de Limites</div>
+            <div class="benefit-title">📋 Acompanhamento de Limites</div>
+            <p class="form-hint" style="margin-bottom:12px;">Valores em tempo real (aprovado, usado e disponível). Use <strong>Lançar débito</strong> para compras anteriores ao sistema.</p>
             <div class="table-wrap">
               <table class="data-table">
                 <thead>
@@ -72,13 +73,13 @@
                     <th>Funcionário</th>
                     <th>Telefones</th>
                     <th>Status</th>
-                    <th>Limite Solicitado/Aprovado</th>
+                    <th>Limite (tempo real)</th>
                     <th>Documento</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="limitesTbody">
-                  <tr><td colspan="6" class="text-center">Nenhuma solicitação cadastrada.</td></tr>
+                  <tr><td colspan="6" class="text-center">Nenhum limite cadastrado.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -115,6 +116,7 @@
                   <label>Categoria</label>
                   <select id="provCategoria" class="form-control" required>
                     <option value="Restaurante">Restaurante</option>
+                    <option value="Farmácia">Farmácia</option>
                     <option value="Saúde">Saúde</option>
                     <option value="Transporte">Transporte</option>
                     <option value="Outros">Outros</option>
@@ -127,6 +129,11 @@
                     <option value="SIM">SIM</option>
                   </select>
                 </div>
+              </div>
+              <div class="form-group">
+                <label>WhatsApp do restaurante (com DDI)</label>
+                <input type="tel" id="provWhatsapp" class="form-control" placeholder="Ex.: 5511999999999" inputmode="numeric"/>
+                <p class="form-hint" style="margin-top:6px;">Usado no pedido de marmita: abre o WhatsApp com a mensagem do pedido já preenchida.</p>
               </div>
               <button type="submit" class="btn btn-primary">Salvar Prestador</button>
             </form>
@@ -321,7 +328,7 @@
   </div>
 
   <!-- Modal Aprovação de Limite -->
-  <div class="modal-overlay" id="approveLimitModal" style="display:none;">
+  <div class="modal-overlay" id="approveLimitModal">
     <div class="modal" style="max-width:480px;">
       <div class="modal-header">
         <h3>Definir Limite de Crédito</h3>
@@ -353,9 +360,32 @@
     </div>
   </div>
 
+  <!-- Modal Débito Manual (compras anteriores ao sistema) -->
+  <div class="modal-overlay" id="manualDebitModal">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <h3>Lançar débito manual</h3>
+        <button class="modal-close" onclick="closeManualDebitModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="manualDebitLimitId"/>
+        <input type="hidden" id="manualDebitEmployeeId"/>
+        <div class="form-group"><label>Funcionário</label><input type="text" id="manualDebitName" class="form-control" readonly/></div>
+        <div class="form-group"><label>Disponível agora</label><input type="text" id="manualDebitDisponivel" class="form-control" readonly/></div>
+        <div class="form-group"><label>Valor do débito (R$)</label><input type="number" id="manualDebitValor" class="form-control" min="0.01" step="0.01" placeholder="0,00" required/></div>
+        <div class="form-group"><label>Descrição / o que foi comprado</label><input type="text" id="manualDebitDesc" class="form-control" placeholder="Ex.: Marmitas semana 10/07" required/></div>
+        <div class="form-group"><label>Estabelecimento (opcional)</label><input type="text" id="manualDebitPrestador" class="form-control" placeholder="Ex.: Restaurante ZS"/></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeManualDebitModal()">Cancelar</button>
+        <button class="btn btn-primary" onclick="confirmManualDebit()">Lançar débito</button>
+      </div>
+    </div>
+  </div>
+
   <script src="../js/config.js?v=nodelete-demo1"></script>
   <script src="../js/db.js?v=nodelete-demo1"></script>
   <script src="../js/auth.js?v=1781813000"></script>
-  <script src="../js/admin-beneficios.js?v=benef-fix4"></script>
+  <script src="../js/admin-beneficios.js?v=manual-debit2"></script>
 <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

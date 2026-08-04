@@ -1,0 +1,203 @@
+<!-- Aba + modal: Justificativa de Falta (carregado por rh-justificativa-boot.js) -->
+<div class="tab-content" id="tab-justificativa" style="display:none;" data-rh-tab="justificativa">
+  <div class="page-content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div class="page-header-text">
+        <h2 class="fw-bold fs-4 mb-1">Justificativa de Falta</h2>
+        <p class="text-muted small mb-0">Registre e aprove faltas dos colaboradores</p>
+      </div>
+      <button type="button" class="btn btn-primary btn-sm" data-rh-action="justif-open-new">+ Nova Justificativa</button>
+    </div>
+    <div class="card">
+      <div class="table-wrap">
+        <table class="data-table table table-sm align-middle mb-0">
+          <thead>
+            <tr>
+              <th>Protocolo</th>
+              <th>Colaborador</th>
+              <th>Situação</th>
+              <th>Duração</th>
+              <th>Afastamento</th>
+              <th>Retorno</th>
+              <th>Ações</th>
+            </tr>
+          </thead>
+          <tbody id="justificativa_list_body">
+            <tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="justificativaModal">
+  <div class="modal rh-modal--wide">
+    <div class="modal-header">
+      <h3 id="justificativaModalTitle">Justificativa de Falta</h3>
+      <button type="button" class="modal-close" data-rh-action="justif-close" aria-label="Fechar"></button>
+    </div>
+    <div class="modal-body rh-modal-body--scroll">
+      <form id="form-justificativa" novalidate>
+        <input type="hidden" id="justif_id"/>
+
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label" for="justif_protocolo">Protocolo</label>
+            <input type="text" class="form-control text-center rh-input-readonly fw-bold" id="justif_protocolo" readonly/>
+          </div>
+          <div class="col-md-6 d-flex align-items-end">
+            <span class="text-success fw-bold small pb-2">GERAR AUTOMÁTICO</span>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-1">
+          <div class="col-md-8">
+            <label class="form-label" for="justif_employee">Colaborador</label>
+            <select class="form-select" id="justif_employee" required>
+              <option value="">Selecione...</option>
+            </select>
+          </div>
+          <div class="col-md-4 d-flex align-items-end">
+            <button type="button" class="btn btn-accent w-100" data-rh-action="justif-buscar-dados">BUSCAR DADOS</button>
+          </div>
+        </div>
+        <div id="justif_emp_info" class="alert alert-secondary small mb-3 d-none" role="status"></div>
+
+        <div class="row g-3 mt-1">
+          <div class="col-md-4">
+            <label class="form-label" for="justif_situacao">Situação</label>
+            <select class="form-select" id="justif_situacao" required>
+              <option value="abonada">Abonada</option>
+              <option value="descontada">Descontada</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="justif_dias">Dias</label>
+            <input type="number" class="form-control" id="justif_dias" min="0" step="1" placeholder="0"/>
+            <small class="rh-field-hint">Dia inteiro ou período de vários dias</small>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="justif_horas">Horas</label>
+            <input type="number" class="form-control" id="justif_horas" min="0" step="0.5" placeholder="0"/>
+            <small class="rh-field-hint">Ex: 4h vespertino — use com dias = 0</small>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="form-label" for="justif_protocolo_inss">Protocolo INSS</label>
+          <input type="text" class="form-control" id="justif_protocolo_inss" placeholder="Nº protocolo INSS (se houver)"/>
+        </div>
+
+        <div class="mt-3">
+          <label class="form-label" for="justif_tipo">Tipo de justificativa</label>
+          <select class="form-select" id="justif_tipo" required>
+            <option value="atestado">Atestado médico</option>
+            <option value="justificada">Falta justificada</option>
+            <option value="injustificada">Falta injustificada</option>
+            <option value="abono">Abono / licença</option>
+          </select>
+        </div>
+
+        <div class="mt-3">
+          <label class="form-label" for="justif_motivo">Justificativa</label>
+          <textarea class="form-control" id="justif_motivo" rows="2" placeholder="Descreva o motivo da falta ou afastamento..." required></textarea>
+        </div>
+
+        <div class="row g-3 mt-1">
+          <div class="col-md-6">
+            <label class="form-label" for="justif_data_afastamento">Data afastamento</label>
+            <input type="date" class="form-control" id="justif_data_afastamento"/>
+            <div class="rh-justif-hint">Inativar sistema</div>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label" for="justif_data_retorno">Data retorno</label>
+            <input type="date" class="form-control" id="justif_data_retorno"/>
+            <div class="rh-justif-hint">Ativar sistema</div>
+          </div>
+        </div>
+
+        <div class="rh-justif-panel d-none" id="justif_medico_panel">
+          <div class="rh-justif-panel__title">Atestado médico</div>
+          <div class="mb-3 cbo-search-wrap">
+            <label class="form-label" for="justif_cbo_search">CBO (ocupação)</label>
+            <input type="text" class="form-control" id="justif_cbo_search" placeholder="Buscar código ou nome CBO..." autocomplete="off"/>
+            <div id="justif_cbo_dropdown" class="cbo-dropdown d-none"></div>
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="justif_cbo_cod">Código CBO</label>
+              <input type="text" class="form-control rh-input-readonly fw-bold" id="justif_cbo_cod" readonly/>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="justif_cbo_descricao">Descrição CBO</label>
+              <input type="text" class="form-control rh-input-readonly" id="justif_cbo_descricao" readonly/>
+            </div>
+          </div>
+          <div class="row g-3 mt-1">
+            <div class="col-md-3">
+              <label class="form-label" for="justif_dias_atestado">Dias (atestado)</label>
+              <input type="number" class="form-control" id="justif_dias_atestado" min="0" step="1" placeholder="0"/>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="justif_horas_atestado">Horas (atestado)</label>
+              <input type="number" class="form-control" id="justif_horas_atestado" min="0" step="0.5" placeholder="0"/>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="justif_intercalado">Atestado intercalado?</label>
+              <select class="form-select" id="justif_intercalado">
+                <option value="nao">Não</option>
+                <option value="sim">Sim</option>
+              </select>
+            </div>
+            <div class="col-md-3">
+              <label class="form-label" for="justif_protocolo_inss_med">Protocolo INSS</label>
+              <input type="text" class="form-control" id="justif_protocolo_inss_med" placeholder="INSS do atestado"/>
+            </div>
+          </div>
+          <div class="mt-3">
+            <label class="form-label" for="justif_data_termino">Data término</label>
+            <input type="date" class="form-control" id="justif_data_termino"/>
+          </div>
+          <div class="rh-dem-anexos-panel mt-3">
+            <div class="rh-dem-anexos-panel__title">Anexo do atestado <span class="rh-justif-optional">(opcional)</span></div>
+            <div class="rh-dem-anexo-row">
+              <span class="rh-dem-anexo-row__label">Arquivo</span>
+              <span class="rh-dem-anexo-row__status" id="justif_atestado_status">Nenhum arquivo</span>
+              <button type="button" class="btn btn-outline btn-sm" data-rh-action="justif-atestado-pick">Anexar</button>
+              <a href="#" id="justif_atestado_link" class="btn btn-ghost btn-sm d-none" target="_blank" rel="noopener">Ver anexo</a>
+              <input type="file" id="justif_atestado_file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="rh-file-input-hidden"/>
+            </div>
+            <p class="rh-justif-hint mb-0">PDF ou imagem do atestado médico — não é obrigatório anexar.</p>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-3">
+          <div class="col-md-4">
+            <label class="form-label" for="justif_excecao_abono">Exceção de abono</label>
+            <select class="form-select" id="justif_excecao_abono">
+              <option value="nao">Não</option>
+              <option value="sim">Sim</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="justif_gerou_advertencia">Gerou advertência</label>
+            <select class="form-select" id="justif_gerou_advertencia">
+              <option value="nao">Não</option>
+              <option value="sim">Sim</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label" for="justif_diretoria">Diretoria</label>
+            <input type="text" class="form-control" id="justif_diretoria" placeholder="Diretor / área"/>
+          </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+          <button type="button" class="btn btn-outline-secondary" data-rh-action="justif-close">Cancelar</button>
+          <button type="submit" class="btn btn-accent btn-lg flex-grow-1">Salvar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

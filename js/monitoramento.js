@@ -24,7 +24,7 @@ const Monitoramento = (() => {
     if (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function') {
       return DB.proposalBillingDate(p);
     }
-    const raw = p?.created_at || p?.createdAt || p?.updated_at;
+    const raw = p?.updated_at || p?.updatedAt || p?.created_at || p?.createdAt;
     const d = raw ? new Date(raw) : new Date(0);
     return Number.isNaN(d.getTime()) ? new Date(0) : d;
   }

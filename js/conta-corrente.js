@@ -85,6 +85,21 @@
       'parceiro'].includes(s.role);
   }
 
+  function isUserActive(u) {
+    const a = u?.active;
+    if (a === false || a === 0 || a === '0' || a === 'false' || a === 'inativo') return false;
+    return true;
+  }
+
+  function isCcMoneyActive(u) {
+    if (typeof DB !== 'undefined' && typeof DB.isCcMoneyActive === 'function') {
+      return DB.isCcMoneyActive(u);
+    }
+    const v = u?.cc_money_active;
+    if (v === false || v === 0 || v === '0' || v === 'false') return false;
+    return true;
+  }
+
   function canManageMovements() {
     const s = Auth.getSession();
     if (!s) return false;
@@ -220,6 +235,13 @@
 .cc-card__holder { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.9); }
 .cc-card__number { font-family: 'Courier New', monospace; font-size: 12px; color: rgba(255,255,255,0.5); letter-spacing: 1px; }
 .cc-card.negative .cc-card__balance { color: #ffb4b4; }
+.cc-card__top-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; max-width: 70%; }
+.cc-card__name { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: #fff; text-align: right; line-height: 1.25; }
+.cc-card__active-btn { border: 1px solid rgba(255,255,255,0.45); background: rgba(255,255,255,0.12); color: #fff; font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.cc-card__active-btn:hover { background: rgba(255,255,255,0.22); }
+.cc-card__active-btn.is-inactive { border-color: rgba(74,222,128,0.7); background: rgba(22,163,74,0.35); }
+.cc-card__badge-off { display: inline-block; margin-left: 6px; font-size: 10px; font-weight: 800; letter-spacing: 0.04em; padding: 2px 6px; border-radius: 6px; background: rgba(239,68,68,0.35); color: #fecaca; vertical-align: middle; }
+option.cc-opt-inactive { color: #b45309; }
 
 .cc-kpi-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .cc-kpi-card { background: var(--color-surface); border: 1px solid var(--color-border); border-radius: 16px; padding: 16px; display: flex; align-items: center; gap: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.02); transition: transform 0.2s; }
@@ -634,22 +656,29 @@
       const opRoles = new Set([
         'vendedor', 'employee', 'funcionario', 'supervisor', 'sup_backoffice', 'backoffice',
         'operacional', 'parceiro', 'gerente', 'gerencia',
+        'master', 'fundador', 'desenvolvedor', 'financeiro', 'financial', 'rh',
       ]);
       let employees = [];
       if (window.PARTNER_ROOT_ID) {
         employees = await DB.getEmployeesByAdmin(window.PARTNER_ROOT_ID).catch(() => []);
       } else if (hubRoles.has(String(s?.role || '').toLowerCase())) {
         const all = typeof DB.getAllUsers === 'function'
-          ? await DB.getAllUsers().catch(() => [])
+          ? await DB.getAllUsers(true).catch(() => [])
           : await DB.getUsers().catch(() => []);
         employees = (all || []).filter((u) => opRoles.has(String(u?.role || '').toLowerCase()));
         if (!employees.length) employees = all || [];
       } else {
         employees = await DB.getEmployeesByAdmin(s?.id).catch(() => []);
       }
+      // Inclui ativos e com conta corrente travada (marcados) — login/users.active NÃO é filtrado aqui
       return (employees || [])
-        .filter((u) => u && u.active !== false)
-        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+        .filter((u) => u && u.id && isUserActive(u))
+        .sort((a, b) => {
+          const aOn = isCcMoneyActive(a) ? 0 : 1;
+          const bOn = isCcMoneyActive(b) ? 0 : 1;
+          if (aOn !== bOn) return aOn - bOn;
+          return String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
+        });
     },
 
     async renderGestao() {
@@ -711,7 +740,9 @@
               <select id="ccGestaoSelect" class="form-control" onchange="ContaCorrente.onGestaoSelect(this.value)">
                 ${employees.map(e => {
                   const nm = typeof fixMojibake === 'function' ? fixMojibake(e.name) : e.name;
-                  return `<option value="${esc(e.id)}" ${e.id === selId ? 'selected' : ''}>${esc(nm)} (${esc(e.role)})</option>`;
+                  const on = isCcMoneyActive(e);
+                  const label = `${nm || 'Sem nome'} (${e.role || '—'})${on ? '' : ' — CC INATIVA'}`;
+                  return `<option class="${on ? '' : 'cc-opt-inactive'}" value="${esc(e.id)}" ${e.id === selId ? 'selected' : ''}>${esc(label)}</option>`;
                 }).join('')}
               </select>
             </div>
@@ -744,10 +775,22 @@
       const countTxt = this.selectMode
         ? `${this.selectedIds.size} selecionado${this.selectedIds.size === 1 ? '' : 's'}`
         : `${lines.length} lançamento${lines.length === 1 ? '' : 's'}`;
+      const active = isCcMoneyActive(u);
+      const activeBtn = canManageMovements()
+        ? (active
+          ? `<button type="button" class="cc-card__active-btn" onclick="ContaCorrente.toggleAccountActive('${esc(empId)}', false)">Inativar conta corrente</button>`
+          : `<button type="button" class="cc-card__active-btn is-inactive" onclick="ContaCorrente.toggleAccountActive('${esc(empId)}', true)">Ativar conta corrente</button>`)
+        : '';
       box.innerHTML = `
-        <div class="cc-card ${neg ? 'negative' : ''}" style="margin-bottom:12px;">
-          <div class="cc-card__top"><span>Prévia</span><span>${esc(name)}</span></div>
-          <div class="cc-card__balance">${fmtBal(stmt.balance, stmt.money, u)}</div>
+        <div class="cc-card ${neg ? 'negative' : ''}" style="margin-bottom:12px;height:auto;min-height:160px;">
+          <div class="cc-card__top">
+            <span class="cc-card__brand">Prévia</span>
+            <div class="cc-card__top-actions">
+              <span class="cc-card__name">${esc(name)}${active ? '' : '<span class="cc-card__badge-off">CC INATIVA</span>'}</span>
+              ${activeBtn}
+            </div>
+          </div>
+          <div class="cc-card__balance" style="margin-top:14px;">${fmtBal(stmt.balance, stmt.money, u)}</div>
         </div>
         <div class="cc-extrato${selCls}" id="ccGestaoExtrato">
           <div class="cc-extrato__head">
@@ -768,6 +811,31 @@
           </div>
           <div id="ccGestaoExtratoBody">${this._renderLinesGrouped(lines, u, stmt.money)}</div>
         </div>`;
+    },
+
+    async toggleAccountActive(empId, activate) {
+      if (!canManageMovements()) {
+        showToast('Sem permissão para alterar a conta corrente.', 'warning');
+        return;
+      }
+      if (!empId) return;
+      const wantOn = !!activate;
+      const msg = wantOn
+        ? 'Reativar a CONTA CORRENTE desta pessoa?\n\nO login dela já continua normal. Isso só libera saques/saldo em dinheiro de novo.'
+        : 'Inativar a CONTA CORRENTE (dinheiro) desta pessoa?\n\nO login no sistema CONTINUA ativo. Só bloqueia saques da conta corrente até reativar.';
+      if (!confirm(msg)) return;
+      if (typeof showLoading === 'function') showLoading(wantOn ? 'Ativando conta corrente...' : 'Inativando conta corrente...');
+      try {
+        await DB.setCcMoneyActive(empId, wantOn);
+        showToast(wantOn ? 'Conta corrente ativada.' : 'Conta corrente inativada (login permanece).', 'success');
+        this.gestaoUserId = empId;
+        await this.renderGestao();
+      } catch (e) {
+        console.error('[ContaCorrente] toggleAccountActive', e);
+        showToast('Erro ao alterar conta corrente: ' + (e.message || e), 'error');
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
     },
 
     openMovement(kind) {

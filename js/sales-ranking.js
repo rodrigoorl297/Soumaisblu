@@ -14,7 +14,7 @@ window.SalesRanking = {
 
   STATUS_OPTIONS: [
     'Em Andamento', 'AG. BOLETO', 'Digitação', 'PROPOSTA DIGITADA', 'AG. ASS TERMO',
-    'AG. VÍDEO', 'AG. ASS PROPOSTA', 'BOLETO VALIDADO', 'AG. QUITAÇÃO', 'BOLETO QUITADO',
+    'AG. VÍDEO', 'AG. DOCS GARANTIA', 'AG. ASS PROPOSTA', 'BOLETO VALIDADO', 'AG. QUITAÇÃO', 'BOLETO QUITADO',
     'AG. LIBERAÇÃO MARGEM', 'AVERBADO', 'PAGO', 'Pendenciado', 'Cancelado',
   ],
 
@@ -22,7 +22,7 @@ window.SalesRanking = {
     ? Proposals._VENDOR_SITUACOES.map(o => o.v)
     : [
         'Em Andamento', 'Digitação', 'AG. BOLETO', 'PROPOSTA DIGITADA', 'AG. ASS TERMO',
-        'AG. VÍDEO', 'AG. ASS PROPOSTA', 'BOLETO VALIDADO', 'AG. QUITAÇÃO', 'BOLETO QUITADO',
+        'AG. VÍDEO', 'AG. DOCS GARANTIA', 'AG. ASS PROPOSTA', 'BOLETO VALIDADO', 'AG. QUITAÇÃO', 'BOLETO QUITADO',
         'AG. LIBERAÇÃO MARGEM', 'AVERBADO', 'PAGO', 'Pendenciado', 'Cancelado',
       ],
 
@@ -102,7 +102,7 @@ window.SalesRanking = {
     if (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function') {
       return DB.proposalBillingDate(p);
     }
-    const raw = p.createdAt || p.created_at;
+    const raw = p.updatedAt || p.updated_at || p.createdAt || p.created_at;
     const d = raw ? new Date(raw) : new Date(0);
     return Number.isNaN(d.getTime()) ? new Date(0) : d;
   },
@@ -132,10 +132,15 @@ window.SalesRanking = {
       return DB.proposalGrossAmount(p);
     }
     const v = parseFloat(p?.valor ?? 0);
-    const vf = parseFloat(p?.valorFinal ?? p?.valor_final ?? 0);
-    if (Number.isFinite(v) && v > 0) return v;
-    if (Number.isFinite(vf) && vf > 0) return vf;
-    return 0;
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  },
+
+  _proposalChartAmount(p, billingKey) {
+    const billing = billingKey || this._filters.billing || 'total';
+    if (typeof DB !== 'undefined' && typeof DB.proposalChartBillingAmount === 'function') {
+      return DB.proposalChartBillingAmount(p, billing);
+    }
+    return billing === 'pagas' ? this._proposalAmount(p) : this._proposalGrossAmount(p);
   },
 
   _vendorId(p) {
@@ -214,7 +219,7 @@ window.SalesRanking = {
         rows = await DB.listProposals();
       } else if (typeof DB.listProposalsLite === 'function') {
         // Mesma base do dashboard (listProposalsLite) para os totais baterem no relatório.
-        rows = await DB.listProposalsLite({ limit: 800 });
+        rows = await DB.listProposalsLite({ all: true });
       } else if (typeof DB.listProposals === 'function') rows = await DB.listProposals();
       else if (typeof DB.list === 'function') rows = await DB.list('proposals');
       else if (typeof DB.getProposals === 'function') rows = await DB.getProposals();
@@ -620,7 +625,8 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     const filtered = this._filterForDashboardSync(rawProps);
     const scoped = this._scopeProposals(filtered, userIds, vendorIndex, usersByName, true);
     const rows = this._aggregate(users, scoped, vendorIndex, usersByName, true);
-    const dashTotal = filtered.reduce((s, p) => s + this._proposalAmount(p), 0);
+    const dashTotal = filtered.reduce((s, p) => s + this._proposalChartAmount(p), 0);
+    const dashTotalBruto = filtered.reduce((s, p) => s + this._proposalGrossAmount(p), 0);
     const rankedTotal = rows.reduce((s, r) => s + (r.total || 0), 0);
     const rankedIds = new Set(userIds.map(String));
     let orphanCount = 0;
@@ -629,13 +635,13 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, true);
       if (!vid || !rankedIds.has(String(vid))) {
         orphanCount += 1;
-        orphanTotal += this._proposalAmount(p);
+        orphanTotal += this._proposalChartAmount(p);
       }
     });
     // #region agent log
     fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'rank-sync3',hypothesisId:'H4-H5',location:'sales-ranking.js:prepare',message:'ranking vs dashboard totals',data:{period:this._filters.period,billing:this._filters.billing||'total',rawCount:rawProps.length,filteredCount:filtered.length,dashTotal,rankedTotal,orphanCount,orphanTotal,dashCachedTotal:window._dashBillingTotal??null,dashCachedCount:window._dashPropCount??null},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
-    return { users, vendorIndex, usersByName, userIds, rawProps, filtered, scoped, rows, dashTotal, rankedTotal, orphanCount, orphanTotal };
+    return { users, vendorIndex, usersByName, userIds, rawProps, filtered, scoped, rows, dashTotal, dashTotalBruto, rankedTotal, orphanCount, orphanTotal };
   },
 
   _buildOrphanReportRow(filtered, users, vendorIndex, usersByName) {
@@ -650,7 +656,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, true);
       if (vid && rankedIds.has(String(vid))) return;
       count += 1;
-      const amt = this._proposalAmount(p);
+      const amt = this._proposalChartAmount(p);
       total += amt;
       bruto += this._proposalGrossAmount(p);
       const bucket = this._funnelBucket(p);
@@ -775,23 +781,28 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
   },
 
   _aggregate(users, proposals, vendorIndex, usersByName, masterMode = true) {
+    const billing = this._filters.billing || 'total';
     const byVendor = {};
     let _dbgAmt = null;
     proposals.forEach(p => {
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, masterMode);
       if (!vid) return;
-      if (!byVendor[vid]) byVendor[vid] = { total: 0, count: 0 };
-      const amt = this._proposalAmount(p);
+      if (!byVendor[vid]) byVendor[vid] = { total: 0, bruto: 0, count: 0 };
+      const amt = this._proposalChartAmount(p, billing);
+      const bruto = this._proposalGrossAmount(p);
       if (!_dbgAmt && amt > 0) {
         _dbgAmt = {
           id: p.id || p.numero,
           valor: p.valor,
           valorFinal: p.valorFinal ?? p.valor_final,
           used: amt,
+          bruto,
+          billing,
           created: p.createdAt || p.created_at,
         };
       }
       byVendor[vid].total += amt;
+      byVendor[vid].bruto += bruto;
       byVendor[vid].count += 1;
     });
     // #region agent log
@@ -802,10 +813,11 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
 
     return (users || [])
       .map(u => {
-        const agg = byVendor[u.id] || { total: 0, count: 0 };
+        const agg = byVendor[u.id] || { total: 0, bruto: 0, count: 0 };
         return {
           user: u,
           total: agg.total,
+          bruto: agg.bruto,
           count: agg.count,
           paidCount: 0,
           tier: this._tierForSales(agg.total),
@@ -948,8 +960,12 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       return;
     }
     el.style.display = '';
-    const totalBilling = proposals.reduce((s, p) => s + this._proposalAmount(p), 0);
+    const billing = this._filters.billing || 'total';
+    const isPagas = billing === 'pagas';
+    const totalBilling = proposals.reduce((s, p) => s + this._proposalChartAmount(p, billing), 0);
+    const totalBruto = proposals.reduce((s, p) => s + this._proposalGrossAmount(p), 0);
     const rankedBilling = rows.reduce((s, r) => s + (r.total || 0), 0);
+    const rankedBruto = rows.reduce((s, r) => s + (r.bruto || 0), 0);
     const rankedCount = rows.reduce((s, r) => s + (r.count || 0), 0);
     const vendorIndex = opts.vendorIndex;
     const unassigned = vendorIndex
@@ -957,13 +973,18 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       : 0;
     const parts = [
       this._periodLabel(this._filters.period),
-      this._billingLabel(this._filters.billing || 'total'),
+      this._billingLabel(billing),
       `${rows.length} no ranking`,
       `${proposals.length} proposta(s)`,
-      `Faturamento: ${this._fmtSales(totalBilling)}`,
+      `Bruto: ${this._fmtSales(totalBruto)}`,
     ];
+    if (isPagas) parts.push(`Pago (final): ${this._fmtSales(totalBilling)}`);
+    else parts.push(`Faturamento: ${this._fmtSales(totalBilling)}`);
     if (Math.abs(rankedBilling - totalBilling) > 0.01) {
       parts.push(`Atribuído: ${this._fmtSales(rankedBilling)} (${rankedCount} prop.)`);
+    }
+    if (isPagas && Math.abs(rankedBruto - totalBruto) > 0.01) {
+      parts.push(`Bruto atribuído: ${this._fmtSales(rankedBruto)}`);
     }
     if (unassigned > 0) parts.push(`${unassigned} sem vendedor`);
     if (this._filters.status) parts.push(`Status: ${this._filters.status}`);
@@ -980,6 +1001,8 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     const publicRank = opts.rankMode === 'public';
     const showSales = !publicRank && opts.showSalesAmount !== false && this._canViewSalesAmount(opts.viewer);
     const showMasterDetails = showSales;
+    const billing = this._filters.billing || 'total';
+    const isPagasBilling = billing === 'pagas';
 
     if (!rows.length) {
       box.innerHTML = publicRank
@@ -1007,7 +1030,9 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       const statsHtml = publicRank
         ? `<span class="ranking-item__count"><strong>${row.paidCount || 0}</strong> paga(s) · <strong>${row.count || 0}</strong> proposta(s)</span>`
         : `${showMasterDetails ? `<span class="ranking-item__classif-label">Classificação</span>${tierBadge}` : ''}
-            ${showSales ? `<span class="ranking-item__sales">${this._fmtSales(row.total)}</span>` : ''}
+            ${showSales ? `<span class="ranking-item__sales">${isPagasBilling && row.bruto > 0 && Math.abs(row.bruto - row.total) > 0.01
+              ? `${this._fmtSales(row.total)} <span style="font-size:11px;color:var(--color-text-muted);">(bruto ${this._fmtSales(row.bruto)})</span>`
+              : this._fmtSales(row.total)}</span>` : ''}
             <span class="ranking-item__count">${row.count} proposta(s)</span>`;
 
       return `<div class="ranking-item${isMe ? ' ranking-item--me' : ''}">

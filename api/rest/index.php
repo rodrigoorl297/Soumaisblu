@@ -8,6 +8,9 @@ error_reporting(E_ALL);
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/FinanceMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/BeneficiosMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/TrainingTracksMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/InternalChatMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/RhMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/PostgRestCompat.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
@@ -44,6 +47,24 @@ try {
         }
         if (str_starts_with($table, 'beneficios_') && !soublu_beneficios_tables_exist($pdo)) {
             soublu_ensure_beneficios_tables($pdo);
+        }
+        if ((str_starts_with($table, 'training_track')) && !soublu_training_tracks_tables_exist($pdo)) {
+            soublu_ensure_training_tracks_tables($pdo);
+        }
+        if ($table === 'training_attempts') {
+            soublu_ensure_training_attempts_progress_schema($pdo);
+        }
+        if ($table === 'training_mural') {
+            soublu_ensure_training_mural_ciencia_schema($pdo);
+        }
+        if (str_starts_with($table, 'training_mural_') && !soublu_training_mural_engagement_tables_exist($pdo)) {
+            soublu_ensure_training_mural_engagement_schema($pdo);
+        }
+        if (str_starts_with($table, 'internal_chat_') && !soublu_internal_chat_tables_exist($pdo)) {
+            soublu_ensure_internal_chat_tables($pdo);
+        }
+        if (str_starts_with($table, 'rh_vaga') && !soublu_rh_vagas_tables_exist($pdo)) {
+            soublu_ensure_rh_vagas_schema($pdo);
         }
         $api = new PostgRestCompat($pdo);
         return $api->handle($table, $method, $body, $query);
