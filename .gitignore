@@ -5,6 +5,12 @@ config.pix.local.php
 config.evolution.local.php
 config.supabase.local.php
 config.stack.local.php
+config.nextbilling.local.php
+config.nextbilling.settings.json
+config.boleto.local.php
+config.zapi.local.php
+config.whaticket.local.php
+config.sistemaweb.local.php
 *.p12
 *.pem
 .env

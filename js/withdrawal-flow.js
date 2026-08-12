@@ -34,7 +34,12 @@ function selectPixType(type, btn) {
 window.selectPixType = selectPixType;
 
 /* ── PASSO 1 → próximo passo ── */
+let _wdGoingToTerm = false;
+
 async function goToTermStep() {
+  if (_wdGoingToTerm) return;
+  _wdGoingToTerm = true;
+  try {
   const rawAmt = document.getElementById('withdrawAmount').value;
   const moneyWallet = typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(currentUser);
   const pay = typeof WithdrawalRules !== 'undefined'
@@ -62,7 +67,7 @@ async function goToTermStep() {
 
   window._wdPaymentDraft = pay;
 
-  if (moneyWallet && typeof WithdrawalRules !== 'undefined') {
+  if (typeof WithdrawalRules !== 'undefined') {
     const ev = await WithdrawalRules.evaluate(currentUser.id, amt, currentUser);
     if (!ev.ok) { showToast(ev.msg, 'error', 6000); return; }
     window._wdCalc = ev;
@@ -77,7 +82,51 @@ async function goToTermStep() {
       showToast(`Saldo insuficiente. Disponível: ${formatCurrency(bal, currentUser)}.`, 'error');
       return;
     }
-    window._wdCalc = { netAmount: amt, irpfTax: 0, totalDebit: amt };
+    window._wdCalc = { netAmount: amt, irpfTax: 0, totalDebit: amt, requestedAmount: amt };
+  }
+
+  // Débitos Clube: pergunta ANTES do termo (fecha o modal de saque para o diálogo aparecer na frente)
+  try {
+    const openDeb = typeof DB.getOpenAccountDebitos === 'function'
+      ? await Promise.race([
+          DB.getOpenAccountDebitos(currentUser.id),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout débitos')), 10000)),
+        ])
+      : { total: 0 };
+    const deb = Number(openDeb?.total) || 0;
+    if (deb > 0) {
+      closeModal('withdrawalModal');
+      const choice = await askAccountDebitoOnWithdraw(openDeb);
+      if (choice.cancel) {
+        showToast('Saque cancelado.', 'info');
+        openModal('withdrawalModal');
+        return;
+      }
+      const calc = window._wdCalc || {};
+      calc.accountDebitoOpen = deb;
+      calc.accountDebitoItens = openDeb.itens || [];
+      calc.deductAccountDebito = !!choice.deduct;
+      if (choice.deduct) {
+        const netAfter = Math.round(((Number(calc.netAmount) || amt) - deb) * 100) / 100;
+        if (!(netAfter > 0)) {
+          showToast(`Se descontar ${formatMoney(deb)}, o líquido do saque fica zerado. Ajuste o valor ou escolha sacar sem descontar.`, 'error', 8000);
+          openModal('withdrawalModal');
+          return;
+        }
+        calc.accountDebito = deb;
+        calc.netAmount = netAfter;
+      } else {
+        calc.accountDebito = 0;
+        calc.accountDebitoPending = true;
+      }
+      window._wdCalc = calc;
+      window._wdDeductDebito = !!choice.deduct;
+    } else {
+      window._wdDeductDebito = false;
+    }
+  } catch (e) {
+    console.warn('[goToTermStep] débitos abertos:', e);
+    window._wdDeductDebito = false;
   }
 
   const pixKey = pay.pix?.pix_key;
@@ -105,7 +154,6 @@ async function goToTermStep() {
   }
 
   if (_wdIsFirst) {
-    // 1º saque: vai para cadastro de documento primeiro
     _termFaceAlreadyDone = false;
     _docFrontB64 = '';
     _docBackB64  = '';
@@ -121,15 +169,20 @@ async function goToTermStep() {
     document.getElementById('docBackPreviewWrap').style.borderColor = 'var(--color-border)';
     document.getElementById('docBackPreviewWrap').style.borderStyle = 'dashed';
     const bst = document.getElementById('docBackStatus'); if(bst) bst.style.display='none';
-    // Scroll para o topo da área de documento
     const dc = document.getElementById('docContent'); if(dc) dc.scrollTop = 0;
     document.getElementById('docTypeValue').value = 'rg';
     selectDocType('rg');
     document.getElementById('docScreen').classList.add('open');
   } else {
-    // Demais saques: vai direto para o termo
     _termFaceAlreadyDone = false;
     openTermScreen(amt, pixType, pixKey, holderName);
+  }
+  } catch (err) {
+    console.error('[goToTermStep]', err);
+    showToast(err?.message || 'Não foi possível continuar o saque. Tente novamente.', 'error');
+    try { openModal('withdrawalModal'); } catch (_) { /* noop */ }
+  } finally {
+    _wdGoingToTerm = false;
   }
 }
 
@@ -241,23 +294,29 @@ function openTermScreen(amount, pixType, pixKey, holderName) {
     feeClause.style.display = 'none';
   }
   let holderHtml = `Titular: <strong>${holderName}</strong>`;
-  if (calc.partnerFee > 0 || calc.irpjTax > 0) {
-    holderHtml += `<div style="margin-top:8px;font-size:13px;color:var(--color-warning);">
-      Valor solicitado: <strong>${typeof formatMoney === 'function' ? formatMoney(requested) : requested}</strong><br>`;
+  const fmtM = (n) => (typeof formatMoney === 'function' ? formatMoney(n) : String(n));
+  const hasDeductions = (calc.partnerFee > 0) || (calc.irpjTax > 0) || (calc.irpfTax > 0) || (calc.accountDebito > 0);
+  if (hasDeductions || calc.accountDebitoPending) {
+    holderHtml += `<div style="margin-top:10px;font-size:13px;line-height:1.7;color:var(--color-warning);border-left:3px solid var(--color-warning);padding-left:12px;">
+      <div><strong>Resumo do saque</strong></div>
+      <div>Valor solicitado: <strong>${fmtM(requested)}</strong></div>`;
     if (calc.partnerFee > 0) {
-      holderHtml += `Taxa administrativa: <strong>− ${typeof formatMoney === 'function' ? formatMoney(calc.partnerFee) : calc.partnerFee}</strong><br>`;
+      holderHtml += `<div>Taxa administrativa: <strong>− ${fmtM(calc.partnerFee)}</strong></div>`;
     }
     if (calc.irpjTax > 0) {
       const rateLbl = calc.irpjRate ? ` (${String(calc.irpjRate).replace('.', ',')}%)` : '';
-      holderHtml += `Retenção IRPJ${rateLbl}: <strong>− ${typeof formatMoney === 'function' ? formatMoney(calc.irpjTax) : calc.irpjTax}</strong><br>`;
+      holderHtml += `<div>Retenção IRPJ${rateLbl}: <strong>− ${fmtM(calc.irpjTax)}</strong></div>`;
     }
-    holderHtml += `Valor líquido PIX: <strong>${formatCurrency(amtDisp, currentUser)}</strong>
-    </div>`;
-  }
-  if (calc.irpfTax > 0) {
-    holderHtml += `<div style="margin-top:8px;font-size:13px;color:var(--color-warning);">
-      Retenção IRPF (3,5%): <strong>${formatMoney(calc.irpfTax)}</strong><br>
-      Total debitado do saldo: <strong>${formatMoney(calc.totalDebit)}</strong>
+    if (calc.irpfTax > 0) {
+      holderHtml += `<div>Retenção IRPF (1,89%): <strong>− ${fmtM(calc.irpfTax)}</strong></div>`;
+    }
+    if (calc.accountDebito > 0) {
+      holderHtml += `<div>Débito Clube / conta (você optou por descontar): <strong>− ${fmtM(calc.accountDebito)}</strong></div>`;
+    } else if (calc.accountDebitoPending && calc.accountDebitoOpen > 0) {
+      holderHtml += `<div style="color:#b91c1c;">Débito Clube em aberto <strong>${fmtM(calc.accountDebitoOpen)}</strong> — você optou por <strong>não descontar</strong> (permanece em aberto).</div>`;
+    }
+    holderHtml += `<div>Valor líquido no PIX: <strong>${formatCurrency(amtDisp, currentUser)}</strong></div>
+      <div>Total debitado do saldo: <strong>${fmtM(calc.totalDebit != null ? calc.totalDebit : requested)}</strong></div>
     </div>`;
   }
   document.getElementById('termHolder').innerHTML = holderHtml;
@@ -498,6 +557,48 @@ function cancelFaceStep() {
   }
 }
 
+/* ── Modal débitos em aberto (Clube / conta) ── */
+function askAccountDebitoOnWithdraw(openDebito) {
+  return new Promise((resolve) => {
+    const total = Number(openDebito?.total) || 0;
+    if (!(total > 0)) { resolve({ deduct: false, cancel: false }); return; }
+    const existing = document.getElementById('wdDebitoModal');
+    if (existing) existing.remove();
+    const fmt = typeof formatMoney === 'function' ? formatMoney(total) : String(total);
+    const el = document.createElement('div');
+    el.id = 'wdDebitoModal';
+    el.style.cssText = 'position:fixed;inset:0;z-index:20000;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px;';
+    el.innerHTML = `<div role="dialog" aria-modal="true" style="background:#fff;border-radius:12px;max-width:420px;width:100%;padding:20px 22px;box-shadow:0 12px 40px rgba(0,0,0,.25);position:relative;z-index:20001;">
+      <h3 style="margin:0 0 10px;font-size:16px;">Débitos em aberto</h3>
+      <p style="margin:0 0 14px;font-size:13px;line-height:1.55;color:#444;">
+        Você possui faturas em aberto no clube de benefícios. Valor: <strong>${fmt}</strong>.
+        Deseja descontar esse valor dos seus pontos neste saque?
+      </p>
+      <p style="margin:0 0 14px;font-size:12px;line-height:1.45;color:#666;">
+        Se escolher <strong>não descontar</strong>, o saque segue e o débito permanece em aberto (esteira em vermelho).
+      </p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button type="button" data-act="yes" class="btn btn-primary" style="width:100%;">Sim, descontar e sacar</button>
+        <button type="button" data-act="no" class="btn btn-outline" style="width:100%;">Não descontar — só sacar</button>
+        <button type="button" data-act="cancel" class="btn btn-ghost" style="width:100%;">Cancelar</button>
+      </div>
+    </div>`;
+    const done = (v) => { try { el.remove(); } catch (_) {} resolve(v); };
+    el.querySelectorAll('[data-act]').forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const act = btn.getAttribute('data-act');
+        if (act === 'yes') done({ deduct: true, cancel: false });
+        else if (act === 'no') done({ deduct: false, cancel: false });
+        else done({ deduct: false, cancel: true });
+      });
+    });
+    document.body.appendChild(el);
+    try { el.querySelector('[data-act="yes"]')?.focus(); } catch (_) { /* noop */ }
+  });
+}
+
 /* ── Executar o saque ── */
 async function executeWithdrawal() {
   const amountEl = document.getElementById('withdrawAmount');
@@ -559,6 +660,9 @@ async function executeWithdrawal() {
     return;
   }
 
+  let deductAccountDebito = window._wdDeductDebito === true
+    || window._wdCalc?.deductAccountDebito === true;
+
   let withdrawalOk = false;
   try {
     const savePay = document.getElementById('wdSavePayment')?.checked !== false;
@@ -585,6 +689,7 @@ async function executeWithdrawal() {
       doc_verified: _wdIsFirst ? true : (currentUser.doc_verified||false),
       doc_front:   _docFrontB64 || '',
       doc_back:    _docBackB64  || '',
+      deductAccountDebito,
     };
     if (typeof DB !== 'undefined' && typeof DB.normalizePixPayment === 'function') {
       const norm = DB.normalizePixPayment(reqPayload.pix_key_type, reqPayload.pix_key);

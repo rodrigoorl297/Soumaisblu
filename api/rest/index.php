@@ -11,6 +11,7 @@ require_once dirname(__DIR__) . '/lib/BeneficiosMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/TrainingTracksMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/InternalChatMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/RhMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/LeadsMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/PostgRestCompat.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
@@ -65,6 +66,12 @@ try {
         }
         if (str_starts_with($table, 'rh_vaga') && !soublu_rh_vagas_tables_exist($pdo)) {
             soublu_ensure_rh_vagas_schema($pdo);
+        }
+        if ($table === 'lead_unlock_requests' && !soublu_leads_unlock_schema_ok($pdo)) {
+            soublu_ensure_leads_tables($pdo);
+        }
+        if ($table === 'leads') {
+            soublu_ensure_leads_indexes($pdo);
         }
         $api = new PostgRestCompat($pdo);
         return $api->handle($table, $method, $body, $query);

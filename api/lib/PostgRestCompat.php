@@ -7,23 +7,23 @@ final class PostgRestCompat
     private const DEFAULT_LIMIT = 200;
 
     /** Teto absoluto — mesmo se o cliente pedir mais. */
-    private const HARD_CAP = 1000;
+    private const HARD_CAP = 50000;
 
     /** Tetos por tabela pesada (menor que HARD_CAP). */
     private const TABLE_CAPS = [
-        'proposals' => 800,
-        'users' => 1000,
-        'transactions' => 500,
-        'clients' => 800,
-        'tickets' => 300,
-        'leads' => 500,
-        'wa_messages' => 300,
-        'wa_chats' => 400,
-        'finance_proposta_ops' => 500,
-        'beneficios_vouchers' => 500,
-        'rh_employees' => 500,
-        'internal_chat_messages' => 300,
-        'internal_chat_threads' => 200,
+        'proposals' => 2000,
+        'users' => 2000,
+        'transactions' => 1000,
+        'clients' => 2000,
+        'tickets' => 500,
+        'leads' => 50000,
+        'wa_messages' => 500,
+        'wa_chats' => 500,
+        'finance_proposta_ops' => 1000,
+        'beneficios_vouchers' => 1000,
+        'rh_employees' => 1000,
+        'internal_chat_messages' => 500,
+        'internal_chat_threads' => 300,
     ];
 
     private const ALLOWED = [
@@ -75,7 +75,7 @@ final class PostgRestCompat
     ];
 
     private const JSON_COLUMNS = [
-        'users' => ['attendance_data', 'login_days', 'payment_saved', 'vendor_tier_data', 'permissions'],
+        'users' => ['attendance_data', 'login_days', 'payment_saved', 'vendor_tier_data', 'permissions', 'sonhos_data'],
         'finance_proposta_ops' => ['data'],
         'transactions' => ['meta'],
         'tickets' => ['messages', 'thread'],
@@ -126,6 +126,10 @@ final class PostgRestCompat
             throw new RuntimeException('Tabela não permitida: ' . $table, 404);
         }
 
+        if ($table === 'users') {
+            $this->ensureUsersExtraColumns();
+        }
+
         $params = $this->parseQuery($queryString);
         $method = strtoupper($method);
 
@@ -145,12 +149,40 @@ final class PostgRestCompat
         throw new RuntimeException('Método não suportado: ' . $method, 405);
     }
 
+    /** Colunas extras usadas pelo front (sonhos, etc.) — cria se faltar. */
+    private function ensureUsersExtraColumns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $cols = $this->tableColumns('users');
+            $need = [
+                'sonhos_data' => 'LONGTEXT NULL',
+            ];
+            foreach ($need as $col => $ddl) {
+                if (in_array($col, $cols, true)) {
+                    continue;
+                }
+                $this->pdo->exec('ALTER TABLE `users` ADD COLUMN `' . $col . '` ' . $ddl);
+                unset($this->tableColumnsCache['users']);
+            }
+        } catch (Throwable $e) {
+            /* ambiente sem permissão ALTER — segue sem bloquear a API */
+        }
+    }
+
     /** Aplica default + teto por tabela (nunca devolve resultado ilimitado). */
     private function resolveLimit(string $table, mixed $requested): int
     {
         $tableCap = self::TABLE_CAPS[$table] ?? self::HARD_CAP;
         $cap = min(self::HARD_CAP, max(1, (int) $tableCap));
         if ($requested === null || $requested === '' || (int) $requested <= 0) {
+            if ($table === 'leads' || $table === 'lead_weekly_assignments') {
+                return $cap;
+            }
             return min(self::DEFAULT_LIMIT, $cap);
         }
         return max(1, min((int) $requested, $cap));
@@ -184,10 +216,11 @@ final class PostgRestCompat
                 $out['on_conflict'] = (string) $val;
             } elseif ($key === 'or') {
                 $out['or'] = $this->parseOrGroup((string) $val);
-            } elseif (preg_match('/^(eq|ilike)\.(.+)$/s', (string) $val, $m)) {
+            } elseif (preg_match('/^(eq|ilike|like)\.(.+)$/s', (string) $val, $m)) {
+                $op = ($m[1] === 'like') ? 'ilike' : $m[1];
                 $out['filters'][] = [
                     'col' => (string) $key,
-                    'op' => $m[1],
+                    'op' => $op,
                     'val' => $m[2],
                 ];
             } elseif ((string) $val === 'is.null') {
@@ -205,8 +238,9 @@ final class PostgRestCompat
         $parts = preg_split('/\s*,\s*/', $inner) ?: [];
         $conds = [];
         foreach ($parts as $p) {
-            if (preg_match('/^([^.]+)\.(eq|ilike)\.(.+)$/', $p, $m)) {
-                $conds[] = ['col' => $m[1], 'op' => $m[2], 'val' => $m[3]];
+            if (preg_match('/^([^.]+)\.(eq|ilike|like)\.(.+)$/', $p, $m)) {
+                $op = ($m[2] === 'like') ? 'ilike' : $m[2];
+                $conds[] = ['col' => $m[1], 'op' => $op, 'val' => $m[3]];
             }
         }
         return $conds;
@@ -295,6 +329,9 @@ final class PostgRestCompat
     {
         $row = $this->prepareRow($table, $body);
         if (!$row) {
+            if (is_array($body) && $body !== []) {
+                throw new RuntimeException('Nenhum campo válido para atualizar (verifique colunas do banco).', 400);
+            }
             return [];
         }
         $sets = [];
@@ -320,8 +357,16 @@ final class PostgRestCompat
             throw new RuntimeException('DELETE sem filtro não permitido.', 400);
         }
         $sql .= ' WHERE ' . $where;
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($bind);
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($bind);
+        } catch (Throwable $e) {
+            $msg = $e->getMessage();
+            if (preg_match('/foreign key|constraint|1451|1217/i', $msg)) {
+                throw new RuntimeException('Não foi possível excluir: há vínculos no banco.', 409);
+            }
+            throw $e;
+        }
     }
 
     private function buildWhere(string $table, array $params): array
@@ -340,8 +385,9 @@ final class PostgRestCompat
                     $bind[$key] = $this->normalizeFilterBind($f['col'], $this->decodeFilterVal($f['val']));
                 }
             } elseif ($f['op'] === 'ilike') {
-                $parts[] = "`{$col}` LIKE :{$key}";
-                $bind[$key] = '%' . $this->decodeFilterVal($f['val']) . '%';
+                [$sqlFrag, $pattern] = $this->buildIlike($col, $key, $f['val']);
+                $parts[] = $sqlFrag;
+                $bind[$key] = $pattern;
             } elseif ($f['op'] === 'is' && $f['val'] === 'null') {
                 $parts[] = "`{$col}` IS NULL";
             } elseif (str_starts_with($f['val'], 'in.(')) {
@@ -365,6 +411,10 @@ final class PostgRestCompat
                 if ($f['op'] === 'eq') {
                     $orParts[] = "`{$col}` = :{$key}";
                     $bind[$key] = $this->normalizeFilterBind($f['col'], $this->decodeFilterVal($f['val']));
+                } elseif ($f['op'] === 'ilike') {
+                    [$sqlFrag, $pattern] = $this->buildIlike($col, $key, $f['val']);
+                    $orParts[] = $sqlFrag;
+                    $bind[$key] = $pattern;
                 }
             }
             if ($orParts) {
@@ -385,6 +435,22 @@ final class PostgRestCompat
     private function decodeFilterVal(string $v): string
     {
         return rawurldecode($v);
+    }
+
+    /**
+     * PostgREST ilike: *foo* → %foo% (case-insensitive via LOWER).
+     * @return array{0:string,1:string} [sqlFragment, bindPattern]
+     */
+    private function buildIlike(string $col, string $bindKey, string $rawVal): array
+    {
+        $raw = $this->decodeFilterVal($rawVal);
+        if (str_contains($raw, '*')) {
+            $pattern = str_replace('*', '%', $raw);
+        } else {
+            $pattern = '%' . $raw . '%';
+        }
+        // LOWER garante case-insensitive mesmo com collation binária.
+        return ["LOWER(`{$col}`) LIKE LOWER(:{$bindKey})", $pattern];
     }
 
     /** MySQL TINYINT(1): active=eq.true deve virar 1, não a string "true". */

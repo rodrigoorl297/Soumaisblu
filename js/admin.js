@@ -85,7 +85,7 @@ async function ensureSectionScripts(sec) {
     secStore: ['../js/store-shop.js'],
     secProducts: ['../js/store-shop.js'],
     secOrders: ['../js/store-shop.js'],
-    secMeetings: ['../js/meetings.js'],
+    secMeetings: ['../js/meetings.js?v=meet-all1'],
     secSimulacao: ['../js/simulacao.js'],
     secTimIndicacao: ['../js/tim.js'],
     secTimEsteira: ['../js/tim.js'],
@@ -534,7 +534,7 @@ function _applyAdminNavVisibility(cfg) {
   document.querySelectorAll('.partners-master-only').forEach(el => {
     el.style.display = 'none';
   });
-  const showAdminEmployees = CAN_EMPLOYEES_PANEL && !employeesManagedInRhHub();
+  const showAdminEmployees = CAN_EMPLOYEES_PANEL;
   document.querySelectorAll('.employees-panel-only').forEach(el => {
     el.style.display = showAdminEmployees ? '' : 'none';
   });
@@ -1413,8 +1413,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const canLoja        = p.canLoja !== undefined ? !!p.canLoja : (canProposta || (PARTNER_ROOT_ID && IS_VENDEDOR_ADM));
     const canSimulacao   = p.canSimulacao !== undefined ? !!p.canSimulacao : (canProposta && (!_inPartnerOrg || partnerOrgCan('simulador')));
     const canChamados    = p.canChamados !== undefined ? !!p.canChamados : (_inPartnerOrg ? (IS_PARCEIRO && partnerOrgCan('gestao_chamados')) || (_partnerStaff && !IS_PARCEIRO && partnerOrgCan('gestao_chamados')) : true);
-    const canSupervisorPanel = p.canSupervisorPanel !== undefined ? !!p.canSupervisorPanel : (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_RH || IS_DESENVOLVEDOR);
-    CAN_EMPLOYEES_PANEL = canSupervisorPanel || IS_SUP_BACKOFFICE || canManagePartnerTeam() || (PARTNER_ROOT_ID && IS_PARCEIRO) || (PARTNER_ROOT_ID && _partnerStaff && partnerOrgCan('cadastrar_funcionario'));
+    const canSupervisorPanel = p.canSupervisorPanel !== undefined ? !!p.canSupervisorPanel : (IS_MASTER || IS_FUNDA || IS_GERENTE || IS_FINANCIAL || IS_RH || IS_DESENVOLVEDOR || IS_DIRETORIA);
+    CAN_EMPLOYEES_PANEL = canSupervisorPanel || IS_GERENTE || IS_SUP_BACKOFFICE || canManagePartnerTeam() || (PARTNER_ROOT_ID && IS_PARCEIRO) || (PARTNER_ROOT_ID && _partnerStaff && partnerOrgCan('cadastrar_funcionario'));
     const canPartnerDashboard = p.canPartnerDashboard !== undefined ? !!p.canPartnerDashboard : ((IS_PARCEIRO && partnerOrgCan('dashboard')) || (PARTNER_ROOT_ID && _partnerStaff && (partnerOrgCan('dashboard') || partnerOrgCan('visualizar_propostas'))));
     const canTeamBillingChart = p.canTeamBillingChart !== undefined ? !!p.canTeamBillingChart : _canViewTeamBillingChart();
     const _sakPartnerNet = _inPartnerOrg && _isSakPartnerNetwork();
@@ -1478,6 +1478,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H1-H5',location:'admin.js:boot-perms',message:'admin boot permissions',data:{role:s.role,userId:s.id,rawCanMasterPanel:!!(p.canMasterPanel),computedCanMasterPanel:!!canMasterPanel,companyWide:!!_hasCompanyWideDashboard(),IS_SUP_BACKOFFICE:!!IS_SUP_BACKOFFICE,IS_SUPERVISOR:!!IS_SUPERVISOR,landingSection},timestamp:Date.now()})}).catch(()=>{});
     // #endregion
     _applyAdminNavVisibility(_adminNavCfg);
+    if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
     if (IS_PORTARIA) _applyPortariaNavExtras();
     if (window.PainelSonhos && typeof PainelSonhos.applyAdminNav === 'function') {
       PainelSonhos.applyAdminNav(s.role);
@@ -2587,6 +2588,7 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
 
 const _TEAM_BILLING_STATUS_LABELS = {
   total: 'Fatura Total',
+  cadastradas: 'Cadastradas',
   digitadas: 'Digitadas',
   pagas: 'Pagas',
   canceladas: 'Canceladas',
@@ -2627,15 +2629,18 @@ function _teamBillingDateRange(filterKey) {
 }
 
 function _filterPropsForTeamBilling(props, filterKey, statusKey) {
+  const sk = statusKey || _teamBillingStatusFilter || 'total';
   const propDate = (p) => (typeof DB.proposalBillingDate === 'function'
-    ? DB.proposalBillingDate(p)
-    : (typeof DB.proposalDate === 'function' ? DB.proposalDate(p) : new Date(p.createdAt || p.created_at || 0)));
+    ? DB.proposalBillingDate(p, sk)
+    : (typeof DB.proposalCreatedDate === 'function'
+      ? DB.proposalCreatedDate(p)
+      : new Date(p.createdAt || p.created_at || 0)));
   const { dateFrom, dateTo } = _teamBillingDateRange(filterKey);
   let rows = (props || []).filter((p) => {
     const d = propDate(p);
     return d >= dateFrom && d < dateTo;
   });
-  rows = rows.filter((p) => _proposalMatchesBillingStatus(p, statusKey || _teamBillingStatusFilter || 'total'));
+  rows = rows.filter((p) => _proposalMatchesBillingStatus(p, sk));
   return rows;
 }
 window._filterPropsForTeamBilling = _filterPropsForTeamBilling;
@@ -2854,12 +2859,16 @@ function _proposalMatchesBillingStatus(p, statusFilter) {
   if (typeof DB !== 'undefined' && typeof DB.proposalMatchesBillingStatus === 'function') {
     return DB.proposalMatchesBillingStatus(p, statusFilter);
   }
-  const f = statusFilter || 'total';
-  if (f === 'total') return true;
-  if (f === 'pagas') return _proposalIsPaid(p);
-  if (f === 'canceladas') return _proposalIsCancelled(p);
-  if (f === 'digitadas') {
-    return !_proposalIsPaid(p) && !_proposalIsCancelled(p);
+  const f = String(statusFilter || 'total').toLowerCase().trim();
+  if (f === 'total' || f === 'todas' || f === 'all' || !f) return true;
+  if (f === 'cadastradas' || f === 'cadastrada') return true;
+  if (f === 'pagas' || f === 'paga' || f === 'pago') return _proposalIsPaid(p);
+  if (f === 'canceladas' || f === 'cancelada') return _proposalIsCancelled(p);
+  if (f === 'digitadas' || f === 'digitada') {
+    if (typeof DB !== 'undefined' && typeof DB.proposalDigitacaoAt === 'function') {
+      return !!DB.proposalDigitacaoAt(p);
+    }
+    return false;
   }
   return true;
 }
@@ -3017,6 +3026,7 @@ async function renderTeamBillingChart() {
   const propKpiLabel = statusKey === 'pagas' ? 'Propostas Pagas'
     : statusKey === 'canceladas' ? 'Propostas Canceladas'
     : statusKey === 'digitadas' ? 'Propostas Digitadas'
+    : statusKey === 'cadastradas' ? 'Propostas Cadastradas'
     : 'Total de Propostas';
   const billKpiLabel = isPagas ? 'Faturamento Pago (final)'
     : statusKey === 'total' ? 'Faturamento Bruto' : `Faturamento Bruto (${statusLabel})`;
@@ -3098,13 +3108,46 @@ async function renderTeamBillingChart() {
               }
               return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV || brutoV)}</div>`;
             };
+            /* Resumo por vendedor — controle de quem produziu no período. */
+            const vendorStats = (() => {
+              const map = new Map();
+              (d.props || []).forEach((p) => {
+                const name = String(p.vendorName || p.vendor_name || '').trim() || 'Sem vendedor';
+                const key = name.toLocaleLowerCase('pt-BR');
+                const cur = map.get(key) || { name, count: 0, total: 0 };
+                cur.count += 1;
+                cur.total += propAmt(p) || propBruto(p) || 0;
+                map.set(key, cur);
+              });
+              (d.team || []).forEach((u) => {
+                const name = String(u.name || '').trim();
+                if (!name) return;
+                const key = name.toLocaleLowerCase('pt-BR');
+                if (!map.has(key)) map.set(key, { name, count: 0, total: 0, idle: true });
+              });
+              return [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+            })();
+            const vendorsHtml = vendorStats.length
+              ? `<div style="margin-bottom:12px;">
+                  <div style="font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--color-text-muted);margin-bottom:6px;">VENDEDORES DA EQUIPE (${vendorStats.length})</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    ${vendorStats.map((v) => `
+                      <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:6px 10px;min-width:140px;">
+                        <div style="font-weight:700;font-size:12px;">${v.name}</div>
+                        <div style="font-size:11px;color:var(--color-text-muted);">${v.count} prop. · ${fmtR(v.total)}${v.idle && !v.count ? ' · sem proposta no período' : ''}</div>
+                      </div>`).join('')}
+                  </div>
+                </div>`
+              : '';
             return `
             <tr style="border-bottom:1px solid var(--color-border);" id="trow_${i}"><td style="padding:8px 12px;"><span style="font-weight:800;color:${cor};">#${i+1}</span></td><td style="padding:8px 12px;"><span style="font-weight:700;">${d.sup.name}</span><div style="font-size:11px;color:var(--color-text-muted);">${supSub}</div></td><td style="padding:8px 12px;">${d.team.length}</td><td style="padding:8px 12px;font-weight:700;">${d.count}</td><td style="padding:8px 12px;font-weight:800;color:${cor};">${fmtR(d.total)}</td>${isPagas ? `<td style="padding:8px 12px;font-weight:700;color:var(--color-text-muted);">${fmtR(d.totalBruto || 0)}</td>` : ''}<td style="padding:8px 12px;"><div style="display:flex;align-items:center;gap:8px;"><div style="background:var(--color-surface-2);border-radius:4px;height:6px;width:80px;overflow:hidden;"><div style="height:6px;width:${share}%;background:${cor};border-radius:4px;"></div></div><span style="font-size:12px;">${share}%</span></div></td><td style="padding:8px 12px;"><button class="btn btn-ghost btn-sm" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver</button></td></tr><tr id="tdetail_${i}" style="display:none;background:var(--color-surface-2);"><td colspan="${isPagas ? 8 : 7}" style="padding:12px 20px;">
+                ${vendorsHtml}
                 ${!d.props.length
                   ? '<span style="color:var(--color-text-muted);font-size:12px;">Nenhuma proposta neste período.</span>'
-                  : `<div style="display:flex;flex-wrap:wrap;gap:8px;">
+                  : `<div style="font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--color-text-muted);margin-bottom:6px;">PROPOSTAS</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
                       ${d.props.slice(0,20).map(p => `
-                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;min-width:180px;"><div style="font-weight:700;font-size:12px;">${p.numero || p.id}</div><div style="font-size:11px;color:var(--color-text-muted);">${p.clientName||'—'} · ${p.convenio||'—'}</div>${propValHtml(p)}<div style="font-size:10px;background:${cor}18;color:${cor};padding:2px 6px;border-radius:99px;display:inline-block;margin-top:3px;">${p.statusOp||p.status||'—'}</div></div>`).join('')}
+                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;min-width:200px;"><div style="font-weight:700;font-size:12px;">${p.numero || p.id}</div><div style="font-size:12px;font-weight:700;color:${cor};margin-top:2px;">Vendedor: ${p.vendorName || p.vendor_name || '—'}</div><div style="font-size:11px;color:var(--color-text-muted);">${p.clientName||'—'} · ${p.convenio||'—'}</div>${propValHtml(p)}<div style="font-size:10px;background:${cor}18;color:${cor};padding:2px 6px;border-radius:99px;display:inline-block;margin-top:3px;">${p.statusOp||p.status||'—'}</div></div>`).join('')}
                       ${d.props.length > 20 ? `<div style="font-size:12px;color:var(--color-text-muted);align-self:center;">+${d.props.length-20} mais...</div>` : ''}
                     </div>`}
               </td></tr>`;
@@ -3221,12 +3264,14 @@ window.setTeamBillingStatus = setTeamBillingStatus;
    Cada supervisor gerencia sua equipe (admin_id)
 ══════════════════════════════════════════════ */
 async function renderMasterPanel() {
-  if (!IS_MASTER && !IS_GERENTE && !IS_FINANCIAL && !IS_RH && !IS_DESENVOLVEDOR && !IS_DIRETORIA) return;
-  const [allUsers, allOrders, allWds] = await Promise.all([
-    DB.getAllUsers().catch(() => []),
+  if (!IS_MASTER && !IS_FUNDA && !IS_GERENTE && !IS_FINANCIAL && !IS_RH && !IS_DESENVOLVEDOR && !IS_DIRETORIA) return;
+  const [allUsersRaw, allOrders, allWds] = await Promise.all([
+    DB.getAllUsers(true).catch(() => []),
     DB.getOrders().catch(() => []),
     DB.getWithdrawals().catch(() => []),
   ]);
+  /* Inativos/removidos ficam fora da lista principal (Excluir some da tela). */
+  const allUsers = (allUsersRaw || []).filter((u) => _masterUserIsActive(u));
 
   const supervisors    = allUsers.filter(u => u.role === 'supervisor');
   const desenvolvedores = allUsers.filter(u => u.role === 'desenvolvedor');
@@ -3258,7 +3303,7 @@ async function renderMasterPanel() {
   const allEmpLike = allUsers.filter((u) => ['employee', 'vendedor', 'backoffice', 'sup_backoffice', 'fundador'].includes(u.role)
     && (typeof isSouBluInternalUser !== 'function' || isSouBluInternalUser(u)));
   const totalPts = (typeof filterSouBluInternalUsers === 'function' ? filterSouBluInternalUsers(allUsers) : allUsers)
-    .filter((u) => u.active !== false)
+    .filter((u) => _masterUserIsActive(u))
     .reduce((s, e) => s + userPts(e), 0);
   const wdPendTotal = allWds.filter(w=>['solicitado','aprovado_master','aprovado_financeiro'].includes(w.status)).length;
 
@@ -3267,7 +3312,7 @@ async function renderMasterPanel() {
   html += `<div class="stat-grid" style="margin-bottom:var(--space-lg);">${[
     statCardHtml({ icon: 'users', color: 'blue', label: 'Supervisores', value: supervisors.length }),
     statCardHtml({ icon: 'balance', color: 'green', label: 'Total Pontos', value: totalPts.toLocaleString('pt-BR'), valueStyle: 'font-size:18px;' }),
-    statCardHtml({ icon: 'users', color: 'yellow', label: 'Funcionários', value: allEmpLike.filter(e => e.active).length }),
+    statCardHtml({ icon: 'users', color: 'yellow', label: 'Funcionários', value: allEmpLike.filter((e) => _masterUserIsActive(e)).length }),
     statCardHtml({ icon: 'withdrawals', color: 'orange', label: 'Saques Pend.', value: wdPendTotal }),
   ].join('')}</div>`;
 
@@ -3324,6 +3369,7 @@ async function renderMasterPanel() {
   }
 
   box.innerHTML = html;
+  _bindMasterPanelActions();
 }
 
 /* ══════════════════════════════════════════════
@@ -4762,10 +4808,21 @@ function _masterUserOrderWdCounts(userId, allOrders, allWds) {
   return { ords: ords.length, wdPend, wdPaid, wds: wds.length };
 }
 
+function _masterUserIsActive(user) {
+  if (typeof DB !== 'undefined' && typeof DB._isUserActive === 'function') return DB._isUserActive(user);
+  if (!user) return false;
+  const email = String(user.email || '').toLowerCase();
+  if (email.endsWith('@deleted.local') || /^deleted_/.test(email)) return false;
+  if (/\(removido\)\s*$/i.test(String(user.name || ''))) return false;
+  if (user.deleted_at) return false;
+  const a = user.active;
+  return !(a === false || a === 0 || a === '0' || a === 'false');
+}
+
 function _masterMetricChipsHtml(user, allOrders, allWds) {
   const pts = userPts(user);
   const { ords, wdPend } = _masterUserOrderWdCounts(user.id, allOrders, allWds);
-  const active = user.active !== false;
+  const active = _masterUserIsActive(user);
   return `<div class="master-metric-chips">
     <span class="master-chip master-chip--pts"><strong>${pts.toLocaleString('pt-BR')}</strong> pts</span>
     <span class="master-chip">${ords} pedido${ords !== 1 ? 's' : ''}</span>
@@ -4813,12 +4870,14 @@ function _renderMasterSoloBody(user, allOrders, allWds) {
 }
 
 function _masterUserActionsHtml(user) {
-  const escName = user.name.replace(/'/g, "\\'");
+  const escName = String(user.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  const uid = String(user.id || '').replace(/'/g, '');
   const canDelete = IS_FUNDA ? user.role !== 'fundador' : (user.role !== 'master' && user.role !== 'fundador');
-  return `<div class="master-user-card__actions">
-    <button class="btn btn-ghost btn-sm" onclick="masterEditUser('${user.id}')">Editar</button>
-    <button class="btn btn-ghost btn-sm" onclick="masterToggleUser('${user.id}')">${user.active !== false ? 'Desativar' : 'Ativar'}</button>
-    ${canDelete ? `<button class="btn btn-ghost btn-sm" style="color:var(--color-danger);" onclick="masterDeleteUser('${user.id}','${escName}')" title="Excluir">Excluir</button>` : ''}
+  const isActive = _masterUserIsActive(user);
+  return `<div class="master-user-card__actions" data-master-actions="${uid}">
+    <button type="button" class="btn btn-ghost btn-sm" data-master-act="edit" data-user-id="${uid}">Editar</button>
+    <button type="button" class="btn btn-ghost btn-sm" data-master-act="toggle" data-user-id="${uid}">${isActive ? 'Desativar' : 'Ativar'}</button>
+    ${canDelete ? `<button type="button" class="btn btn-ghost btn-sm" style="color:var(--color-danger);" data-master-act="delete" data-user-id="${uid}" data-user-name="${escName}" title="Excluir definitivamente">Excluir</button>` : ''}
   </div>`;
 }
 
@@ -4848,8 +4907,8 @@ function _renderUserCard(user, team, allOrders, allWds, roleLabels) {
           ${avatarHtml(e.name, 'avatar-sm', e.photo_url || '')}
           <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:11px;color:var(--color-text-muted);">${e.department} · ${formatCurrency(userPts(e), e)}</div></div>
           ${ptsBtn}
-          <button class="btn btn-ghost btn-sm" onclick="masterEditUser('${e.id}')">Editar</button>
-          <button class="btn btn-ghost btn-sm" style="color:var(--color-danger);" onclick="masterDeleteUser('${e.id}','${e.name.replace(/'/g, "\\'")}')" title="Excluir">Excluir</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-master-act="edit" data-user-id="${e.id}">Editar</button>
+          <button type="button" class="btn btn-ghost btn-sm" style="color:var(--color-danger);" data-master-act="delete" data-user-id="${e.id}" data-user-name="${e.name.replace(/'/g, "\\'")}" title="Excluir">Excluir</button>
         </div>`;
       }).join('')}
     </div>`;
@@ -4929,7 +4988,11 @@ async function openCreateUserModal() {
 
 async function masterEditUser(id) {
   if (!id) return;
-  const u = await DB.getUser(id, true); if (!u) return;
+  if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+  const u = await DB.getUser(id, true); if (!u) {
+    showToast('Usuário não encontrado.', 'error');
+    return;
+  }
 
   // Rede parceira: edita no fluxo de equipe do parceiro (não manda para o RH).
   let partnerRoot = u.partner_root_id || null;
@@ -4948,27 +5011,10 @@ async function masterEditUser(id) {
     return;
   }
 
-  // Hub RH: só redireciona se já existir ficha RH; usuários só no login
-  // precisam continuar editáveis pelo modal Master.
-  if (employeesManagedInRhHub() && typeof DB.getRhEmployees === 'function') {
-    try {
-      const list = await DB.getRhEmployees().catch(() => []);
-      const cpf = String(u?.cpf || '').replace(/\D/g, '');
-      const email = String(u?.email || '').trim().toLowerCase();
-      const hasRh = (list || []).some((e) =>
-        String(e.user_id || '') === String(id)
-        || (cpf.length === 11 && String(e.cpf || '').replace(/\D/g, '') === cpf)
-        || (email && String(e.email || e.email_pessoal || '').trim().toLowerCase() === email)
-      );
-      if (hasRh) {
-        goToRhFuncionarios(id);
-        return;
-      }
-    } catch (_) {
-      /* fallback: edita no modal master */
-    }
-  } else if (employeesManagedInRhHub()) {
-    goToRhFuncionarios(id);
+  // Painel Master: edita sempre no modal local (não redireciona para o RH).
+  const modal = document.getElementById('masterUserModal');
+  if (!modal) {
+    showToast('Modal de edição não encontrado. Recarregue (Ctrl+F5).', 'error');
     return;
   }
   document.getElementById('masterUserModalTitle').textContent = ' Editar Usuário';
@@ -5115,29 +5161,74 @@ async function saveMasterUser() {
 }
 
 async function masterToggleUser(id) {
-  const u = await DB.getUser(id); if (!u) return;
+  if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+  const u = await DB.getUser(id, true); if (!u) { showToast('Usuário não encontrado.', 'error'); return; }
+  const wasActive = _masterUserIsActive(u);
   showLoading();
   try {
-    await DB.updateUser(id, { active: !u.active });
+    await DB.updateUser(id, { active: !wasActive });
+    if (typeof invalidateSouBluCaches === 'function') invalidateSouBluCaches();
+    if (typeof DB.clearAllUsersCache === 'function') DB.clearAllUsersCache();
     await renderMasterPanel();
-    showToast(`${u.name} ${!u.active ? 'ativado' : 'desativado'}.`, 'info');
+    showToast(`${u.name} ${wasActive ? 'desativado' : 'ativado'}.`, 'info');
+  } catch (err) {
+    console.error('[masterToggleUser]', err);
+    showToast('Erro ao alterar status: ' + (err.message || 'tente novamente'), 'error');
   } finally { hideLoading(); }
 }
 
 async function masterDeleteUser(id, name) {
-  if (!confirm(`Desativar "${name}"?\n\nA conta será desativada (não apagada). Propostas e histórico permanecem vinculados.`)) return;
-  showLoading('Desativando...');
+  if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+  const u = await DB.getUser(id, true).catch(() => null);
+  const label = name || u?.name || id;
+  const role = String(u?.role || '').toLowerCase();
+  if (role === 'fundador' || role === 'master') {
+    showToast('Não é permitido excluir master/fundador.', 'error');
+    return;
+  }
+  if (!confirm(`Excluir "${label}"?\n\nO usuário some da lista e não consegue mais entrar.\nAs propostas e o histórico DELE CONTINUAM no sistema.`)) return;
+  showLoading('Excluindo...');
   try {
-    await DB.deleteUser(id);
+    if (typeof DB.removeUserCompletely === 'function') {
+      await DB.removeUserCompletely(id);
+    } else {
+      if (u && DB._isUserActive(u)) await DB.deleteUser(id);
+      await DB.purgeInactiveUser(id);
+    }
     if (typeof invalidateSouBluCaches === 'function') invalidateSouBluCaches();
+    if (typeof DB.clearAllUsersCache === 'function') DB.clearAllUsersCache();
     await renderMasterPanel();
-    // Atualizar tabela de funcionários se estiver visível
     if (document.getElementById('employeesTbody')) await renderEmployeesTable();
-    showToast(`"${name}" desativado.`, 'success');
-  } catch(err) {
+    showToast(`"${label}" removido. As propostas dele continuam no sistema.`, 'success');
+  } catch (err) {
     console.error('[masterDeleteUser]', err);
-    showToast('Erro ao desativar: ' + (err.message||'tente novamente'), 'error');
+    if (typeof DB.clearAllUsersCache === 'function') DB.clearAllUsersCache();
+    await renderMasterPanel().catch(() => null);
+    showToast('Erro ao excluir: ' + (err.message || 'tente novamente'), 'error');
   } finally { hideLoading(); }
+}
+
+window.masterEditUser = masterEditUser;
+window.masterToggleUser = masterToggleUser;
+window.masterDeleteUser = masterDeleteUser;
+
+function _bindMasterPanelActions() {
+  const box = document.getElementById('masterContent');
+  if (!box || box.dataset.masterActionsBound === '1') return;
+  box.dataset.masterActionsBound = '1';
+  box.addEventListener('click', (ev) => {
+    const btn = ev.target?.closest?.('[data-master-act]');
+    if (!btn || !box.contains(btn)) return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const act = btn.getAttribute('data-master-act');
+    const uid = btn.getAttribute('data-user-id');
+    const uname = btn.getAttribute('data-user-name') || '';
+    if (!uid) return;
+    if (act === 'edit') masterEditUser(uid);
+    else if (act === 'toggle') masterToggleUser(uid);
+    else if (act === 'delete') masterDeleteUser(uid, uname);
+  });
 }
 
 /* ══════════════════════════════════════════════
@@ -5919,11 +6010,19 @@ async function renderWithdrawalsTable(){
     const irpjTax = Number(wdMeta.irpj_tax || 0);
     const payType = String(w.method || wdMeta.payment_method || 'pix').toLowerCase();
     const typeLbl = payType.includes('conta') ? 'CONTA CORRENTE' : String(w.pix_key_type || 'pix').toUpperCase();
+    const debitoPending = !!wdMeta.account_debito_pending;
+    const debitoAmt = Number(wdMeta.account_debito_amount || 0);
+    const trStyle = debitoPending
+      ? ' style="background:rgba(220,38,38,.12);outline:1px solid rgba(220,38,38,.35);"'
+      : '';
+    const debitoBadge = debitoPending
+      ? `<div style="font-size:10px;font-weight:700;color:#b91c1c;margin-top:4px;" title="Colaborador sacou sem descontar débitos em aberto">⚠ Débito em conta${debitoAmt > 0 ? ' · ' + formatMoney(debitoAmt) : ''}</div>`
+      : '';
 
-    rowsHtml += `<tr><td><div class="employee-avatar-cell">
+    rowsHtml += `<tr${trStyle}><td><div class="employee-avatar-cell">
         ${avatarHtml(emp?.name||'–','avatar-sm',emp?.photo_url||'')}
         <div style="font-size:13px;font-weight:600;">${emp?.name||'–'}</div>
-        ${orgBadge}
+        ${orgBadge}${debitoBadge}
       </div></td><td><span class="pts-orange" style="font-family:var(--font-display);font-weight:900;">
         ${formatCurrency(w.amount, emp)}
       </span>${irpjTax > 0 ? `<div style="font-size:10px;color:var(--color-warning);">IRPJ −${formatMoney(irpjTax)}</div>` : ''}${irpfTax > 0 ? `<div style="font-size:10px;color:var(--color-warning);">IRPF −${formatMoney(irpfTax)}</div>` : ''}</td><td><div style="font-size:12px;"><strong>${typeLbl}</strong></div><div style="font-size:12px;color:var(--color-text-muted);">${w.pix_key}</div><div style="font-size:11px;color:var(--color-text-muted);">${w.holder_name}${w.bank_name?' · '+w.bank_name:''}</div></td><td style="font-size:12px;">${formatDate(w.created_at)}</td><td>${wdStatusBadge(w.status)}</td><td>${pixBankCell}</td><td style="text-align:center;">${receiptBtn}</td><td><input type="text" style="font-size:12px;padding:4px 8px;border-radius:6px;border:1px solid var(--color-border);width:110px;"
@@ -6253,11 +6352,12 @@ async function saveFeedback() {
       showToast('Advertência com pontos só para equipe SOU+BLU interna.', 'warning');
       return;
     }
-    const pts = typeof userPts === 'function' ? userPts(emp) : Number(emp?.points ?? emp?.balance ?? 0);
-    const depois = pts - 100;
+    const pts = typeof userPts === 'function' ? userPts(emp) : Math.max(0, Number(emp?.points ?? emp?.balance ?? 0) || 0);
+    const debit = Math.min(100, pts);
+    const depois = Math.max(0, pts - debit);
     const msg = `Aplicar advertência a ${_feedbackEmpName}?
 
-100 pontos serão descontados agora (o saldo pode ficar negativo).
+Serão descontados ${debit.toLocaleString('pt-BR')} ponto(s) (máx. 100; saldo não fica negativo).
 Saldo atual: ${pts.toLocaleString('pt-BR')} pts → ${depois.toLocaleString('pt-BR')} pts`;
     if (!confirm(msg)) return;
   }

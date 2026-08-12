@@ -7,6 +7,7 @@ window.SalesRanking = {
 
   BILLING_OPTIONS: [
     { v: 'total', l: 'Fatura Total' },
+    { v: 'cadastradas', l: 'Cadastradas' },
     { v: 'pagas', l: 'Pagas' },
     { v: 'digitadas', l: 'Digitadas' },
     { v: 'canceladas', l: 'Canceladas' },
@@ -90,19 +91,29 @@ window.SalesRanking = {
     if (typeof DB !== 'undefined' && typeof DB.proposalMatchesBillingStatus === 'function') {
       return DB.proposalMatchesBillingStatus(p, billingKey || 'total');
     }
-    const f = billingKey || 'total';
-    if (f === 'total') return true;
+    const f = String(billingKey || 'total').toLowerCase().trim();
+    if (f === 'total' || f === 'todas' || f === 'all' || !f) return true;
+    if (f === 'cadastradas' || f === 'cadastrada') return true;
     if (f === 'pagas') return this._isPaidProposal(p);
     if (f === 'canceladas') return this._isCancelledProposal(p);
-    if (f === 'digitadas') return !this._isPaidProposal(p) && !this._isCancelledProposal(p);
+    if (f === 'digitadas') {
+      if (typeof DB !== 'undefined' && typeof DB.proposalDigitacaoAt === 'function') {
+        return !!DB.proposalDigitacaoAt(p);
+      }
+      return false;
+    }
     return true;
   },
 
-  _proposalBillingDate(p) {
+  _proposalBillingDate(p, billingKey) {
+    const sk = billingKey || this._filters?.billing || 'total';
     if (typeof DB !== 'undefined' && typeof DB.proposalBillingDate === 'function') {
-      return DB.proposalBillingDate(p);
+      return DB.proposalBillingDate(p, sk);
     }
-    const raw = p.updatedAt || p.updated_at || p.createdAt || p.created_at;
+    if (typeof DB !== 'undefined' && typeof DB.proposalCreatedDate === 'function') {
+      return DB.proposalCreatedDate(p);
+    }
+    const raw = p.createdAt || p.created_at || p.updatedAt || p.updated_at;
     const d = raw ? new Date(raw) : new Date(0);
     return Number.isNaN(d.getTime()) ? new Date(0) : d;
   },
@@ -294,9 +305,10 @@ window.SalesRanking = {
 
   _filterByPeriodOnly(proposals) {
     const { start, end } = this._periodRange(this._filters.period);
+    const billingWant = this._filters.billing || 'total';
     return (proposals || []).filter((p) => {
       if (!p || !p.id) return false;
-      const d = this._proposalBillingDate(p);
+      const d = this._proposalBillingDate(p, billingWant);
       if (start && d < start) return false;
       if (end && d >= end) return false;
       return true;
@@ -437,7 +449,7 @@ window.SalesRanking = {
   <div class='meta'>Filtros: ${this._escHtml(filters)}</div>
   <p class='hint'>
     <strong>Faturamento</strong> = valor final · mesmos filtros do dashboard
-    (<strong>período + Fatura Total / Pagas / Digitadas / Canceladas</strong>).
+    (<strong>período + Fatura Total / Cadastradas / Pagas / Digitadas / Canceladas</strong>).
     Todas as colunas usam o <strong>mesmo conjunto de propostas</strong> do Painel Master.
   </p>
   <table>
@@ -582,7 +594,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     return (proposals || []).filter(p => {
       if (!p || !p.id) return false;
 
-      const d = this._proposalBillingDate(p);
+      const d = this._proposalBillingDate(p, billingWant);
       if (start && d < start) return false;
       if (end && d >= end) return false;
 

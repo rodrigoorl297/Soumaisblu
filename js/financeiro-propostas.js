@@ -16,7 +16,16 @@
 
   function fmtDt(iso) {
     if (!iso) return '—';
-    try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '—'; }
+    if (typeof formatDateTime === 'function') return formatDateTime(iso);
+    try {
+      const d = (typeof _parseSouBluDate === 'function') ? _parseSouBluDate(iso) : new Date(iso);
+      if (!d || Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      });
+    } catch { return '—'; }
   }
 
   function simNaoOptions(selected) {
@@ -205,15 +214,19 @@
     async _findProposalByQuery(q) {
       const raw = String(q || '').trim();
       if (!raw) return null;
-      const ql = raw.toLowerCase();
       const qCpf = raw.replace(/\D/g, '');
       const matchLocal = (p) => {
-        const num = String(p.numero || p.id || '').toLowerCase();
+        const num = String(p.numero || p.id || '');
         const cpf = String(p.client_cpf || p.clientCpf || '').replace(/\D/g, '');
-        const cli = String(p.client_name || p.clientName || '').toLowerCase();
-        return num === ql || num.includes(ql)
-          || (qCpf.length >= 4 && cpf.includes(qCpf))
-          || cli.includes(ql);
+        const cli = String(p.client_name || p.clientName || '');
+        if (typeof textMatchesSearch === 'function') {
+          if (textMatchesSearch(num, raw) || textMatchesSearch(cli, raw)) return true;
+        } else {
+          const ql = raw.toLowerCase();
+          const numL = num.toLowerCase();
+          if (numL === ql || numL.includes(ql) || cli.toLowerCase().includes(ql)) return true;
+        }
+        return qCpf.length >= 4 && cpf.includes(qCpf);
       };
 
       // Busca direta na API (não depende do limite de 800 da lista).
@@ -807,7 +820,7 @@
           op.comissao_conta_creditada_para = creditInfo.targetId;
         }
 
-        const obsLine = `[BAIXA COMISSÃO] ${new Date().toLocaleString('pt-BR')}`;
+        const obsLine = `[BAIXA COMISSÃO] ${typeof formatDateTime === 'function' ? formatDateTime(new Date()) : new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}`;
         const obs = typeof DB._appendProposalObsLine === 'function'
           ? DB._appendProposalObsLine(p.obs, obsLine)
           : `${String(p.obs || '').trim()}\n${obsLine}`.trim();

@@ -14,7 +14,16 @@
 
   function fmtDt(iso) {
     if (!iso) return '—';
-    try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '—'; }
+    if (typeof formatDateTime === 'function') return formatDateTime(iso);
+    try {
+      const d = (typeof _parseSouBluDate === 'function') ? _parseSouBluDate(iso) : new Date(iso);
+      if (!d || Number.isNaN(d.getTime())) return '—';
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      });
+    } catch { return '—'; }
   }
 
   function isFinanceiroOnly() {

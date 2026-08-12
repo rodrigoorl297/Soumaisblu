@@ -271,25 +271,6 @@
     });
   }
 
-  function _injectSidebar() {
-    const nav = document.querySelector('.sidebar-nav');
-    if (!nav || nav.querySelector('.ichat-nav-item')) return;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'nav-item ichat-nav-item';
-    btn.innerHTML = '<span class="nav-icon">💬</span><span class="nav-label">Chat interno</span>';
-    btn.addEventListener('click', (e) => {
-      e.preventDefault();
-      InternalChat.open();
-    });
-    const wa = document.getElementById('navWhatsApp');
-    if (wa && wa.parentElement === nav) {
-      wa.insertAdjacentElement('afterend', btn);
-    } else {
-      nav.appendChild(btn);
-    }
-  }
-
   function _setUnread(n) {
     _unread = Math.max(0, n | 0);
     const badge = document.getElementById('ichatBadge');
@@ -313,12 +294,11 @@
         const base = (document.querySelector('script[src*="internal-chat.js"]')?.getAttribute('src') || '')
           .replace(/[^/]+$/, '')
           .replace(/\/js\/?$/, '/css/') || '../css/';
-        link.href = (base.includes('css') ? base : '../css/') + 'internal-chat.css?v=ichat5';
-        if (!/internal-chat\.css/.test(link.href)) link.href = '../css/internal-chat.css?v=ichat5';
+        link.href = (base.includes('css') ? base : '../css/') + 'internal-chat.css?v=ichat6';
+        if (!/internal-chat\.css/.test(link.href)) link.href = '../css/internal-chat.css?v=ichat6';
         document.head.appendChild(link);
       }
       _ensureDom();
-      _injectSidebar();
       await Promise.all([_loadUsers(), _loadThreads()]);
       this.renderList();
       this._startPoll();

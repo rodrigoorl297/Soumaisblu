@@ -9,6 +9,7 @@ const LeadsImport = {
     name:        { label: 'Nome',         aliases: ['nome', 'nome completo', 'nome_completo', 'name', 'cliente', 'beneficiário', 'beneficiario'] },
     orgao:       { label: 'Órgão',        aliases: ['órgão', 'orgao', 'orgão/empresa', 'empresa', 'org', 'lotação', 'lotacao', 'instituição', 'instituicao'] },
     cpf:         { label: 'CPF',          aliases: ['cpf', 'cpf/cnpj', 'documento', 'doc', 'cpf_cnpj'] },
+    score:       { label: 'Score',        aliases: ['score', 'pontuação', 'pontuacao', 'score_lead', 'score lead', 'classificação', 'classificacao', 'rank', 'score_credito'] },
     mother_name: { label: 'Nome da Mãe',  aliases: ['nome da mãe', 'nome_da_mae', 'mae', 'mãe', 'mother', 'filiação', 'filiacao', 'nome mae'] },
     phone:       { label: 'Telefone 1',   aliases: ['telefone 1', 'telefone', 'tel', 'celular', 'fone', 'phone', 'whatsapp', 'contato', 'número', 'numero'] },
     phone2:      { label: 'Telefone 2',   aliases: ['telefone 2', 'tel 2', 'celular 2', 'fone 2', 'whatsapp 2', 'contato 2', 'número 2'] },
@@ -22,15 +23,35 @@ const LeadsImport = {
     if (typeof XLSX === 'undefined') {
       if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
       else {
-        await new Promise((resolve, reject) => {
-          const s = document.createElement('script');
-          s.src = 'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js';
-          s.onload = resolve;
-          s.onerror = () => reject(new Error('SheetJS'));
-          document.head.appendChild(s);
-        });
+        const sources = [
+          '../js/vendor/xlsx.full.min.js?v=xlsx203',
+          'js/vendor/xlsx.full.min.js?v=xlsx203',
+          'https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js',
+          'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+        ];
+        let lastErr = null;
+        for (const src of sources) {
+          try {
+            await new Promise((resolve, reject) => {
+              const s = document.createElement('script');
+              s.src = src;
+              s.onload = () => resolve();
+              s.onerror = () => reject(new Error('SheetJS load failed: ' + src));
+              document.head.appendChild(s);
+            });
+            if (typeof XLSX !== 'undefined') break;
+          } catch (err) {
+            lastErr = err;
+          }
+        }
+        if (typeof XLSX === 'undefined') {
+          throw lastErr || new Error('SheetJS');
+        }
       }
     }
+    // #region agent log
+    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-xlsx',hypothesisId:'F1',location:'leads-import.js:parseFile',message:'XLSX ready',data:{hasXLSX:typeof XLSX!=='undefined',fileName:file?.name||null,fileSize:file?.size||null},timestamp:Date.now()})}).catch(()=>{});
+    // #endregion
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
 

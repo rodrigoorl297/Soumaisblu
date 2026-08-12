@@ -5,6 +5,7 @@
   let currentUser = null;
   let currentLimit = null;
   let orderMode = 'entrega';
+  let _orderSubmitting = false;
 
   function _benId(prefix) {
     return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -151,6 +152,61 @@
     currentLimit = { ...currentLimit, ...balances, status: 'aprovado' };
     _renderLimitUI(currentLimit);
     return balances;
+  }
+
+  /** Estorna valor no limite (rollback se o voucher falhar após o débito). */
+  async function _creditLimit(amount) {
+    if (!currentLimit?.id) return null;
+    const orderVal = Math.round((parseFloat(amount) || 0) * 100) / 100;
+    if (orderVal <= 0) return null;
+    const balances = _computeLimitBalances(
+      currentLimit.limite_aprovado,
+      Math.max(0, (parseFloat(currentLimit.limite_utilizado) || 0) - orderVal)
+    );
+    await supaReq('PATCH', 'beneficios_limites', {
+      limite_utilizado: balances.utilizado,
+      limite_disponivel: balances.disponivel,
+      status: 'aprovado',
+    }, `?id=eq.${currentLimit.id}`);
+    currentLimit = { ...currentLimit, ...balances, status: 'aprovado' };
+    _renderLimitUI(currentLimit);
+    return balances;
+  }
+
+  function _itemsFingerprint(items) {
+    return (Array.isArray(items) ? items : [])
+      .map((it) => `${String(it.sku || it.name || '').trim()}|${parseInt(it.qty, 10) || 1}|${Math.round((parseFloat(it.price) || 0) * 100)}`)
+      .sort()
+      .join(';');
+  }
+
+  /** Evita pedido duplicado por clique duplo / retry no mesmo minuto. */
+  async function _findRecentDuplicateOrder(employeeId, valor, items) {
+    if (!employeeId) return null;
+    const wantVal = Math.round((parseFloat(valor) || 0) * 100) / 100;
+    const wantFp = _itemsFingerprint(items);
+    const rows = await supaReq(
+      'GET',
+      'beneficios_vouchers',
+      null,
+      `?employee_id=eq.${encodeURIComponent(employeeId)}&status=eq.em_analise&order=created_at.desc&limit=15`
+    ).catch(() => []);
+    const now = Date.now();
+    for (const v of (Array.isArray(rows) ? rows : [])) {
+      const vVal = Math.round((parseFloat(v.valor) || 0) * 100) / 100;
+      if (Math.abs(vVal - wantVal) > 0.009) continue;
+      let det = v.detalhes_pedido;
+      if (typeof det === 'string') {
+        try { det = JSON.parse(det); } catch (_) { det = null; }
+      }
+      if (_itemsFingerprint(det?.itens) !== wantFp) continue;
+      const created = (typeof _parseSouBluDate === 'function')
+        ? _parseSouBluDate(v.created_at)
+        : new Date(String(v.created_at || '').replace(' ', 'T'));
+      const t = created && !Number.isNaN(created.getTime()) ? created.getTime() : 0;
+      if (t && (now - t) <= 90 * 1000) return v;
+    }
+    return null;
   }
 
   function switchTab(tabId, el) {
@@ -321,7 +377,7 @@
         <td style="font-size:12px;line-height:1.4;max-width:280px;">${descSafe}</td>
         <td>${formatCurrency(v.valor)}</td>
         <td>${statusBadge}</td>
-        <td>${new Date(v.created_at).toLocaleDateString('pt-BR')}</td>
+        <td>${formatDate(v.created_at)}</td>
       `;
       tbody.appendChild(tr);
     });
@@ -490,6 +546,7 @@
 
   async function submitFoodOrder(e) {
     e.preventDefault();
+    if (_orderSubmitting) return;
     if (!currentLimit || (parseFloat(currentLimit.limite_aprovado) || 0) <= 0) {
       alert('Você precisa ter um limite aprovado pelo RH primeiro.');
       return;
@@ -504,7 +561,26 @@
       alert(`O valor do pedido excede o seu limite disponível (${formatCurrency(disponivel)}).`);
       return;
     }
+
+    const form = document.getElementById('orderForm');
+    const submitBtn = form?.querySelector('button[type="submit"]');
+    _orderSubmitting = true;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.dataset._prevLabel = submitBtn.textContent || '';
+      submitBtn.textContent = 'Enviando pedido…';
+    }
+
+    let debited = false;
     try {
+      // Clique duplo / retry: se já existe pedido idêntico nos últimos 90s, não cria outro.
+      const dup = await _findRecentDuplicateOrder(currentUser.id, orderVal, items);
+      if (dup) {
+        alert(`Este pedido já foi registrado (voucher ${dup.voucher_no}). Não foi criado outro.`);
+        await loadUserData().catch(() => {});
+        return;
+      }
+
       const providers = await supaReq('GET', 'beneficios_prestadores', null, '?categoria=eq.Restaurante&limit=20');
       const list = Array.isArray(providers) ? providers : [];
       const provider = list.find((p) => _restauranteWhatsappFrom(p)) || list[0]
@@ -519,6 +595,7 @@
         itens: items,
       };
       await _debitLimit(orderVal);
+      debited = true;
       const voucherPayload = {
         id: _benId('ben_vou_'),
         voucher_no: voucherNo,
@@ -530,8 +607,26 @@
         valor: orderVal,
         status: 'em_analise',
         detalhes_pedido: detalhes,
+        created_at: (typeof DB !== 'undefined' && typeof DB._nowBrazilSql === 'function')
+          ? DB._nowBrazilSql()
+          : undefined,
       };
       await supaReq('POST', 'beneficios_vouchers', voucherPayload);
+      if (typeof DB !== 'undefined' && typeof DB.registerOpenAccountDebito === 'function') {
+        try {
+          await DB.registerOpenAccountDebito({
+            employeeId: currentUser.id,
+            amount: orderVal,
+            reason: `Fatura Clube ${voucherNo}`,
+            byUser: currentUser.id,
+            voucherId: voucherPayload.id,
+            voucherNo,
+            source: 'clube',
+          });
+        } catch (regErr) {
+          console.warn('[clube] lançamento débito aberto:', regErr);
+        }
+      }
 
       const waPhone = _restauranteWhatsappFrom(provider);
       const waText = _buildFoodOrderWhatsappText({
@@ -556,8 +651,20 @@
       setOrderMode(orderMode);
       await loadUserData();
     } catch (err) {
+      if (debited) {
+        try { await _creditLimit(orderVal); } catch (_) { /* noop */ }
+      }
       alert('Erro ao salvar pedido: ' + err.message);
       await loadUserData().catch(() => {});
+    } finally {
+      _orderSubmitting = false;
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        if (submitBtn.dataset._prevLabel) {
+          submitBtn.textContent = submitBtn.dataset._prevLabel;
+          delete submitBtn.dataset._prevLabel;
+        }
+      }
     }
   }
 

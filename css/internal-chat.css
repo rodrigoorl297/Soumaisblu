@@ -380,11 +380,6 @@
 .ichat-compose button:hover { filter: brightness(1.04); }
 .ichat-compose button:active { transform: scale(0.98); }
 
-.sidebar-nav .nav-item.ichat-nav-item.is-active,
-.sidebar-nav .nav-item.ichat-nav-item:hover {
-  color: var(--color-accent-dark, #EA580C);
-}
-
 @media (max-width: 640px) {
   .ichat-panel {
     right: 10px;

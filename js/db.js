@@ -73,7 +73,14 @@
     },
 
     _isUserActive(u) {
-      const a = u?.active;
+      if (!u) return false;
+      const email = String(u.email || '').toLowerCase();
+      if (email.endsWith('@deleted.local') || /^deleted_/.test(email)) return false;
+      if (/\(removido\)\s*$/i.test(String(u.name || ''))) return false;
+      if (u.deleted_at) return false;
+      // Demos legados @empresa.com não contam como ativos na UI.
+      if (typeof this._isLegacyDemoUser === 'function' && this._isLegacyDemoUser(u)) return false;
+      const a = u.active;
       return !(a === false || a === 0 || a === '0' || a === 'false');
     },
 
@@ -181,6 +188,7 @@
     async init() {
       if (this.online) {
         await this._ensureOnlineUsersOnce();
+        await this._purgeLegacyDemoUsersOnce().catch(() => null);
         await this.ensurePersistTablesOnline().catch(() => null);
         await this.ensureRhTablesOnline().catch(() => null);
         return;
@@ -230,6 +238,72 @@
         this._lset(this.LK.bolao_copa_picks, []);
         this._lset(this.LK.bolao_copa_results, []);
       }
+      // Sempre tira demos @empresa.com do local — sem resetar o restante.
+      this._stripLegacyDemoUsersLocal();
+    },
+
+    /** IDs/e-mails de demo (@empresa.com) que o Excluir não “grudava” — seed recriava. */
+    _legacyDemoUserIds() {
+      return ['back01', 'ger01', 'fin01', 'rh01', 'oper01', 'jur01', 'dir01', 'ouv01'];
+    },
+
+    _isLegacyDemoUser(u) {
+      if (!u) return false;
+      const id = String(u.id || '');
+      if (this._legacyDemoUserIds().includes(id)) return true;
+      const email = String(u.email || '').toLowerCase();
+      return email.endsWith('@empresa.com');
+    },
+
+    _stripLegacyDemoUsersLocal() {
+      const list = this._lget(this.LK.users);
+      if (!Array.isArray(list) || !list.length) return;
+      const next = list.filter((u) => !this._isLegacyDemoUser(u));
+      if (next.length !== list.length) {
+        this._lset(this.LK.users, next);
+        console.log('[DB] Removidos usuários demo locais (@empresa.com)');
+      }
+    },
+
+    /**
+     * Remove demos do banco online (Backoffice OP, Financeiro F, etc.).
+     * Se a flag já está setada, só reexecuta se back01 ainda existir.
+     */
+    async _purgeLegacyDemoUsersOnce() {
+      if (!this.online) return;
+      const flagKey = 'soublu_demo_users_purged_v1';
+      if (localStorage.getItem(flagKey) === '1') {
+        try {
+          const probe = await supaReq('GET', 'users', null, '?id=eq.back01&select=id&limit=1');
+          if (!probe || !probe.length) return;
+        } catch (_) {
+          return;
+        }
+      }
+      const ids = this._legacyDemoUserIds();
+      let removed = 0;
+      for (const id of ids) {
+        try {
+          const rows = await supaReq('GET', 'users', null, `?id=eq.${encodeURIComponent(id)}&select=id,email,active&limit=1`);
+          if (!rows || !rows.length) continue;
+          try {
+            await this.removeUserCompletely(id);
+          } catch (_) {
+            try { await this.deleteUser(id); } catch (__) { /* noop */ }
+            try { await this.purgeInactiveUser(id); } catch (__) { /* noop */ }
+            try {
+              await supaReq('DELETE', 'users', null, `?id=eq.${encodeURIComponent(id)}`);
+            } catch (___) { /* noop */ }
+          }
+          removed += 1;
+        } catch (_) { /* noop */ }
+      }
+      if (removed) {
+        console.log('[DB] Usuários demo (@empresa.com) removidos:', removed);
+        this.clearAllUsersCache();
+        _cacheDel('users');
+      }
+      try { localStorage.setItem(flagKey, '1'); } catch (_) { /* noop */ }
     },
 
     _seedMarketplaceServices() {
@@ -604,34 +678,49 @@
       ));
     },
   
-    /** Papéis que podem ser marcados em reunião (gerente para baixo na hierarquia). */
+    /** Papéis convocáveis em reunião — inclui RH, master, financeiro, diretoria etc. */
     MEETING_PARTICIPANT_ROLES: [
-      'gerente', 'gerencia', 'supervisor', 'sup_backoffice', 'backoffice',
-      'vendedor', 'employee', 'operacional', 'juridico', 'ouvidoria', 'admin',
+      'master', 'fundador', 'desenvolvedor', 'diretoria', 'rh',
+      'gerente', 'gerencia', 'financeiro', 'financial',
+      'supervisor', 'sup_backoffice', 'backoffice',
+      'vendedor', 'employee', 'operacional', 'juridico', 'ouvidoria', 'admin', 'portaria',
     ],
 
     /** Colaboradores ativos convocáveis em reunião (gerente ↓; equipe ou todos conforme escopo). */
     async getMeetingParticipants(adminId = null) {
       const roles = this.MEETING_PARTICIPANT_ROLES;
       const cols = 'id,name,email,role,matricula,department,active,admin_id';
+      const isActive = (u) => u?.active !== false && u?.active !== 0 && u?.active !== '0';
+      const inScope = (u) => {
+        if (!adminId) return true;
+        return String(u.admin_id || '') === String(adminId);
+      };
+      const filterLocal = (list) => (list || [])
+        .filter((u) => roles.includes(String(u.role || '').toLowerCase()) && isActive(u) && inScope(u))
+        .sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+
       if (this.online) {
-        let params = `?role=in.(${roles.join(',')})&active=eq.true&select=${cols}&order=name.asc&limit=500`;
-        if (adminId) {
-          params = `?admin_id=eq.${encodeURIComponent(adminId)}&role=in.(${roles.join(',')})&active=eq.true&select=${cols}&order=name.asc&limit=500`;
-        }
         try {
-          return await supaReq('GET', 'users', null, params);
+          // Sem active=eq.true na query — filtra no cliente (MySQL TINYINT costuma falhar nesse filtro).
+          let params = `?role=in.(${roles.join(',')})&select=${cols}&order=name.asc&limit=800`;
+          if (adminId) {
+            params = `?admin_id=eq.${encodeURIComponent(adminId)}&role=in.(${roles.join(',')})&select=${cols}&order=name.asc&limit=800`;
+          }
+          const rows = await supaReq('GET', 'users', null, params);
+          const filtered = filterLocal(rows);
+          if (filtered.length) return filtered;
         } catch (e) {
           console.warn('[DB] getMeetingParticipants:', e);
+        }
+        try {
+          const all = await this.getAllUsers();
+          return filterLocal(all);
+        } catch (e2) {
+          console.warn('[DB] getMeetingParticipants fallback:', e2);
           return [];
         }
       }
-      const all = this._lget(this.LK.users);
-      return all.filter(u =>
-        roles.includes(u.role) &&
-        u.active !== false &&
-        (!adminId || u.admin_id === adminId)
-      );
+      return filterLocal(this._lget(this.LK.users));
     },
 
     /** @deprecated use getMeetingParticipants */
@@ -695,6 +784,8 @@
     clearAllUsersCache() {
       this.__allUsersMem = null;
       this.__allUsersMemAt = 0;
+      this.__allUsersInflight = null;
+      this.__allUsersFetchToken = (this.__allUsersFetchToken || 0) + 1;
     },
 
     async getAllUsers(force = false) {
@@ -711,6 +802,7 @@
         if (!force && this.__allUsersInflight) {
           return this.__allUsersInflight;
         }
+        const fetchToken = this.__allUsersFetchToken || 0;
         const run = (async () => {
           const cols = 'id,name,email,role,cpf,matricula,department,admin_id,balance,points,active,cc_money_active,photo_url,show_points,created_at';
           const pageSize = 400;
@@ -723,6 +815,10 @@
             all.push(...chunk);
             if (chunk.length < pageSize) break;
             offset += pageSize;
+          }
+          /* Descarta resultado se outro clear/fetch mais novo rodou no meio (ex.: após Excluir). */
+          if (fetchToken !== (this.__allUsersFetchToken || 0)) {
+            return this.__allUsersMem || all;
           }
           this.__allUsersMem = all;
           this.__allUsersMemAt = Date.now();
@@ -739,7 +835,7 @@
           console.warn('[DB] getAllUsers:', e);
           return [];
         } finally {
-          this.__allUsersInflight = null;
+          if (this.__allUsersInflight === run) this.__allUsersInflight = null;
         }
       }
       return this._lget(this.LK.users);
@@ -762,7 +858,7 @@
       if (data.photo_url != null) patch.photo_url = data.photo_url;
       if (data.phone != null) patch.phone = String(data.phone).trim();
       if (data.cpf) patch.cpf = String(data.cpf).replace(/\D/g, '');
-      if (data.partner_root_id != null) patch.partner_root_id = data.partner_root_id;
+      if (data.partner_root_id !== undefined) patch.partner_root_id = data.partner_root_id || null;
       if (data.permissions != null) patch.permissions = data.permissions;
       if (data.show_points !== undefined) patch.show_points = data.show_points;
 
@@ -1025,13 +1121,14 @@
             await this.savePartner({ ...prt, active: false, meta: { ...(prt.meta || {}), status: 'inativo' } });
           }
         } catch (_) { /* noop */ }
-        const still = await this.getUser(id);
+        const still = await this.getUser(id, true);
         if (!still) {
           throw new Error('Usuário não encontrado.');
         }
         if (this._isUserActive(still)) {
           throw new Error('Não foi possível desativar este usuário.');
         }
+        this.clearAllUsersCache();
         return true;
       }
       const list = this._lget(this.LK.users);
@@ -1040,6 +1137,112 @@
       list[idx] = { ...list[idx], active: false, deleted_at: now };
       this._lset(this.LK.users, list);
       return true;
+    },
+
+    /**
+     * Remove o registro do usuário (só se já estiver inativo).
+     * Usado para limpar duplicatas no Painel Master — não apaga propostas.
+     */
+    async purgeInactiveUser(id) {
+      if (!id) throw new Error('ID do usuário inválido');
+      const u = await this.getUser(id, true);
+      if (!u) throw new Error('Usuário não encontrado.');
+      if (this._isUserActive(u)) {
+        throw new Error('Desative a conta antes de remover o cadastro duplicado.');
+      }
+      const role = String(u.role || '').toLowerCase();
+      if (role === 'fundador' || role === 'master') {
+        throw new Error('Não é permitido remover master/fundador.');
+      }
+      if (this.online) {
+        _cacheDel('users');
+        this.clearAllUsersCache();
+        await supaReq('DELETE', 'users', null, `?id=eq.${encodeURIComponent(id)}`);
+        const still = await this.getUser(id, true).catch(() => null);
+        if (still) {
+          throw new Error('Não foi possível excluir do banco (vínculos). Conta permanece desativada.');
+        }
+        this.clearAllUsersCache();
+        return true;
+      }
+      const list = this._lget(this.LK.users).filter((x) => String(x.id) !== String(id));
+      this._lset(this.LK.users, list);
+      return true;
+    },
+
+    /**
+     * Exclusão no Painel Master: remove a conta da lista/login.
+     * NUNCA apaga propostas — só garante vendorName nas propostas antes de sumir o cadastro.
+     * @returns {{ removed: boolean, deactivated?: boolean, reason?: string }}
+     */
+    async removeUserCompletely(id) {
+      if (!id) throw new Error('ID do usuário inválido');
+      const u = await this.getUser(id, true);
+      if (!u) throw new Error('Usuário não encontrado.');
+      const role = String(u.role || '').toLowerCase();
+      if (role === 'fundador' || role === 'master') {
+        throw new Error('Não é permitido excluir master/fundador.');
+      }
+      const vendorLabel = String(u.name || '').trim();
+      /* Congela o nome do vendedor nas propostas — elas permanecem no sistema. */
+      try {
+        await this._freezeProposalVendorNames(id, vendorLabel);
+      } catch (e) {
+        console.warn('[DB] freeze proposal names:', e?.message || e);
+      }
+      if (this._isUserActive(u)) {
+        await this.deleteUser(id);
+      }
+      try {
+        await this.purgeInactiveUser(id);
+        return { removed: true };
+      } catch (e) {
+        const msg = String(e?.message || e || '');
+        /* Hard DELETE falhou (vínculos) — desativa e libera e-mail/matrícula. Propostas ficam. */
+        try {
+          const stamp = Date.now().toString(36);
+          await this.updateUser(id, {
+            active: false,
+            email: `deleted_${String(id).slice(0, 12)}_${stamp}@deleted.local`,
+            matricula: `DEL-${stamp}`,
+            photo_url: '',
+            name: vendorLabel ? `${vendorLabel} (removido)` : 'Removido',
+          });
+        } catch (_) { /* noop */ }
+        this.clearAllUsersCache();
+        return { removed: false, deactivated: true, reason: msg };
+      }
+    },
+
+    /** Garante vendorName nas propostas do usuário (não altera IDs nem apaga nada). */
+    async _freezeProposalVendorNames(userId, vendorLabel) {
+      const uid = String(userId || '').trim();
+      const name = String(vendorLabel || '').trim();
+      if (!uid || !name) return 0;
+      const list = await this._fetchProposalsForVendorIds([uid]).catch(() => []);
+      let n = 0;
+      for (const p of list || []) {
+        if (!p?.id) continue;
+        const current = String(p.vendorName || p.vendor_name || '').trim();
+        if (current && !/\(removido\)\s*$/i.test(current)) continue;
+        try {
+          if (this.online) {
+            await supaReq('PATCH', 'proposals', {
+              vendorName: name,
+              vendor_name: name,
+            }, `?id=eq.${encodeURIComponent(p.id)}`);
+          } else {
+            const all = this._lget(this.LK.proposals);
+            const idx = all.findIndex((x) => String(x.id) === String(p.id));
+            if (idx >= 0) {
+              all[idx] = { ...all[idx], vendorName: name, vendor_name: name };
+              this._lset(this.LK.proposals, all);
+            }
+          }
+          n += 1;
+        } catch (_) { /* segue nas demais */ }
+      }
+      return n;
     },
 
     /**
@@ -1208,11 +1411,11 @@
       return Number.isFinite(n) ? Math.max(0, n) : 0;
     },
 
-    /** Saldo em pontos (permite negativo após advertência / débitos). */
+    /** Saldo em pontos (nunca negativo na leitura). */
     _ptsBalance(emp) {
-      if (typeof userPts === 'function') return userPts(emp);
+      if (typeof userPts === 'function') return Math.max(0, userPts(emp));
       const n = this._balanceAmt(emp?.points ?? emp?.balance ?? 0);
-      return Number.isFinite(n) ? n : 0;
+      return Number.isFinite(n) ? Math.max(0, n) : 0;
     },
 
     _isPartnerWalletUser(emp) {
@@ -1308,16 +1511,26 @@ if (!allowed) return null;
       const current = money
         ? this._balanceAmt(emp.points ?? emp.balance ?? 0)
         : this._ptsBalance(emp);
-      const nb = Math.round((current - amt) * 100) / 100;
+      const curSafe = Number.isFinite(current) ? Math.max(0, current) : 0;
+      // Nunca deixa saldo negativo — desconta no máximo o que a pessoa tem.
+      const debit = Math.min(amt, curSafe);
+      if (debit <= 0) {
+        if (curSafe !== current) {
+          await this.updateUser(empId, { balance: 0, points: 0 });
+          _cacheDel('users');
+        }
+        return 0;
+      }
+      const nb = Math.round((curSafe - debit) * 100) / 100;
       await this.updateUser(empId,{balance:nb, points:nb});
       _cacheDel('users');
       const txMeta = (meta && typeof meta === 'object' && !Array.isArray(meta))
-        ? { saldo_anterior: current, saldo_novo: nb, ...meta }
-        : { saldo_anterior: current, saldo_novo: nb };
+        ? { saldo_anterior: curSafe, saldo_novo: nb, solicitado: amt, ...meta }
+        : { saldo_anterior: curSafe, saldo_novo: nb, solicitado: amt };
       await this.addTransaction({
         employee_id: empId,
         type: 'debit',
-        amount: amt,
+        amount: debit,
         reason,
         by_user: byUser || 'admin',
         meta: txMeta,
@@ -1401,6 +1614,25 @@ if (!allowed) return null;
       const all=await this.getTransactions();
       return all.filter(t=>ids.has(t.employee_id));
     },
+    _nowBrazilSql() {
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', {
+          timeZone: 'America/Sao_Paulo',
+          year: 'numeric', month: '2-digit', day: '2-digit',
+          hour: '2-digit', minute: '2-digit', second: '2-digit',
+          hour12: false,
+        }).formatToParts(new Date());
+        const g = (t) => parts.find((p) => p.type === t)?.value || '00';
+        return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
+      } catch (_) {
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        // fallback UTC-3 aproximado
+        d.setHours(d.getHours() - 3);
+        return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}`;
+      }
+    },
+
     async addTransaction(data) {
       const amountVal = this._moneyAmt(data.amount);
       const tx={
@@ -1410,7 +1642,7 @@ if (!allowed) return null;
         amount:Number.isFinite(amountVal) ? amountVal : 0,
         reason:data.reason??'',
         by_user:data.by_user||null,
-        created_at:new Date().toISOString(),
+        created_at: data.created_at || this._nowBrazilSql(),
       };
       if (data.meta != null && typeof data.meta === 'object' && !Array.isArray(data.meta)) {
         tx.meta = data.meta;
@@ -1436,6 +1668,178 @@ if (!allowed) return null;
         return tx;
       }
       const list=this._lget(this.LK.transactions); list.push(tx); this._lset(this.LK.transactions,list); return tx;
+    },
+
+    _parseTxMeta(t) {
+      const m = t?.meta;
+      if (m && typeof m === 'object') return m;
+      if (typeof m === 'string') {
+        try { return JSON.parse(m) || {}; } catch (_) { return {}; }
+      }
+      return {};
+    },
+
+    _parseVoucherDetalhes(v) {
+      const d = v?.detalhes_pedido;
+      if (d && typeof d === 'object') return d;
+      if (typeof d === 'string') {
+        try { return JSON.parse(d) || {}; } catch (_) { return {}; }
+      }
+      return {};
+    },
+
+    _OPEN_VOUCHER_DEBIT_STATUSES: new Set(['em_analise', 'utilizado', 'em_processamento']),
+
+    /** Débitos em aberto na conta (faturas Clube + lançamentos open_debit). Não altera saldo. */
+    async getOpenAccountDebitos(empId) {
+      const itens = [];
+      if (!empId) return { total: 0, itens };
+
+      try {
+        let vouchers = [];
+        if (this.online && typeof supaReq === 'function') {
+          vouchers = await supaReq('GET', 'beneficios_vouchers', null,
+            `?employee_id=eq.${encodeURIComponent(empId)}&select=id,voucher_no,valor,status,detalhes_pedido,categoria,created_at&order=created_at.desc&limit=200`);
+        }
+        for (const v of (Array.isArray(vouchers) ? vouchers : [])) {
+          const st = String(v.status || '').toLowerCase();
+          if (!this._OPEN_VOUCHER_DEBIT_STATUSES.has(st)) continue;
+          const det = this._parseVoucherDetalhes(v);
+          if (det.settled_from_points || det.settled_on_withdraw) continue;
+          const valor = Math.round((Number(v.valor) || 0) * 100) / 100;
+          if (valor <= 0) continue;
+          itens.push({
+            id: v.id,
+            source: 'clube',
+            voucher_no: v.voucher_no || '',
+            label: `Clube ${v.voucher_no || v.id}${v.categoria ? ' — ' + v.categoria : ''}`,
+            amount: valor,
+            created_at: v.created_at,
+          });
+        }
+      } catch (e) {
+        console.warn('[getOpenAccountDebitos] vouchers:', e);
+      }
+
+      try {
+        const txs = await this.getTransactions(empId).catch(() => []);
+        for (const t of (txs || [])) {
+          const meta = this._parseTxMeta(t);
+          if (!meta.open_debit || meta.status === 'settled') continue;
+          if (meta.voucher_id && itens.some((i) => String(i.id) === String(meta.voucher_id))) continue;
+          const valor = Math.round((Number(t.amount) || 0) * 100) / 100;
+          if (valor <= 0) continue;
+          itens.push({
+            id: t.id,
+            source: 'manual',
+            label: t.reason || 'Débito em aberto',
+            amount: valor,
+            created_at: t.created_at,
+            tx_id: t.id,
+          });
+        }
+      } catch (e) {
+        console.warn('[getOpenAccountDebitos] txs:', e);
+      }
+
+      const total = Math.round(itens.reduce((s, i) => s + i.amount, 0) * 100) / 100;
+      return { total, itens };
+    },
+
+    /** Registra fatura/débito em aberto no extrato (sem debitar saldo ainda). */
+    async registerOpenAccountDebito({ employeeId, amount, reason, byUser, voucherId, voucherNo, source }) {
+      const amt = Math.round((Number(amount) || 0) * 100) / 100;
+      if (!employeeId || !(amt > 0)) return null;
+      return this.addTransaction({
+        employee_id: employeeId,
+        type: 'debit',
+        amount: amt,
+        reason: reason || (voucherNo ? `Débito em aberto Clube ${voucherNo}` : 'Débito em aberto'),
+        by_user: byUser || 'sistema',
+        meta: {
+          kind: source === 'clube' ? 'clube_fatura' : 'conta_debito_aberto',
+          open_debit: true,
+          status: 'open',
+          screen: 'conta_corrente_gestao',
+          voucher_id: voucherId || null,
+          voucher_no: voucherNo || null,
+        },
+      });
+    },
+
+    async _markVoucherSettledFromPoints(voucherId) {
+      if (!voucherId || !this.online || typeof supaReq !== 'function') return;
+      try {
+        const rows = await supaReq('GET', 'beneficios_vouchers', null,
+          `?id=eq.${encodeURIComponent(voucherId)}&select=id,detalhes_pedido&limit=1`);
+        const v = Array.isArray(rows) && rows[0] ? rows[0] : null;
+        if (!v) return;
+        const det = { ...this._parseVoucherDetalhes(v), settled_from_points: true, settled_on_withdraw: true, settled_at: new Date().toISOString() };
+        await supaReq('PATCH', 'beneficios_vouchers', { detalhes_pedido: det }, `?id=eq.${encodeURIComponent(voucherId)}`);
+      } catch (e) {
+        console.warn('[DB] mark voucher settled:', e);
+      }
+    },
+
+    async settleOpenAccountDebitos(empId, itens, byUser, opts) {
+      const list = Array.isArray(itens) ? itens : [];
+      const total = Math.round(list.reduce((s, i) => s + (Number(i.amount) || 0), 0) * 100) / 100;
+      if (!(total > 0)) return { ok: true, total: 0 };
+      const doMark = !(opts && opts.mark === false);
+      const labels = list.map((i) => i.voucher_no || i.label || i.id).filter(Boolean).slice(0, 8).join(', ');
+      const reason = `Quitação débitos em conta${labels ? ' — ' + labels : ''}`;
+      const bal = await this.deductBalance(empId, total, reason, byUser || empId, {
+        kind: 'quitacao_debito_aberto',
+        screen: 'saque_pix',
+        voucher_ids: list.filter((i) => i.source === 'clube').map((i) => i.id),
+      });
+      if (bal == null) return { ok: false, msg: 'Saldo insuficiente para quitar débitos em aberto.' };
+      if (doMark) await this.markOpenAccountDebitosSettled(empId, list);
+      return { ok: true, total };
+    },
+
+    async markOpenAccountDebitosSettled(empId, itens) {
+      const list = Array.isArray(itens) ? itens : [];
+      await Promise.all(list.map(async (i) => {
+        if (i.source === 'clube') {
+          await this._markVoucherSettledFromPoints(i.id);
+          try {
+            const txs = await this.getTransactions(empId);
+            for (const tx of (txs || [])) {
+              const meta = this._parseTxMeta(tx);
+              if (!meta.open_debit || meta.status === 'settled') continue;
+              if (String(meta.voucher_id || '') !== String(i.id)) continue;
+              const next = { ...meta, status: 'settled', settled_at: new Date().toISOString() };
+              if (this.online) {
+                _cacheDel('transactions');
+                await supaReq('PATCH', 'transactions', { meta: next }, `?id=eq.${encodeURIComponent(tx.id)}`);
+              } else {
+                const listTx = this._lget(this.LK.transactions);
+                const idx = listTx.findIndex((t) => String(t.id) === String(tx.id));
+                if (idx >= 0) { listTx[idx] = { ...listTx[idx], meta: next }; this._lset(this.LK.transactions, listTx); }
+              }
+            }
+          } catch (e) { console.warn('[markOpenAccountDebitosSettled] link tx:', e); }
+        }
+        if (i.tx_id || i.source === 'manual') {
+          try {
+            const txId = i.tx_id || i.id;
+            const txs = await this.getTransactions(empId);
+            const tx = (txs || []).find((t) => String(t.id) === String(txId));
+            if (tx) {
+              const meta = { ...this._parseTxMeta(tx), status: 'settled', settled_at: new Date().toISOString() };
+              if (this.online) {
+                _cacheDel('transactions');
+                await supaReq('PATCH', 'transactions', { meta }, `?id=eq.${encodeURIComponent(txId)}`);
+              } else {
+                const listTx = this._lget(this.LK.transactions);
+                const idx = listTx.findIndex((t) => String(t.id) === String(txId));
+                if (idx >= 0) { listTx[idx] = { ...listTx[idx], meta }; this._lset(this.LK.transactions, listTx); }
+              }
+            }
+          } catch (e) { console.warn('[markOpenAccountDebitosSettled] tx:', e); }
+        }
+      }));
     },
   
     /* ══ ORDERS ══ */
@@ -1702,7 +2106,7 @@ if (!allowed) return null;
       let irpjTax = 0;
       let irpjRate = 0;
 
-      if (money && typeof WithdrawalRules !== 'undefined') {
+      if (typeof WithdrawalRules !== 'undefined') {
         const ev = await WithdrawalRules.evaluate(empId, amt, emp);
         if (!ev.ok) return { ok:false, msg: ev.msg };
         netAmount = ev.netAmount;
@@ -1713,12 +2117,29 @@ if (!allowed) return null;
         irpjTax = ev.irpjTax || 0;
         irpjRate = ev.irpjRate || 0;
         try {
-          if (ev.flagSplitNext) await this.updateUser(empId, { withdrawal_irpf_next: true });
           if (ev.clearPendingIrpf) await this.updateUser(empId, { withdrawal_irpf_next: false });
         } catch (e) { console.warn('[requestWithdrawal] flags IRPF:', e); }
       } else if (!money && typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
         const wd = VendorTierPoints.canWithdrawToday(emp);
         if (!wd.ok) return { ok:false, msg: wd.msg };
+      }
+
+      let openDebito = { total: 0, itens: [] };
+      let deductOpen = false;
+      let accountDebitoPending = false;
+      try {
+        openDebito = await this.getOpenAccountDebitos(empId);
+      } catch (_) { openDebito = { total: 0, itens: [] }; }
+      if (openDebito.total > 0) {
+        // Só desconta se a pessoa optou explicitamente (flag true).
+        deductOpen = pixData?.deductAccountDebito === true;
+        accountDebitoPending = !deductOpen;
+        if (deductOpen) {
+          netAmount = Math.round((Math.max(0, netAmount - openDebito.total)) * 100) / 100;
+          if (!(netAmount > 0)) {
+            return { ok: false, msg: 'Valor insuficiente após descontar débitos em aberto e IRPF.' };
+          }
+        }
       }
 
       const _bal = typeof userWalletBalance === 'function'
@@ -1727,8 +2148,7 @@ if (!allowed) return null;
       const tol = money ? 0.001 : 0;
       if (_bal < totalDebit - tol) {
         const lbl = typeof formatCurrency === 'function' ? formatCurrency(_bal, emp) : String(_bal);
-        const extra = irpfTax > 0 ? ' (saque + IRPF)' : '';
-        return { ok:false, msg:`Saldo insuficiente${extra}. Você tem ${lbl}.` };
+        return { ok:false, msg:`Saldo insuficiente. Você tem ${lbl}.` };
       }
 
       const normPix = this.normalizePixPayment(pixData.pix_key_type, pixData.pix_key);
@@ -1740,6 +2160,25 @@ if (!allowed) return null;
       const holderName = pixData.holder_name || '';
       const bankName = pixData.bank_name || '';
 
+      let settledDebitoTotal = 0;
+      if (deductOpen && openDebito.itens.length) {
+        const settled = await this.settleOpenAccountDebitos(empId, openDebito.itens, empId, { mark: false });
+        if (!settled.ok) return { ok: false, msg: settled.msg || 'Falha ao quitar débitos.' };
+        settledDebitoTotal = settled.total || 0;
+        // IRPF/débito saem do valor solicitado: saldo debitado = solicitado (= totalDebit inicial).
+        // Quitação já debitou o aberto → resta debitar o restante do saque.
+        totalDebit = Math.round((totalDebit - settledDebitoTotal) * 100) / 100;
+        if (!(totalDebit > 0)) {
+          // Todo o valor foi para quitação de débitos — ainda registra saque líquido 0? bloquear.
+          try {
+            await this.addBalance(empId, settledDebitoTotal, 'Estorno — saque sem líquido após débitos', 'sistema', {
+              kind: 'estorno_saque_falha', screen: 'saque_pix',
+            });
+          } catch (_) { /* noop */ }
+          return { ok: false, msg: 'Após os débitos em aberto não resta valor líquido para o PIX.' };
+        }
+      }
+
       const notePayload = {
         net_amount: netAmount,
         requested_amount: amt,
@@ -1747,10 +2186,13 @@ if (!allowed) return null;
         irpj_tax: irpjTax,
         irpj_rate: irpjRate,
         irpf_tax: irpfTax,
-        gross_debit: totalDebit,
+        gross_debit: Math.round((totalDebit + settledDebitoTotal) * 100) / 100,
         irpf_reason: irpfReason,
         payment_method: 'pix',
         bank: null,
+        account_debito_pending: accountDebitoPending || false,
+        account_debito_amount: openDebito.total || 0,
+        account_debito_deducted: settledDebitoTotal || 0,
       };
 
       let reason = `Saque PIX — ${pixType.toUpperCase()} ${pixKey}`;
@@ -1761,6 +2203,14 @@ if (!allowed) return null;
       const wdMeta = { screen: 'saque_pix', kind: 'saque_solicitado' };
       const nbAfter = await this.deductBalance(empId, totalDebit, reason, empId, wdMeta);
       if (nbAfter == null) {
+        if (settledDebitoTotal > 0) {
+          try {
+            await this.addBalance(empId, settledDebitoTotal, 'Estorno — falha após quitação de débitos no saque', 'sistema', {
+              kind: 'estorno_saque_falha',
+              screen: 'saque_pix',
+            });
+          } catch (_) { /* noop */ }
+        }
         return {
           ok: false,
           msg: 'Não foi possível reservar o saldo para o saque. Verifique o saldo disponível ou contate o suporte.',
@@ -1788,11 +2238,25 @@ if (!allowed) return null;
       };
       try {
         await this._insertWithdrawal(wd);
-        return{ok:true,withdrawal:wd, irpf_tax: irpfTax, irpj_tax: irpjTax, total_debit: totalDebit, partner_fee: partnerFee};
+        if (settledDebitoTotal > 0 && openDebito.itens.length) {
+          try { await this.markOpenAccountDebitosSettled(empId, openDebito.itens); } catch (mErr) {
+            console.warn('[requestWithdrawal] marcar débitos quitados:', mErr);
+          }
+        }
+        return{
+          ok:true,
+          withdrawal:wd,
+          irpf_tax: irpfTax,
+          irpj_tax: irpjTax,
+          total_debit: Math.round((totalDebit + settledDebitoTotal) * 100) / 100,
+          partner_fee: partnerFee,
+          account_debito_pending: accountDebitoPending,
+          account_debito_deducted: settledDebitoTotal,
+        };
       } catch (e) {
         console.error('[requestWithdrawal]', e);
         try {
-          await this.addBalance(empId, totalDebit, 'Estorno — falha ao registrar saque', 'sistema', {
+          await this.addBalance(empId, totalDebit + settledDebitoTotal, 'Estorno — falha ao registrar saque', 'sistema', {
             kind: 'estorno_saque_falha',
             screen: 'saque_pix',
           });
@@ -2083,9 +2547,10 @@ if (!allowed) return null;
       const notes = this._parseWdNotes(wd);
       const gross = Number(notes.gross_debit);
       if (Number.isFinite(gross) && gross > 0) return Math.round(gross * 100) / 100;
+      const requested = Number(notes.requested_amount);
+      if (Number.isFinite(requested) && requested > 0) return Math.round(requested * 100) / 100;
       const amt = Math.round(Number(wd?.amount || 0) * 100) / 100;
-      const irpf = Number(notes.irpf_tax) || 0;
-      return Math.round((amt + irpf) * 100) / 100;
+      return amt;
     },
 
     async _withdrawalDebitAlreadyRecorded(wd) {
@@ -2547,12 +3012,125 @@ if (!allowed) return null;
 
     /** Mesmos filtros do gráfico Faturamento por Equipe (dashboard). */
     proposalMatchesBillingStatus(p, statusFilter) {
-      const f = statusFilter || 'total';
-      if (f === 'total') return true;
-      if (f === 'pagas') return this.isPaidProposal(p);
-      if (f === 'canceladas') return this.isCancelledProposal(p);
-      if (f === 'digitadas') return !this.isPaidProposal(p) && !this.isCancelledProposal(p);
+      const f = String(statusFilter || 'total').toLowerCase().trim();
+      if (f === 'total' || f === 'todas' || f === 'all' || !f) return true;
+      // Cadastradas = o que entrou no período (filtro de data usa createdAt).
+      if (f === 'cadastradas' || f === 'cadastrada') return true;
+      if (f === 'pagas' || f === 'paga' || f === 'pago') return this.isPaidProposal(p);
+      if (f === 'canceladas' || f === 'cancelada') return this.isCancelledProposal(p);
+      // Digitadas = só quem pingou na esteira (tem data de entrada em Digitação).
+      if (f === 'digitadas' || f === 'digitada') return !!this.proposalDigitacaoAt(p);
       return true;
+    },
+
+    /** Status/fase = Digitação (esteira). */
+    isDigitacaoStatus(val) {
+      const s = String(val || '')
+        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase().trim();
+      return s === 'DIGITACAO' || s.includes('DIGITACAO');
+    },
+
+    /**
+     * Momento em que a proposta pingou na esteira (Digitação).
+     * Nunca usa updatedAt — evita contagem por abrir/salvar/editar.
+     * @returns {Date|null}
+     */
+    proposalDigitacaoAt(p) {
+      if (!p) return null;
+      const tryDate = (raw) => {
+        if (!raw) return null;
+        const d = new Date(raw);
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
+      const explicit = tryDate(p.digitacaoAt || p.digitacao_at);
+      if (explicit) return explicit;
+      if (p.meta) {
+        let meta = p.meta;
+        if (typeof meta === 'string') {
+          try { meta = JSON.parse(meta); } catch (_) { meta = null; }
+        }
+        const fromMeta = tryDate(meta?.digitacaoAt || meta?.digitacao_at);
+        if (fromMeta) return fromMeta;
+      }
+      const hist = this._parseProposalHistoryArr(p.history);
+      let firstMs = null;
+      for (const h of hist) {
+        const kind = String(h?.kind || h?.billing || '').toLowerCase();
+        const action = String(h?.action || '');
+        const isDig = kind === 'digitacao' || kind === 'digitacao_at'
+          || /(→|->|⇒)\s*\[?\s*Digita/i.test(action)
+          || /Status:.*Digita/i.test(action);
+        if (!isDig || !h?.date) continue;
+        const t = new Date(h.date).getTime();
+        if (Number.isNaN(t)) continue;
+        if (firstMs == null || t < firstMs) firstMs = t;
+      }
+      if (firstMs != null) return new Date(firstMs);
+      return null;
+    },
+
+    /** Chave de cliente para detectar propostas duplicadas (CPF 11 dígitos). */
+    proposalClientDedupeKey(p) {
+      if (!p) return '';
+      const cpf = String(p.clientCpf || p.client_cpf || p.cpf || '').replace(/\D/g, '');
+      if (cpf.length === 11) return `cpf:${cpf}`;
+      const cid = String(p.clientId || p.client_id || '').trim();
+      if (cid) return `id:${cid}`;
+      return '';
+    },
+
+    /** Grupos com 2+ propostas do mesmo cliente. */
+    findDuplicateProposalGroups(proposals) {
+      const map = new Map();
+      (proposals || []).forEach((p) => {
+        if (!p || !p.id) return;
+        const key = this.proposalClientDedupeKey(p);
+        if (!key) return;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(p);
+      });
+      const groups = [];
+      map.forEach((list, key) => {
+        if (list.length >= 2) groups.push({ key, proposals: list });
+      });
+      return groups;
+    },
+
+    /**
+     * Qual proposta manter em um grupo duplicado:
+     * paga > com número > maior valor > mais recente (createdAt).
+     */
+    pickProposalToKeep(proposals) {
+      const list = (proposals || []).filter((p) => p && p.id);
+      if (!list.length) return null;
+      return list.slice().sort((a, b) => {
+        const aPaid = this.isPaidProposal(a) ? 1 : 0;
+        const bPaid = this.isPaidProposal(b) ? 1 : 0;
+        if (bPaid !== aPaid) return bPaid - aPaid;
+        const aNum = String(a.numero || a.numeroProposta || a.proposalNumber || '').trim() ? 1 : 0;
+        const bNum = String(b.numero || b.numeroProposta || b.proposalNumber || '').trim() ? 1 : 0;
+        if (bNum !== aNum) return bNum - aNum;
+        const aVal = Number(a.valor || a.valorLiberado || 0) || 0;
+        const bVal = Number(b.valor || b.valorLiberado || 0) || 0;
+        if (bVal !== aVal) return bVal - aVal;
+        const aCreated = this.proposalCreatedDate(a).getTime() || 0;
+        const bCreated = this.proposalCreatedDate(b).getTime() || 0;
+        return bCreated - aCreated;
+      })[0];
+    },
+
+    /** Outra proposta ativa (não cancelada) do mesmo cliente, excluindo excludeId. */
+    findOtherActiveProposalForClient(proposals, clientHint, excludeId) {
+      const key = this.proposalClientDedupeKey(clientHint || {});
+      if (!key) return null;
+      const ex = String(excludeId || '').trim();
+      return (proposals || []).find((p) => {
+        if (!p || !p.id) return false;
+        if (ex && String(p.id) === ex) return false;
+        if (this.isCancelledProposal(p)) return false;
+        return this.proposalClientDedupeKey(p) === key;
+      }) || null;
     },
 
     /**
@@ -2687,19 +3265,37 @@ if (!allowed) return null;
 
     /**
      * Data para filtros de faturamento/relatórios por período.
-     * - Pagas: data em que virou Paga (não a criação).
-     * - Demais: última atualização.
+     * @param {string} [status] total|cadastradas|digitadas|pagas|canceladas
+     * - pagas → paidAt
+     * - digitadas → digitacaoAt (ping na esteira; não usa updatedAt)
+     * - cadastradas → createdAt
+     * - canceladas → createdAt (fallback)
+     * - total → paga: paidAt; senão createdAt
      */
-    proposalBillingDate(p) {
+    proposalBillingDate(p, status) {
+      const s = String(status || 'total').toLowerCase().trim();
+      if (s === 'pagas' || s === 'paga' || s === 'pago') {
+        const paid = this.proposalPaidAt(p);
+        return paid || this.proposalCreatedDate(p);
+      }
+      if (s === 'digitadas' || s === 'digitada') {
+        return this.proposalDigitacaoAt(p) || new Date(0);
+      }
+      if (s === 'cadastradas' || s === 'cadastrada') {
+        return this.proposalCreatedDate(p);
+      }
+      if (s === 'canceladas' || s === 'cancelada') {
+        return this.proposalCreatedDate(p);
+      }
       if (this.isPaidProposal(p)) {
         const paid = this.proposalPaidAt(p);
         if (paid) return paid;
       }
-      return this.proposalDate(p);
+      return this.proposalCreatedDate(p);
     },
 
-    proposalInDateRange(p, from, to) {
-      const d = this.proposalBillingDate(p);
+    proposalInDateRange(p, from, to, status) {
+      const d = this.proposalBillingDate(p, status);
       return d >= from && d < to;
     },
 
@@ -3373,8 +3969,8 @@ if (!allowed) return null;
     },
 
     /**
-     * Soft-delete de proposta: NUNCA hard-DELETE.
-     * Converte para status Cancelado + nota no histórico (preserva PAGO/AG.LIB/BOLETO etc.).
+     * Exclusão definitiva de proposta (hard DELETE).
+     * Para apenas cancelar, use updateProposal com status Cancelado.
      */
     async deleteProposal(id, opts = {}) {
       if (!id) return null;
@@ -3384,34 +3980,15 @@ if (!allowed) return null;
       }
       const existing = await this.getProposal(id);
       if (!existing) return null;
-      const now = new Date().toISOString();
-      const actor = opts.by || opts.actorName || 'admin';
-      const hist = this._parseProposalHistoryArr(existing.history);
-      hist.push({
-        date: now,
-        actorName: actor,
-        action: 'Status: → [Cancelado]',
-        note: opts.note || `Exclusão convertida em cancelamento por ${actor}`,
-        kind: 'soft_delete',
-      });
-      const patch = {
-        status: 'Cancelado',
-        history: hist,
-        updatedAt: now,
-        updated_at: now,
-        lastUpdatedBy: actor,
-        last_updated_by: actor,
-      };
-      try {
-        const withActive = { ...patch, active: false };
-        const saved = await this.updateProposal(id, withActive);
-        if (saved) return saved;
-      } catch (e) {
-        if (!/active|Unknown column/i.test(String(e?.message || e))) {
-          console.warn('[DB] deleteProposal active=false:', e.message);
-        }
+      if (this.online) {
+        await supaReq('DELETE', 'proposals', null, `?id=eq.${encodeURIComponent(id)}`);
+        this._invalidateProposalsCache();
+        return { id, deleted: true };
       }
-      return await this.updateProposal(id, patch);
+      const list = this._lget(this.LK.proposals);
+      const next = (list || []).filter((p) => String(p.id) !== String(id));
+      this._lset(this.LK.proposals, next);
+      return { id, deleted: true };
     },
 
     /** Leitura local (FileReader) — usada quando Storage não está disponível. */
@@ -5142,6 +5719,10 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       const skipWd = new Set(['cancelado', 'rejeitado', 'estornado']);
       const lines = [];
       for (const t of txs || []) {
+        let meta = t.meta;
+        if (typeof meta === 'string') {
+          try { meta = JSON.parse(meta) || {}; } catch (_) { meta = {}; }
+        }
         lines.push({
           id: t.id,
           kind: 'transaction',
@@ -5149,7 +5730,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
           amount: typeof txAmount === 'function' ? txAmount(t) : Number(t.amount) || 0,
           reason: t.reason || 'Movimentação',
           created_at: t.created_at || t.date,
-          meta: t.meta,
+          meta: meta && typeof meta === 'object' ? meta : {},
           by_user: t.by_user,
         });
       }
@@ -5624,24 +6205,52 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         'REGISTRO / DELIBERAÇÕES DA REUNIÃO:',
         '(Complementar após o encontro, se necessário.)',
       ].join('\n');
+      const toSql = (raw) => {
+        if (raw == null || raw === '') return this._nowBrazilSql();
+        if (typeof raw === 'string' && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(raw.trim())) {
+          return raw.trim();
+        }
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) throw new Error('Data/hora da reunião inválida.');
+        try {
+          const parts = new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'America/Sao_Paulo',
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false,
+          }).formatToParts(d);
+          const g = (t) => parts.find((p) => p.type === t)?.value || '00';
+          return `${g('year')}-${g('month')}-${g('day')} ${g('hour')}:${g('minute')}:${g('second')}`;
+        } catch (_) {
+          return this._nowBrazilSql();
+        }
+      };
+      const whenSql = toSql(scheduled_at);
+      const nowSql = this._nowBrazilSql();
       const row = {
         id: this._genId('mtg'),
         subject: subj,
         pauta: pautaTxt,
         ata_subject: subj,
         ata_pauta: ataPautaInicial,
-        scheduled_at: scheduled_at ? new Date(scheduled_at).toISOString() : new Date().toISOString(),
+        scheduled_at: whenSql,
         created_by: String(created_by || ''),
         participant_ids: pids,
         acknowledgements: {},
-        created_at: new Date().toISOString(),
+        created_at: nowSql,
       };
       if (!row.subject) throw new Error('Informe o assunto da reunião.');
       if (!pautaTxt) throw new Error('Informe a pauta da reunião.');
       if (!pids.length) throw new Error('Selecione pelo menos um participante.');
+      if (!row.created_by) throw new Error('Sessão inválida. Recarregue a página (Ctrl+F5) e tente de novo.');
       if (this.online) {
         _cacheDel('meetings');
-        await supaReq('POST', 'meetings', this._meetingPayloadForApi(row));
+        try {
+          await supaReq('POST', 'meetings', this._meetingPayloadForApi(row));
+        } catch (e) {
+          const msg = String(e?.message || e || '');
+          throw new Error(msg || 'Não foi possível gravar a reunião no servidor.');
+        }
         return this._normMeetingRow(row);
       }
       const list = this._meetingsLS();
@@ -6996,21 +7605,14 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
 
     /* ══ SEEDS ══ */
     _seedUsers(){
+      // Só contas reais de bootstrap. Demos @empresa.com (Backoffice OP, etc.)
+      // foram removidos — Excluir não “grudava” porque o seed recriava.
       return[
         {id:'fund_rodrigo',name:'Rodrigo Orlando',email:'rodrigo.orlando@soublu.com',password:'rodrigo123',matricula:'ROD001',department:'Direção',role:'fundador',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'dev_owner',name:'Desenvolvedor',email:'desenvolvedor@soublu.com',password:'dev123456',matricula:'DEV001',department:'Desenvolvimento',role:'desenvolvedor',admin_id:'fund_rodrigo',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'master_sak01',name:'Lucas SAK',email:'lucas@sakpromotora.com.br',password:'master123',matricula:'SAK001',department:'Administracao',role:'master',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'ger_sak01',name:'Gerente Geral',email:'gerente@sakpromotora.com.br',password:'gerente123',matricula:'GRN001',department:'Gerência',role:'gerente',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'master01',name:'Master SOU+BLU',email:'master@soublu.com',password:'master123',matricula:'MST001',department:'Administração',role:'master',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'back01',name:'Backoffice OP',email:'backoffice@empresa.com',password:'123456',matricula:'BCK001',department:'Operacional',role:'backoffice',admin_id:'master01',balance:100,points:100,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'ger01',name:'Gerência Geral',email:'gerencia@empresa.com',password:'123456',matricula:'GER001',department:'Gerência',role:'gerencia',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'fin01',name:'Financeiro F',email:'financeiro@empresa.com',password:'123456',matricula:'FIN001',department:'Financeiro',role:'financeiro',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'rh01',name:'RH Human',email:'rh@empresa.com',password:'123456',matricula:'RHH001',department:'RH',role:'rh',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'oper01',name:'Operacional O',email:'operacional@empresa.com',password:'123456',matricula:'OPR001',department:'Operacional',role:'operacional',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'jur01',name:'Jurídico J',email:'juridico@empresa.com',password:'123456',matricula:'JUR001',department:'Jurídico',role:'juridico',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'dir01',name:'Diretoria D',email:'diretoria@empresa.com',password:'123456',matricula:'DIR001',department:'Diretoria',role:'diretoria',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'ouv01',name:'Ouvidoria O',email:'ouvidoria@empresa.com',password:'123456',matricula:'OUV001',department:'Ouvidoria',role:'ouvidoria',admin_id:'master01',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        // demos Alpha/Beta/vendedores removidos — não devem voltar após Excluir
       ];
     },
     _seedProducts(){return[

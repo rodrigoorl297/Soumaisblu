@@ -15,9 +15,9 @@
   <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
   <link rel="stylesheet" href="../css/global.css?v=modal-bs1"/>
   <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
-  <link rel="stylesheet" href="../css/leads.css?v=1781704178"/>
-  <!-- SheetJS for XLSX parsing -->
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js?v=1781704178"></script>
+  <link rel="stylesheet" href="../css/leads.css?v=emp-bs1"/>
+  <!-- SheetJS for XLSX parsing (local — CDN costuma bloquear) -->
+  <script src="../js/vendor/xlsx.full.min.js?v=xlsx203"></script>
 </head>
 <body class="leads-app">
   <!-- Loader -->
@@ -78,7 +78,7 @@
       <!-- Topbar -->
       <header class="topbar">
         <div class="topbar-left">
-          <button class="btn btn-ghost btn-sm" id="menuToggle" onclick="toggleSidebar()" style="display:none;font-size:20px;">☰</button>
+          <button class="btn btn-ghost btn-sm" id="menuToggle" onclick="toggleSidebar()" style="display:none;font-size:20px;">â˜°</button>
           <h1 id="pageTitle">Dashboard</h1>
         </div>
         <div class="topbar-right">
@@ -88,7 +88,7 @@
         </div>
       </header>
 
-      <!-- ═══ TAB: Dashboard ═══ -->
+      <!-- TAB -->
       <div class="tab-content active" id="tab-dashboard">
         <div class="page-content">
           <div class="stats-grid" id="dashboardStats">
@@ -121,11 +121,15 @@
 
           <!-- Employee Progress Table -->
           <div class="card">
-            <div class="flex items-center justify-between mb-md" style="padding: 24px 24px 0 24px; margin-bottom: 16px;">
+            <div class="flex items-center justify-between mb-md" style="padding: 24px 24px 0 24px; margin-bottom: 16px; gap:12px; flex-wrap:wrap;">
               <h3 style="margin: 0; font-size: 18px; font-weight: 800;">Progresso por Funcionário</h3>
-              <div class="search-bar" style="max-width: 300px; width: 100%;">
-                <span class="search-icon">🔍</span>
-                <input type="text" id="employeeSearch" placeholder="Buscar funcionário..." oninput="filterEmployeeTable()"/>
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-accent btn-sm" id="btnManageLeads" onclick="openManageLeadsModal()" style="font-weight:700;">⚙️ Gerenciar / Trocar Leads</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnLeadsTelefonia" onclick="openTelefoniaModal()" title="Click2Call NextBilling">Telefonia</button>
+                <div class="search-bar" style="max-width: 300px; width: 100%;">
+                  <span class="search-icon"></span>
+                  <input type="text" id="employeeSearch" placeholder="Buscar funcionário..." oninput="filterEmployeeTable()"/>
+                </div>
               </div>
             </div>
             <div class="table-wrap">
@@ -150,11 +154,11 @@
         </div>
       </div>
 
-      <!-- ═══ TAB: Upload ═══ -->
+      <!-- TAB -->
       <div class="tab-content" id="tab-upload">
         <div class="page-content">
           <div class="card">
-            <h3 style="margin-bottom:20px;">📤 Upload de Planilha</h3>
+            <h3 style="margin-bottom:20px;">Upload de Planilha</h3>
             <p class="text-muted" style="margin-bottom:20px;font-size:14px;">
               Envie uma planilha (.xlsx, .xls, .csv) com os dados dos leads.
               O sistema aceita até <strong>60.000+ registros</strong> e detecta automaticamente as colunas.
@@ -169,7 +173,7 @@
 
             <!-- Column Mapping -->
             <div id="mappingSection" class="hidden mt-lg">
-              <h3>🗺️ Mapeamento de Colunas</h3>
+              <h3>Mapeamento de Colunas</h3>
               <p class="text-muted" style="margin-bottom:12px;font-size:14px;">
                 Verifique se as colunas foram detectadas corretamente:
               </p>
@@ -213,7 +217,7 @@
         </div>
       </div>
 
-      <!-- ═══ TAB: Distribute ═══ -->
+      <!-- TAB -->
       <div class="tab-content" id="tab-distribute">
         <div class="page-content">
           <div class="card">
@@ -285,14 +289,14 @@
         </div>
       </div>
 
-      <!-- ═══ TAB: Employees ═══ -->
+      <!-- TAB -->
       <div class="tab-content" id="tab-employees">
         <div class="page-content">
           <div class="card">
             <div class="flex items-center justify-between mb-md" style="padding: 24px 24px 0 24px; margin-bottom: 16px;">
-              <h3 style="margin: 0; font-size: 18px; font-weight: 800;">📋 Funcionários e seus Leads</h3>
+              <h3 style="margin: 0; font-size: 18px; font-weight: 800;">Funcionários e seus Leads</h3>
               <div class="search-bar" style="max-width: 300px; width: 100%;">
-                <span class="search-icon">🔍</span>
+                <span class="search-icon"></span>
                 <input type="text" id="empListSearch" placeholder="Buscar..." oninput="filterEmpList()"/>
               </div>
             </div>
@@ -317,14 +321,14 @@
         </div>
       </div>
 
-      <!-- ═══ TAB: Unlock Requests ═══ -->
+      <!-- TAB -->
       <div class="tab-content" id="tab-unlock">
         <div class="page-content">
           <div class="card">
-            <h3 style="margin-bottom:20px;">🔓 Solicitações de Desbloqueio</h3>
+            <h3 style="margin-bottom:20px;">Solicitações de Desbloqueio</h3>
             <div class="unlock-list" id="unlockList">
               <div class="empty-state">
-                <div class="empty-icon">✅</div>
+                <div class="empty-icon"></div>
                 <h3>Nenhum pedido pendente</h3>
                 <p>Todos os funcionários estão com acesso liberado.</p>
               </div>
@@ -335,12 +339,139 @@
     </main>
   </div>
 
+  <!-- Modal Gerenciar / Apagar / Trocar Leads -->
+  <div class="modal-overlay" id="manageLeadsModal" style="display:none;">
+    <div class="modal" style="max-width:960px; width:95%;">
+      <div class="modal-header">
+        <h3>⚙️ Gerenciar, Apagar e Trocar Leads do Lote</h3>
+        <button type="button" class="modal-close" onclick="closeManageLeadsModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap;">
+          <div class="search-bar" style="max-width:320px; width:100%;">
+            <input type="text" id="manageLeadSearch" class="form-control" placeholder="Buscar por nome, CPF ou telefone..." oninput="renderManageLeadsTable()"/>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+            <select id="manageLeadStatusFilter" class="form-control" style="width:160px;" onchange="renderManageLeadsTable()">
+              <option value="">Todos Status</option>
+              <option value="pending">Pendente</option>
+              <option value="nao_atende">Não Atende</option>
+              <option value="sem_interesse">Sem Interesse</option>
+              <option value="em_negociacao">Em Negociação</option>
+              <option value="venda_fechada">Venda Fechada</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+            <select id="manageLeadUserFilter" class="form-control" style="width:200px;" onchange="renderManageLeadsTable()">
+              <option value="">Todos os Vendedores</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Bulk Action Bar -->
+        <div id="bulkLeadsActionBar" style="display:none; background:var(--color-surface-2); padding:10px 14px; border-radius:8px; margin-bottom:14px; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;">
+          <span style="font-weight:700; font-size:13px;" id="selectedLeadsCount">0 leads selecionados</span>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <select id="bulkReassignSelect" class="form-control" style="max-width:220px; font-size:12px;">
+              <option value="">Reatribuir para...</option>
+            </select>
+            <button type="button" class="btn btn-primary btn-sm" onclick="executeBulkReassign()">🔄 Trocar Vendedor</button>
+            <button type="button" class="btn btn-danger btn-sm" onclick="executeBulkDelete()" style="background:var(--color-danger);color:#fff;">🗑️ Apagar Selecionados</button>
+          </div>
+        </div>
+
+        <div class="table-wrap" style="max-height:460px; overflow-y:auto;">
+          <table class="data-table" id="manageLeadsTable">
+            <thead>
+              <tr>
+                <th style="width:40px;"><input type="checkbox" id="checkAllManageLeads" onchange="toggleAllManageLeads(this.checked)"/></th>
+                <th>Nome</th>
+                <th>CPF / Órgão</th>
+                <th>Score</th>
+                <th>Telefone</th>
+                <th>Status</th>
+                <th>Vendedor Atual</th>
+                <th style="text-align:right;">Ações</th>
+              </tr>
+            </thead>
+            <tbody id="manageLeadsTbody">
+              <tr><td colspan="8" class="text-center text-muted" style="padding:24px;">Selecione um lote no menu superior para gerenciar os leads.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeManageLeadsModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Telefonia / NextBilling -->
+  <div class="modal-overlay" id="telefoniaModal">
+    <div class="modal" style="max-width:560px;">
+      <div class="modal-header">
+        <h3>Telefonia · Click2Call</h3>
+        <button type="button" class="modal-close" onclick="closeTelefoniaModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding:16px 20px;">
+        <p class="text-muted" style="font-size:13px;margin:0 0 14px;">
+          Modo <strong>MicroSIP</strong>: ao clicar em Ligar, a discagem abre no softphone Online (áudio no headset).
+        </p>
+        <div id="telefoniaStatusBox" style="padding:12px;border-radius:8px;background:var(--color-surface-2);margin-bottom:14px;font-size:13px;">
+          Carregando status…
+        </div>
+        <div class="form-group">
+          <label for="telefoniaServer">URL do servidor NextBilling</label>
+          <input type="url" id="telefoniaServer" class="form-control" placeholder="https://sip.seudominio.com.br"/>
+          <div class="small text-muted mt-1">Mesma URL do painel onde vocês entram para ver ramais/saldo.</div>
+        </div>
+        <div class="form-group">
+          <label for="telefoniaDeviceId">device_id (linha que paga)</label>
+          <input type="number" id="telefoniaDeviceId" class="form-control" min="1" step="1" placeholder="Ex: 50"/>
+        </div>
+        <div class="form-group">
+          <label for="telefoniaCallMode">Modo de origem</label>
+          <select id="telefoniaCallMode" class="form-control">
+            <option value="softphone">MicroSIP / ramal (recomendado)</option>
+            <option value="cellphone">Celular do perfil</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="telefoniaSrcRamal">Ramal MicroSIP (src)</label>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input type="text" id="telefoniaSrcRamal" class="form-control" inputmode="numeric" placeholder="Ex: 209" maxlength="6"/>
+            <button type="button" class="btn btn-outline btn-sm" onclick="saveTelefoniaConfig()">Salvar</button>
+          </div>
+          <div class="small text-muted mt-1">Com MicroSIP registrado neste ramal, o headset toca primeiro.</div>
+        </div>
+
+        <div style="margin:18px 0 12px;padding:14px;border:1px solid #fdba74;border-radius:12px;background:#fff7ed;">
+          <div style="font-weight:800;font-size:14px;margin-bottom:10px;color:#9a3412;">📞 Testar ligação</div>
+          <div class="form-group mb-2">
+            <label for="telefoniaTestSrc">Ramal / origem (toca primeiro)</label>
+            <input type="tel" id="telefoniaTestSrc" class="form-control" inputmode="tel" placeholder="Ex: 209"/>
+          </div>
+          <div class="form-group mb-2">
+            <label for="telefoniaTestDst">Número para testar (destino)</label>
+            <input type="tel" id="telefoniaTestDst" class="form-control" inputmode="tel" placeholder="Digite o número com DDD"/>
+          </div>
+          <button type="button" class="btn btn-success btn-sm w-100" id="telefoniaTestBtn" onclick="testTelefoniaCall()">📞 Ligar para este número</button>
+          <div class="small text-muted mt-2 mb-0">MicroSIP precisa estar <strong>Online</strong>. O Windows pode pedir para abrir o MicroSIP na primeira vez — aceite.</div>
+        </div>
+
+        <div id="telefoniaPhoneList" style="margin-top:16px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline btn-sm" onclick="closeTelefoniaModal()">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Scripts (produção Locaweb = MySQL via db-connect.js no head) -->
-  <script src="../js/config.js?v=nodelete-demo1"></script>
+  <script src="../js/config.js?v=20260811_dist_fix1"></script>
   <script src="../js/db.js?v=nodelete-demo1"></script>
   <script src="../js/auth.js?v=1781813000"></script>
-  <script src="../js/leads-db.js?v=tickets-lean1"></script>
-  <script src="../js/leads-import.js?v=1781704178"></script>
-  <script src="../js/leads-manager.js?v=1781704178"></script>
+  <script src="../js/leads-db.js?v=20260811_dist_fix1"></script>
+  <script src="../js/leads-import.js?v=20260811_dist_fix1"></script>
+  <script src="../js/leads-manager.js?v=20260811_dist_fix1"></script>
 <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

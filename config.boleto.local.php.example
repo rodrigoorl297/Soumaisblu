@@ -1,0 +1,37 @@
+<?php
+/**
+ * Copie este arquivo para: config.boleto.local.php (raiz do site)
+ *
+ * Fluxo Hyperflow:
+ *   https://integracoes.hyperflow.global/apps/cs-call-1/flows/fluxo-flow-1
+ *
+ * IMPORTANTE: o link acima é o EDITOR. A URL que o SOU+BLU chama é a do API Gateway.
+ *
+ * No Hyperflow:
+ * 1) App cs-call-1 → API Gateway → criar rota POST (ex.: boleto-validado)
+ * 2) Vincular ao fluxo "fluxo-flow-1"
+ * 3) Copiar o Endpoint da rota e colar em BOLETO_WEBHOOK_URL
+ * 4) Se a rota exigir cliente: criar Cliente e colar o ID em BOLETO_HYPERFLOW_CLIENT_ID
+ * 5) No fluxo: Start → Delay 3 dias → Ativar usuário / WhatsApp com {{input.telefone}}
+ */
+declare(strict_types=1);
+
+define('BOLETO_HYPERFLOW_APP', 'cs-call-1');
+define('BOLETO_HYPERFLOW_FLOW', 'fluxo-flow-1');
+define('BOLETO_HYPERFLOW_FLOW_URL', 'https://integracoes.hyperflow.global/apps/cs-call-1/flows/fluxo-flow-1');
+
+/**
+ * Cole aqui o Endpoint do API Gateway (não o link do editor).
+ * Exemplo (formato varia por organização):
+ * https://xxxx.hyperflowapis.global/.../boleto-validado
+ */
+define('BOLETO_WEBHOOK_URL', '');
+
+/** Header client_id exigido pelo Hyperflow quando a rota restringe clientes. */
+define('BOLETO_HYPERFLOW_CLIENT_ID', '');
+
+/**
+ * Token interno SOU+BLU (X-API-Key em notify/list/due).
+ * Vazio = usa API_INTERNAL_KEY.
+ */
+define('BOLETO_WEBHOOK_TOKEN', '');

@@ -54,28 +54,54 @@ const LeadsDB = {
   /* ── LEADS ── */
   async importLeads(batchId, leadsArray) {
     _cacheDel('leads');
-    const CHUNK_SIZE = 500;
+    // nginx rejeita POST ~>=50KB com 400 HTML; manter margem (evidência: 45KB ok, 57KB fail).
+    const MAX_CHUNK_BYTES = 40000;
+    const MAX_CHUNK_ROWS = 80;
     let imported = 0;
-    for (let i = 0; i < leadsArray.length; i += CHUNK_SIZE) {
-      const chunk = leadsArray.slice(i, i + CHUNK_SIZE).map(lead => ({
-        id: DB._genId('ld'),
-        batch_id: batchId,
-        name: (lead.name || '').trim(),
-        orgao: (lead.orgao || '').trim(),
-        cpf: (lead.cpf || '').trim(),
-        mother_name: (lead.mother_name || '').trim(),
-        phone: (lead.phone || '').trim(),
-        extra_data: lead.extra_data || {},
-        status: 'pending',
-        assigned_to: null,
-        assigned_date: null,
-        assigned_week: null,
-        assigned_year: null,
-        notes: '',
-        completed_at: null,
-        created_at: new Date().toISOString(),
-      }));
-      await supaReq('POST', 'leads', chunk);
+    let i = 0;
+    while (i < leadsArray.length) {
+      const chunk = [];
+      let approxBytes = 2; // []
+      while (i < leadsArray.length && chunk.length < MAX_CHUNK_ROWS) {
+        const lead = leadsArray[i];
+        const extraData = lead.extra_data || {};
+        if (lead.score) extraData.score = (lead.score || '').trim();
+        if (lead.phone2) extraData.phone2 = (lead.phone2 || '').trim();
+        const row = {
+          id: DB._genId('ld'),
+          batch_id: batchId,
+          name: (lead.name || '').trim(),
+          orgao: (lead.orgao || '').trim(),
+          cpf: (lead.cpf || '').trim(),
+          mother_name: (lead.mother_name || '').trim(),
+          phone: (lead.phone || '').trim(),
+          extra_data: extraData,
+          status: 'pending',
+          assigned_to: null,
+          assigned_date: null,
+          assigned_week: null,
+          assigned_year: null,
+          notes: '',
+          completed_at: null,
+          created_at: new Date().toISOString(),
+        };
+        const rowBytes = JSON.stringify(row).length + (chunk.length ? 1 : 0);
+        if (chunk.length && approxBytes + rowBytes > MAX_CHUNK_BYTES) break;
+        chunk.push(row);
+        approxBytes += rowBytes;
+        i += 1;
+      }
+      // #region agent log
+      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'import-chunk',hypothesisId:'G2',location:'leads-db.js:importLeads',message:'posting lead chunk',data:{chunkRows:chunk.length,approxBytes,importedBefore:imported,total:leadsArray.length,batchId},timestamp:Date.now()})}).catch(()=>{});
+      // #endregion
+      try {
+        await supaReq('POST', 'leads', chunk);
+      } catch (err) {
+        // #region agent log
+        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'import-chunk',hypothesisId:'G2',location:'leads-db.js:importLeads:catch',message:'chunk post failed',data:{status:err?.status||null,error:String(err?.message||err).slice(0,200),chunkRows:chunk.length,approxBytes},timestamp:Date.now()})}).catch(()=>{});
+        // #endregion
+        throw err;
+      }
       imported += chunk.length;
       if (typeof lead_onImportProgress === 'function') {
         lead_onImportProgress(imported, leadsArray.length);
@@ -86,40 +112,88 @@ const LeadsDB = {
   },
 
   async getLeads(batchId, filters = {}) {
-    let params = `?batch_id=eq.${encodeURIComponent(batchId)}&select=*&order=created_at.asc`;
+    const limitVal = filters.limit || 50000;
+    let params = `?batch_id=eq.${encodeURIComponent(batchId)}&select=*&order=created_at.asc&limit=${limitVal}`;
     if (filters.status) params += `&status=eq.${encodeURIComponent(filters.status)}`;
     if (filters.assigned_to) params += `&assigned_to=eq.${encodeURIComponent(filters.assigned_to)}`;
     if (filters.assigned_date) params += `&assigned_date=eq.${encodeURIComponent(filters.assigned_date)}`;
-    if (filters.limit) params += `&limit=${filters.limit}`;
     if (filters.offset) params += `&offset=${filters.offset}`;
     return await supaReq('GET', 'leads', null, params);
   },
 
   async getLeadsByUser(userId, date = null) {
-    let params = `?assigned_to=eq.${encodeURIComponent(userId)}&select=*&order=created_at.asc`;
+    let params = `?assigned_to=eq.${encodeURIComponent(userId)}&select=*&order=assigned_date.desc&limit=500`;
     if (date) params += `&assigned_date=eq.${encodeURIComponent(date)}`;
     return await supaReq('GET', 'leads', null, params);
   },
 
   async getLeadsByUserAndWeek(userId, weekNumber, year) {
     return await supaReq('GET', 'leads', null,
-      `?assigned_to=eq.${encodeURIComponent(userId)}&assigned_week=eq.${weekNumber}&assigned_year=eq.${year}&select=*&order=assigned_date.asc`
+      `?assigned_to=eq.${encodeURIComponent(userId)}&assigned_week=eq.${weekNumber}&assigned_year=eq.${year}&select=*&order=assigned_date.asc&limit=500`
     );
   },
 
+  /**
+   * Mesa do vendedor: leads do dia + pendentes (não depende de carregar o histórico inteiro).
+   * A API limita leads a 200–500; buscar “todos” por created_at.asc escondia os pendentes novos.
+   */
+  // Lotes com atribuição fantasma (distribuição incompleta) — não mostrar na mesa
+  _GHOST_BATCH_IDS: new Set(['lbmpwlwzf2meozi', 'lbmpwm1by2w2lyy']),
+
   async getEmployeeTodayLeads(userId, todayStr) {
-    const d = new Date(todayStr + 'T12:00:00');
-    const jan1 = new Date(d.getFullYear(), 0, 1);
-    const days = Math.floor((d - jan1) / (24 * 60 * 60 * 1000));
-    const weekNumber = Math.ceil((d.getDay() + 1 + days) / 7);
-    const year = d.getFullYear();
+    const today = todayStr || this.getCurrentDateStr();
+    const { week: weekNumber, year } = this.getWeekAndYearFromDateStr(today);
+    const uid = encodeURIComponent(userId);
+    const byId = new Map();
 
-    const weekLeads = await this.getLeadsByUserAndWeek(userId, weekNumber, year);
+    const merge = (rows) => {
+      for (const l of rows || []) {
+        if (!l || !l.id) continue;
+        if (l.batch_id && this._GHOST_BATCH_IDS.has(String(l.batch_id))) continue;
+        byId.set(l.id, l);
+      }
+    };
 
-    return weekLeads.filter(l => {
-      if (l.assigned_date === todayStr) return true;
-      if (l.assigned_date < todayStr && !this.isWorkedStatus(l.status)) return true;
-      if (l.assigned_date < todayStr && this.isWorkedStatus(l.status) && l.completed_at && l.completed_at.startsWith(todayStr)) return true;
+    // 1) Pendentes do vendedor (mesa real)
+    merge(await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${uid}&status=eq.pending&select=*&order=assigned_date.asc&limit=500`
+    ).catch(() => []));
+
+    // 2) Designados para hoje (qualquer status)
+    merge(await this.getLeadsByUser(userId, today).catch(() => []));
+
+    // 3) Semana atual (progresso / trabalhados da semana)
+    merge(await this.getLeadsByUserAndWeek(userId, weekNumber, year).catch(() => []));
+
+    // 4) Fallback: últimos atribuídos (mais recentes primeiro)
+    if (byId.size === 0) {
+      merge(await this.getLeadsByUser(userId).catch(() => []));
+    }
+
+    return this._filterDeskLeads([...byId.values()], today);
+  },
+
+  _filterDeskLeads(leads, todayStr) {
+    const today = this._normDate(todayStr);
+    return (leads || []).filter((l) => {
+      const status = l.status || 'pending';
+      const assigned = this._normDate(l.assigned_date);
+      if (assigned && assigned === today) return true;
+      // Pendentes / não finalizados: hoje + atrasados
+      if (!this.isWorkedStatus(status)) {
+        if (!assigned || assigned <= today) return true;
+        const { week, year } = this.getWeekAndYearFromDateStr(today);
+        const ws = this._getWeekStartDate(year, week);
+        const we = new Date(ws);
+        we.setDate(we.getDate() + 6);
+        const ad = new Date(assigned + 'T12:00:00');
+        if (!Number.isNaN(ad.getTime()) && ad >= ws && ad <= we) return true;
+        return false;
+      }
+      if (l.completed_at) {
+        const completedLocal = this._normDate(l.completed_at) || this._toLocalDateStr(new Date(l.completed_at));
+        if (completedLocal === today) return true;
+      }
       return false;
     });
   },
@@ -228,8 +302,56 @@ const LeadsDB = {
 
   async getUnassignedLeads(batchId) {
     return await supaReq('GET', 'leads', null,
-      `?batch_id=eq.${encodeURIComponent(batchId)}&assigned_to=is.null&select=*&order=created_at.asc`
+      `?batch_id=eq.${encodeURIComponent(batchId)}&assigned_to=is.null&select=*&order=created_at.asc&limit=50000`
     );
+  },
+
+  /* ── GESTÃO / APAGAR / TROCAR LEADS ── */
+  async deleteLead(id) {
+    _cacheDel('leads');
+    await supaReq('DELETE', 'leads', null, `?id=eq.${encodeURIComponent(id)}`);
+    return true;
+  },
+
+  async deleteLeadsBulk(leadIds) {
+    if (!leadIds || !leadIds.length) return true;
+    _cacheDel('leads');
+    for (let i = 0; i < leadIds.length; i += 30) {
+      const chunk = leadIds.slice(i, i + 30);
+      const orParams = chunk.map(id => `id.eq.${encodeURIComponent(id)}`).join(',');
+      await supaReq('DELETE', 'leads', null, `?or=(${orParams})`);
+    }
+    return true;
+  },
+
+  async reassignLead(id, newUserId, assignedDate = null) {
+    _cacheDel('leads');
+    const today = this.getCurrentDateStr();
+    const { week, year } = this.getCurrentWeekAndYear();
+    const updates = {
+      assigned_to: newUserId || null,
+      assigned_date: newUserId ? (assignedDate || today) : null,
+      assigned_week: newUserId ? week : null,
+      assigned_year: newUserId ? year : null,
+    };
+    return await this.updateLead(id, updates);
+  },
+
+  async reassignLeadsBulk(leadIds, newUserId) {
+    if (!leadIds || !leadIds.length) return true;
+    _cacheDel('leads');
+    const today = this.getCurrentDateStr();
+    const { week, year } = this.getCurrentWeekAndYear();
+    for (let i = 0; i < leadIds.length; i += 30) {
+      const chunk = leadIds.slice(i, i + 30);
+      await Promise.all(chunk.map(id => supaReq('PATCH', 'leads', {
+        assigned_to: newUserId || null,
+        assigned_date: newUserId ? today : null,
+        assigned_week: newUserId ? week : null,
+        assigned_year: newUserId ? year : null,
+      }, `?id=eq.${encodeURIComponent(id)}`)));
+    }
+    return true;
   },
 
   /* ── REPASSE / SUBDIVISÃO DE LOTES ── */
@@ -302,11 +424,8 @@ const LeadsDB = {
     const leadsPerWeek = Math.ceil(leadsPerEmployee / totalWeeks);
     const dailyTarget = Math.ceil(leadsPerWeek / 5);
 
-    // Get current week/year
-    const now = new Date();
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const currentWeek = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
-    const currentYear = now.getFullYear();
+    // Get current week/year (segunda-feira, alinhado a _getWeekStartDate)
+    const { week: currentWeek, year: currentYear } = this.getCurrentWeekAndYear();
 
     let leadIndex = 0;
     const weeklyAssignments = [];
@@ -318,8 +437,14 @@ const LeadsDB = {
 
       // Assign leads and create weekly assignments
       for (let week = 0; week < totalWeeks; week++) {
-        const weekNum = currentWeek + week;
-        const weekStart = this._getWeekStartDate(currentYear, weekNum);
+        let weekNum = currentWeek + week;
+        let yearForWeek = currentYear;
+        // Estouro de ano (semana 53+)
+        while (weekNum > 53) {
+          weekNum -= 52;
+          yearForWeek += 1;
+        }
+        const weekStart = this._getWeekStartDate(yearForWeek, weekNum);
         const weekLeadCount = Math.min(leadsPerWeek, empLeadCount - (week * leadsPerWeek));
         if (weekLeadCount <= 0) break;
 
@@ -329,7 +454,7 @@ const LeadsDB = {
           user_id: empId,
           batch_id: batchId,
           week_number: weekNum,
-          year: currentYear,
+          year: yearForWeek,
           total_leads: weekLeadCount,
           daily_target: Math.ceil(weekLeadCount / 5),
           created_at: new Date().toISOString(),
@@ -343,7 +468,7 @@ const LeadsDB = {
           while (date.getDay() === 0 || date.getDay() === 6) {
             date.setDate(date.getDate() + 1);
           }
-          const dateStr = date.toISOString().split('T')[0];
+          const dateStr = this._toLocalDateStr(date);
           const dailyCount = Math.ceil(weekLeadCount / 5);
 
           for (let d = 0; d < dailyCount && leadIndex < unassigned.length; d++) {
@@ -352,11 +477,11 @@ const LeadsDB = {
 
             const lead = unassigned[leadIndex];
             leadUpdates.push({
-              ...lead,
+              id: lead.id,
               assigned_to: empId,
               assigned_date: dateStr,
               assigned_week: weekNum,
-              assigned_year: currentYear,
+              assigned_year: yearForWeek,
             });
             leadIndex++;
           }
@@ -368,7 +493,8 @@ const LeadsDB = {
       await supaReq('POST', 'lead_weekly_assignments', weeklyAssignments);
     }
     if (leadUpdates.length > 0) {
-      await supaReq('POST', 'leads', leadUpdates, '?on_conflict=id');
+      // Só campos de atribuição + PATCH em lotes (upsert completo estourava e deixava assigned_to null)
+      await this._applyLeadAssignments(leadUpdates);
     }
 
     // Update batch status
@@ -378,6 +504,43 @@ const LeadsDB = {
     });
 
     return { distributed: leadIndex, perEmployee: leadsPerEmployee, dailyTarget };
+  },
+
+  /** Aplica assigned_* em chunks agrupados via PATCH OR (super rápido no MySQL). */
+  async _applyLeadAssignments(updates) {
+    _cacheDel('leads');
+    if (!updates || !updates.length) return;
+
+    // Agrupa atualizações por combinação de (assigned_to, assigned_date, assigned_week, assigned_year)
+    const groups = new Map();
+    for (const u of updates) {
+      const key = `${u.assigned_to}|${u.assigned_date}|${u.assigned_week}|${u.assigned_year}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          assigned_to: u.assigned_to,
+          assigned_date: u.assigned_date,
+          assigned_week: u.assigned_week,
+          assigned_year: u.assigned_year,
+          ids: [],
+        });
+      }
+      groups.get(key).ids.push(u.id);
+    }
+
+    for (const group of groups.values()) {
+      const { assigned_to, assigned_date, assigned_week, assigned_year, ids } = group;
+      const CHUNK_SIZE = 30; // 30 IDs por consulta OR para rápida execução no MySQL
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunkIds = ids.slice(i, i + CHUNK_SIZE);
+        const orParams = chunkIds.map(id => `id.eq.${encodeURIComponent(id)}`).join(',');
+        await supaReq('PATCH', 'leads', {
+          assigned_to,
+          assigned_date,
+          assigned_week,
+          assigned_year,
+        }, `?or=(${orParams})`);
+      }
+    }
   },
 
   _getWeekStartDate(year, weekNum) {
@@ -445,18 +608,36 @@ const LeadsDB = {
       const d = new Date(weekStart);
       d.setDate(d.getDate() + i);
       while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
-      dates.push(d.toISOString().split('T')[0]);
+      dates.push(this._toLocalDateStr(d));
     }
+
+    const allLeads = await this.getLeadsByUser(userId).catch(() => []);
 
     const results = [];
     for (const date of dates) {
       const progress = await this.getDailyProgress(userId, date);
+      let target = progress?.target || 0;
+      let completed = progress?.completed || 0;
+
+      // Progress zerado / ausente: derivar dos leads reais (evita "0 de 0" falso)
+      if (target <= 0) {
+        const dayLeads = (allLeads || []).filter((l) => l.assigned_date === date);
+        if (dayLeads.length) {
+          target = dayLeads.length;
+          completed = dayLeads.filter((l) => this.isWorkedStatus(l.status)).length;
+        } else if (date === this.getCurrentDateStr()) {
+          const desk = this._filterDeskLeads(allLeads || [], date);
+          target = desk.length;
+          completed = desk.filter((l) => this.isWorkedStatus(l.status)).length;
+        }
+      }
+
       results.push({
         date,
         dayName: new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short' }),
-        target: progress?.target || 0,
-        completed: progress?.completed || 0,
-        metTarget: progress?.met_target || false,
+        target,
+        completed,
+        metTarget: progress?.met_target || (target > 0 && completed >= target),
         lockTriggered: progress?.lock_triggered || false,
       });
     }
@@ -501,16 +682,20 @@ const LeadsDB = {
       lead_lock_reason: '',
     });
 
-    // Update pending unlock requests
-    const pending = await supaReq('GET', 'lead_unlock_requests', null,
-      `?user_id=eq.${encodeURIComponent(userId)}&status=eq.pending&select=*`
-    );
-    for (const req of pending) {
-      await supaReq('PATCH', 'lead_unlock_requests', {
-        status: 'approved',
-        approved_by: approvedBy,
-        resolved_at: new Date().toISOString(),
-      }, `?id=eq.${encodeURIComponent(req.id)}`);
+    // Update pending unlock requests (tabela pode estar incompleta — não bloquear desbloqueio)
+    try {
+      const pending = await supaReq('GET', 'lead_unlock_requests', null,
+        `?user_id=eq.${encodeURIComponent(userId)}&status=eq.pending&select=*`
+      );
+      for (const req of pending || []) {
+        await supaReq('PATCH', 'lead_unlock_requests', {
+          status: 'approved',
+          approved_by: approvedBy,
+          resolved_at: new Date().toISOString(),
+        }, `?id=eq.${encodeURIComponent(req.id)}`);
+      }
+    } catch (e) {
+      console.warn('[LeadsDB.unlockUser] requests:', e?.message || e);
     }
 
     return true;
@@ -584,19 +769,152 @@ const LeadsDB = {
   },
 
   /* ── HELPERS ── */
-  getCurrentDateStr() {
-    return new Date().toISOString().split('T')[0];
+  /** Normaliza "2026-08-07 00:00:00" → "2026-08-07". */
+  _normDate(v) {
+    const m = String(v || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    return m ? m[1] : '';
   },
 
-  getCurrentWeekAndYear() {
-    const now = new Date();
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const weekNumber = Math.ceil(((now - startOfYear) / 86400000 + startOfYear.getDay() + 1) / 7);
-    return { week: weekNumber, year: now.getFullYear() };
+  /** Data local YYYY-MM-DD (evita bug de UTC do toISOString no Brasil). */
+  _toLocalDateStr(d = new Date()) {
+    const dt = d instanceof Date ? d : new Date(d);
+    if (Number.isNaN(dt.getTime())) return '';
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, '0');
+    const day = String(dt.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  },
+
+  getCurrentDateStr() {
+    return this._toLocalDateStr(new Date());
+  },
+
+  /** Semana alinhada a _getWeekStartDate (segunda como início). */
+  getWeekAndYearFromDateStr(dateStr) {
+    const d = new Date(String(dateStr) + 'T12:00:00');
+    if (Number.isNaN(d.getTime())) return this.getCurrentWeekAndYear();
+    return this.getCurrentWeekAndYear(d);
+  },
+
+  getCurrentWeekAndYear(ref = new Date()) {
+    const d = ref instanceof Date ? new Date(ref.getFullYear(), ref.getMonth(), ref.getDate()) : new Date(ref);
+    const day = d.getDay(); // 0=dom
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const monday = new Date(d);
+    monday.setDate(d.getDate() + mondayOffset);
+
+    let year = monday.getFullYear();
+    // Se a segunda cai em ano diferente do calendário, usar o ano da segunda
+    let week1 = this._getWeekStartDate(year, 1);
+    if (monday < week1) {
+      year -= 1;
+      week1 = this._getWeekStartDate(year, 1);
+    }
+    const diffDays = Math.round((monday - week1) / 86400000);
+    const week = Math.max(1, Math.floor(diffDays / 7) + 1);
+    return { week, year };
   },
 
   isBusinessDay(date) {
     const d = new Date(date);
     return d.getDay() !== 0 && d.getDay() !== 6;
+  },
+
+  /* ── NextBilling Click2Call ── */
+  _nextBillingApiBase() {
+    const cfg = window.SOUBLU_CONFIG || {};
+    const base = String(cfg.API_BASE_URL || cfg.SITE_URL || '').replace(/\/+$/, '');
+    if (base) return `${base}/api/nextbilling.php`;
+    try {
+      return new URL('../api/nextbilling.php', window.location.href).href;
+    } catch (_) {
+      return '/api/nextbilling.php';
+    }
+  },
+
+  _nextBillingHeaders() {
+    const cfg = window.SOUBLU_CONFIG || {};
+    const key = String(cfg.API_KEY || '').trim();
+    return {
+      'Content-Type': 'application/json',
+      'X-API-Key': key,
+      apikey: key,
+    };
+  },
+
+  async nextBillingStatus() {
+    const url = `${this._nextBillingApiBase()}?action=status`;
+    const res = await fetch(url, { headers: this._nextBillingHeaders() });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
+
+  async nextBillingSaveDevice(deviceId) {
+    return this.nextBillingSaveConfig({ device_id: Number(deviceId) });
+  },
+
+  async nextBillingSaveConfig(opts = {}) {
+    const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    const res = await fetch(`${this._nextBillingApiBase()}?action=save_config`, {
+      method: 'POST',
+      headers: this._nextBillingHeaders(),
+      body: JSON.stringify({ ...opts, user_id: session?.id || '' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    return data;
+  },
+
+  /**
+   * @param {{ lead_id?: string, phone_field?: string, src?: string, dst?: string }} opts
+   */
+  async nextBillingClick2Call(opts = {}) {
+    const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    if (!session?.id) throw new Error('Sessão inválida. Faça login novamente.');
+    const payload = { ...opts, user_id: session.id };
+    const res = await fetch(`${this._nextBillingApiBase()}?action=click2call`, {
+      method: 'POST',
+      headers: this._nextBillingHeaders(),
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.ok) throw new Error(data.error || data.hint || `HTTP ${res.status}`);
+    // MicroSIP: abre discagem no softphone (conta Online, ex. blu-209)
+    if (data.method === 'sip' && data.dial_uri) {
+      this.openSoftphoneDial(data);
+    }
+    return data;
+  },
+
+  /** Dispara URI sip:/callto: para o MicroSIP (handler do Windows). */
+  openSoftphoneDial(data) {
+    const uri = String(data?.dial_uri || '').trim();
+    const uriHost = String(data?.dial_uri_host || '').trim();
+    const dst = String(data?.dst || '').trim();
+    if (!uri && !dst) return false;
+    const tryOpen = (href) => {
+      try {
+        const a = document.createElement('a');
+        a.href = href;
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        return true;
+      } catch (_) {
+        try {
+          window.location.href = href;
+          return true;
+        } catch (__) {
+          return false;
+        }
+      }
+    };
+    if (uri && tryOpen(uri)) return true;
+    if (uriHost && uriHost !== uri && tryOpen(uriHost)) return true;
+    if (dst && tryOpen('callto:' + dst)) return true;
+    if (dst && tryOpen('tel:' + dst)) return true;
+    return false;
   },
 };

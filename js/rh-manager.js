@@ -1197,6 +1197,17 @@ async function _syncRhUserFromEmployee(emp, password, opts = {}) {
     }
   }
 
+  /* Cadastro no RH da empresa (não painel parceiro): tira da rede parceira e reativa login.
+     Ex.: colaborador que veio de parceiro/SAK e passa a ser da CS CALL / SOU+BLU. */
+  const inPartnerPanel = typeof window !== 'undefined' && !!window.PARTNER_ROOT_ID;
+  if (!inPartnerPanel && existingRole !== 'parceiro') {
+    userData.partner_root_id = null;
+    if (u.active === false || u.active === 0 || u.active === '0') {
+      userData.active = true;
+      userData.deleted_at = null;
+    }
+  }
+
   await DB.updateUser(u.id, userData);
   return u.id;
 }

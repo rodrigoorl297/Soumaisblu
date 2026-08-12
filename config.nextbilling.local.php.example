@@ -1,0 +1,38 @@
+<?php
+/**
+ * Copie este arquivo para: config.nextbilling.local.php (raiz do site)
+ *
+ * Tokens: no NextBilling, edite um usuário Master/Assinante e copie API Token + API Key.
+ * Doc: https://nextbilling.atlassian.net/wiki/spaces/NV/pages/419102753/Click2Call+-+0800Web
+ *
+ * Click2Call:
+ *   POST {NEXTBILLING_SERVER}/api/click2Call/{TOKEN}/{KEY}
+ *   body: { "device_id": N, "src": "DDD+vendedor", "dst": "DDD+lead" }
+ */
+declare(strict_types=1);
+
+/** URL base do servidor NextBilling (sem barra no final). Ex.: https://sip.seudominio.com.br */
+define('NEXTBILLING_SERVER', '');
+
+/** Tokens de acesso da API (Master ou Assinante). */
+define('NEXTBILLING_API_TOKEN', '');
+define('NEXTBILLING_API_KEY', '');
+
+/**
+ * ID da Linha IP que paga as ligações (device_id).
+ * Lista: GET /api/listDevices/{TOKEN}/{KEY}/{id_cliente}
+ */
+define('NEXTBILLING_DEVICE_ID', 0);
+
+/** ID do cliente/assinante no NextBilling (opcional — listagem de ramais). */
+define('NEXTBILLING_CUSTOMER_ID', 0);
+
+/**
+ * softphone = MicroSIP/ramal toca primeiro (recomendado)
+ * cellphone = celular do perfil toca primeiro
+ */
+define('NEXTBILLING_CALL_MODE', 'softphone');
+
+/** Ramal SIP padrão (src) no modo softphone — ex.: 209 */
+define('NEXTBILLING_SRC_RAMAL', '');
+

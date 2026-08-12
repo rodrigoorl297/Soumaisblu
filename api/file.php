@@ -17,7 +17,7 @@ $allowedBuckets = [
     'proposal-attachments', 'tim-docs', 'contestacao-docs', 'finance-docs',
     'ticket-docs', 'partner-docs', 'profile-photos', 'product-images',
     'rh-demissao', 'rh-docs', 'monitoria-atendimento', 'partner-nf', 'sonhos', 'mural', 'misc',
-    'whatsapp-media', 'docs',
+    'whatsapp-media', 'docs', 'trainings', 'trainings-media',
 ];
 
 $bucket = '';

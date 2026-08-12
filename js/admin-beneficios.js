@@ -311,8 +311,26 @@
           observacoes: desc,
           itens: [{ name: desc, qty: 1 }],
         },
+        created_at: (typeof DB !== 'undefined' && typeof DB._nowBrazilSql === 'function')
+          ? DB._nowBrazilSql()
+          : undefined,
       };
       await supaReq('POST', 'beneficios_vouchers', voucherPayload);
+      if (typeof DB !== 'undefined' && typeof DB.registerOpenAccountDebito === 'function') {
+        try {
+          await DB.registerOpenAccountDebito({
+            employeeId,
+            amount: valor,
+            reason: `Débito Clube ${voucherNo}${desc ? ' — ' + desc : ''}`,
+            byUser: (typeof Auth !== 'undefined' && Auth.getSession()?.id) || 'admin',
+            voucherId: voucherPayload.id,
+            voucherNo,
+            source: 'clube',
+          });
+        } catch (regErr) {
+          console.warn('[admin-beneficios] lançamento débito aberto:', regErr);
+        }
+      }
       const aprovado = parseFloat(modal?.dataset?.aprovado) || 0;
       const utilizadoAtual = parseFloat(modal?.dataset?.utilizado) || 0;
       const balances = _limitBalances(aprovado, utilizadoAtual + valor);
@@ -637,7 +655,7 @@
           <td><strong>${v.voucher_no}</strong></td>
           <td>${v.employee_name}</td>
           <td>${formatCurrency(v.valor)}</td>
-          <td>${new Date(v.created_at).toLocaleDateString('pt-BR')}</td>
+          <td>${formatDate(v.created_at)}</td>
         `;
         tbody.appendChild(tr);
       });
@@ -667,7 +685,7 @@
         <p><strong>Prestador:</strong> ${v.prestador_name}</p>
         <p><strong>Valor:</strong> ${formatCurrency(v.valor)}</p>
         <p><strong>Situação:</strong> <span class="badge ${v.status === 'pago' ? 'badge-success' : 'badge-warning'}">${v.status}</span></p>
-        <p><strong>Data de Emissão:</strong> ${new Date(v.created_at).toLocaleString('pt-BR')}</p>
+        <p><strong>Data de Emissão:</strong> ${formatDateTime(v.created_at)}</p>
       `;
       resultDiv.style.display = 'block';
     } catch (e) {

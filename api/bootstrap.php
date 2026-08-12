@@ -5,6 +5,11 @@ declare(strict_types=1);
 ini_set('display_errors', '0');
 error_reporting(0);
 
+// Horário oficial do sistema: Brasília (UTC-3)
+if (function_exists('date_default_timezone_set')) {
+    date_default_timezone_set('America/Sao_Paulo');
+}
+
 /** Carrega configs locais (MySQL, PIX, Supabase, Evolution). */
 function soublu_config_root(): string
 {
@@ -25,7 +30,7 @@ function soublu_load_local_configs(): void
         require_once $stack;
     }
 
-    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php', 'config.whaticket.local.php', 'config.sistemaweb.local.php'] as $file) {
+    foreach (['config.db.local.php', 'config.pix.local.php', 'config.supabase.local.php', 'config.evolution.local.php', 'config.zapi.local.php', 'config.whaticket.local.php', 'config.sistemaweb.local.php', 'config.boleto.local.php', 'config.nextbilling.local.php'] as $file) {
         $path = $root . '/' . $file;
         if (is_file($path)) {
             require_once $path;
@@ -142,6 +147,15 @@ function soublu_pdo(bool $reset = false): PDO
     }
     $pdo = new PDO($dsn, DB_USER, defined('DB_PASS') ? DB_PASS : '', $options);
     $pdo->exec('SET NAMES ' . (preg_match('/^[a-z0-9_]+$/', $charset) ? $charset : 'utf8mb4'));
+    try {
+        $pdo->exec("SET time_zone = '-03:00'");
+    } catch (Throwable $e) {
+        try {
+            $pdo->exec("SET time_zone = 'America/Sao_Paulo'");
+        } catch (Throwable $e2) {
+            // hosting pode bloquear — PHP já usa America/Sao_Paulo
+        }
+    }
     try {
         $pdo->exec('SET SESSION wait_timeout = 28800');
     } catch (Throwable $e) {

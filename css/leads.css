@@ -43,6 +43,11 @@ body.leads-app .stat-card .stat-value {
   font-family: 'Nunito', sans-serif;
 }
 
+/* Atendimento (vendedor): layout Bootstrap (.le-shell) — não usa .sidebar fixed */
+body.leads-app.leads-employee {
+  --sidebar-width: 72px;
+}
+
 /* Isola layout do módulo leads (não misturar com layout.css do admin) */
 body.leads-app .app-layout {
   display: flex;
@@ -50,13 +55,13 @@ body.leads-app .app-layout {
   width: 100%;
 }
 
-body.leads-app .app-layout .sidebar {
+body.leads-app:not(.leads-employee) .app-layout .sidebar {
   width: var(--sidebar-width);
   min-width: var(--sidebar-width);
   flex-shrink: 0;
 }
 
-body.leads-app .app-layout .main-content {
+body.leads-app:not(.leads-employee) .app-layout .main-content {
   flex: 1;
   min-width: 0;
   margin-left: var(--sidebar-width);
@@ -594,6 +599,19 @@ body.leads-app .app-layout .nav-item.active {
   font-size: 12px;
 }
 
+.le-btn-ligar {
+  background: #16a34a !important;
+  border-color: #16a34a !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}
+.le-btn-ligar:hover {
+  background: #15803d !important;
+  border-color: #15803d !important;
+  color: #fff !important;
+}
+
 /* ── Daily Progress Widget ── */
 .daily-progress {
   background: var(--color-surface);
@@ -630,6 +648,29 @@ body.leads-app .app-layout .nav-item.active {
 .daily-progress .progress-bar {
   height: 12px;
   margin-top: 16px;
+  display: block;
+  width: 100%;
+  background: var(--color-surface-2, #e2e8f0);
+  border-radius: 999px;
+  overflow: hidden;
+  /* Neutraliza Bootstrap .progress-bar */
+  flex-direction: unset;
+  justify-content: unset;
+  color: inherit;
+  text-align: left;
+  white-space: normal;
+  transition: none;
+}
+
+.progress-fill {
+  height: 100%;
+  min-height: 12px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-accent, #f97316), #fb923c);
+  transition: width .3s ease;
+}
+.progress-fill.danger {
+  background: linear-gradient(90deg, #dc2626, #f87171);
 }
 
 /* ── Weekly Overview ── */

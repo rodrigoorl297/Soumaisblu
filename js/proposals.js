@@ -457,10 +457,10 @@ window.Proposals = {
   },
 
   /** Anexos só quando há upload novo — evita migração pesada em PCs lentos. */
-  async _resolveAttachmentsForSaveQuick(proposalId, proposal) {
-    if (this._hasPendingAnexoUploads()) {
+  async _resolveAttachmentsForSaveQuick(proposalId, proposal, rootId) {
+    if (this._hasPendingAnexoUploads(rootId)) {
       return this._withTimeout(
-        this._prepareAttachmentsForSave(proposalId, proposal),
+        this._prepareAttachmentsForSave(proposalId, proposal, rootId),
         90000,
         'Preparar anexos',
       );
@@ -506,8 +506,66 @@ window.Proposals = {
     return true;
   },
 
-  _hasPendingAnexoUploads: function() {
+  _hasPendingAnexoUploads: function(rootId) {
+    const root = document.getElementById(rootId || this._folderRootId);
+    if (root) {
+      return [...root.querySelectorAll('input.prop-folder__input[type="file"]')]
+        .some((inp) => !!(inp.files && inp.files[0]));
+    }
     return this._getAllAnexoFieldDefs().some(({ id }) => !!document.getElementById(id)?.files?.[0]);
+  },
+
+  /** Une defs do estado + inputs reais do DOM (evita perder boleto se o contexto/slots dessincronizar). */
+  _getAnexoUploadJobsFromDom: function(rootId) {
+    const byGrupo = new Map();
+    const put = (id, grupo, customNameId, prefer) => {
+      if (!id || !grupo) return;
+      const inp = document.getElementById(id);
+      const hasFile = !!(inp?.files?.[0]);
+      const prev = byGrupo.get(grupo);
+      if (!prev) {
+        byGrupo.set(grupo, { id, grupo, customNameId: customNameId || null });
+        return;
+      }
+      /* Prefere o input que realmente tem arquivo (ex.: manageProp* vs empProp* stale). */
+      if (prefer || (hasFile && !document.getElementById(prev.id)?.files?.[0])) {
+        byGrupo.set(grupo, { id, grupo, customNameId: customNameId || prev.customNameId || null });
+      } else if (customNameId && !prev.customNameId) {
+        prev.customNameId = customNameId;
+      }
+    };
+    const root = document.getElementById(rootId || this._folderRootId);
+    if (root) {
+      root.querySelectorAll('input.prop-folder__input[type="file"]').forEach((inp) => {
+        if (!inp?.id || !inp.files?.[0]) return;
+        let grupo = inp.getAttribute('data-grupo') || '';
+        if (!grupo) {
+          const hit = this._getAllAnexoFieldDefs().find((d) => d.id === inp.id);
+          grupo = hit?.grupo || '';
+        }
+        if (!grupo) {
+          for (const cat of (this._ANEXO_CATEGORIES || [])) {
+            const suf = String(cat.folderIdSuffix || '');
+            if (!suf) continue;
+            const esc = suf.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (cat.initialSlots?.length) {
+              const slot = cat.initialSlots.find((s) =>
+                String(inp.id).endsWith(suf + (s.slotSuffix || '')));
+              if (slot?.grupo) { grupo = slot.grupo; break; }
+            }
+            const m = String(inp.id).match(new RegExp(esc + '(\\d+)$', 'i'));
+            if (m) { grupo = cat.grupoPrefix + m[1]; break; }
+          }
+        }
+        if (!grupo) {
+          const m2 = String(inp.id).match(/Custom_([^_]+)_(\d+)$/i);
+          if (m2) grupo = `custom_${m2[1]}_${m2[2]}`;
+        }
+        put(inp.id, grupo, null, true);
+      });
+    }
+    this._getAllAnexoFieldDefs().forEach((d) => put(d.id, d.grupo, d.customNameId, false));
+    return [...byGrupo.values()];
   },
 
   _attachmentAlreadyOnStorage: function(att, key) {
@@ -531,6 +589,34 @@ window.Proposals = {
         { value: 'NEO_FLEX3', label: 'NEO FLEX 3 — 52%', pct: 0.52 },
         { value: 'NEO_FLEX4', label: 'NEO FLEX 4 — 37%', pct: 0.37 },
         { value: 'NEO_FLEX5', label: 'NEO FLEX 5 — 17%', pct: 0.17 },
+      ],
+    },
+    {
+      group: 'GOVSP NEO CGM',
+      items: [
+        { value: 'GOVSP_NEO_CGM_399_76', label: 'GOVSP NEO CGM 399 — 76%', pct: 0.76 },
+        { value: 'GOVSP_NEO_CGM_379_65', label: 'GOVSP NEO CGM 379 — 65%', pct: 0.65 },
+        { value: 'GOVSP_NEO_CGM_359_40', label: 'GOVSP NEO CGM 359 — 40%', pct: 0.40 },
+        { value: 'GOVSP_NEO_CGM_339_30', label: 'GOVSP NEO CGM 339 — 30%', pct: 0.30 },
+        { value: 'GOVSP_NEO_CGM_319_15', label: 'GOVSP NEO CGM 319 — 15%', pct: 0.15 },
+      ],
+    },
+    {
+      group: 'PREFSP NEO CGM',
+      items: [
+        { value: 'PREFSP_NEO_CGM_419_60', label: 'PREFSP NEO CGM 419 — 60%', pct: 0.60 },
+        { value: 'PREFSP_NEO_CGM_399_50', label: 'PREFSP NEO CGM 399 — 50%', pct: 0.50 },
+        { value: 'PREFSP_NEO_CGM_379_40', label: 'PREFSP NEO CGM 379 — 40%', pct: 0.40 },
+        { value: 'PREFSP_NEO_CGM_359_25', label: 'PREFSP NEO CGM 359 — 25%', pct: 0.25 },
+      ],
+    },
+    {
+      group: 'GOVMA NEO CGM',
+      items: [
+        { value: 'GOVMA_NEO_CGM_419_60', label: 'GOVMA NEO CGM 419 — 60%', pct: 0.60 },
+        { value: 'GOVMA_NEO_CGM_399_50', label: 'GOVMA NEO CGM 399 — 50%', pct: 0.50 },
+        { value: 'GOVMA_NEO_CGM_379_40', label: 'GOVMA NEO CGM 379 — 40%', pct: 0.40 },
+        { value: 'GOVMA_NEO_CGM_359_25', label: 'GOVMA NEO CGM 359 — 25%', pct: 0.25 },
       ],
     },
     {
@@ -584,6 +670,9 @@ window.Proposals = {
 
   _tabelaPct: {
     NEO_NORMAL: 1, NEO_FLEX1: 0.82, NEO_FLEX2: 0.67, NEO_FLEX3: 0.52, NEO_FLEX4: 0.37, NEO_FLEX5: 0.17,
+    GOVSP_NEO_CGM_399_76: 0.76, GOVSP_NEO_CGM_379_65: 0.65, GOVSP_NEO_CGM_359_40: 0.40, GOVSP_NEO_CGM_339_30: 0.30, GOVSP_NEO_CGM_319_15: 0.15,
+    PREFSP_NEO_CGM_419_60: 0.60, PREFSP_NEO_CGM_399_50: 0.50, PREFSP_NEO_CGM_379_40: 0.40, PREFSP_NEO_CGM_359_25: 0.25,
+    GOVMA_NEO_CGM_419_60: 0.60, GOVMA_NEO_CGM_399_50: 0.50, GOVMA_NEO_CGM_379_40: 0.40, GOVMA_NEO_CGM_359_25: 0.25,
     AKI_L2_110: 1.10, AKI_L3_100: 1.00, AKI_L4_82: 0.82, AKI_L5_67: 0.67, AKI_L6_52: 0.52, AKI_L7_37: 0.37, AKI_L8_17: 0.17, AKI_L9_10: 0.10,
     AKI_100: 1, AKI_70: 0.70, AKI_35: 0.35, AKI_17: 0.17,
     AMIGOZ_100: 1, AMIGOZ_67: 0.67, AMIGOZ_58: 0.58, AMIGOZ_38: 0.38, AMIGOZ_13: 0.13,
@@ -809,18 +898,28 @@ window.Proposals = {
   },
 
   _matchesProposalQuickSearch: function(p, query) {
-    const n = String(query || '').trim().toLowerCase();
-    if (!n) return true;
+    const raw = String(query || '').trim();
+    if (!raw) return true;
     const blob = [
       p.numero, p.id,
       p.clientName, p.client_name, p.clientCpf, p.client_cpf,
       p.product, p.convenio, p.entidade,
       p.vendorName, p.vendor_name,
       p.protocolo, p.matricula, p.status,
-    ]
-      .map(x => (x != null ? String(x) : '')).join(' ')
-      .toLowerCase();
-    return blob.includes(n);
+    ].map(x => (x != null ? String(x) : '')).join(' ');
+    if (typeof textMatchesSearch === 'function') {
+      if (textMatchesSearch(blob, raw)) return true;
+    } else {
+      const n = raw.toLowerCase();
+      if (blob.toLowerCase().includes(n)) return true;
+    }
+    const qDigits = raw.replace(/\D/g, '');
+    if (qDigits.length >= 3) {
+      const cpf = String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '');
+      const mat = String(p.matricula || '').replace(/\D/g, '');
+      if (cpf.includes(qDigits) || mat.includes(qDigits)) return true;
+    }
+    return false;
   },
 
   _folderRootId: 'propAnexosFolders',
@@ -937,15 +1036,16 @@ window.Proposals = {
     };
   },
 
-  _folderSlotRowHtml: function(inputId, labelText) {
+  _folderSlotRowHtml: function(inputId, labelText, grupo) {
     const safeId = this._escAttr(inputId);
     const lblId = inputId + 'Label';
     const sub = labelText
       ? `<span class="prop-folder__slot-label">${this._escHtml(labelText)}</span>`
       : '';
+    const grupoAttr = grupo ? ` data-grupo="${this._escAttr(grupo)}"` : '';
     return `<div class="prop-folder__slot">
       ${sub}
-      <input type="file" id="${safeId}" class="form-control prop-folder__input" accept="*/*">
+      <input type="file" id="${safeId}" class="form-control prop-folder__input" accept="*/*"${grupoAttr}>
       <button type="button" class="btn btn-outline btn-sm prop-folder__btn" title="Selecionar arquivo">📁</button>
       <div id="${lblId}" class="prop-file-label prop-file-preview-wrap">-</div>
     </div>`;
@@ -955,7 +1055,7 @@ window.Proposals = {
     const slots = this._folderDynamicSlots[folderKey] || [];
     return slots.map((s, idx) =>
       `<div class="prop-folder__slot-wrap" data-slot="${idx + 1}">` +
-      this._folderSlotRowHtml(s.id, s.label) + '</div>'
+      this._folderSlotRowHtml(s.id, s.label, s.grupo) + '</div>'
     ).join('');
   },
 
@@ -966,7 +1066,7 @@ window.Proposals = {
     const wrap = document.createElement('div');
     wrap.className = 'prop-folder__slot-wrap';
     wrap.dataset.slot = String(slotIndex);
-    wrap.innerHTML = this._folderSlotRowHtml(slot.id, slot.label);
+    wrap.innerHTML = this._folderSlotRowHtml(slot.id, slot.label, slot.grupo);
     slotsEl.appendChild(wrap);
   },
 
@@ -1035,9 +1135,6 @@ window.Proposals = {
     const p = this._folderPrefix || 'prop';
     const stale = Object.values(this._folderDynamicSlots || {}).some((list) =>
       (list || []).some((s) => !String(s.id || '').startsWith(p)));
-    // #region agent log
-    if(stale){fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-D',location:'proposals.js:initAnexoFolders',message:'slots obsoletos de outro contexto — reset',data:{prefix:p,ctx:this._folderRootId},timestamp:Date.now()})}).catch(()=>{});}
-    // #endregion
     if (!this._folderDynamicSlots || !Object.keys(this._folderDynamicSlots).length || stale) {
       this._initDynamicFolderSlots();
     }
@@ -1168,14 +1265,11 @@ window.Proposals = {
     return list;
   },
 
-  _collectAttachments: async function(proposalId) {
+  _collectAttachments: async function(proposalId, rootId) {
     if (!proposalId) throw new Error('ID da proposta é obrigatório para anexos.');
     const maxBytes = (this.PROPOSAL_MAX_FILE_MB || 50) * 1024 * 1024;
     const attachments = {};
-    const defs = this._getAllAnexoFieldDefs();
-    // #region agent log
-    try{const _dbgDefs=defs.map(d=>{const els=document.querySelectorAll('#'+(window.CSS&&CSS.escape?CSS.escape(d.id):d.id));const f=document.getElementById(d.id)?.files?.[0];return{id:d.id,grupo:d.grupo,domCount:els.length,file:f?f.name+'|'+f.size:null};});fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-B',location:'proposals.js:_collectAttachments:entry',message:'defs no save',data:{proposalId,ctx:this._folderRootId,defs:_dbgDefs},timestamp:Date.now()})}).catch(()=>{});}catch(_){/* noop */}
-    // #endregion
+    const defs = this._getAnexoUploadJobsFromDom(rootId);
 
     /* Anti-duplicação: slots obsoletos (contexto trocado / modal reaberto) podem gerar
        defs repetidos ou ids duplicados no DOM apontando para o MESMO input — o que
@@ -1192,9 +1286,6 @@ window.Proposals = {
       if (!f) return;
       if (seenInputs.has(inp)) {
         console.warn('[Proposals] input duplicado ignorado no upload:', id, grupo);
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-A',location:'proposals.js:_collectAttachments:seenInputs',message:'input duplicado bloqueado',data:{id,grupo,file:f.name},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return;
       }
       seenInputs.add(inp);
@@ -1203,9 +1294,6 @@ window.Proposals = {
       const set = seenFilesByFolder[folder] = seenFilesByFolder[folder] || new Set();
       if (set.has(sig)) {
         console.warn('[Proposals] arquivo repetido na mesma pasta ignorado no upload:', grupo, f.name);
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-B',location:'proposals.js:_collectAttachments:sameFile',message:'arquivo repetido na pasta bloqueado',data:{grupo,file:f.name,folder},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         return;
       }
       set.add(sig);
@@ -2282,11 +2370,11 @@ window.Proposals = {
     return out;
   },
 
-  _prepareAttachmentsForSave: async function(proposalId, proposal) {
+  _prepareAttachmentsForSave: async function(proposalId, proposal, rootId) {
     const t0 = Date.now();
     let base = this._parseAttachments(proposal?.attachments);
     const hasBase = this._hasProposalAttachments(base);
-    const hasNewFiles = this._hasPendingAnexoUploads();
+    const hasNewFiles = this._hasPendingAnexoUploads(rootId);
 
     if (this._attachmentLoadPromises[proposalId] && (hasNewFiles || !hasBase)) {
       try { await this._attachmentLoadPromises[proposalId]; } catch { /* ignore */ }
@@ -2326,7 +2414,7 @@ window.Proposals = {
       msMigrate = Date.now() - t2;
     }
     const t3 = Date.now();
-    const uploaded = await this._collectAttachments(proposalId);
+    const uploaded = await this._collectAttachments(proposalId, rootId);
     msCollect = Date.now() - t3;
     const merged = { ...base, ...uploaded };
     this._propPerfLog('proposals.js:_prepareAttachmentsForSave', 'attachments prepared', {
@@ -2594,24 +2682,26 @@ window.Proposals = {
     return s === 'DIGITACAO' || s.includes('DIGITACAO');
   },
 
-  /** Primeiro horário em que a proposta entrou em Digitação (fila FIFO). */
+  /** Primeiro horário em que a proposta entrou em Digitação (fila FIFO / esteira). */
   _digitacaoAt: function(p) {
     if (!p) return '';
+    if (typeof DB !== 'undefined' && typeof DB.proposalDigitacaoAt === 'function') {
+      const d = DB.proposalDigitacaoAt(p);
+      return d ? d.toISOString() : '';
+    }
     if (p.digitacaoAt || p.digitacao_at) return p.digitacaoAt || p.digitacao_at;
     const meta = this._parseProposalMeta(p.meta);
     if (meta.digitacaoAt) return meta.digitacaoAt;
     const hist = this._parseProposalHistory(p.history);
     for (const h of hist) {
+      const kind = String(h?.kind || '').toLowerCase();
       const action = String(h?.action || '');
-      // Aceita "→ [Digitação]" / "-> Digitação" mesmo com encoding quebrado.
-      if (/(→|->|⇒)\s*\[?\s*Digita/i.test(action) || /Status:.*Digita/i.test(action)) {
+      if (kind === 'digitacao' || kind === 'digitacao_at'
+        || /(→|->|⇒)\s*\[?\s*Digita/i.test(action) || /Status:.*Digita/i.test(action)) {
         if (h.date) return h.date;
       }
     }
-    const st = p.statusOp || p.status_op || p.status || '';
-    if (this._isDigitacaoStatus(st)) {
-      return p.updatedAt || p.updated_at || p.createdAt || p.created_at || '';
-    }
+    // Sem updatedAt — movimentação comum não pode “repinar” na esteira.
     return '';
   },
 
@@ -2621,9 +2711,14 @@ window.Proposals = {
     const entered = this._isDigitacaoStatus(nowOp)
       && !this._isDigitacaoStatus(prevStatusOp)
       && !this._isDigitacaoStatus(prevStatus);
-    // Coluna `meta` pode não existir no MySQL — marcar só via history (já gravada no save).
     if (entered) {
-      proposal._digitacaoAtMark = new Date().toISOString();
+      const at = new Date().toISOString();
+      proposal._digitacaoAtMark = at;
+      // Persiste se a API aceitar o campo; histórico com kind é o fallback.
+      if (!proposal.digitacaoAt && !proposal.digitacao_at) {
+        proposal.digitacaoAt = at;
+        proposal.digitacao_at = at;
+      }
     }
     return proposal;
   },
@@ -2770,16 +2865,73 @@ window.Proposals = {
     return String(phone || '').trim();
   },
 
+  _isBoletoValidadoStatus: function(status, statusOp) {
+    const n = (s) => String(s || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const a = n(status);
+    const b = n(statusOp);
+    return a.includes('boleto validado') || b.includes('boleto validado');
+  },
+
+  /**
+   * Dispara webhook Hyper/n8n quando o status vira BOLETO VALIDADO (1ª vez).
+   * Fire-and-forget — não bloqueia o save.
+   */
+  _notifyBoletoValidadoWebhook: async function(proposal, oldStatus, oldStatusOp) {
+    try {
+      if (!proposal?.id) return;
+      const nowOk = this._isBoletoValidadoStatus(proposal.status, proposal.statusOp || proposal.status_op);
+      if (!nowOk) return;
+      if (this._isBoletoValidadoStatus(oldStatus, oldStatusOp)) return;
+
+      const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
+      const apiBase = String(cfg.API_BASE_URL || cfg.SITE_URL || '').replace(/\/+$/, '')
+        || (typeof location !== 'undefined' ? location.origin : '');
+      const apiKey = String(cfg.API_KEY || '').trim();
+      if (!apiBase || !apiKey) return;
+
+      let client = null;
+      const cpf = String(proposal.clientCpf || proposal.client_cpf || '').replace(/\D/g, '');
+      if (cpf && typeof DB?.getClientByCpf === 'function') {
+        try { client = await DB.getClientByCpf(cpf); } catch (_) { /* noop */ }
+      } else if (cpf && typeof DB?.getClient === 'function') {
+        try { client = await DB.getClient(cpf); } catch (_) { /* noop */ }
+      }
+
+      const url = `${apiBase}/api/boleto-webhook.php?action=notify`;
+      fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey,
+        },
+        body: JSON.stringify({
+          proposal,
+          client: client || undefined,
+          old_status: oldStatus || '',
+          old_status_op: oldStatusOp || '',
+        }),
+        keepalive: true,
+      }).catch((e) => console.warn('[boleto-webhook]', e?.message || e));
+    } catch (e) {
+      console.warn('[boleto-webhook]', e?.message || e);
+    }
+  },
+
   _matchProposalSearch: function(p, q) {
-    if (!q) return true;
+    const raw = String(q || '').trim();
+    if (!raw) return true;
     const etapaLabel = this._vendorStage(p) ? this._labelEtapaVendedor(this._vendorStage(p)) : '';
     const haystack = [
       p.id, p.numero, p.clientName, p.clientCpf, p.vendorName,
       p.product, p.convenio, p.entidade, p.status, p.statusOp,
       etapaLabel, p.matricula, p.protocolo
-    ].filter(Boolean).join(' ').toLowerCase();
-    if (haystack.includes(q)) return true;
-    const qDigits = q.replace(/\D/g, '');
+    ].filter(Boolean).join(' ');
+    if (typeof textMatchesSearch === 'function') {
+      if (textMatchesSearch(haystack, raw)) return true;
+    } else if (haystack.toLowerCase().includes(raw.toLowerCase())) {
+      return true;
+    }
+    const qDigits = raw.replace(/\D/g, '');
     if (qDigits) {
       const cpfDigits = String(p.clientCpf || '').replace(/\D/g, '');
       const matriculaDigits = String(p.matricula || '').replace(/\D/g, '');
@@ -2811,6 +2963,116 @@ window.Proposals = {
     if (role === 'parceiro') return false;
     if (this._isMaster()) return true;
     return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
+  },
+
+  _isProposalPaid: function(p) {
+    if (!p) return false;
+    if (typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function') {
+      return DB.isPaidProposal(p);
+    }
+    const st = String(p.status || '').toUpperCase();
+    const fase = String(p.statusOp || p.status_op || '').toUpperCase();
+    return st.includes('PAGO') || fase.includes('PAGO');
+  },
+
+  /** Proposta paga = somente leitura (salvar altera updatedAt e distorce o dashboard). */
+  _assertProposalNotPaidForSave: function(proposal) {
+    if (!this._isProposalPaid(proposal)) return true;
+    const msg = 'Proposta paga é somente leitura. Não é permitido salvar alterações.';
+    if (typeof showToast === 'function') showToast(msg, 'warning');
+    else alert(msg);
+    return false;
+  },
+
+  _ensureCleanupDuplicatesBtn: function() {
+    if (document.getElementById('btnLimparPropostasDuplicadas')) return;
+    const exportBtn = document.querySelector('#secManageProposals button[onclick*="exportAdminCsv"]');
+    if (!exportBtn || !exportBtn.parentElement) return;
+    if (!this._canDeleteProposal()) return;
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.id = 'btnLimparPropostasDuplicadas';
+    btn.className = 'btn btn-outline btn-sm';
+    btn.title = 'Apagar propostas duplicadas do mesmo cliente (mantém a melhor)';
+    btn.textContent = 'Limpar duplicadas';
+    btn.onclick = () => this.cleanupDuplicateProposals();
+    exportBtn.parentElement.insertBefore(btn, exportBtn);
+  },
+
+  /**
+   * Apaga propostas duplicadas do mesmo CPF — mantém 1 por cliente
+   * (prioridade: paga > com número > maior valor > mais recente).
+   */
+  cleanupDuplicateProposals: async function() {
+    if (!this._canDeleteProposal()) {
+      alert('Sem permissão para excluir propostas.');
+      return;
+    }
+    if (typeof showLoading === 'function') showLoading('Analisando duplicadas…');
+    try {
+      const all = await (typeof DB.listProposals === 'function' ? DB.listProposals() : []);
+      const groups = typeof DB.findDuplicateProposalGroups === 'function'
+        ? DB.findDuplicateProposalGroups(all)
+        : [];
+      if (!groups.length) {
+        if (typeof showToast === 'function') showToast('Nenhuma proposta duplicada encontrada.', 'success');
+        else alert('Nenhuma proposta duplicada encontrada.');
+        return;
+      }
+      const toDelete = [];
+      const keepPreview = [];
+      groups.forEach((g) => {
+        const keep = DB.pickProposalToKeep(g.proposals);
+        if (!keep) return;
+        const name = keep.clientName || keep.client_name || 'Cliente';
+        const cpf = String(keep.clientCpf || keep.client_cpf || '').replace(/\D/g, '');
+        keepPreview.push(`${name} (${cpf || 'sem CPF'}) — mantém ${keep.numero || keep.id}`);
+        g.proposals.forEach((p) => {
+          if (String(p.id) !== String(keep.id)) toDelete.push(p);
+        });
+      });
+      if (!toDelete.length) {
+        alert('Nada para apagar.');
+        return;
+      }
+      const sample = keepPreview.slice(0, 8).join('\n');
+      const more = keepPreview.length > 8 ? `\n… e mais ${keepPreview.length - 8} cliente(s)` : '';
+      if (!confirm(
+        `Encontradas ${groups.length} cliente(s) com propostas duplicadas.\n` +
+        `Serão apagadas ${toDelete.length} proposta(s) extras (mantém 1 por cliente).\n\n` +
+        `${sample}${more}\n\nConfirmar exclusão?`
+      )) return;
+
+      if (typeof showLoading === 'function') showLoading(`Excluindo ${toDelete.length} duplicada(s)…`);
+      const session = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      let ok = 0;
+      let fail = 0;
+      for (const p of toDelete) {
+        try {
+          await DB.deleteProposal(p.id, { by: session?.name || session?.email || 'dedupe' });
+          ok += 1;
+        } catch (e) {
+          console.warn('[cleanupDuplicateProposals]', p.id, e);
+          fail += 1;
+        }
+      }
+      this._adminListCache = null;
+      if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) {
+        SalesRanking.invalidateCache();
+      }
+      if (typeof DB._invalidateProposalsCache === 'function') DB._invalidateProposalsCache();
+      await this.renderAdminList();
+      const msg = fail
+        ? `Duplicadas: ${ok} apagada(s), ${fail} falha(s).`
+        : `${ok} proposta(s) duplicada(s) apagada(s).`;
+      if (typeof showToast === 'function') showToast(msg, fail ? 'warning' : 'success');
+      else alert(msg);
+    } catch (e) {
+      console.error('[cleanupDuplicateProposals]', e);
+      alert('Erro ao limpar duplicadas: ' + (e.message || 'tente novamente'));
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
   },
 
   _BR_UFS: ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'],
@@ -3343,6 +3605,28 @@ window.Proposals = {
         return;
       }
 
+      // Não permitir segunda proposta ativa para o mesmo CPF.
+      try {
+        const existingList = typeof DB.listProposals === 'function' ? await DB.listProposals() : [];
+        const dup = typeof DB.findOtherActiveProposalForClient === 'function'
+          ? DB.findOtherActiveProposalForClient(existingList, { clientCpf: cpf }, null)
+          : (existingList || []).find((p) => {
+              const pc = String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '');
+              if (pc !== cpf) return false;
+              const st = String(p.status || '').toUpperCase();
+              const fase = String(p.statusOp || p.status_op || '').toUpperCase();
+              return !st.includes('CANCEL') && !fase.includes('CANCEL');
+            });
+        if (dup) {
+          const num = dup.numero || dup.id;
+          const st = dup.statusOp || dup.status || '—';
+          alert(`Já existe proposta ativa para este cliente.\nNº/ID: ${num}\nStatus: ${st}\n\nNão é permitido cadastrar duplicada.`);
+          return;
+        }
+      } catch (dupErr) {
+        console.warn('[Proposals.submit] checagem de duplicata:', dupErr);
+      }
+
       const role = user.role || '';
       const isVendedor = this._isVendedorRole(role);
       const etapaVendedor = (document.getElementById('propEtapaVendedor')?.value || '').trim();
@@ -3358,7 +3642,8 @@ window.Proposals = {
       let attachments = {};
       const proposalId = 'PROP-' + Date.now();
       try {
-        attachments = await this._collectAttachments(proposalId);
+        this._setFolderContext('propAnexosFolders', 'prop');
+        attachments = await this._collectAttachments(proposalId, 'propAnexosFolders');
         attachments = this._validateAttachmentsBeforeSave(attachments);
       } catch (e) {
         alert(e.message || `Erro ao enviar anexo. Verifique o tamanho (máx. ${this.PROPOSAL_MAX_FILE_MB || 50} MB) e tente novamente.`);
@@ -3768,6 +4053,8 @@ window.Proposals = {
     const tbody = document.getElementById('manageProposalsTbody');
     if (!tbody) return;
 
+    this._ensureCleanupDuplicatesBtn();
+
     // Limpa e-mail injetado pelo autofill do Chrome antes de filtrar a lista.
     this._scrubProposalSearchAutofill();
 
@@ -4027,6 +4314,12 @@ window.Proposals = {
         modal?.classList.remove('open');
         return;
       }
+      // Paga = somente leitura (evitar save que distorce filtros do dashboard).
+      if (this._isProposalPaid(proposal)) {
+        viewOnly = true;
+        if (typeof showToast === 'function') showToast('Proposta paga: somente visualização (não salva).', 'info');
+      }
+      this._applyEmployeeModalMode(viewOnly);
 
       const cpf = String(proposal.clientCpf || '').replace(/\D/g, '');
       const client = cpf ? await this._lookupClientByCpf(cpf) : null;
@@ -4115,6 +4408,7 @@ window.Proposals = {
     const id = gv('empPropId');
     let proposal = this._employeeEditCache[id] ? { ...this._employeeEditCache[id] } : await DB.getProposal(id);
     if (!proposal) return;
+    if (!this._assertProposalNotPaidForSave(proposal)) return;
     if (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments)) {
       if (!this._employeeEditCache[id]) {
         try {
@@ -4160,7 +4454,7 @@ window.Proposals = {
 
     this._setFolderContext('empPropAnexosFolders', 'empProp');
     try {
-      proposal.attachments = await this._prepareAttachmentsForSave(id, proposal);
+      proposal.attachments = await this._prepareAttachmentsForSave(id, proposal, 'empPropAnexosFolders');
     } catch (e) {
       console.error('[employeeSave] anexo', e);
       alert('Erro ao processar anexo: ' + (e.message || 'tente de novo. Arquivos muito grandes podem falhar no modo local.'));
@@ -4179,6 +4473,11 @@ window.Proposals = {
       action: empAction,
       note: proposal.obs || ''
     };
+    if (proposal._digitacaoAtMark) {
+      empHistEntry.kind = 'digitacao';
+      empHistEntry.date = proposal._digitacaoAtMark;
+      delete proposal._digitacaoAtMark;
+    }
     const wasPaidEmp = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
       ? DB.isPaidProposal({ status: oldStatus, statusOp: oldStatusOp, status_op: oldStatusOp })
       : String(oldStatus || '').toUpperCase().includes('PAGO');
@@ -4198,6 +4497,7 @@ window.Proposals = {
       await this._saveProposalClientData(proposal, 'emp');
       const tClient = Date.now();
       await DB.saveProposal(proposal, { skipHydrate: true });
+      void this._notifyBoletoValidadoWebhook(proposal, oldStatus, oldStatusOp);
       this._propPerfLog('proposals.js:employeeSave', 'save done', {
         msTotal: Date.now() - saveT0, msClient: tClient - saveT0, msDb: Date.now() - tClient,
       }, 'C');
@@ -4267,6 +4567,12 @@ window.Proposals = {
     const raw = await DB.getProposal(id);
     const proposal = this._normProposal(raw);
     if (!proposal) return;
+
+    // Paga = somente leitura (salvar altera updatedAt e bagunça Digitadas/Pagas no dashboard).
+    if (this._isProposalPaid(proposal)) {
+      viewOnly = true;
+      if (typeof showToast === 'function') showToast('Proposta paga: somente visualização (não salva).', 'info');
+    }
 
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
@@ -4428,6 +4734,7 @@ window.Proposals = {
       return;
     }
     proposal = this._normProposal(proposal) || proposal;
+    if (!this._assertProposalNotPaidForSave(proposal)) return;
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
       if (!belongs) {
@@ -4448,7 +4755,10 @@ window.Proposals = {
     const saveBtnText = saveBtn?.innerText;
     if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Salvando…'; }
     try {
-    const pendingAtt = this._hasPendingAnexoUploads();
+    /* Contexto ANTES de detectar uploads — senão defs/prefixo de outro modal
+       fazem pendingAtt=false e o save apaga/ignora os boletos anexados. */
+    this._setFolderContext('managePropAnexosFolders', 'manageProp');
+    const pendingAtt = this._hasPendingAnexoUploads('managePropAnexosFolders');
     if (pendingAtt && (!proposal.attachments || !this._hasProposalAttachments(proposal.attachments))) {
       if (!this._adminEditCache[id]) {
         try {
@@ -4560,6 +4870,11 @@ window.Proposals = {
          action,
          note: note
        };
+       if (proposal._digitacaoAtMark) {
+         histEntry.kind = 'digitacao';
+         histEntry.date = proposal._digitacaoAtMark;
+         delete proposal._digitacaoAtMark;
+       }
        const wasPaid = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
          ? DB.isPaidProposal({ status: oldStatus, statusOp: oldStatusOp, status_op: oldStatusOp })
          : String(oldStatus || '').toUpperCase().includes('PAGO');
@@ -4574,31 +4889,12 @@ window.Proposals = {
        proposal.history.push(histEntry);
     }
 
-    this._setFolderContext('managePropAnexosFolders', 'manageProp');
-      if (pendingAtt) {
+    if (pendingAtt) {
         try {
-          proposal.attachments = await this._resolveAttachmentsForSaveQuick(id, proposal);
+          proposal.attachments = await this._resolveAttachmentsForSaveQuick(id, proposal, 'managePropAnexosFolders');
         } catch (e) {
           console.error('[adminSave] anexo', e);
-          if (!pendingAtt) {
-            try {
-              const attRow = typeof DB.getProposalAttachments === 'function'
-                ? await DB.getProposalAttachments(id)
-                : await DB.getProposal(id);
-              if (attRow?.attachments && this._hasProposalAttachments(attRow.attachments)) {
-                proposal.attachments = this._parseAttachments(attRow.attachments);
-                if (typeof showToast === 'function') {
-                  showToast('Anexos mantidos do servidor; demais alterações serão salvas.', 'warning', 5000);
-                }
-              } else {
-                throw e;
-              }
-            } catch (_) {
-              throw e;
-            }
-          } else {
-            throw e;
-          }
+          throw e;
         }
       }
 
@@ -4630,6 +4926,7 @@ window.Proposals = {
       }
       const tClient = Date.now();
       const toSave = { ...proposal };
+      /* Só omite attachments no PATCH se não houve upload novo — senão o boleto some. */
       if (!pendingAtt) delete toSave.attachments;
       const saved = await this._withTimeout(
         DB.saveProposal(toSave, { skipHydrate: true }),
@@ -4639,6 +4936,7 @@ window.Proposals = {
       proposal = saved
         ? (this._normProposal({ ...proposal, ...saved }) || { ...proposal, ...saved })
         : proposal;
+      void this._notifyBoletoValidadoWebhook(proposal, oldStatus, oldStatusOp);
       this._propPerfLog('proposals.js:adminSave', 'save done', {
         msTotal: Date.now() - saveT0, msClient: tClient - saveT0, msDb: Date.now() - tClient,
       }, 'C');
@@ -4678,9 +4976,9 @@ window.Proposals = {
       return;
     }
     const nome = label || id;
-    if (!confirm(`Cancelar a proposta "${nome}"?\n\nEla NÃO será apagada — o status muda para Cancelado e o histórico é preservado.`)) return;
+    if (!confirm(`Excluir definitivamente a proposta "${nome}"?\n\nEsta ação não pode ser desfeita — a proposta será apagada do sistema.`)) return;
 
-    if (typeof showLoading === 'function') showLoading('Cancelando proposta...');
+    if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
     try {
       if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) {
         const raw = await DB.getProposal(id);
@@ -4701,14 +4999,14 @@ window.Proposals = {
         SalesRanking.invalidateCache();
       }
       if (fromModal) closeModal('manageProposalModal');
-      if (typeof showToast === 'function') showToast('Proposta cancelada (registro preservado).', 'success');
+      if (typeof showToast === 'function') showToast('Proposta excluída.', 'success');
       await this.renderAdminList();
       if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
         try { await renderAdminRanking(); } catch (_) { /* noop */ }
       }
     } catch (e) {
       console.error('[masterDeleteProposal]', e);
-      alert('Erro ao cancelar proposta: ' + (e.message || 'tente novamente'));
+      alert('Erro ao excluir proposta: ' + (e.message || 'tente novamente'));
     } finally {
       if (typeof hideLoading === 'function') hideLoading();
     }

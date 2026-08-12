@@ -62,12 +62,65 @@
     const seenSet = new Set(seen.map(String));
     const fresh = list.filter(m => !seenSet.has(String(m.id)));
     if (!fresh.length) return;
+    _playMeetingSound('alert');
     fresh.slice(0, 3).forEach(m => {
-      showToast(`📅 Nova convocação: ${m.subject || 'Reunião'}`, 'info', 7000);
+      showToast(`Nova convocação: ${m.subject || 'Reunião'}`, 'info', 7000);
     });
     list.forEach(m => seenSet.add(String(m.id)));
     localStorage.setItem(key, JSON.stringify([...seenSet].slice(-120)));
   }
+
+  let _meetAudioCtx = null;
+  let _meetAudioUnlocked = false;
+
+  function _unlockMeetingAudio() {
+    if (_meetAudioUnlocked) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      _meetAudioCtx = _meetAudioCtx || new Ctx();
+      if (_meetAudioCtx.state === 'suspended') _meetAudioCtx.resume();
+      const osc = _meetAudioCtx.createOscillator();
+      const gain = _meetAudioCtx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(_meetAudioCtx.destination);
+      osc.start();
+      osc.stop(_meetAudioCtx.currentTime + 0.01);
+      _meetAudioUnlocked = true;
+    } catch (_) { /* noop */ }
+  }
+
+  /** Som curto: alert = nova convocação; ok = reunião criada. */
+  function _playMeetingSound(kind) {
+    try {
+      _unlockMeetingAudio();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      _meetAudioCtx = _meetAudioCtx || new Ctx();
+      if (_meetAudioCtx.state === 'suspended') _meetAudioCtx.resume();
+      const now = _meetAudioCtx.currentTime;
+      const tones = kind === 'ok'
+        ? [{ t: 0, f: 523 }, { t: 0.12, f: 659 }, { t: 0.24, f: 784 }]
+        : [{ t: 0, f: 660 }, { t: 0.18, f: 880 }, { t: 0.36, f: 660 }];
+      tones.forEach(({ t, f }) => {
+        const osc = _meetAudioCtx.createOscillator();
+        const gain = _meetAudioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = f;
+        gain.gain.setValueAtTime(0.0001, now + t);
+        gain.gain.exponentialRampToValueAtTime(0.11, now + t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.15);
+        osc.connect(gain);
+        gain.connect(_meetAudioCtx.destination);
+        osc.start(now + t);
+        osc.stop(now + t + 0.17);
+      });
+    } catch (_) { /* noop */ }
+  }
+
+  document.addEventListener('pointerdown', _unlockMeetingAudio, { once: true, passive: true });
+  document.addEventListener('keydown', _unlockMeetingAudio, { once: true });
 
   function ensureMeetingTermOverlay() {
     if (document.getElementById('meetingTermFullscreen')) return;
@@ -181,6 +234,8 @@
     ouvidoria: 'Ouvidoria',
     master: 'Master',
     fundador: 'Fundador',
+    admin: 'Admin',
+    portaria: 'Portaria',
   };
 
   function _escapeHtml(s) {
@@ -678,12 +733,13 @@
 
   function _wireMeetingsCreateBtn(adminId) {
     const btn = document.getElementById('meetCreateBtn');
-    if (!btn || btn.dataset.wired === '1') return;
-    btn.dataset.wired = '1';
+    if (!btn) return;
+    // Re-wire sempre (innerHTML recria o botão; dataset.wired antigo não deve bloquear)
     btn.onclick = async () => {
-      const subject = document.getElementById('meetSubject').value.trim();
-      const pauta = document.getElementById('meetPauta').value.trim();
-      const dt = document.getElementById('meetScheduled').value;
+      _unlockMeetingAudio();
+      const subject = document.getElementById('meetSubject')?.value.trim() || '';
+      const pauta = document.getElementById('meetPauta')?.value.trim() || '';
+      const dtRaw = document.getElementById('meetScheduled')?.value || '';
       const participant_ids = _getSelectedMeetingParticipants();
 
       if (!subject) {
@@ -695,27 +751,45 @@
         return;
       }
       if (!participant_ids.length) {
-        showToast('Marque pelo menos um participante.', 'warning');
+        showToast('Marque pelo menos um participante na lista.', 'warning');
+        return;
+      }
+      if (!adminId) {
+        showToast('Sessão inválida. Recarregue a página (Ctrl+F5).', 'error');
         return;
       }
 
-      showLoading('Salvando…');
+      let scheduledIso = null;
+      if (dtRaw) {
+        const d = new Date(dtRaw);
+        if (Number.isNaN(d.getTime())) {
+          showToast('Data/hora inválida. Escolha novamente no calendário.', 'warning');
+          return;
+        }
+        scheduledIso = d.toISOString();
+      }
+
+      showLoading('Salvando reunião…');
+      btn.disabled = true;
       try {
         await DB.createMeeting({
           subject,
           pauta,
-          scheduled_at: dt ? new Date(dt).toISOString() : new Date().toISOString(),
+          scheduled_at: scheduledIso || new Date().toISOString(),
           participant_ids,
           created_by: adminId,
         });
-        showToast('Convocação e ata inicial criadas. Use "Baixar ata" na lista quando precisar.', 'success', 6000);
+        _playMeetingSound('ok');
+        showToast('Reunião criada! Convocação e ata inicial prontas.', 'success', 6000);
         if (typeof _cacheDel === 'function') _cacheDel('meetings');
         _clearMeetingsConvokeForm();
         await renderMeetingsAdmin({ tableOnly: true });
         await updateMeetingsBadge();
       } catch (e) {
-        showToast(e.message || 'Não foi possível salvar.', 'error');
+        console.error('[meetCreate]', e);
+        showToast(e.message || 'Não foi possível salvar a reunião.', 'error', 8000);
       } finally {
+        btn.disabled = false;
         hideLoading();
       }
     };
@@ -806,7 +880,7 @@
         ${partOpts}
         <div id="meetPartSearchEmpty" class="text-muted text-center" style="display:none;padding:16px;font-size:13px;">Nenhum participante encontrado para esta busca.</div>
       </div>
-      <p class="form-hint" style="margin-top:8px;"><strong id="meetPartCount">0 de 0</strong> selecionado(s)<span id="meetPartVisibleCount" style="color:var(--color-text-muted);"></span> · Do <strong>gerente para baixo</strong>${scopeMaster ? ' (toda a empresa)' : ' (sua equipe)'}. Fundador, master, financeiro, RH e diretoria não entram na lista.</p>
+      <p class="form-hint" style="margin-top:8px;"><strong id="meetPartCount">0 de 0</strong> selecionado(s)<span id="meetPartVisibleCount" style="color:var(--color-text-muted);"></span> · Todos os colaboradores ativos${scopeMaster ? ' (toda a empresa)' : ' (sua equipe)'}, incluindo <strong>RH, master, financeiro e diretoria</strong>.</p>
     </div>
   </div>
   <button type="button" class="btn btn-primary" id="meetCreateBtn">📅 Criar convocação</button>
@@ -837,6 +911,7 @@
     _wireMeetingsCreateBtn(adminId);
     } else if (hasForm) {
       _wireMeetingParticipantPicker();
+      _wireMeetingsCreateBtn(adminId);
     }
 
     _renderMeetingsAdminTable(meetings, usersById);

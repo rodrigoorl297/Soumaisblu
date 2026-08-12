@@ -31,10 +31,16 @@ window.Clients = {
   },
 
   matchesClientSearch: function(client, query, opts) {
-    const q = String(query || '').trim().toLowerCase();
-    if (!q) return true;
-    const qDigits = this._normalizeDigits(q);
-    const supervisorName = String(opts?.supervisorName || '').toLowerCase();
+    const raw = String(query || '').trim();
+    if (!raw) return true;
+    const fold = typeof foldSearchText === 'function'
+      ? foldSearchText
+      : (s) => String(s || '').toLowerCase();
+    const matchText = typeof textMatchesSearch === 'function'
+      ? textMatchesSearch
+      : (hay, q) => fold(hay).includes(fold(q));
+
+    const supervisorName = String(opts?.supervisorName || '');
     const fields = [
       client.name,
       client.email,
@@ -43,8 +49,10 @@ window.Clients = {
       client.phone2,
       supervisorName,
     ];
-    const hay = fields.join(' ').toLowerCase();
-    if (hay.includes(q)) return true;
+    const hay = fields.filter((v) => v != null && String(v).trim() !== '').join(' ');
+    if (matchText(hay, raw)) return true;
+
+    const qDigits = this._normalizeDigits(raw);
     if (!qDigits) return false;
     const cpf = this._normalizeDigits(client.cpf);
     const phone1 = this._normalizeDigits(client.phone1);

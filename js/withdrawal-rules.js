@@ -3,9 +3,7 @@
 const WithdrawalRules = {
   MIN_BRL: 0,
   MAX_PER_MONTH: 3,
-  IRPF_THRESHOLD: 5000,
-  IRPF_RATE: 0.035,
-  SPLIT_PARTS: 3,
+  IRPF_RATE: 0.0189,
   PARTNER_FEE_DEFAULT: 10,
 
   _moneyUser(u) {
@@ -254,7 +252,36 @@ const WithdrawalRules = {
         const wd = VendorTierPoints.canWithdrawToday(emp);
         if (!wd.ok) return { ok: false, msg: wd.msg };
       }
-      return { ok: true, money: false, netAmount: Math.floor(amt), irpfTax: 0, totalDebit: Math.floor(amt), partnerFee: 0 };
+      const allWdPts = await DB.getWithdrawals(empId);
+      const monthListPts = this._activeWithdrawals(allWdPts, empId);
+      if (monthListPts.length >= this.MAX_PER_MONTH) {
+        return { ok: false, msg: `Limite de ${this.MAX_PER_MONTH} saques por mês atingido.` };
+      }
+      const irpfPts = this._round(amt * this.IRPF_RATE);
+      const netPts = this._round(Math.max(0, amt - irpfPts));
+      if (!(netPts > 0)) {
+        return { ok: false, msg: 'Valor muito baixo após retenção IRPF (1,89%).' };
+      }
+      const balPts = typeof userWalletBalance === 'function' ? userWalletBalance(emp) : Number(emp?.points ?? emp?.balance ?? 0);
+      if (amt > balPts + 0.001) {
+        return { ok: false, msg: `Saldo insuficiente. Disponível: ${formatCurrency(balPts, emp)}.` };
+      }
+      return {
+        ok: true,
+        money: false,
+        partnerWallet: false,
+        netAmount: netPts,
+        requestedAmount: amt,
+        irpfTax: irpfPts,
+        irpfReason: 'irpf_colaborador',
+        totalDebit: amt,
+        partnerFee: 0,
+        irpjTax: 0,
+        flagSplitNext: false,
+        clearPendingIrpf: true,
+        monthCount: monthListPts.length + 1,
+        remainingThisMonth: this.MAX_PER_MONTH - monthListPts.length - 1,
+      };
     }
 
     if (!partnerWallet) {
@@ -276,34 +303,22 @@ const WithdrawalRules = {
 
     let irpfTax = 0;
     let irpfReason = '';
-    const pendingNext = !!(emp?.withdrawal_irpf_next || emp?.withdrawalIrpfNext);
 
     if (!partnerWallet) {
-      if (amt > this.IRPF_THRESHOLD) {
-        irpfTax = this._round(amt * this.IRPF_RATE);
-        irpfReason = 'irpf_acima_5000';
-      } else if (pendingNext) {
-        irpfTax = this._round(amt * this.IRPF_RATE);
-        irpfReason = 'irpf_fracionamento_proximo';
-      }
-    }
-
-    const willBeThird = !partnerWallet && monthList.length >= this.MAX_PER_MONTH - 1;
-    const allUnderThreshold = monthList.every((w) => Number(w.amount) < this.IRPF_THRESHOLD) && amt < this.IRPF_THRESHOLD;
-    const monthSum = monthList.reduce((s, w) => s + Number(w.amount || 0), 0) + amt;
-    let flagSplitNext = false;
-    if (willBeThird && allUnderThreshold && monthSum >= this.IRPF_THRESHOLD) {
-      flagSplitNext = true;
+      irpfTax = this._round(amt * this.IRPF_RATE);
+      irpfReason = 'irpf_colaborador';
     }
 
     const netAmount = partnerWallet
       ? this._round(Math.max(0, amt - partnerFee - irpjTax))
-      : amt;
-    const totalDebit = this._round(amt + irpfTax);
+      : this._round(Math.max(0, amt - irpfTax));
+    if (!partnerWallet && !(netAmount > 0)) {
+      return { ok: false, msg: 'Valor muito baixo após retenção IRPF (1,89%).' };
+    }
+    const totalDebit = amt;
     const bal = typeof userWalletBalance === 'function' ? userWalletBalance(emp) : Number(emp?.points ?? emp?.balance ?? 0);
     if (totalDebit > bal + 0.001) {
-      const extra = irpfTax > 0 ? ` (valor + IRPF ${formatMoney(irpfTax)})` : '';
-      return { ok: false, msg: `Saldo insuficiente${extra}. Disponível: ${formatMoney(bal)}.` };
+      return { ok: false, msg: `Saldo insuficiente. Disponível: ${formatMoney(bal)}.` };
     }
 
     const remaining = partnerWallet ? null : this.MAX_PER_MONTH - monthList.length - 1;
@@ -320,8 +335,8 @@ const WithdrawalRules = {
       irpfTax,
       irpfReason,
       totalDebit,
-      flagSplitNext,
-      clearPendingIrpf: irpfReason === 'irpf_fracionamento_proximo',
+      flagSplitNext: false,
+      clearPendingIrpf: true,
       monthCount: monthList.length + 1,
       remainingThisMonth: remaining,
     };
@@ -330,14 +345,13 @@ const WithdrawalRules = {
   updatePreview(emp) {
     const box = document.getElementById('wdRulesPreview');
     if (!box) return;
-    if (!this._moneyUser(emp)) {
-      box.style.display = 'none';
-      return;
-    }
     box.style.display = '';
     const partnerWallet = this._partnerWalletUser(emp);
+    const money = this._moneyUser(emp);
     const raw = document.getElementById('withdrawAmount')?.value;
-    const amt = typeof parseMoneyAmount === 'function' ? parseMoneyAmount(raw) : 0;
+    const amt = money
+      ? (typeof parseMoneyAmount === 'function' ? parseMoneyAmount(raw) : 0)
+      : Math.max(0, Math.floor(Number(raw) || 0));
     if (!amt) {
       if (partnerWallet) {
         this._partnerSacFee(emp).then((fee) => {
@@ -350,10 +364,10 @@ const WithdrawalRules = {
         }).catch(() => {});
         return;
       }
-      let hint = `Sem valor mínimo · máx. ${this.MAX_PER_MONTH} saques/mês · IRPF 3,5% acima de R$ 5.000,00`;
+      let hint = `Sem valor mínimo · máx. ${this.MAX_PER_MONTH} saques/mês · IRPF 1,89% em todo saque`;
       if (!partnerWallet && typeof VendorTierPoints !== 'undefined' && VendorTierPoints.usesTierWithdrawRules(emp)) {
         const wd = VendorTierPoints.canWithdrawToday(emp);
-        hint = `Saque de pontos: dias ${VendorTierPoints.WITHDRAW_DAY_MIN} a ${VendorTierPoints.WITHDRAW_DAY_MAX} · crédito de faixa todo dia ${VendorTierPoints.CREDIT_DAY}`;
+        hint = `Saque de pontos: dias ${VendorTierPoints.WITHDRAW_DAY_MIN} a ${VendorTierPoints.WITHDRAW_DAY_MAX} · crédito de faixa todo dia ${VendorTierPoints.CREDIT_DAY} · IRPF 1,89%`;
         if (!wd.ok) hint += `<div style="color:var(--color-warning);margin-top:4px;">${wd.msg}</div>`;
       }
       box.innerHTML = `<div style="font-size:12px;color:var(--color-text-muted);line-height:1.5;">${hint}</div>`;
@@ -364,28 +378,22 @@ const WithdrawalRules = {
         box.innerHTML = `<div style="font-size:12px;color:var(--color-danger);">${r.msg}</div>`;
         return;
       }
+      const fmt = (n) => (typeof formatMoney === 'function' ? formatMoney(n) : String(n));
       let html = `<div style="font-size:12px;line-height:1.55;">
-        <div>Valor solicitado: <strong>${formatMoney(r.requestedAmount ?? r.netAmount)}</strong></div>`;
+        <div>Valor solicitado: <strong>${fmt(r.requestedAmount ?? r.netAmount)}</strong></div>`;
       if (r.partnerFee > 0) {
-        html += `<div style="color:var(--color-warning);">Taxa administrativa: <strong>− ${formatMoney(r.partnerFee)}</strong></div>`;
+        html += `<div style="color:var(--color-warning);">Taxa administrativa: <strong>− ${fmt(r.partnerFee)}</strong></div>`;
       }
       if (r.irpjTax > 0) {
-        html += `<div style="color:var(--color-warning);">Retenção IRPJ (${String(r.irpjRate || '').replace('.', ',')}%): <strong>− ${formatMoney(r.irpjTax)}</strong></div>`;
-      }
-      if (r.partnerFee > 0 || r.irpjTax > 0) {
-        html += `<div>Valor líquido PIX: <strong>${formatMoney(r.netAmount)}</strong></div>`;
-      } else {
-        html += `<div>Valor do saque: <strong>${formatMoney(r.netAmount)}</strong></div>`;
+        html += `<div style="color:var(--color-warning);">Retenção IRPJ (${String(r.irpjRate || '').replace('.', ',')}%): <strong>− ${fmt(r.irpjTax)}</strong></div>`;
       }
       if (r.irpfTax > 0) {
-        html += `<div style="color:var(--color-warning);">IRPF (3,5%): <strong>− ${formatMoney(r.irpfTax)}</strong></div>`;
+        html += `<div style="color:var(--color-warning);">IRPF (1,89%) descontado automaticamente: <strong>− ${fmt(r.irpfTax)}</strong></div>`;
       }
-      html += `<div>Total debitado do saldo: <strong>${formatMoney(r.totalDebit)}</strong></div>`;
+      html += `<div>Valor líquido PIX: <strong>${fmt(r.netAmount)}</strong></div>`;
+      html += `<div>Total debitado do saldo: <strong>${fmt(r.totalDebit)}</strong></div>`;
       if (r.remainingThisMonth != null) {
         html += `<div style="color:var(--color-text-muted);margin-top:4px;">${r.remainingThisMonth} saque(s) restante(s) neste mês.</div>`;
-      }
-      if (emp?.withdrawal_irpf_next && r.irpfReason === 'irpf_fracionamento_proximo') {
-        html += `<div style="color:var(--color-warning);margin-top:4px;">Imposto aplicado por fracionamento em saques anteriores.</div>`;
       }
       html += '</div>';
       box.innerHTML = html;
@@ -414,8 +422,7 @@ const WithdrawalRules = {
     const rulesHtml = `
       <input type="hidden" id="wdPayMethod" value="pix"/>
       <div id="wdRulesHint" style="margin-bottom:12px;padding:10px 12px;background:var(--color-surface-2);border-radius:var(--radius-md);font-size:12px;line-height:1.5;color:var(--color-text-secondary);">
-        <strong>Regras:</strong> sem valor mínimo · até 3 saques por mês · acima de R$ 5.000,00 retém 3,5% (IRPF).
-        Fracionar valores para fugir do imposto gera retenção automática no próximo saque.
+        <strong>Regras:</strong> sem valor mínimo · até 3 saques por mês · retenção de <strong>1,89% (IRPF)</strong> descontada automaticamente do valor solicitado (PIX recebe o líquido).
       </div>
       <div id="wdRulesPreview" style="margin-bottom:12px;padding:10px 12px;border:1px solid var(--color-border);border-radius:var(--radius-md);display:none;"></div>
       <p style="font-size:12px;color:var(--color-text-muted);margin:0 0 12px;line-height:1.45;">O saque é creditado na sua chave PIX. O saldo no perfil funciona como uma carteira digital — não é transferência para conta corrente.</p>
@@ -456,6 +463,10 @@ const WithdrawalRules = {
             hint.innerHTML = `<strong>Parceiro:</strong> sem limite de valor mínimo nem de saques por mês. Taxa administrativa de <strong>R$ ${fee.toFixed(2).replace('.', ',')}</strong>.${irpjHint} O PIX credita o valor líquido após as deduções.`;
           });
         }).catch(() => {});
+      } else if (money) {
+        hint.innerHTML = `<strong>Regras:</strong> sem valor mínimo · até 3 saques por mês · <strong>1,89% (IRPF)</strong> descontado automaticamente do valor (PIX recebe o líquido).`;
+      } else {
+        hint.innerHTML = `<strong>Regras:</strong> até 3 saques por mês · <strong>1,89% (IRPF)</strong> descontado automaticamente do valor solicitado.`;
       }
     }
     const amtLbl = document.getElementById('withdrawAmountLabel');

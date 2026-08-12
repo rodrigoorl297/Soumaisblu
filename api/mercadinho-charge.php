@@ -277,8 +277,8 @@ try {
         $ins = $pdo->prepare(
             'INSERT INTO `beneficios_vouchers`
                 (`id`, `voucher_no`, `employee_id`, `employee_name`, `prestador_id`, `prestador_name`,
-                 `categoria`, `valor`, `status`, `detalhes_pedido`)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                 `categoria`, `valor`, `status`, `detalhes_pedido`, `created_at`)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $ins->execute([
             'ben_vou_' . bin2hex(random_bytes(6)),
@@ -291,6 +291,7 @@ try {
             $valor,
             'utilizado',
             json_encode($detalhes, JSON_UNESCAPED_UNICODE),
+            date('Y-m-d H:i:s'),
         ]);
 
         $pdo->commit();

@@ -37,7 +37,7 @@
    /** Tabelas em tempo quase-real: nunca cachear GET (chat interno etc.). */
    function _isNoCacheTable(table) {
      const t = String(table || '');
-     return t.startsWith('internal_chat_');
+     return t.startsWith('internal_chat_') || t.startsWith('leads') || t === 'lead_batches' || t === 'lead_weekly_assignments' || t === 'lead_unlock_requests';
    }
 
    /** Debug ingest desligado em produção (evita spam localhost + /api/debug-session-log). */

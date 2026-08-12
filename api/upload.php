@@ -67,10 +67,11 @@ if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
 
 $file = $_FILES['file'];
 $maxMb = match (true) {
+    in_array($bucket, ['trainings', 'docs', 'trainings-media'], true) => 100,
     $bucket === 'whatsapp-media' => 16,
     $bucket === 'proposal-attachments' => 50,
     in_array($bucket, ['tim-docs', 'contestacao-docs', 'finance-docs', 'ticket-docs', 'rh-docs', 'rh-justificativa', 'rh-demissao'], true) => 25,
-    default => 5,
+    default => 10,
 };
 if ($file['size'] > $maxMb * 1024 * 1024) {
     soublu_json(['ok' => false, 'error' => "Arquivo maior que {$maxMb}MB."], 400);
@@ -100,11 +101,11 @@ if ($bucket === 'proposal-attachments') {
     if (!in_array($ext, $allowed, true)) {
         soublu_json(['ok' => false, 'error' => 'Tipo de arquivo não permitido. Use PDF, imagem, ZIP, DOC ou XLS.'], 400);
     }
-} elseif ($bucket === 'docs') {
-    /* Materiais de treinamento / docs: PDF, imagens e Office (incl. PPTX). */
-    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip'];
+} elseif (in_array($bucket, ['docs', 'trainings', 'trainings-media'], true)) {
+    /* Materiais de treinamento / docs / vídeos: PDF, imagens, Office, MP4, WebM, MOV. */
+    $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'mp4', 'webm', 'mov', 'avi', 'mkv', 'mp3', 'wav', 'm4a'];
     if (!in_array($ext, $allowed, true)) {
-        soublu_json(['ok' => false, 'error' => 'Tipo de arquivo não permitido. Use PDF, Office ou imagem.'], 400);
+        soublu_json(['ok' => false, 'error' => 'Tipo de arquivo não permitido. Use PDF, vídeo (MP4/WebM), áudio, imagem ou Office.'], 400);
     }
 } else {
     $allowed = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];

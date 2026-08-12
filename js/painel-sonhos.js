@@ -876,21 +876,32 @@ const PainelSonhos = (() => {
     if (typeof raw === 'string') {
       try { raw = JSON.parse(raw); } catch (_) { raw = []; }
     }
-    if (Array.isArray(raw)) return raw.filter(Boolean).map(normalizeItem).filter(Boolean);
-    if (raw && typeof raw === 'object' && Array.isArray(raw.items)) {
-      return raw.items.map(normalizeItem).filter(Boolean);
+    let remote = [];
+    if (Array.isArray(raw)) remote = raw.filter(Boolean).map(normalizeItem).filter(Boolean);
+    else if (raw && typeof raw === 'object' && Array.isArray(raw.items)) {
+      remote = raw.items.map(normalizeItem).filter(Boolean);
     }
+    let local = [];
     try {
       const loc = localStorage.getItem(localKey(user?.id));
-      if (loc) return JSON.parse(loc).map(normalizeItem).filter(Boolean);
+      if (loc) local = JSON.parse(loc).map(normalizeItem).filter(Boolean);
     } catch (_) { /* noop */ }
-    return [];
+    if (!remote.length) return local;
+    if (!local.length) return remote;
+    /* Remoto manda; fotos do local preenchem buracos (legado sem coluna sonhos_data). */
+    const byId = new Map(local.map((d) => [d.id, d]));
+    return remote.map((d) => {
+      if (d.photoUrl) return d;
+      const loc = byId.get(d.id);
+      if (loc?.photoUrl) return { ...d, photoUrl: loc.photoUrl };
+      return d;
+    });
   }
 
   function normalizePhotoPath(ref) {
     let raw = String(ref || '').trim();
     if (!raw || /^data:|^blob:/i.test(raw)) return raw;
-    if (/attachment-proxy\.php/i.test(raw)) {
+    if (/(?:file|attachment-proxy)\.php/i.test(raw)) {
       try {
         const p = new URL(raw, location.origin).searchParams.get('path');
         if (p) raw = decodeURIComponent(p);
@@ -935,7 +946,10 @@ const PainelSonhos = (() => {
     writeLocal(user.id, clean);
     const payload = { sonhos_data: { items: clean, updated_at: new Date().toISOString() } };
     try {
-      await DB.updateUser(user.id, payload);
+      const saved = await DB.updateUser(user.id, payload);
+      if (saved && saved.sonhos_data == null && payload.sonhos_data) {
+        throw new Error('sonhos_data não foi gravado no banco');
+      }
       if (typeof currentUser !== 'undefined' && currentUser?.id === user.id) {
         currentUser = { ...currentUser, sonhos_data: payload.sonhos_data };
       }
@@ -946,6 +960,7 @@ const PainelSonhos = (() => {
       return true;
     } catch (e) {
       console.warn('[PainelSonhos] save remoto:', e?.message || e);
+      showToast('Sonho ficou só neste aparelho. Recarregue (Ctrl+F5) e tente de novo.', 'warning');
       return false;
     }
   }
@@ -967,9 +982,16 @@ const PainelSonhos = (() => {
     if (_userFetchPromise && !forceRefresh) return _userFetchPromise;
     _userFetchPromise = (async () => {
       try {
-        const u = typeof resolveEmployeeUser === 'function'
+        let u = typeof resolveEmployeeUser === 'function'
           ? await resolveEmployeeUser()
           : await Auth.getCurrentUser();
+        /* Garante sonhos_data fresco do banco (sessão pode estar desatualizada). */
+        if (u?.id && typeof DB?.getUser === 'function') {
+          try {
+            const fresh = await DB.getUser(u.id, true);
+            if (fresh) u = { ...u, ...fresh };
+          } catch (_) { /* usa u */ }
+        }
         if (u) _cachedUser = u;
         return u;
       } finally {
@@ -1034,20 +1056,21 @@ const PainelSonhos = (() => {
     if (/^data:image\//i.test(raw)) return raw;
     if (/^blob:/i.test(raw)) return raw;
     let path = normalizePhotoPath(raw);
+    let src = '';
     if (/^https?:\/\//i.test(path)) {
       if (typeof resolvePhotoUrl === 'function') {
-        const resolved = resolvePhotoUrl(path);
-        if (resolved) return resolved;
+        src = resolvePhotoUrl(path) || path;
+      } else {
+        src = path;
       }
-      return path;
+    } else {
+      path = ensureUploadsPath(path);
+      if (typeof resolvePhotoUrl === 'function') {
+        src = resolvePhotoUrl(path) || resolvePhotoUrl(ensureUploadsPath(raw)) || '';
+      }
+      if (!src) src = `${apiBaseUrl()}/${path.replace(/^\/+/, '')}`;
     }
-    path = ensureUploadsPath(path);
-    if (typeof resolvePhotoUrl === 'function') {
-      const resolved = resolvePhotoUrl(path) || resolvePhotoUrl(ensureUploadsPath(raw));
-      if (resolved) return resolved;
-    }
-    const src = `${apiBaseUrl()}/${path.replace(/^\/+/, '')}`;
-    if (id) {
+    if (id && src) {
       _photoSrcCache.set(id, src);
       _photoSrcCache.set(`${id}:raw`, rawKey);
     }
@@ -1058,11 +1081,26 @@ const PainelSonhos = (() => {
     if (!img) return;
     if (!img.dataset.psRetry) {
       img.dataset.psRetry = '1';
+      if (dreamId) {
+        _photoSrcCache.delete(dreamId);
+        _photoSrcCache.delete(`${dreamId}:raw`);
+      }
       const raw = img.getAttribute('data-photo-ref') || '';
       if (raw) {
-        const retry = photoSrc({ id: dreamId, photoUrl: raw });
+        let retry = '';
+        const norm = normalizePhotoPath(raw);
+        if (typeof resolvePhotoUrl === 'function') {
+          retry = resolvePhotoUrl(norm) || resolvePhotoUrl(ensureUploadsPath(norm)) || '';
+          if (!retry && !/^sonhos\//i.test(norm) && norm) {
+            retry = resolvePhotoUrl(`sonhos/${norm}`) || '';
+          }
+        }
         const current = img.getAttribute('src') || '';
         if (retry && retry !== current) {
+          if (dreamId) {
+            _photoSrcCache.set(dreamId, retry);
+            _photoSrcCache.set(`${dreamId}:raw`, raw);
+          }
           img.src = /^data:image\//i.test(retry) ? retry : escAttr(retry);
           return;
         }
@@ -1442,7 +1480,7 @@ const PainelSonhos = (() => {
   }
 
   async function render(rootId = 'painelSonhosRoot', opts = {}) {
-    const { forceUser = false } = opts;
+    const { forceUser = true } = opts;
     const root = document.getElementById(rootId);
     if (!root) return;
 

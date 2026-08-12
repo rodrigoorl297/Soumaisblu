@@ -12,12 +12,98 @@ function showToast(msg, type='info', dur=3500) {
   setTimeout(()=>{ t.style.cssText='opacity:0;transform:translateX(120%);transition:.4s ease'; setTimeout(()=>t.remove(),400); },dur);
 }
 
-function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
-function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function openModal(id) {
+  if (id === 'trainingModal' || id === 'muralModal' || id === 'trainingTakeModal') {
+    if (window.Trainings && typeof window.Trainings.ensureModals === 'function') {
+      window.Trainings.ensureModals();
+    }
+  }
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('open');
+  el.style.display = 'flex';
+  el.style.opacity = '1';
+  el.style.visibility = 'visible';
+  el.style.zIndex = '999999';
+  el.style.pointerEvents = 'auto';
+
+  const innerModal = el.querySelector('.modal');
+  if (innerModal) {
+    innerModal.style.display = 'block';
+    innerModal.style.pointerEvents = 'auto';
+  }
+
+  document.documentElement.classList.add('modal-open');
+  document.body.classList.add('modal-open');
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) {
+    el.classList.remove('open');
+    el.style.display = 'none';
+    el.style.opacity = '0';
+    el.style.visibility = 'hidden';
+    el.style.pointerEvents = 'none';
+  }
+  if (!document.querySelector('.modal-overlay.open')) {
+    document.documentElement.classList.remove('modal-open');
+    document.body.classList.remove('modal-open');
+  }
+}
+/** Fecha overlays/loaders fantasma que bloqueiam cliques no painel. */
+function unlockUiOverlays() {
+  document.querySelectorAll('.modal-overlay.open').forEach((el) => el.classList.remove('open'));
+  document.documentElement.classList.remove('modal-open');
+  document.body.classList.remove('modal-open');
+  document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+  const loader = document.getElementById('globalLoader');
+  if (loader) loader.style.display = 'none';
+}
 window.openModal = openModal;
 window.closeModal = closeModal;
-document.addEventListener('click',e=>{ if(e.target.classList.contains('modal-overlay'))e.target.classList.remove('open'); });
+window.unlockUiOverlays = unlockUiOverlays;
 
+/** Normaliza texto para busca: minúsculas + sem acento (JOÃO ≡ joao ≡ João). */
+function foldSearchText(s) {
+  try {
+    return String(s || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR')
+      .replace(/\s+/g, ' ')
+      .trim();
+  } catch (_) {
+    return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
+  }
+}
+
+/**
+ * Busca flexível: ignora maiúsculas/minúsculas e acentos;
+ * frase completa OU todas as palavras (ex.: "silva joao" acha "João da Silva").
+ */
+function textMatchesSearch(haystack, query) {
+  const q = foldSearchText(query);
+  if (!q) return true;
+  const hay = foldSearchText(haystack);
+  if (hay.includes(q)) return true;
+  const tokens = q.split(' ').filter((t) => t.length >= 2);
+  if (tokens.length >= 2) return tokens.every((t) => hay.includes(t));
+  return false;
+}
+window.foldSearchText = foldSearchText;
+window.textMatchesSearch = textMatchesSearch;
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('modal-overlay')) closeModal(e.target.id);
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') unlockUiOverlays();
+});
+// Garante que a página nunca fica com overlay invisível engolindo cliques
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', unlockUiOverlays, { once: true });
+} else {
+  unlockUiOverlays();
+}
 /**
  * Parceiros e equipe (admin_id = parceiro): saldo em R$.
  * Colaboradores SOU+BLU internos: pontos.
@@ -151,13 +237,17 @@ function userPts(u) {
   if (!u) return 0;
   const pts = _parseWalletField(u.points);
   const bal = _parseWalletField(u.balance);
+  let v = 0;
   if (typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(u)) {
-    if (pts != null && bal != null) return Math.min(pts, bal);
-    return pts != null ? pts : (bal != null ? bal : 0);
+    if (pts != null && bal != null) v = Math.min(pts, bal);
+    else v = pts != null ? pts : (bal != null ? bal : 0);
+  } else if (pts != null) {
+    v = pts;
+  } else if (bal != null) {
+    v = bal;
   }
-  if (pts != null) return pts;
-  if (bal != null) return bal;
-  return 0;
+  // Nunca exibir / somar saldo negativo (advertências antigas ou desync).
+  return Number.isFinite(v) ? Math.max(0, v) : 0;
 }
 
 function _siteBaseUrl() {
@@ -187,52 +277,39 @@ function resolvePhotoUrl(photo) {
   if (!raw) return '';
   if (/^data:/i.test(raw)) return raw;
   const base = _siteBaseUrl();
-  if (/^(?:\/)?api\/(?:file|attachment-proxy)\.php/i.test(raw)) {
-    if (/attachment-proxy\.php/i.test(raw)) {
-      try {
-        const u = new URL(raw, base + '/');
-        const p = u.searchParams.get('path');
-        if (p) {
-          return `${base}/api/file.php?path=${encodeURIComponent(decodeURIComponent(p))}`;
-        }
-      } catch (_) { /* segue */ }
-    }
+  const toFilePhp = (path) => {
+    const p = String(path || '').trim().replace(/^\/+/, '').replace(/^uploads\//i, '');
+    if (!p) return '';
+    return `${base}/api/file.php?path=${encodeURIComponent(p)}`;
+  };
+  if (/^(?:\/)?api\/(?:file|attachment-proxy)\.php/i.test(raw) || /(?:file|attachment-proxy)\.php/i.test(raw)) {
+    try {
+      const u = new URL(raw, base + '/');
+      const p = u.searchParams.get('path');
+      if (p) return toFilePhp(decodeURIComponent(p));
+    } catch (_) { /* segue */ }
     return /^https?:\/\//i.test(raw) ? raw : `${base}${raw.startsWith('/') ? raw : '/' + raw}`;
   }
   if (/^https?:\/\//i.test(raw)) {
-    if (/attachment-proxy\.php/i.test(raw)) {
-      try {
-        const p = new URL(raw, window.location.origin).searchParams.get('path');
-        if (p) {
-          const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-          return `${base}/api/file.php?path=${encodeURIComponent(decodeURIComponent(p))}`;
-        }
-      } catch (_) { /* segue */ }
-    }
     if (/supabase\.co\/storage/i.test(raw)) {
       const m = raw.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
-      if (m) {
-        const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-        return `${base}/api/file.php?path=${encodeURIComponent(m[1] + '/' + m[2])}`;
-      }
+      if (m) return toFilePhp(m[1] + '/' + m[2]);
     }
     const up = raw.match(/\/uploads\/([^?#]+)/i);
-    if (up) {
-      const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-      return `${base}/api/file.php?path=${encodeURIComponent(up[1])}`;
-    }
+    if (up) return toFilePhp(up[1]);
     return raw;
   }
   const rel = raw.replace(/^\.\//, '').replace(/^\//, '');
   if (/^uploads\//i.test(rel)) {
-    const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-    const path = rel.replace(/^uploads\//i, '');
-    return `${base}/api/file.php?path=${encodeURIComponent(path)}`;
+    return toFilePhp(rel.replace(/^uploads\//i, ''));
   }
-  const storageBuckets = 'profile-photos|product-images|partner-docs|ticket-docs|sonhos|misc|proposal-attachments|finance-docs|tim-docs|contestacao-docs|whatsapp-media';
+  const storageBuckets = 'profile-photos|product-images|partner-docs|ticket-docs|sonhos|mural|misc|proposal-attachments|finance-docs|tim-docs|contestacao-docs|whatsapp-media';
   if (new RegExp(`^(${storageBuckets})/`, 'i').test(rel)) {
-    const base = String((window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.SITE_URL) || window.location.origin || '').replace(/\/+$/, '');
-    return `${base}/api/file.php?path=${encodeURIComponent(rel)}`;
+    return toFilePhp(rel);
+  }
+  /* Foto de perfil salva só com nome do arquivo / userId/img_… */
+  if (/^[a-zA-Z0-9_-]+\/[^/]+\.(jpe?g|png|gif|webp)$/i.test(rel)) {
+    return toFilePhp(`profile-photos/${rel}`);
   }
   if (typeof window.soubluAsset === 'function') return window.soubluAsset(rel);
   return raw;
@@ -486,12 +563,90 @@ window.userUsesMoneyWallet = userUsesMoneyWallet;
 window.isSouBluInternalUser = isSouBluInternalUser;
 window.filterSouBluInternalUsers = filterSouBluInternalUsers;
 window.canSouBluManagePoints = canSouBluManagePoints;
-function formatDate(iso) { return new Date(iso).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric'}); }
-function formatDateTime(iso) { return new Date(iso).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}); }
+const SOUBLU_TZ = 'America/Sao_Paulo';
+
+function _parseSouBluDate(iso) {
+  if (iso == null || iso === '') return null;
+  if (iso instanceof Date) return Number.isNaN(iso.getTime()) ? null : iso;
+  const s = String(iso).trim();
+  if (!s) return null;
+  // Já com fuso (Z ou ±hh:mm)
+  if (/Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  // MySQL "YYYY-MM-DD HH:mm:ss" / ISO sem fuso:
+  // legado pode ser UTC ou parede BRT — escolhe a interpretação mais próxima de agora
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const base = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] || '00'}`;
+    const asSp = new Date(`${base}-03:00`);
+    const asUtc = new Date(`${base}Z`);
+    if (Number.isNaN(asSp.getTime()) && Number.isNaN(asUtc.getTime())) return null;
+    if (Number.isNaN(asSp.getTime())) return asUtc;
+    if (Number.isNaN(asUtc.getTime())) return asSp;
+    const now = Date.now();
+    return Math.abs(asUtc.getTime() - now) < Math.abs(asSp.getTime() - now) ? asUtc : asSp;
+  }
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function formatDate(iso) {
+  const d = _parseSouBluDate(iso);
+  if (!d) return '—';
+  return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: SOUBLU_TZ });
+}
+function formatDateTime(iso) {
+  const d = _parseSouBluDate(iso);
+  if (!d) return '—';
+  return d.toLocaleString('pt-BR', {
+    day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit',
+    timeZone: SOUBLU_TZ,
+  });
+}
+function formatTime(iso) {
+  const d = _parseSouBluDate(iso);
+  if (!d) return '—';
+  return d.toLocaleTimeString('pt-BR', {
+    hour: '2-digit', minute: '2-digit',
+    timeZone: SOUBLU_TZ,
+  });
+}
+/** Ex.: "hoje às 10:22", "ontem às 18:05", "05/08 às 09:30" */
+function formatDayTime(iso) {
+  const d = _parseSouBluDate(iso);
+  if (!d) return '—';
+  const time = formatTime(iso);
+  const dayKey = (dt) => dt.toLocaleDateString('en-CA', { timeZone: SOUBLU_TZ }); // YYYY-MM-DD
+  const today = dayKey(new Date());
+  const yest = (() => {
+    const x = new Date();
+    x.setDate(x.getDate() - 1);
+    return dayKey(x);
+  })();
+  const key = dayKey(d);
+  if (key === today) return `hoje às ${time}`;
+  if (key === yest) return `ontem às ${time}`;
+  return d.toLocaleDateString('pt-BR', {
+    day: '2-digit', month: '2-digit', timeZone: SOUBLU_TZ,
+  }) + ` às ${time}`;
+}
+window._parseSouBluDate = _parseSouBluDate;
+window.SOUBLU_TZ = SOUBLU_TZ;
+window.formatTime = formatTime;
+window.formatDayTime = formatDayTime;
 function timeAgo(iso) {
-  const d=Date.now()-new Date(iso).getTime(), m=Math.floor(d/60000);
-  if(m<1)return'agora'; if(m<60)return`há ${m}min`;
-  const h=Math.floor(m/60); if(h<24)return`há ${h}h`; return`há ${Math.floor(h/24)}d`;
+  const parsed = _parseSouBluDate(iso);
+  if (!parsed) return '—';
+  const d = Date.now() - parsed.getTime();
+  const m = Math.floor(d / 60000);
+  if (m < 1) return 'agora';
+  if (m < 60) return `há ${m}min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `há ${h}h`;
+  return `há ${Math.floor(h / 24)}d`;
 }
 
 function getInitials(name='') { return name.trim().split(' ').filter(Boolean).slice(0,2).map(n=>n[0]).join('').toUpperCase(); }
@@ -633,12 +788,12 @@ function downloadWithdrawalReceipt(wd,emp){
     <tr><td>Status banco</td><td>${PIX_WD_STATUS[_resolvePixWdStatus(wd)]?.label||'—'}</td></tr>
     <tr><td>ID envio Efi</td><td>${wd.pix_id_envio||'—'}</td></tr>
     <tr><td>End-to-end (E2E)</td><td style="word-break:break-all">${wd.pix_e2e_id||'—'}</td></tr>
-    <tr><td>Solicitado em</td><td>${wd.created_at?new Date(wd.created_at).toLocaleString('pt-BR'):'—'}</td></tr>
-    <tr><td>Pago / processado</td><td>${paidAt?new Date(paidAt).toLocaleString('pt-BR'):'—'}</td></tr>
-    <tr><td>Aprovação Master</td><td>${wd.approved_by_master?'Sim':'Não'}${wd.master_approved_at?` — ${new Date(wd.master_approved_at).toLocaleString('pt-BR')}`:''}</td></tr>
-    <tr><td>Aprovação Financeiro</td><td>${wd.approved_by_financial?'Sim':'Não'}${wd.financial_approved_at?` — ${new Date(wd.financial_approved_at).toLocaleString('pt-BR')}`:''}</td></tr>
+    <tr><td>Solicitado em</td><td>${wd.created_at?formatDateTime(wd.created_at):'—'}</td></tr>
+    <tr><td>Pago / processado</td><td>${paidAt?formatDateTime(paidAt):'—'}</td></tr>
+    <tr><td>Aprovação Master</td><td>${wd.approved_by_master?'Sim':'Não'}${wd.master_approved_at?` — ${formatDateTime(wd.master_approved_at)}`:''}</td></tr>
+    <tr><td>Aprovação Financeiro</td><td>${wd.approved_by_financial?'Sim':'Não'}${wd.financial_approved_at?` — ${formatDateTime(wd.financial_approved_at)}`:''}</td></tr>
   </table>
-  <div class="foot">Documento gerado pelo sistema SOU + BLU em ${new Date().toLocaleString('pt-BR')}. 
+  <div class="foot">Documento gerado pelo sistema SOU + BLU em ${formatDateTime(new Date())}. 
   Comprovante administrativo — confira também o extrato Efi/bancário oficial quando disponível.</div>
   <script>window.onload=function(){window.print();}<\/script>
 </body></html>`;
@@ -748,6 +903,13 @@ function formatTransactionMetaLine(metaRaw) {
     }
     if (m.kind === 'estorno_saque_rejeitado') return '🔄 Estorno de saque devolvido';
     if (m.kind === 'credito_manual' && m.origin === 'painel_rapido') return '⚡ Painel rápido de pontos';
+    if (m.open_debit && m.status !== 'settled') {
+      const vo = m.voucher_no ? ` ${m.voucher_no}` : '';
+      return `Clube de benefícios — em aberto${vo} (desconta no saque)`;
+    }
+    if (m.kind === 'clube_fatura' || m.kind === 'conta_debito_aberto') {
+      return m.status === 'settled' ? 'Clube — quitado no saque' : 'Clube de benefícios';
+    }
     return '';
   } catch (e) { return ''; }
 }
@@ -910,13 +1072,12 @@ function showLoading(msg='Carregando...') {
     el = document.createElement('div');
     el.id = 'globalLoader';
     el.className = 'loader-overlay';
-    el.innerHTML = `<div class="loader-spinner"></div><p class="loader-text">${msg}</p>`;
+    el.innerHTML = `<div class="loader-spinner"></div><p class="loader-text"></p>`;
     document.body.appendChild(el);
-  } else {
-    el.style.display = 'flex';
-    const p = el.querySelector('.loader-text, p');
-    if (p && msg) p.textContent = msg;
   }
+  el.style.display = 'flex';
+  const p = el.querySelector('.loader-text, p');
+  if (p && msg) p.textContent = msg;
 }
 function hideLoading() {
   const el = document.getElementById('globalLoader');

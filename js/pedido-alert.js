@@ -36,12 +36,27 @@
   }
 
   function _fmtHora(iso) {
+    if (typeof formatTime === 'function') return formatTime(iso);
     try {
-      const d = new Date(String(iso).replace(' ', 'T'));
-      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      const d = (typeof _parseSouBluDate === 'function')
+        ? _parseSouBluDate(iso)
+        : new Date(String(iso).replace(' ', 'T') + (String(iso).includes('Z') || /[+-]\d{2}:?\d{2}$/.test(String(iso)) ? '' : '-03:00'));
+      if (!d || Number.isNaN(d.getTime())) return '';
+      return d.toLocaleTimeString('pt-BR', {
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/Sao_Paulo',
+      });
     } catch (_) {
       return '';
     }
+  }
+
+  function _fmtQuando(iso) {
+    // Data+hora completas em Brasília (evita dúvida com "ontem/hoje")
+    if (typeof formatDateTime === 'function') return formatDateTime(iso);
+    if (typeof formatDayTime === 'function') return formatDayTime(iso);
+    const h = _fmtHora(iso);
+    return h ? `às ${h}` : '—';
   }
 
   function _esc(s) {
@@ -49,7 +64,10 @@
   }
 
   function _orderAgeMs(v) {
-    const t = Date.parse(String(v?.created_at || '').replace(' ', 'T'));
+    const parsed = (typeof _parseSouBluDate === 'function')
+      ? _parseSouBluDate(v?.created_at)
+      : new Date(String(v?.created_at || '').replace(' ', 'T'));
+    const t = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : NaN;
     return Number.isFinite(t) ? (Date.now() - t) : 0;
   }
 
@@ -206,7 +224,7 @@
         <p class="pedido-note__line">${_esc(v.employee_name || 'Colaborador')}</p>
         <p class="pedido-note__line">Valor: <strong>${_fmtMoney(v.valor)}</strong></p>
         <div class="pedido-note__foot">
-          <span class="pedido-note__time">hoje às ${_fmtHora(v.created_at)}</span>
+          <span class="pedido-note__time">${_fmtQuando(v.created_at)}</span>
           <button type="button" class="pedido-note__btn" onclick="PedidoAlert.goToOrders()">Verificar</button>
         </div>
       </div>

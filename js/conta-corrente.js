@@ -18,7 +18,10 @@
 
   function fmtDt(iso) {
     if (!iso) return '—';
-    try { return new Date(iso).toLocaleString('pt-BR'); } catch { return '—'; }
+    if (typeof formatDateTime === 'function') return formatDateTime(iso);
+    try {
+      return new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+    } catch { return '—'; }
   }
 
   function groupLinesByDate(lines) {
@@ -520,8 +523,9 @@ option.cc-opt-inactive { color: #b45309; }
           const sign = isCr ? '+' : '−';
           const amt = fmtBal(ln.amount, money, user);
           const kind = ln.meta?.kind ? String(ln.meta.kind).replace('conta_', '').replace(/_/g, ' ') : '';
+          const openDeb = !!(ln.meta?.open_debit && ln.meta?.status !== 'settled');
           const advDetail = isAdv ? adiantamentoDetail(ln) : '';
-          const extraParts = [advDetail, kind, ln.status].filter(Boolean);
+          const extraParts = [advDetail, kind, openDeb ? 'em aberto' : '', ln.status].filter(Boolean);
           const extra = extraParts.join(' · ');
           const canSelect = ln.kind === 'transaction' && !!ln.id;
           const id = String(ln.id || '');
@@ -530,6 +534,7 @@ option.cc-opt-inactive { color: #b45309; }
             'cc-line',
             canSelect ? 'cc-line--selectable' : 'cc-line--locked',
             checked ? 'selected' : '',
+            openDeb ? 'cc-line--open-debit' : '',
           ].filter(Boolean).join(' ');
           const checkHtml = selectMode
             ? `<label class="cc-line__check" onclick="event.stopPropagation()">
@@ -541,11 +546,11 @@ option.cc-opt-inactive { color: #b45309; }
           const click = canSelect && selectMode
             ? ` onclick="ContaCorrente.toggleSelect('${esc(id)}')"`
             : '';
-          return `<div class="${lineCls}" data-tx-id="${esc(id)}"${click}>
+          return `<div class="${lineCls}" data-tx-id="${esc(id)}"${click}${openDeb ? ' style="background:rgba(220,38,38,.06);"' : ''}>
             ${checkHtml}
             <div class="cc-line__icon ${cls}">${icon}</div>
             <div class="cc-line__body">
-              <div class="cc-line__title">${esc(ln.reason)}</div>
+              <div class="cc-line__title">${esc(ln.reason)}${openDeb ? ' <span style="color:#b91c1c;font-size:11px;font-weight:700;">(em aberto)</span>' : ''}</div>
               <div class="cc-line__meta">${fmtDt(ln.created_at)}${extra ? ' <span class="cc-line__dot"></span> ' + esc(extra) : ''}</div>
             </div>
             <div class="cc-line__amt ${cls}">${sign}${amt}</div>
@@ -781,6 +786,26 @@ option.cc-opt-inactive { color: #b45309; }
           ? `<button type="button" class="cc-card__active-btn" onclick="ContaCorrente.toggleAccountActive('${esc(empId)}', false)">Inativar conta corrente</button>`
           : `<button type="button" class="cc-card__active-btn is-inactive" onclick="ContaCorrente.toggleAccountActive('${esc(empId)}', true)">Ativar conta corrente</button>`)
         : '';
+
+      let openDebHtml = '';
+      try {
+        const openDeb = typeof DB.getOpenAccountDebitos === 'function'
+          ? await DB.getOpenAccountDebitos(empId)
+          : { total: 0, itens: [] };
+        if (openDeb.total > 0) {
+          const items = (openDeb.itens || []).slice(0, 8).map((i) =>
+            `<li style="margin:2px 0;">${esc(i.label || i.voucher_no || i.id)} — <strong>${fmtBal(i.amount, stmt.money, u)}</strong></li>`
+          ).join('');
+          openDebHtml = `<div class="card card-padded" style="margin-bottom:12px;border:1px solid rgba(185,28,28,.35);background:rgba(220,38,38,.06);">
+            <div style="font-size:13px;font-weight:700;color:#b91c1c;margin-bottom:6px;">Débitos em aberto · ${fmtBal(openDeb.total, stmt.money, u)}</div>
+            <ul style="margin:0;padding-left:18px;font-size:12px;color:var(--color-text-secondary);">${items}</ul>
+            <p style="margin:8px 0 0;font-size:11px;color:var(--color-text-muted);">No saque o colaborador pode optar por descontar esses valores dos pontos.</p>
+          </div>`;
+        }
+      } catch (e) {
+        console.warn('[ContaCorrente] open debits:', e);
+      }
+
       box.innerHTML = `
         <div class="cc-card ${neg ? 'negative' : ''}" style="margin-bottom:12px;height:auto;min-height:160px;">
           <div class="cc-card__top">
@@ -792,6 +817,7 @@ option.cc-opt-inactive { color: #b45309; }
           </div>
           <div class="cc-card__balance" style="margin-top:14px;">${fmtBal(stmt.balance, stmt.money, u)}</div>
         </div>
+        ${openDebHtml}
         <div class="cc-extrato${selCls}" id="ccGestaoExtrato">
           <div class="cc-extrato__head">
             <span class="cc-extrato__title">Histórico</span>
