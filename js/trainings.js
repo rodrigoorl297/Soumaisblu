@@ -1491,6 +1491,7 @@
           html += `<div class="form-group"><label style="user-select:none;"><strong>${i + 1}.</strong> ${esc(item.q)}</label>${opts}</div>`;
         });
         html += `</div>`; // Fechar antiCheatLayer
+        html += `<div style="text-align:right;margin-top:24px;"><button type="button" class="btn btn-primary" onclick="Trainings.submitTake()">Concluir / Enviar Prova</button></div>`;
       } else {
         html += '<p class="text-muted">Sem prova — clique em concluir para registrar participação.</p>';
       }
