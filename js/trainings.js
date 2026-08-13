@@ -1478,7 +1478,7 @@
           ? `<p style="font-size:13px;color:var(--color-text-muted);">Prova com <strong>${drawn.length}</strong> perguntas sorteadas (banco de ${total}).</p>`
           : '';
         html += `<hr style="margin:20px 0;">`;
-        html += `<div id="antiCheatLayer" style="user-select:none; -webkit-user-select:none; position:relative;">`;
+        html += `<div id="antiCheatLayer" style="-webkit-touch-callout:none; -webkit-user-select:none; -khtml-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none; position:relative;">`;
         html += `<div id="antiCheatOverlay" style="display:none; position:absolute; top:-20px; left:-20px; width:calc(100% + 40px); height:calc(100% + 40px); background:rgba(0,0,0,0.95); color:white; z-index:9999; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:20px; border-radius:12px;">
           <h3 style="color:#ff4444; margin-bottom:10px;">⚠️ TELA OCULTADA</h3>
           <p>Você perdeu o foco da janela. Volte para continuar a prova.</p>
@@ -1500,6 +1500,9 @@
       const layer = document.getElementById('antiCheatLayer');
       if (layer) {
         layer.oncontextmenu = (e) => e.preventDefault();
+        layer.addEventListener('copy', (e) => { e.preventDefault(); return false; });
+        layer.addEventListener('cut', (e) => { e.preventDefault(); return false; });
+        layer.addEventListener('dragstart', (e) => { e.preventDefault(); return false; });
         const overlay = document.getElementById('antiCheatOverlay');
         const handleKeyDown = (e) => {
           if (e.key === 'PrintScreen' || e.keyCode === 44) {
