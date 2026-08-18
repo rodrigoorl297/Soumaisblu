@@ -52,6 +52,10 @@
     return { q, options, correct };
   }
 
+  /**
+   * Mesma prova para todos os usuários (ordem fixa do banco).
+   * Não sorteia — o sorteio aleatório fazia a nota variar entre pessoas.
+   */
   function _pickQuestionsForAttempt(allQs) {
     const pool = (allQs || []).map(_normQuestion).filter(Boolean);
     if (!pool.length) return [];
@@ -174,6 +178,15 @@
     return '<span class="badge badge-muted">Pendente</span>';
   }
 
+  /** Já enviou a prova — apenas 1 tentativa. */
+  function _attemptFinished(att) {
+    if (!att) return false;
+    if (att.completed_at) return true;
+    if (['passed', 'failed', 'penalized'].includes(String(att.status || ''))) return true;
+    if (att.score != null && att.score !== '') return true;
+    return false;
+  }
+
   const Trainings = {
     canManage,
     canRhReport,
@@ -275,13 +288,12 @@
         const isRegimento = tr.category === 'regimento';
         let btnLabel = isRegimento && !(tr.questions || []).length ? 'Ler / Confirmar' : 'Iniciar / Prova';
         let disabledAttr = '';
-        if (att) {
-          if ((tr.questions || []).length > 0) {
-            btnLabel = 'Prova Concluída';
-            disabledAttr = 'disabled title="Você já realizou esta prova." style="opacity:0.6; cursor:not-allowed;"';
-          } else {
-            btnLabel = 'Rever Material';
-          }
+        const hasQuiz = (tr.questions || []).length > 0;
+        if (hasQuiz && _attemptFinished(att)) {
+          btnLabel = 'Prova Concluída (1x)';
+          disabledAttr = 'disabled title="Apenas 1 tentativa permitida." style="opacity:0.6; cursor:not-allowed;"';
+        } else if (att && !hasQuiz) {
+          btnLabel = 'Rever Material';
         }
         return `<div class="card card-padded" style="margin-bottom:12px;">
           <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;">
@@ -1415,8 +1427,18 @@
       const tr = await DB.getTraining(trainingId);
       const user = await Auth.getCurrentUser();
       if (!tr || !user) return;
+      const att = await DB.getTrainingAttempt(tr.id, user.id);
+      const hasQuiz = (tr.questions || []).length > 0;
+      if (hasQuiz && _attemptFinished(att)) {
+        if (typeof showToast === 'function') {
+          showToast('Você já realizou esta prova. É permitida apenas 1 tentativa.', 'warning', 6000);
+        } else {
+          alert('Você já realizou esta prova. É permitida apenas 1 tentativa.');
+        }
+        return;
+      }
       const drawn = _pickQuestionsForAttempt(tr.questions || []);
-      window.__trnTake = { training: tr, user, drawn };
+      window.__trnTake = { training: tr, user, drawn, att };
       const body = document.getElementById('trainingTakeBody');
       const kind = tr.kind === 'palestra' ? 'Palestra' : 'Tutorial';
       let html = `<h3>${esc(tr.title)}</h3><p class="badge badge-muted">${kind}</p>`;
@@ -1474,8 +1496,8 @@
       if (tr.video_url_2) html += _embedVideo(tr.video_url_2);
       if (drawn.length) {
         const total = (tr.questions || []).length;
-        const note = total > QUIZ_DRAW
-          ? `<p style="font-size:13px;color:var(--color-text-muted);">Prova com <strong>${drawn.length}</strong> perguntas sorteadas (banco de ${total}).</p>`
+        const note = total > 0
+          ? `<p style="font-size:13px;color:var(--color-text-muted);">Prova com <strong>${drawn.length}</strong> pergunta(s) — mesma para todos os colaboradores.</p>`
           : '';
         html += `<hr style="margin:20px 0;">`;
         html += `<div id="antiCheatLayer" style="-webkit-touch-callout:none; -webkit-user-select:none; -khtml-user-select:none; -moz-user-select:none; -ms-user-select:none; user-select:none; position:relative;">`;
@@ -1543,6 +1565,21 @@
       if (!pack) return;
       const { training: tr, user, drawn } = pack;
       const qs = drawn || [];
+
+      // Trava no servidor/local: 1 tentativa por usuário
+      if (qs.length) {
+        const existing = await DB.getTrainingAttempt(tr.id, user.id);
+        if (_attemptFinished(existing)) {
+          if (typeof showToast === 'function') {
+            showToast('Prova já enviada. Apenas 1 tentativa é permitida.', 'warning', 6000);
+          } else {
+            alert('Prova já enviada. Apenas 1 tentativa é permitida.');
+          }
+          closeModal('trainingTakeModal');
+          return;
+        }
+      }
+
       const answers = [];
       let correct = 0;
       qs.forEach((item, i) => {
@@ -1592,13 +1629,17 @@
           penalized_at: new Date().toISOString(),
           completed_at: new Date().toISOString(),
         });
-      } else if (!passed && tr.penalty_points > 0) {
-        showToast(`Reprovado (${score}%). Você pode tentar novamente antes do prazo.`, 'warning', 8000);
+      } else if (!passed) {
+        showToast(`Reprovado (${score}%). Tentativa única — não é possível refazer.`, 'warning', 8000);
       }
 
       closeModal('trainingTakeModal');
       if (passed) showToast(`Aprovado! Nota: ${score}%`, 'success');
-      else if (status !== 'penalized') showToast(`Nota: ${score}% — mínimo ${tr.passing_score}%`, 'error');
+      else if (status !== 'penalized' && !(tr.penalty_points > 0 && !pastDeadline)) {
+        /* toast de reprovação já exibido acima quando aplicável */
+      } else if (status !== 'penalized') {
+        showToast(`Nota: ${score}% — mínimo ${tr.passing_score}%`, 'error');
+      }
 
       if (document.getElementById('trainingsRoot')) await this.renderEmployee();
       if (document.getElementById('trainingsAdminRoot')) await this.renderAdminManage();
@@ -1766,7 +1807,7 @@
   </div>
   <div class="form-group">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <label style="margin:0;">Banco de perguntas (até ${MAX_QUESTIONS} — sorteia ${QUIZ_DRAW} na prova)</label>
+      <label style="margin:0;">Banco de perguntas (até ${MAX_QUESTIONS} — todas entram na prova, mesma ordem para todos)</label>
       <button type="button" class="btn btn-outline btn-sm" onclick="Trainings.addQuestionRow()">+ Pergunta</button>
     </div>
     <div id="trnQuestionsEditor"></div>

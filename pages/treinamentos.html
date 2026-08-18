@@ -12,7 +12,7 @@
   <script charset="UTF-8" src="../js/db-connect.js?v=trn-quiz4"></script>
   <title>Treinamentos · SOU+BLU</title>
   <meta name="description" content="Plataforma de Treinamentos - SOU+BLU"/>
-  <!-- LMS_BUILD=trn-quiz13-final-cachebust-7e786d -->
+  <!-- LMS_BUILD=trn-finalize-stuck-20260813c -->
   <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
   <link rel="apple-touch-icon" href="../images/logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -111,7 +111,7 @@
   <script charset="UTF-8" src="../js/ui.js?v=20260811_fix_modal_zindex_v11"></script>
   <script charset="UTF-8" src="../js/db.js?v=1786388320780?v=trn-quiz4"></script>
   <script charset="UTF-8" src="../js/auth.js?v=trn-quiz4"></script>
-  <script charset="UTF-8" src="../js/trainings.js?v=20260811_fix_upload_cover_v14"></script>
+  <script charset="UTF-8" src="../js/trainings.js?v=20260813_one_attempt_v1"></script>
   <script charset="UTF-8" src="../js/training-tracks.js?v=trn-quiz4"></script>
   <script>
     /* ── Tab labels for topbar section ── */
@@ -462,15 +462,25 @@
         return this._attemptsByTraining.get(String(trainingId)) || null;
       },
 
-      _statusForCourse(att, progress) {
+      _statusForCourse(att, progress, tr, userId) {
         if (att?.passed || att?.status === 'passed') {
           return { text: 'Aprovado', kind: 'ok', go: 'REVER' };
         }
         if (att?.status === 'penalized') {
-          return { text: 'Penalizado', kind: 'bad', go: 'CONTINUAR' };
+          return { text: 'Penalizado', kind: 'bad', go: 'REVER' };
         }
-        if (att?.status === 'failed' || (att?.score != null && !att.passed)) {
-          return { text: 'Reprovado', kind: 'bad', go: 'CONTINUAR' };
+        if (att?.status === 'failed' || (att?.completed_at && att?.score != null && !att.passed)) {
+          return { text: 'Reprovado', kind: 'bad', go: 'REVER' };
+        }
+        if (tr && userId && progress.pct >= 100) {
+          const hasFinal = this._getFinalQuestions(tr).length > 0;
+          const modsDone = this._allModuleQuizzesDone(tr, userId);
+          if (modsDone && hasFinal && !this._isFinalQuizComplete(tr, userId)) {
+            return { text: 'Falta prova geral', kind: 'progress', go: 'FINALIZAR' };
+          }
+          if (modsDone && !hasFinal && !(att?.score != null || att?.completed_at)) {
+            return { text: 'Calculando nota…', kind: 'progress', go: 'ABRIR' };
+          }
         }
         if (progress.done > 0) {
           return { text: 'Em andamento', kind: 'progress', go: 'CONTINUAR' };
@@ -733,6 +743,9 @@
         }
         // Soft-migrate local progress for visible courses (non-blocking batch).
         await Promise.all(all.map(tr => this._migrateLocalProgress(tr.id, user.id).catch(() => null)));
+        // Fecha cursos 100% sem nota (média dos módulos / sem prova geral).
+        await Promise.all(all.map(tr => this._tryFinalizeStuckCourse(tr, user.id).catch(() => null)));
+        await this._loadAttemptsForUser(user.id);
 
         const cat = this._currentCategory === 'mural' ? 'all' : this._currentCategory;
         this._currentCategory = cat;
@@ -803,7 +816,7 @@
         const catLabel = this._CATEGORY_LABELS[tr.category] || tr.category || 'Curso';
         const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
         const id = this._esc(tr.id);
-        const status = this._statusForCourse(att, progress);
+        const status = this._statusForCourse(att, progress, tr, user.id);
         const notaText = att?.score != null ? String(att.score) : '—';
         const prazoText = tr.deadline_at ? this._fmtDt(tr.deadline_at).split(',')[0] : '—';
         const lessonsHint = totalLessons
@@ -860,6 +873,8 @@
           } catch { /* noop */ }
         }
         await this._migrateLocalProgress(trainingId, user.id);
+        // Se já terminou tudo e ficou sem nota, grava agora.
+        await this._tryFinalizeStuckCourse(tr, user.id);
 
         const modules = this._getModules(tr);
         const course = this._parseCourse(tr);
@@ -896,6 +911,19 @@
           }
         }
 
+        const att = this._getAttempt(tr.id);
+        const alreadyDone = !!(att?.completed_at || att?.status === 'passed' || att?.status === 'failed' || att?.status === 'penalized');
+        if (!alreadyDone
+          && this._getFinalQuestions(tr).length
+          && this._isFinalQuizUnlocked(tr, user.id)
+          && !this._isFinalQuizComplete(tr, user.id)) {
+          this._playerView = 'quiz';
+          this._quizModuleIdx = 'final';
+          if (typeof showToast === 'function') {
+            showToast('Falta a Prova Geral para gravar sua nota. Responda agora (1 tentativa).', 'info', 7000);
+          }
+        }
+
         this._renderPlayer();
       },
 
@@ -928,23 +956,38 @@
         let lessonDesc = tr.description || '';
         let navHtml = '';
 
+        const attNow = this._getAttempt(tr.id);
+        const courseFinished = !!(attNow?.completed_at || ['passed', 'failed', 'penalized'].includes(String(attNow?.status || '')));
+
         if (inFinalQuiz) {
+          const finalDone = courseFinished || this._isFinalQuizComplete(tr, userId);
+          const finalScore = this._finalQuizScore(tr, userId);
           lessonTitle = this._finalQuizTitle(tr);
-          lessonDesc = 'Prova geral do módulo — responda as questões abaixo.';
-          contentHtml = this._renderQuizForm(finalQuestions, 'final');
-          navHtml = `
-            <button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
-            <button class="lms-nav-btn btn-next" onclick="LMS._submitFinalQuiz()">Enviar prova geral</button>`;
+          lessonDesc = finalDone
+            ? `Prova geral já enviada${finalScore != null ? ` — nota ${finalScore}%` : ''}. Apenas 1 tentativa.`
+            : 'Prova geral do módulo — responda as questões abaixo (apenas 1 tentativa).';
+          contentHtml = this._renderQuizForm(finalQuestions, 'final', { locked: finalDone });
+          navHtml = finalDone
+            ? `<button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
+               <button class="lms-nav-btn" disabled style="opacity:.5;cursor:not-allowed;">Prova enviada (1x)</button>`
+            : `<button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
+               <button class="lms-nav-btn btn-next" onclick="LMS._submitFinalQuiz()">Enviar prova geral</button>`;
         } else if (inQuiz) {
           const modIdx = this._quizModuleIdx;
           const mod = modules[modIdx] || {};
           const modQuestions = this._getModuleQuestions(tr, modIdx, mod, modules);
+          const quizDone = courseFinished || this._isModuleQuizComplete(tr, userId, modIdx);
+          const quizScore = this._moduleQuizScore(tr, userId, modIdx);
           lessonTitle = `Prova — ${mod.title || 'Treinamento ' + (modIdx + 1)}`;
-          lessonDesc = 'Responda as questões abaixo para concluir este treinamento.';
-          contentHtml = this._renderQuizForm(modQuestions, modIdx);
-          navHtml = `
-            <button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
-            <button class="lms-nav-btn btn-next" onclick="LMS._submitModuleQuiz()">Enviar prova</button>`;
+          lessonDesc = quizDone
+            ? `Prova já enviada${quizScore != null ? ` — nota ${quizScore}%` : ''}. Apenas 1 tentativa.`
+            : 'Responda as questões abaixo (apenas 1 tentativa).';
+          contentHtml = this._renderQuizForm(modQuestions, modIdx, { locked: quizDone });
+          navHtml = quizDone
+            ? `<button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
+               <button class="lms-nav-btn" disabled style="opacity:.5;cursor:not-allowed;">Prova enviada (1x)</button>`
+            : `<button class="lms-nav-btn" onclick="LMS._exitQuiz()">← Voltar às aulas</button>
+               <button class="lms-nav-btn btn-next" onclick="LMS._submitModuleQuiz()">Enviar prova</button>`;
         } else {
           contentHtml = this._lessonMediaHtml(lesson);
           lessonTitle = lesson?.title || 'Aula';
@@ -1068,20 +1111,22 @@
           </div>`;
       },
 
-      _renderQuizForm(questions, modIdx) {
+      _renderQuizForm(questions, modIdx, opts = {}) {
         if (!questions.length) {
           return '<div class="lms-text-content">Nenhuma questão cadastrada para este treinamento.</div>';
         }
+        const locked = !!opts.locked;
         return `<div class="lms-quiz-form" style="padding:24px 32px;max-width:800px;margin:0 auto;">
+          ${locked ? '<div style="margin-bottom:16px;padding:10px 14px;border-radius:8px;background:#fef3c7;color:#92400e;font-weight:700;font-size:14px;">🔒 Tentativa única — esta prova já foi enviada e não pode ser refeita.</div>' : ''}
           ${questions.map((item, i) => {
-            const opts = (item.options || []).map((o, j) =>
-              `<label style="display:block;margin:8px 0;font-size:15px;cursor:pointer;">
-                <input type="radio" name="lmsQ_${modIdx}_${i}" value="${j}" style="margin-right:8px;"/> ${this._esc(o)}
+            const optsHtml = (item.options || []).map((o, j) =>
+              `<label style="display:block;margin:8px 0;font-size:15px;cursor:${locked ? 'default' : 'pointer'};opacity:${locked ? '.7' : '1'};">
+                <input type="radio" name="lmsQ_${modIdx}_${i}" value="${j}" style="margin-right:8px;" ${locked ? 'disabled' : ''}/> ${this._esc(o)}
               </label>`
             ).join('');
             return `<div class="lms-quiz-question" style="margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--color-border,#eee);">
               <div style="font-weight:700;margin-bottom:10px;font-size:16px;">${i + 1}. ${this._esc(item.q)}</div>
-              ${opts}
+              ${optsHtml}
             </div>`;
           }).join('')}
         </div>`;
@@ -1135,15 +1180,21 @@
       _openModuleQuiz(modIdx) {
         const tr = this._currentTraining;
         if (!tr || !this._userId) return;
+        const att = this._getAttempt(tr.id);
+        if (att?.completed_at || att?.status === 'passed' || att?.status === 'failed' || att?.status === 'penalized') {
+          if (typeof showToast === 'function') showToast('Curso já finalizado. Apenas 1 tentativa.', 'warning');
+          return;
+        }
         if (!this._isModuleLessonsComplete(tr, this._userId, modIdx)) {
           if (typeof showToast === 'function') showToast('Complete todas as aulas deste treinamento antes da prova.', 'warning');
           return;
         }
+        if (this._isModuleQuizComplete(tr, this._userId, modIdx)) {
+          if (typeof showToast === 'function') showToast('Prova já realizada. Apenas 1 tentativa.', 'warning');
+          return;
+        }
         const modules = this._getModules(tr);
         const qs = this._getModuleQuestions(tr, modIdx, modules[modIdx], modules);
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_openModuleQuiz',message:'opening module quiz',data:{modIdx,qCount:qs.length,titles:qs.map(q=>String(q.q||'').slice(0,60))},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         this._playerView = 'quiz';
         this._quizModuleIdx = modIdx;
         this._renderPlayer();
@@ -1161,6 +1212,14 @@
         const modIdx = this._quizModuleIdx;
         if (!tr || !userId || modIdx == null) return;
         if (modIdx === 'final') return this._submitFinalQuiz();
+
+        // 1 tentativa: se já enviou, bloqueia
+        if (this._isModuleQuizComplete(tr, userId, modIdx)) {
+          if (typeof showToast === 'function') showToast('Prova já enviada. Apenas 1 tentativa.', 'warning');
+          this._exitQuiz();
+          return;
+        }
+
         const modules = this._getModules(tr);
         const mod = modules[modIdx] || {};
         const questions = this._getModuleQuestions(tr, modIdx, mod, modules);
@@ -1182,30 +1241,48 @@
 
         const score = Math.round((correct / questions.length) * 100);
         const passing = tr.passing_score || 70;
+        // Mantém a nota mesmo se reprovar — sem refazer
         this.setModuleQuizComplete(tr.id, userId, modIdx, score);
         await this._persistLessonProgress(tr.id, userId);
 
         if (score >= passing) {
-          if (typeof showToast === 'function') showToast(`Prova aprovada! Nota: ${score}%`, 'success');
+          if (typeof showToast === 'function') showToast(`Prova enviada! Nota: ${score}%`, 'success');
         } else {
-          if (typeof showToast === 'function') showToast(`Nota: ${score}% — mínimo ${passing}%. Você pode tentar novamente.`, 'warning');
-          const p = this.getProgress(tr.id, userId);
-          if (p.completed) delete p.completed[`quiz_${modIdx}`];
-          this._writeLocalProgress(tr.id, userId, p);
-          await this._persistLessonProgress(tr.id, userId);
+          if (typeof showToast === 'function') {
+            showToast(`Prova enviada! Nota: ${score}% (mín. ${passing}%). Tentativa única — não é possível refazer.`, 'warning', 7000);
+          }
+        }
+
+        await this._checkCourseCompletion(tr, userId);
+
+        // Se faltou só a prova geral, abre automaticamente
+        if (this._getFinalQuestions(tr).length
+          && this._isFinalQuizUnlocked(tr, userId)
+          && !this._isFinalQuizComplete(tr, userId)
+          && !(this._getAttempt(tr.id)?.completed_at)) {
+          if (typeof showToast === 'function') showToast('Agora responda a Prova Geral para gravar a nota final.', 'info', 6000);
+          this._playerView = 'quiz';
+          this._quizModuleIdx = 'final';
           this._renderPlayer();
           return;
         }
 
-        await this._checkCourseCompletion(tr, userId);
         this._playerView = 'lesson';
         this._quizModuleIdx = null;
         this._renderPlayer();
+        if (typeof this.renderCatalog === 'function') {
+          try { await this.renderCatalog(); } catch (_) { /* noop */ }
+        }
       },
 
       _openFinalQuiz() {
         const tr = this._currentTraining;
         if (!tr || !this._userId) return;
+        const att = this._getAttempt(tr.id);
+        if (att?.completed_at || att?.status === 'passed' || att?.status === 'failed' || att?.status === 'penalized') {
+          if (typeof showToast === 'function') showToast('Curso já finalizado. Apenas 1 tentativa.', 'warning');
+          return;
+        }
         const qs = this._getFinalQuestions(tr);
         this._dbgLog('B', 'treinamentos.html:_openFinalQuiz', 'open final quiz attempt', {
           qCount: qs.length,
@@ -1216,8 +1293,12 @@
           if (typeof showToast === 'function') showToast('Prova geral ainda não cadastrada.', 'warning');
           return;
         }
+        if (this._isFinalQuizComplete(tr, this._userId)) {
+          if (typeof showToast === 'function') showToast('Prova geral já realizada. Apenas 1 tentativa.', 'warning');
+          return;
+        }
         if (!this._isFinalQuizUnlocked(tr, this._userId)) {
-          if (typeof showToast === 'function') showToast('Conclua todas as aulas e provas dos treinamentos antes da prova geral.', 'warning');
+          if (typeof showToast === 'function') showToast('Conclua todas as aulas e provas dos módulos antes da prova geral.', 'warning');
           return;
         }
         this._playerView = 'quiz';
@@ -1229,6 +1310,13 @@
         const tr = this._currentTraining;
         const userId = this._userId;
         if (!tr || !userId) return;
+
+        if (this._isFinalQuizComplete(tr, userId)) {
+          if (typeof showToast === 'function') showToast('Prova geral já enviada. Apenas 1 tentativa.', 'warning');
+          this._exitQuiz();
+          return;
+        }
+
         const questions = this._getFinalQuestions(tr);
         if (!questions.length) return;
 
@@ -1255,24 +1343,39 @@
         await this._persistLessonProgress(tr.id, userId);
 
         if (score >= passing) {
-          if (typeof showToast === 'function') showToast(`Prova geral aprovada! Nota: ${score}%`, 'success');
+          if (typeof showToast === 'function') showToast(`Prova geral enviada! Nota: ${score}%`, 'success');
         } else {
-          if (typeof showToast === 'function') showToast(`Nota: ${score}% — mínimo ${passing}%. Você pode tentar novamente.`, 'warning');
-          const p = this.getProgress(tr.id, userId);
-          if (p.completed) delete p.completed.quiz_final;
-          this._writeLocalProgress(tr.id, userId, p);
-          await this._persistLessonProgress(tr.id, userId);
-          this._renderPlayer();
-          return;
+          if (typeof showToast === 'function') {
+            showToast(`Prova geral enviada! Nota: ${score}% (mín. ${passing}%). Tentativa única.`, 'warning', 7000);
+          }
         }
 
         await this._checkCourseCompletion(tr, userId);
         this._playerView = 'lesson';
         this._quizModuleIdx = null;
         this._renderPlayer();
+        if (typeof this.renderCatalog === 'function') {
+          try { await this.renderCatalog(); } catch (_) { /* noop */ }
+        }
+      },
+
+      async _tryFinalizeStuckCourse(tr, userId) {
+        if (!tr?.id || !userId) return null;
+        const att = this._getAttempt(tr.id);
+        if (att?.completed_at && att?.score != null) return att;
+        const progress = this.getCourseProgress(tr, userId);
+        if (progress.pct < 100) return null;
+        if (!this._allModuleQuizzesDone(tr, userId)) return null;
+        const finalQs = this._getFinalQuestions(tr);
+        if (finalQs.length && !this._isFinalQuizComplete(tr, userId)) return null;
+        await this._checkCourseCompletion(tr, userId);
+        return this._getAttempt(tr.id);
       },
 
       async _checkCourseCompletion(tr, userId) {
+        const existing = this._getAttempt(tr.id);
+        if (existing?.completed_at && existing?.score != null) return;
+
         const modules = this._getModules(tr);
         const progress = this.getCourseProgress(tr, userId);
         if (progress.pct < 100) return;
@@ -1290,22 +1393,39 @@
         const finalQs = this._getFinalQuestions(tr);
         if (finalQs.length) {
           if (!this._isFinalQuizComplete(tr, userId)) {
-            // #region agent log
-            fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'D',location:'treinamentos.html:_checkCourseCompletion',message:'waiting final quiz before course complete',data:{quizCount,finalQ:finalQs.length},timestamp:Date.now()})}).catch(()=>{});
-            // #endregion
+            this._dbgLog('D', 'treinamentos.html:_checkCourseCompletion', 'waiting final quiz before course complete', {
+              quizCount, finalQ: finalQs.length,
+            });
             return;
           }
           quizCount++;
           totalScore += this._finalQuizScore(tr, userId) || 0;
         }
 
-        if (!quizCount) return;
+        if (!quizCount) {
+          // Curso só com aulas: conclui com 100%
+          try {
+            const saved = await DB.saveTrainingAttempt({
+              training_id: tr.id,
+              user_id: userId,
+              score: 100,
+              passed: true,
+              status: 'passed',
+              completed_at: new Date().toISOString(),
+            });
+            if (saved) this._attemptsByTraining.set(String(tr.id), saved);
+            if (typeof showToast === 'function') showToast('Curso concluído!', 'success', 5000);
+          } catch (e) {
+            console.warn('[LMS] save attempt:', e);
+          }
+          return;
+        }
 
         const avgScore = Math.round(totalScore / quizCount);
         const passed = avgScore >= (tr.passing_score || 70);
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'D',location:'treinamentos.html:_checkCourseCompletion',message:'course completion saved',data:{quizCount,avgScore,passed,hasFinal:!!finalQs.length},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+        this._dbgLog('D', 'treinamentos.html:_checkCourseCompletion', 'course completion saved', {
+          quizCount, avgScore, passed, hasFinal: !!finalQs.length,
+        });
         try {
           const saved = await DB.saveTrainingAttempt({
             training_id: tr.id,
@@ -1316,8 +1436,14 @@
             completed_at: new Date().toISOString(),
           });
           if (saved) this._attemptsByTraining.set(String(tr.id), saved);
-          if (passed && typeof showToast === 'function') {
-            showToast(`Curso concluído! Nota final: ${avgScore}%`, 'success', 6000);
+          if (typeof showToast === 'function') {
+            showToast(
+              passed
+                ? `Curso concluído! Nota final: ${avgScore}%`
+                : `Curso finalizado. Nota final: ${avgScore}% (reprovado). Tentativa única.`,
+              passed ? 'success' : 'warning',
+              7000
+            );
           }
         } catch (e) {
           console.warn('[LMS] save attempt:', e);

@@ -2107,6 +2107,7 @@ const WhatsAppChat = (() => {
               ${optionsHtml}
             </select>
           </span>
+          <button type="button" class="wa-action-icon" title="Etiquetas" onclick="event.stopPropagation();WhatsAppCRM.editDealTags('${esc(chat.id)}', '${esc(chat.deal_tags||'')}', event)">🏷️</button>
         </span>
       `;
     }
@@ -2949,10 +2950,10 @@ _rebindRequired = false;
           }
           
           let dealTagsHTML = '';
-          if (c.deal_tags && c.deal_tags.trim() !== '') {
-              const tags = c.deal_tags.split(',').map(t => t.trim()).filter(Boolean);
-              const tagChips = tags.map((t) => (window.WATags && WATags.chipHtml) ? WATags.chipHtml(t) : `<span class="wa-tag-chip">${esc(t)}</span>`).join('');
-              dealTagsHTML = `<div class="wa-deal-tags">${tagChips}</div>`;
+          const tagList = (window.WATags && WATags.parse) ? WATags.parse(c.deal_tags || '') : String(c.deal_tags || '').split(',').map(t => t.trim()).filter(Boolean);
+          if (tagList.length) {
+              const tagChips = tagList.map((t) => (window.WATags && WATags.chipHtml) ? WATags.chipHtml(t) : `<span class="wa-tag-chip">${esc(t)}</span>`).join('');
+              dealTagsHTML = `<div class="wa-deal-tags" onclick="event.stopPropagation();WhatsAppCRM.editDealTags('${esc(c.id)}', this.dataset.tags, event)" data-tags="${esc(c.deal_tags || '')}">${tagChips}</div>`;
           }
           
           let nextActionHTML = '';
@@ -2989,6 +2990,7 @@ _rebindRequired = false;
 
                 <div class="wa-chat-item__actions wa-deal-actions">
                   <button type="button" class="wa-action-icon" title="Definir Valor (R$)" onclick="WhatsAppCRM.editDealValue('${esc(c.id)}', '${c.deal_value||''}')">💰</button>
+                  <button type="button" class="wa-action-icon" title="Etiquetas" onclick="event.stopPropagation();WhatsAppCRM.editDealTags('${esc(c.id)}', '${esc(c.deal_tags||'')}', event)">🏷️</button>
                   <button type="button" class="wa-action-icon" title="Agendar Retorno" onclick="WhatsAppCRM.editNextAction('${esc(c.id)}', '${esc(c.next_action_at||'')}')">📅</button>
                   <button type="button" class="wa-action-icon" title="Abrir conversa" onclick="WhatsAppChat.selectChat('${esc(c.id)}')">💬</button>
                 </div>
@@ -3289,6 +3291,7 @@ window.WATags = (function () {
     baixa: '#25d366',
     low: '#25d366',
     lead: '#2563eb',
+    led: '#2563eb',
     hot: '#dc2626',
     vip: '#9333ea',
     follow: '#d97706',
@@ -3342,7 +3345,114 @@ window.WATags = (function () {
     const tags = parse(dealTags);
     if (!tags.length) return '';
     const chips = tags.map((t) => chipHtml(t)).join('');
-    return '<div class="wa-contact__tags">' + chips + '</div>';
+    const cid = esc(chatId || '');
+    const raw = esc(dealTags || '');
+    return '<div class="wa-contact__tags" data-chat-id="' + cid + '" data-tags="' + raw + '" onclick="event.stopPropagation();WhatsAppCRM.editDealTags(this.dataset.chatId,this.dataset.tags,event)">' + chips + '</div>';
+  }
+
+  const PRESET_LABELS = ['Urgente', 'Alta', 'Média', 'Baixa', 'Lead', 'Hot', 'VIP', 'Follow'];
+
+  function closeEditor() {
+    const el = document.getElementById('waTagPopover');
+    if (el) el.remove();
+    document.removeEventListener('mousedown', _onDocDown, true);
+  }
+
+  function _onDocDown(ev) {
+    const pop = document.getElementById('waTagPopover');
+    if (!pop) return;
+    if (pop.contains(ev.target)) return;
+    closeEditor();
+  }
+
+  function openEditor(chatId, currentTags, anchorEl) {
+    closeEditor();
+    const selected = parse(currentTags);
+    const pop = document.createElement('div');
+    pop.className = 'wa-tag-popover';
+    pop.id = 'waTagPopover';
+    const r = (anchorEl && anchorEl.getBoundingClientRect) ? anchorEl.getBoundingClientRect() : { left: 24, bottom: 80, top: 80 };
+    let top = r.bottom + 8;
+    let left = r.left;
+    if (left + 280 > window.innerWidth) left = Math.max(8, window.innerWidth - 280);
+    if (top + 360 > window.innerHeight) top = Math.max(8, r.top - 360);
+    pop.style.top = top + 'px';
+    pop.style.left = Math.max(8, left) + 'px';
+
+    function render() {
+      const presets = PRESET_LABELS.map((label) => {
+        const on = selected.some((t) => normKey(t) === normKey(label));
+        return '<span class="wa-tag-chip wa-tag-popover__preset' + (on ? ' is-active' : '') + '" style="--tag-color:' + esc(getColor(label)) + '" data-tag="' + esc(label) + '">' + esc(label) + '</span>';
+      }).join('');
+      const chips = selected.length
+        ? selected.map((t) => '<span class="wa-tag-chip" style="--tag-color:' + esc(getColor(t)) + '" data-remove="' + esc(t) + '">' + esc(t) + ' ×</span>').join('')
+        : '<span class="wa-tag-popover__empty">Nenhuma etiqueta</span>';
+      pop.innerHTML =
+        '<div class="wa-tag-popover__title">Etiquetas</div>' +
+        '<div class="wa-tag-popover__section-label">Selecionadas</div>' +
+        '<div class="wa-tag-popover__selected">' + chips + '</div>' +
+        '<div class="wa-tag-popover__section-label">Prontas</div>' +
+        '<div class="wa-tag-popover__presets">' + presets + '</div>' +
+        '<div class="wa-tag-popover__section-label">Personalizada</div>' +
+        '<div class="wa-tag-popover__custom">' +
+          '<input class="wa-tag-popover__input" id="waTagCustomInput" maxlength="32" placeholder="Ex: Lead, VIP, Retornar">' +
+          '<button type="button" class="wa-tag-popover__add-btn" id="waTagAddBtn">Adicionar</button>' +
+        '</div>' +
+        '<div class="wa-tag-popover__actions">' +
+          '<button type="button" class="wa-tag-popover__btn wa-tag-popover__btn--ghost" id="waTagCancel">Fechar</button>' +
+          '<button type="button" class="wa-tag-popover__btn wa-tag-popover__btn--primary" id="waTagSave">Salvar</button>' +
+        '</div>';
+    }
+
+    function toggleTag(name) {
+      const key = normKey(name);
+      if (!key) return;
+      const idx = selected.findIndex((t) => normKey(t) === key);
+      if (idx >= 0) selected.splice(idx, 1);
+      else selected.push(String(name).trim());
+      render();
+    }
+
+    pop.addEventListener('click', (ev) => {
+      const preset = ev.target.closest('[data-tag]');
+      if (preset && pop.contains(preset)) {
+        toggleTag(preset.getAttribute('data-tag'));
+        return;
+      }
+      const rem = ev.target.closest('[data-remove]');
+      if (rem && pop.contains(rem)) {
+        toggleTag(rem.getAttribute('data-remove'));
+        return;
+      }
+      if (ev.target.id === 'waTagAddBtn') {
+        const input = pop.querySelector('#waTagCustomInput');
+        const val = String(input?.value || '').trim();
+        if (val) toggleTag(val);
+        if (input) input.value = '';
+        return;
+      }
+      if (ev.target.id === 'waTagCancel') {
+        closeEditor();
+        return;
+      }
+      if (ev.target.id === 'waTagSave') {
+        WhatsAppCRM.updateDeal(chatId, { deal_tags: selected.join(', ') });
+        closeEditor();
+      }
+    });
+    pop.addEventListener('keydown', (ev) => {
+      if (ev.key !== 'Enter') return;
+      const input = pop.querySelector('#waTagCustomInput');
+      if (ev.target !== input) return;
+      ev.preventDefault();
+      const val = String(input.value || '').trim();
+      if (val) toggleTag(val);
+      input.value = '';
+    });
+
+    document.body.appendChild(pop);
+    render();
+    setTimeout(() => document.addEventListener('mousedown', _onDocDown, true), 0);
   }
 
   return {
@@ -3351,6 +3461,8 @@ window.WATags = (function () {
     getColor,
     chipHtml,
     inboxHtml,
+    openEditor,
+    closeEditor,
   };
 })();
 
@@ -3398,8 +3510,16 @@ window.WhatsAppCRM = {
         }
     },
     
-    editDealTags() {
-        // Etiquetas UI removida — dados deal_tags permanecem no backend
+    editDealTags(chatId, currentTags, ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        if (!chatId) return;
+        if (window.WATags && typeof WATags.openEditor === 'function') {
+            const anchor = ev && (ev.currentTarget || ev.target);
+            WATags.openEditor(chatId, currentTags || '', anchor);
+            return;
+        }
+        const val = prompt('Etiquetas (separadas por vírgula):', currentTags || '');
+        if (val !== null) this.updateDeal(chatId, { deal_tags: val });
     },
     
     editNextAction(chatId, currentDate) {

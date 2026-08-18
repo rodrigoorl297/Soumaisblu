@@ -165,12 +165,30 @@ const LeadsDB = {
     // 3) Semana atual (progresso / trabalhados da semana)
     merge(await this.getLeadsByUserAndWeek(userId, weekNumber, year).catch(() => []));
 
-    // 4) Fallback: últimos atribuídos (mais recentes primeiro)
+    // 4) Trabalhados recentemente — senão somem da mesa ao marcar (assigned_date != hoje)
+    const yestDate = new Date(today + 'T12:00:00');
+    yestDate.setDate(yestDate.getDate() - 1);
+    const yest = this._toLocalDateStr(yestDate) || today;
+    merge(await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${uid}&completed_at=gte.${encodeURIComponent(yest)}&select=*&order=completed_at.desc&limit=500`
+    ).catch(() => []));
+
+    // 5) Fallback: últimos atribuídos (mais recentes primeiro)
     if (byId.size === 0) {
       merge(await this.getLeadsByUser(userId).catch(() => []));
     }
 
     return this._filterDeskLeads([...byId.values()], today);
+  },
+
+  _completedLocalDate(v) {
+    const s = String(v || '').trim();
+    if (!s) return '';
+    if (/T|Z|[+-]\d{2}:\d{2}$/.test(s)) {
+      const dt = new Date(s);
+      return Number.isNaN(dt.getTime()) ? this._normDate(s) : this._toLocalDateStr(dt);
+    }
+    return this._normDate(s);
   },
 
   _filterDeskLeads(leads, todayStr) {
@@ -191,7 +209,7 @@ const LeadsDB = {
         return false;
       }
       if (l.completed_at) {
-        const completedLocal = this._normDate(l.completed_at) || this._toLocalDateStr(new Date(l.completed_at));
+        const completedLocal = this._completedLocalDate(l.completed_at);
         if (completedLocal === today) return true;
       }
       return false;
@@ -221,14 +239,64 @@ const LeadsDB = {
     return this.WORKED_STATUSES.includes(status);
   },
 
-  async markLeadAs(id, status, notes = '') {
+  _parseExtraData(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) {
+        return {};
+      }
+    }
+    return typeof raw === 'object' && !Array.isArray(raw) ? { ...raw } : {};
+  },
+
+  async _getLeadExtra(id) {
+    const rows = await supaReq('GET', 'leads', null, `?id=eq.${encodeURIComponent(id)}&select=id,extra_data&limit=1`).catch(() => []);
+    return this._parseExtraData(rows?.[0]?.extra_data);
+  },
+
+  leadTags(lead) {
+    const extra = this._parseExtraData(lead?.extra_data);
+    const raw = extra.etiquetas || extra.tags || extra.etiqueta || extra.LED || extra.led || [];
+    if (Array.isArray(raw)) return raw.map((t) => String(t).trim()).filter(Boolean);
+    return String(raw).split(',').map((t) => t.trim()).filter(Boolean);
+  },
+
+  leadLastCall(lead) {
+    const extra = this._parseExtraData(lead?.extra_data);
+    const calls = Array.isArray(extra.calls) ? extra.calls : [];
+    return calls[0] || null;
+  },
+
+  async mergeLeadExtra(id, patch, localExtra = null) {
+    const base = this._parseExtraData(localExtra);
+    const fresh = await this._getLeadExtra(id).catch(() => base);
+    const merged = { ...base, ...fresh, ...(patch || {}) };
+    if (Array.isArray(fresh.calls) && !Array.isArray(patch?.calls)) merged.calls = fresh.calls;
+    if (patch && Object.prototype.hasOwnProperty.call(patch, 'etiquetas')) merged.etiquetas = patch.etiquetas;
+    await this.updateLead(id, { extra_data: merged });
+    return merged;
+  },
+
+  async saveLeadNotesAndTags(id, notes, tags, localExtra = null) {
+    const extra = await this.mergeLeadExtra(id, { etiquetas: Array.isArray(tags) ? tags : [] }, localExtra);
+    const updated = await this.updateLead(id, { notes: notes == null ? '' : String(notes), extra_data: extra });
+    return { lead: updated, extra };
+  },
+
+  async markLeadAs(id, status, notes = '', extraData = null) {
     const updates = { status };
-    if (notes) updates.notes = notes;
+    updates.notes = notes == null ? '' : String(notes);
     if (this.isWorkedStatus(status)) {
       updates.completed_at = new Date().toISOString();
     }
     if (status === 'pending') {
       updates.completed_at = null;
+    }
+    if (extraData && typeof extraData === 'object') {
+      updates.extra_data = extraData;
     }
     const updated = await this.updateLead(id, updates);
     const uid = updated?.assigned_to;
@@ -866,6 +934,53 @@ const LeadsDB = {
     return data;
   },
 
+  _dialHistoryKey(userId) {
+    const uid = userId || (typeof Auth !== 'undefined' ? Auth.getSession()?.id : '') || 'anon';
+    return 'le_dial_history_' + uid;
+  },
+
+  getDialHistory(userId, limit = 20) {
+    try {
+      const raw = localStorage.getItem(this._dialHistoryKey(userId));
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.slice(0, limit) : [];
+    } catch (_) {
+      return [];
+    }
+  },
+
+  _appendLocalDialHistory(entry, userId) {
+    const list = this.getDialHistory(userId, 40);
+    list.unshift(entry);
+    try {
+      localStorage.setItem(this._dialHistoryKey(userId), JSON.stringify(list.slice(0, 40)));
+    } catch (_) { /* ignore */ }
+  },
+
+  async logCall(leadId, phone, meta = {}) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return null;
+    const entry = {
+      phone: digits,
+      at: new Date().toISOString(),
+      via: meta.via || 'click2call',
+      method: meta.method || '',
+    };
+    this._appendLocalDialHistory({ ...entry, lead_id: leadId || '' }, meta.user_id);
+    if (!leadId) return entry;
+    try {
+      const rows = await supaReq('GET', 'leads', null, `?id=eq.${encodeURIComponent(leadId)}&select=id,extra_data&limit=1`);
+      const row = rows?.[0];
+      if (!row) return entry;
+      const extra = this._parseExtraData(row.extra_data);
+      const calls = Array.isArray(extra.calls) ? extra.calls.slice() : [];
+      calls.unshift(entry);
+      extra.calls = calls.slice(0, 40);
+      await this.updateLead(leadId, { extra_data: extra });
+    } catch (_) { /* histórico local já gravado */ }
+    return entry;
+  },
+
   /**
    * @param {{ lead_id?: string, phone_field?: string, src?: string, dst?: string }} opts
    */
@@ -884,6 +999,12 @@ const LeadsDB = {
     if (data.method === 'sip' && data.dial_uri) {
       this.openSoftphoneDial(data);
     }
+    const dst = String(data.dst || opts.dst || '').trim();
+    await this.logCall(opts.lead_id || null, dst, {
+      via: 'click2call',
+      method: data.method || '',
+      user_id: session.id,
+    }).catch(() => null);
     return data;
   },
 

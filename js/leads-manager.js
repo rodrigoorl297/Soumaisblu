@@ -1131,13 +1131,13 @@ async function openManageLeadsModal() {
   _updateBulkActionBar();
 
   const tbody = document.getElementById('manageLeadsTbody');
-  if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:24px;">Carregando leads do lote...</td></tr>';
+  if (tbody) tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:24px;">Carregando leads do lote...</td></tr>';
 
   try {
     _manageLeadsList = await LeadsDB.getLeads(_currentBatch.id, { limit: 50000 });
     renderManageLeadsTable();
   } catch (e) {
-    if (tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger" style="padding:24px;">Erro ao carregar leads: ${_esc(e.message)}</td></tr>`;
+    if (tbody) tbody.innerHTML = `<tr><td colspan="10" class="text-center text-danger" style="padding:24px;">Erro ao carregar leads: ${_esc(e.message)}</td></tr>`;
   }
 }
 
@@ -1161,7 +1161,10 @@ function renderManageLeadsTable() {
       const matchName = String(l.name || '').toLowerCase().includes(q);
       const matchCpf = String(l.cpf || '').includes(q);
       const matchPhone = String(l.phone || '').includes(q);
-      if (!matchName && !matchCpf && !matchPhone) return false;
+      const matchTags = (typeof LeadsDB !== 'undefined' && LeadsDB.leadTags)
+        ? LeadsDB.leadTags(l).join(' ').toLowerCase().includes(q)
+        : false;
+      if (!matchName && !matchCpf && !matchPhone && !matchTags) return false;
     }
     if (statusF && (l.status || 'pending') !== statusF) return false;
     if (userF !== '') {
@@ -1175,7 +1178,7 @@ function renderManageLeadsTable() {
   });
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted" style="padding:32px;">Nenhum lead encontrado com os filtros selecionados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted" style="padding:32px;">Nenhum lead encontrado com os filtros selecionados.</td></tr>';
     return;
   }
 
@@ -1191,16 +1194,32 @@ function renderManageLeadsTable() {
       ? `<span class="badge badge-accent" style="font-weight:800;font-size:11px;">⭐ ${_esc(scoreVal)}</span>`
       : '<span class="text-muted">—</span>';
 
+    const extra = (typeof LeadsDB !== 'undefined' && LeadsDB._parseExtraData)
+      ? LeadsDB._parseExtraData(lead.extra_data)
+      : (lead.extra_data && typeof lead.extra_data === 'object' ? lead.extra_data : {});
+    const tags = (typeof LeadsDB !== 'undefined' && LeadsDB.leadTags) ? LeadsDB.leadTags(lead) : [];
+    const lastCall = (typeof LeadsDB !== 'undefined' && LeadsDB.leadLastCall) ? LeadsDB.leadLastCall(lead) : null;
+    const tagsHtml = tags.length
+      ? tags.map((t) => `<span class="le-tag-chip">${_esc(t)}</span>`).join(' ')
+      : '<span class="text-muted">—</span>';
+    const callHtml = lastCall?.phone
+      ? `${_esc(lastCall.phone)}${lastCall.at ? `<div style="font-size:11px;color:var(--color-text-muted);">${_esc(new Date(lastCall.at).toLocaleString('pt-BR'))}</div>` : ''}`
+      : '<span class="text-muted">—</span>';
+    const notesHint = lead.notes ? `<div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">📝 ${_esc(String(lead.notes).slice(0, 80))}</div>` : '';
+
     return `
       <tr>
         <td><input type="checkbox" value="${lead.id}" ${isChecked ? 'checked' : ''} onchange="toggleSelectManageLead('${lead.id}', this.checked)"/></td>
         <td>
           <div style="font-weight:700;">${_esc(lead.name || 'Lead sem nome')}</div>
           ${lead.orgao ? `<div style="font-size:11px;color:var(--color-text-muted);">${_esc(lead.orgao)}</div>` : ''}
+          ${notesHint}
         </td>
         <td>${_esc(LeadsImport.formatCPF(lead.cpf) || '—')}</td>
         <td>${scoreBadge}</td>
-        <td>${_esc(lead.phone || '—')}</td>
+        <td>${_esc(lead.phone || extra.phone2 || '—')}</td>
+        <td><div class="le-tag-row" style="margin-top:0;">${tagsHtml}</div></td>
+        <td>${callHtml}</td>
         <td><span class="badge badge-${statusObj.color}">${statusObj.icon} ${statusObj.label}</span></td>
         <td>${sellerName}</td>
         <td style="text-align:right;">
@@ -1214,7 +1233,7 @@ function renderManageLeadsTable() {
   if (filtered.length > RENDER_LIMIT) {
     rowsHtml += `
       <tr>
-        <td colspan="7" class="text-center text-muted" style="padding:12px;background:var(--color-surface-2);font-weight:600;font-size:12px;">
+        <td colspan="10" class="text-center text-muted" style="padding:12px;background:var(--color-surface-2);font-weight:600;font-size:12px;">
           Exibindo os primeiros ${RENDER_LIMIT} de ${filtered.length.toLocaleString('pt-BR')} leads. Use a busca ou os filtros para visualizar qualquer lead específico.
         </td>
       </tr>

@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="../css/variables.css?v=1781704178"/>
   <link rel="stylesheet" href="../css/global.css?v=modal-bs1"/>
   <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
-  <link rel="stylesheet" href="../css/leads.css?v=side-nav1"/>
+  <link rel="stylesheet" href="../css/leads.css?v=desk-gestao2"/>
   <style>
     body.leads-app.leads-employee {
       margin: 0;
@@ -445,6 +445,7 @@
               <button type="button" class="btn btn-success" id="btnLeDial" onclick="callManualNumber()">📞 Ligar</button>
             </div>
             <div class="small text-muted mt-2 mb-0">1º toca no seu telefone do perfil · ao atender, chama o número digitado.</div>
+            <div id="leDialHistory" class="le-dial-hist"></div>
           </div>
         </div>
 
@@ -535,8 +536,17 @@
       <div id="modalLeadDetails"></div>
 
       <div class="form-group mt-md">
+        <label>Etiquetas</label>
+        <div id="modalLeadTags"></div>
+      </div>
+
+      <div class="form-group mt-md">
         <label for="modalNotes">Observações</label>
-        <textarea class="form-control" id="modalNotes" placeholder="Anotações sobre o atendimento..."></textarea>
+        <textarea class="form-control" id="modalNotes" placeholder="Anotações sobre o atendimento..." onblur="persistModalLeadMeta()"></textarea>
+      </div>
+
+      <div class="mt-2">
+        <button type="button" class="btn btn-primary btn-sm" onclick="persistModalLeadMeta()">💾 Salvar etiquetas e observações</button>
       </div>
 
       <div class="row g-2 mt-3">
@@ -567,7 +577,7 @@
   <script src="../js/config.js?v=nodelete-demo1"></script>
   <script src="../js/db.js?v=nodelete-demo1"></script>
   <script src="../js/auth.js?v=1781813000"></script>
-  <script src="../js/leads-db.js?v=import-chunk1"></script>
-  <script src="../js/leads-employee.js?v=massa-order1"></script>
+  <script src="../js/leads-db.js?v=desk-gestao2"></script>
+  <script src="../js/leads-employee.js?v=desk-gestao2"></script>
 </body>
 </html>

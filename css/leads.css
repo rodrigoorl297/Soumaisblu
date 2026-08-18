@@ -1002,3 +1002,79 @@ body.leads-app .app-layout .nav-item.active {
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+.le-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.le-tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  font-size: 11px;
+  font-weight: 700;
+}
+.le-tag-chip--edit { padding-right: 4px; }
+.le-tag-x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 2px;
+}
+.le-tag-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.le-tag-preset {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.le-tag-preset.is-on {
+  background: #fff7ed;
+  border-color: #f97316;
+  color: #9a3412;
+}
+.le-dial-hist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.le-dial-hist-label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.le-dial-chip {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-2);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.le-dial-chip span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  margin-left: 4px;
+}

@@ -10,6 +10,9 @@ let _weekProgress = [];
 let _currentLeadId = null;
 let _currentFilter = 'all';
 let _massCallRunning = false;
+let _modalTags = [];
+const LEAD_TAG_PRESETS = ['Lead', 'Quente', 'Retornar', 'WhatsApp', 'Não atende'];
+const HIDDEN_EXTRA_KEYS = new Set(['calls', 'etiquetas', 'tags', 'phone2']);
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -63,6 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Load data
     await loadTodayData();
     await loadWeekOverview();
+    renderDialHistory();
 
     // Show app
     document.getElementById('globalLoader').style.display = 'none';
@@ -199,9 +203,9 @@ function renderLeads() {
 
     const leadScore = lead.score || lead.extra_data?.score;
     return `
-      <div class="lead-card ${cardClass}" id="lead-${lead.id}">
+      <div class="lead-card ${cardClass}${_massaDialedIds.has(String(lead.id)) ? ' le-massa-dialed' : ''}" id="lead-${lead.id}"${_massaDialedIds.has(String(lead.id)) ? ' style="background:rgba(34,197,94,0.14);border-color:#22c55e;box-shadow:inset 4px 0 0 #22c55e;"' : ''}>
         <div class="lead-info">
-          <div class="lead-name">${_esc(lead.name || 'Sem nome')}</div>
+          <div class="lead-name">${_esc(lead.name || 'Sem nome')}${_massaDialedIds.has(String(lead.id)) ? ' <span style="color:#16a34a;font-size:12px;font-weight:700;">● discado</span>' : ''}</div>
           <div class="lead-details">
             ${lead.phone ? `<span>📞 ${_esc(lead.phone)}</span>` : ''}
             ${lead.phone2 ? `<span>📞 ${_esc(lead.phone2)}</span>` : ''}
@@ -209,7 +213,9 @@ function renderLeads() {
             ${lead.cpf ? `<span>📄 ${_maskCPF(lead.cpf)}</span>` : ''}
             ${leadScore ? `<span style="font-weight:800;color:var(--color-primary);">⭐ Score: ${_esc(leadScore)}</span>` : ''}
           </div>
-          ${lead.notes ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">📝 ${_esc(lead.notes)}</div>` : ''}
+            ${_leadTagsHtml(lead)}
+            ${lead.notes ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">📝 ${_esc(lead.notes)}</div>` : ''}
+            ${_lastCallHtml(lead)}
         </div>
         <div class="lead-actions">
           ${hasPhone ? `
@@ -338,6 +344,159 @@ function renderMetrics() {
 
 window.switchLeadsTab = switchLeadsTab;
 
+function _leadExtra(lead) {
+  return (typeof LeadsDB !== 'undefined' && LeadsDB._parseExtraData)
+    ? LeadsDB._parseExtraData(lead?.extra_data)
+    : (lead?.extra_data && typeof lead.extra_data === 'object' ? lead.extra_data : {});
+}
+
+function _leadTagsList(lead) {
+  if (typeof LeadsDB !== 'undefined' && LeadsDB.leadTags) return LeadsDB.leadTags(lead);
+  const extra = _leadExtra(lead);
+  const raw = extra.etiquetas || extra.tags || [];
+  if (Array.isArray(raw)) return raw.map((t) => String(t).trim()).filter(Boolean);
+  return String(raw).split(',').map((t) => t.trim()).filter(Boolean);
+}
+
+function _lastCallHtml(lead) {
+  const call = (typeof LeadsDB !== 'undefined' && LeadsDB.leadLastCall) ? LeadsDB.leadLastCall(lead) : null;
+  if (!call || !call.phone) return '';
+  return `<div style="font-size:12px;color:#166534;margin-top:4px;font-weight:600;">📞 ${_esc(call.phone)}${call.at ? ` · ${_esc(_fmtCallWhen(call.at))}` : ''}</div>`;
+}
+
+function _leadTagsHtml(lead) {
+  const tags = _leadTagsList(lead);
+  if (!tags.length) return '';
+  return `<div class="le-tag-row">${tags.map((t) => `<span class="le-tag-chip">${_esc(t)}</span>`).join('')}</div>`;
+}
+
+function _fmtExtraVal(v) {
+  if (v == null) return '';
+  if (typeof v === 'object') {
+    if (Array.isArray(v)) {
+      return v.map((x) => (x && typeof x === 'object' ? (x.phone || JSON.stringify(x)) : String(x))).join(', ');
+    }
+    return JSON.stringify(v);
+  }
+  return String(v);
+}
+
+function _fmtCallWhen(iso) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function renderDialHistory() {
+  const el = document.getElementById('leDialHistory');
+  if (!el || typeof LeadsDB === 'undefined' || !LeadsDB.getDialHistory) return;
+  const hist = LeadsDB.getDialHistory(_userId, 8);
+  if (!hist.length) {
+    el.innerHTML = '';
+    return;
+  }
+  el.innerHTML = `<div class="le-dial-hist-label">Últimos números discados</div>` +
+    hist.map((h) => {
+      const phone = String(h.phone || '').replace(/\D/g, '');
+      const when = _fmtCallWhen(h.at);
+      return `<button type="button" class="le-dial-chip" onclick="fillDialNumber('${_esc(phone)}')" title="${_esc(when)}">${_esc(phone)}${when ? ` <span>${_esc(when)}</span>` : ''}</button>`;
+    }).join('');
+}
+
+function fillDialNumber(phone) {
+  const input = document.getElementById('leDialNumber');
+  if (input) {
+    input.value = String(phone || '').replace(/\D/g, '');
+    input.focus();
+  }
+}
+
+async function _refreshLeadExtra(leadId) {
+  if (!leadId || typeof LeadsDB === 'undefined') return;
+  try {
+    const extra = await LeadsDB._getLeadExtra(leadId);
+    const idx = (_todayLeads || []).findIndex((l) => l.id === leadId);
+    if (idx !== -1) {
+      _todayLeads[idx].extra_data = extra;
+      renderLeads();
+      const modal = document.getElementById('leadModal');
+      if (_currentLeadId === leadId && modal?.classList.contains('open')) {
+        openLeadModal(leadId);
+      }
+    }
+  } catch (_) { /* ignore */ }
+}
+
+function renderModalTags() {
+  const box = document.getElementById('modalLeadTags');
+  if (!box) return;
+  const chips = _modalTags.map((t, i) =>
+    `<span class="le-tag-chip le-tag-chip--edit">${_esc(t)}<button type="button" class="le-tag-x" onclick="removeLeadTag(${i})" aria-label="Remover">×</button></span>`
+  ).join('');
+  const presets = LEAD_TAG_PRESETS.map((t) => {
+    const on = _modalTags.some((x) => String(x).toLowerCase() === t.toLowerCase());
+    return `<button type="button" class="le-tag-preset${on ? ' is-on' : ''}" onclick="toggleLeadTag('${t.replace(/'/g, "\\'")}')">${_esc(t)}</button>`;
+  }).join('');
+  box.innerHTML = `
+    <div class="le-tag-row">${chips || '<span class="text-muted" style="font-size:12px;">Nenhuma etiqueta ainda.</span>'}</div>
+    <div class="le-tag-presets">${presets}</div>
+    <div class="d-flex gap-2 mt-2">
+      <input type="text" class="form-control form-control-sm" id="modalTagInput" placeholder="Nova etiqueta (ex: Lead)" maxlength="32" onkeydown="if(event.key==='Enter'){event.preventDefault();addLeadTagFromInput();}">
+      <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addLeadTagFromInput()">Adicionar</button>
+    </div>
+  `;
+}
+
+function toggleLeadTag(tag) {
+  const name = String(tag || '').trim();
+  if (!name) return;
+  const idx = _modalTags.findIndex((t) => t.toLowerCase() === name.toLowerCase());
+  if (idx >= 0) _modalTags.splice(idx, 1);
+  else _modalTags.push(name);
+  renderModalTags();
+  persistModalLeadMeta();
+}
+
+function addLeadTagFromInput() {
+  const input = document.getElementById('modalTagInput');
+  const name = String(input?.value || '').trim();
+  if (!name) return;
+  if (!_modalTags.some((t) => t.toLowerCase() === name.toLowerCase())) _modalTags.push(name);
+  if (input) input.value = '';
+  renderModalTags();
+  persistModalLeadMeta();
+}
+
+function removeLeadTag(idx) {
+  _modalTags.splice(idx, 1);
+  renderModalTags();
+  persistModalLeadMeta();
+}
+
+async function persistModalLeadMeta() {
+  if (!_currentLeadId) return;
+  const notes = document.getElementById('modalNotes')?.value?.trim() || '';
+  const idx = _todayLeads.findIndex((l) => l.id === _currentLeadId);
+  const lead = idx !== -1 ? _todayLeads[idx] : null;
+  try {
+    const saved = await LeadsDB.saveLeadNotesAndTags(_currentLeadId, notes, _modalTags.slice(), lead?.extra_data);
+    if (idx !== -1) {
+      _todayLeads[idx].notes = notes;
+      _todayLeads[idx].extra_data = saved?.extra || _todayLeads[idx].extra_data;
+    }
+    renderLeads();
+  } catch (e) {
+    console.error('[Etiquetas]', e);
+    alert('Não foi possível salvar etiquetas/observações: ' + (e.message || e));
+  }
+}
+
+window.fillDialNumber = fillDialNumber;
+window.toggleLeadTag = toggleLeadTag;
+window.addLeadTagFromInput = addLeadTagFromInput;
+window.removeLeadTag = removeLeadTag;
+window.persistModalLeadMeta = persistModalLeadMeta;
+
 /* ── Lead Modal ── */
 function openLeadModal(leadId) {
   _currentLeadId = leadId;
@@ -346,6 +505,12 @@ function openLeadModal(leadId) {
 
   document.getElementById('modalLeadName').textContent = lead.name || 'Lead';
   document.getElementById('modalNotes').value = lead.notes || '';
+  _modalTags = _leadTagsList(lead);
+  renderModalTags();
+
+  const extra = _leadExtra(lead);
+  const extraKeys = Object.keys(extra).filter((k) => !HIDDEN_EXTRA_KEYS.has(k));
+  const calls = Array.isArray(extra.calls) ? extra.calls : [];
 
   // Details
   const details = document.getElementById('modalLeadDetails');
@@ -355,19 +520,30 @@ function openLeadModal(leadId) {
       ${_detailItemCall('📞 Telefone 2', lead.phone2, lead.id, 'phone2')}
       ${_detailItem('🏢 Órgão', lead.orgao)}
       ${_detailItem('📄 CPF', lead.cpf ? _maskCPF(lead.cpf) : '')}
-      ${_detailItem('⭐ Score', lead.score || lead.extra_data?.score)}
+      ${_detailItem('⭐ Score', lead.score || extra.score)}
       ${_detailItem('👩 Nome da Mãe', lead.mother_name)}
     </div>
-    ${Object.keys(lead.extra_data || {}).length ? `
+    ${calls.length ? `
+      <div style="margin-top:8px;padding:10px 12px;background:var(--color-surface-2);border-radius:var(--radius-sm);">
+        <div style="font-size:11px;color:var(--color-text-muted);font-weight:700;text-transform:uppercase;margin-bottom:6px;">Ligações deste lead</div>
+        ${calls.slice(0, 8).map((c) =>
+          `<div style="font-size:13px;display:flex;justify-content:space-between;gap:8px;padding:2px 0;">
+            <span>📞 ${_esc(c.phone || '')}</span>
+            <span class="text-muted">${_esc(_fmtCallWhen(c.at))}</span>
+          </div>`
+        ).join('')}
+      </div>
+    ` : ''}
+    ${extraKeys.length ? `
       <details style="margin-top:8px;">
         <summary style="cursor:pointer;font-size:13px;font-weight:700;color:var(--color-text-secondary);">
-          Dados Extras (${Object.keys(lead.extra_data).length})
+          Dados Extras (${extraKeys.length})
         </summary>
         <div style="margin-top:8px;padding:12px;background:var(--color-surface-2);border-radius:var(--radius-sm);font-size:13px;">
-          ${Object.entries(lead.extra_data).map(([k, v]) =>
+          ${extraKeys.map((k) =>
             `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--color-border);">
               <span class="text-muted">${_esc(k)}</span>
-              <span style="font-weight:600;">${_esc(String(v))}</span>
+              <span style="font-weight:600;">${_esc(_fmtExtraVal(extra[k]))}</span>
             </div>`
           ).join('')}
         </div>
@@ -392,21 +568,30 @@ async function setLeadStatus(status) {
   if (!_currentLeadId) return;
 
   const notes = document.getElementById('modalNotes').value.trim();
+  const idx = _todayLeads.findIndex(l => l.id === _currentLeadId);
+  const lead = idx !== -1 ? _todayLeads[idx] : null;
+  const extra = _leadExtra(lead);
+  extra.etiquetas = _modalTags.slice();
 
   try {
-    await LeadsDB.markLeadAs(_currentLeadId, status, notes);
+    const fresh = await LeadsDB._getLeadExtra(_currentLeadId).catch(() => extra);
+    const merged = { ...fresh, ...extra, etiquetas: extra.etiquetas };
+    if (Array.isArray(fresh.calls) && !Array.isArray(extra.calls)) merged.calls = fresh.calls;
+    await LeadsDB.markLeadAs(_currentLeadId, status, notes, merged);
 
-    // Update local state
-    const idx = _todayLeads.findIndex(l => l.id === _currentLeadId);
     if (idx !== -1) {
       _todayLeads[idx].status = status;
       _todayLeads[idx].notes = notes;
+      _todayLeads[idx].extra_data = merged;
       if (LeadsDB.isWorkedStatus(status)) {
         _todayLeads[idx].completed_at = new Date().toISOString();
+      } else if (status === 'pending') {
+        _todayLeads[idx].completed_at = null;
       }
     }
 
     closeLeadModal();
+    _currentFilter = 'all';
     await loadTodayData(); // Refresh counters and cards
     await loadWeekOverview();
 
@@ -499,6 +684,8 @@ async function callLeadPhone(leadId, phoneField) {
     const r = await LeadsDB.nextBillingClick2Call({ lead_id: leadId, phone_field: field });
     if (typeof showToast === 'function') showToast(r.message || 'Discagem enviada ao MicroSIP.', 'success');
     else alert(r.message || 'Discagem enviada ao MicroSIP.');
+    renderDialHistory();
+    await _refreshLeadExtra(leadId);
   } catch (e) {
     alert(e.message || 'Falha ao ligar');
   } finally {
@@ -519,9 +706,11 @@ async function callManualNumber() {
   if (btn) { btn.disabled = true; btn.textContent = 'Ligando…'; }
   try {
     if (typeof showLoading === 'function') showLoading('Abrindo MicroSIP…');
-    const r = await LeadsDB.nextBillingClick2Call({ dst: num });
+    const r = await LeadsDB.nextBillingClick2Call({ dst: num, lead_id: _currentLeadId || undefined });
     if (typeof showToast === 'function') showToast(r.message || 'Discagem enviada ao MicroSIP.', 'success');
     else alert(r.message || 'Discagem enviada ao MicroSIP.');
+    renderDialHistory();
+    if (_currentLeadId) await _refreshLeadExtra(_currentLeadId);
   } catch (e) {
     alert(e.message || 'Falha ao ligar');
   } finally {
@@ -534,6 +723,7 @@ async function callManualNumber() {
 let _massaRunning = false;
 let _massaStop = false;
 let _massaWaitResolve = null;
+const _massaDialedIds = new Set();
 
 /** Mesma ordem da tela: data de atribuição → criação → nome. */
 function _sortLeadsDeskOrder(leads) {
@@ -546,6 +736,17 @@ function _sortLeadsDeskOrder(leads) {
     if (ca !== cb) return ca.localeCompare(cb);
     return String(a?.name || '').localeCompare(String(b?.name || ''), 'pt-BR');
   });
+}
+
+function _massaMarkDialed(leadId) {
+  if (!leadId) return;
+  _massaDialedIds.add(String(leadId));
+  const el = document.getElementById('lead-' + leadId);
+  if (!el) return;
+  el.classList.add('le-massa-dialed');
+  el.style.background = 'rgba(34, 197, 94, 0.14)';
+  el.style.borderColor = '#22c55e';
+  el.style.boxShadow = 'inset 4px 0 0 #22c55e';
 }
 
 function _massaClearHighlight() {
@@ -650,6 +851,7 @@ async function ligarEmMassa() {
       try {
         await LeadsDB.nextBillingClick2Call({ lead_id: lead.id, phone_field: field });
         ok++;
+        _massaMarkDialed(lead.id);
         // #region agent log
         fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'massa-order',hypothesisId:'M2',location:'leads-employee.js:ligarEmMassa:ok',message:'dial ok',data:{i:i+1,total:queue.length,leadId:lead.id,name:lead.name||null},timestamp:Date.now()})}).catch(()=>{});
         // #endregion

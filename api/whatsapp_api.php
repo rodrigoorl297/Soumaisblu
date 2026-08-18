@@ -5300,7 +5300,7 @@ wa_debug_log('reset_session', [
             }
             $sql .= ' WHERE id = ? AND user_id = ?';
             $params[] = $chatId;
-            $params[] = $userId;
+            $params[] = $targetUserId;
             
             $st = $pdo->prepare($sql);
             $st->execute($params);
