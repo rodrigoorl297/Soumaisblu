@@ -51,27 +51,25 @@
     body.leads-app.leads-employee .le-side-brand {
       display: flex;
       align-items: center;
-      gap: 14px;
-      padding: 22px 16px;
+      gap: 12px;
+      padding: 18px 16px;
       border-bottom: 1px solid rgba(255,255,255,.08);
-      min-height: 100px;
     }
     body.leads-app.leads-employee .le-side-logo {
-      width: 80px;
-      height: 80px;
-      border-radius: 18px;
-      background: transparent;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
       overflow: hidden;
+      flex-shrink: 0;
+      background: transparent;
+      box-shadow: none;
       padding: 0;
     }
     body.leads-app.leads-employee .le-side-logo img {
       width: 100%;
       height: 100%;
-      object-fit: contain;
+      object-fit: cover;
+      object-position: center 18%;
       display: block;
     }
     body.leads-app.leads-employee .le-metric-grid {
@@ -180,9 +178,10 @@
     body.leads-app.leads-employee .le-side-brand-text {
       font-family: 'Nunito', sans-serif;
       font-weight: 900;
-      font-size: 15px;
-      line-height: 1.15;
+      font-size: 17px;
+      line-height: 1.1;
       letter-spacing: .02em;
+      white-space: nowrap;
     }
     body.leads-app.leads-employee .le-side-brand-text span {
       color: #fb923c;
@@ -191,7 +190,8 @@
       font-size: 11px;
       color: rgba(255,255,255,.45);
       font-weight: 600;
-      margin-top: 2px;
+      margin-top: 3px;
+      line-height: 1.2;
     }
     body.leads-app.leads-employee .le-side-nav {
       flex: 1;
@@ -368,7 +368,7 @@
     <aside class="le-sidenav" id="sidebar" aria-label="Navegação">
       <div class="le-side-brand">
         <div class="le-side-logo">
-          <img src="../images/blu-logo.png" width="80" height="80" alt="blu"/>
+          <img src="../images/logo.png" width="40" height="40" alt="SOU+BLU"/>
         </div>
         <div>
           <div class="le-side-brand-text">SOU <span>+BLU</span></div>
@@ -472,7 +472,8 @@
                   <button type="button" class="btn btn-success btn-sm" id="btnLigarMassa" onclick="ligarEmMassa()" title="Liga os pendentes na ordem da lista, um a um">
                     📞 Ligar em massa
                   </button>
-                  <button type="button" class="btn btn-primary btn-sm d-none" id="btnProximoMassa" onclick="proximoLigarMassa()">➡️ Próximo</button>
+                  <button type="button" class="btn btn-outline-success btn-sm d-none" id="btnEmLigacaoMassa" onclick="emLigacaoMassa()" title="A pessoa atendeu — não passar para o próximo ainda">Em ligação</button>
+                  <button type="button" class="btn btn-primary btn-sm d-none" id="btnProximoMassa" onclick="proximoLigarMassa()" title="Ao terminar a ligação, vá para o próximo">➡️ Próximo</button>
                   <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btnPularMassa" onclick="pularLigarMassa()">Pular</button>
                   <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btnPararMassa" onclick="pararLigarMassa()">⏹ Parar</button>
                 </div>
@@ -567,7 +568,7 @@
   <script src="../js/config.js?v=nodelete-demo1"></script>
   <script src="../js/db.js?v=nodelete-demo1"></script>
   <script src="../js/auth.js?v=1781813000"></script>
-  <script src="../js/leads-db.js?v=import-chunk1"></script>
-  <script src="../js/leads-employee.js?v=massa-order1"></script>
+  <script src="../js/leads-db.js?v=sip9"></script>
+  <script src="../js/leads-employee.js?v=sip9"></script>
 </body>
 </html>

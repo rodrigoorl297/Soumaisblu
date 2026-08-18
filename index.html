@@ -13,10 +13,22 @@
   <link rel="stylesheet" href="css/variables.css?v=bs-tokens1"/>
   <link rel="stylesheet" href="css/global.css?v=modal-bs1"/>
   <link rel="stylesheet" href="css/login.css?v=1781704178"/>
+  <style>
+    /* Chrome autofill pintava o e-mail de azul e a senha de branco */
+    .form-group input:-webkit-autofill,
+    .form-group input:-webkit-autofill:hover,
+    .form-group input:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0 1000px #f9f9f9 inset !important;
+      -webkit-text-fill-color: #333 !important;
+      caret-color: #333;
+      border-color: #e0e0e0;
+      transition: background-color 99999s ease-out;
+    }
+  </style>
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
   <script src="js/db-connect.js?v=97c411dbstable4"></script>
   <script src="js/config.js?v=nodelete-demo1" defer></script>
-  <script src="js/db.js?v=nodelete-demo1" defer></script>
+  <script src="js/db.js?v=restore-flavia1" defer></script>
   <script src="js/br-holidays.js?v=1781704178" defer></script>
   <script src="js/attendance-penalty.js?v=1781704178" defer></script>
   <script src="js/vendor-tier-points.js?v=1781704178" defer></script>

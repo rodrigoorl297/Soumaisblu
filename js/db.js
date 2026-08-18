@@ -186,6 +186,9 @@
     },
   
     async init() {
+      this._stripLegacyDemoUsersLocal();
+      this.clearAllUsersCache();
+      if (typeof _cacheDel === 'function') _cacheDel('users');
       if (this.online) {
         await this._ensureOnlineUsersOnce();
         await this._purgeLegacyDemoUsersOnce().catch(() => null);
@@ -244,15 +247,25 @@
 
     /** IDs/e-mails de demo (@empresa.com) que o Excluir não “grudava” — seed recriava. */
     _legacyDemoUserIds() {
-      return ['back01', 'ger01', 'fin01', 'rh01', 'oper01', 'jur01', 'dir01', 'ouv01'];
+      return ['back01', 'ger01', 'fin01', 'rh01', 'oper01', 'jur01', 'dir01', 'ouv01', 'dev_owner'];
     },
 
     _isLegacyDemoUser(u) {
       if (!u) return false;
+      const email = String(u.email || '').toLowerCase();
+      if (email === 'flaviahonda@gmail.com' || email === 'gabi@blupromotora.com.br') return false;
       const id = String(u.id || '');
       if (this._legacyDemoUserIds().includes(id)) return true;
-      const email = String(u.email || '').toLowerCase();
-      return email.endsWith('@empresa.com');
+      if (email.endsWith('@empresa.com')) return true;
+      if (email === 'desenvolvedor@soublu.com') return true;
+      const mat = String(u.matricula || '').toUpperCase();
+      if (['DEV001', 'FIN001', 'BCK001', 'DIR001', 'JUR001', 'RH001', 'GER001', 'OUV001', 'OPR001'].includes(mat)) return true;
+      const name = String(u.name || '').trim().toLowerCase();
+      return ['desenvolvedor', 'financeiro f', 'backoffice op', 'diretoria d', 'jurídico j', 'juridico j', 'gerência geral', 'gerencia geral'].includes(name);
+    },
+
+    _filterOutLegacyDemoUsers(list) {
+      return (list || []).filter((u) => !this._isLegacyDemoUser(u));
     },
 
     _stripLegacyDemoUsersLocal() {
@@ -271,11 +284,14 @@
      */
     async _purgeLegacyDemoUsersOnce() {
       if (!this.online) return;
-      const flagKey = 'soublu_demo_users_purged_v1';
+      const flagKey = 'soublu_demo_users_purged_v2';
       if (localStorage.getItem(flagKey) === '1') {
         try {
-          const probe = await supaReq('GET', 'users', null, '?id=eq.back01&select=id&limit=1');
-          if (!probe || !probe.length) return;
+          const probe = await supaReq('GET', 'users', null, '?id=eq.dev_owner&select=id&limit=1');
+          if (!probe || !probe.length) {
+            const probe2 = await supaReq('GET', 'users', null, '?id=eq.back01&select=id&limit=1');
+            if (!probe2 || !probe2.length) return;
+          }
         } catch (_) {
           return;
         }
@@ -797,7 +813,7 @@
             this.__allUsersBgRefresh = true;
             this.getAllUsers(true).finally(() => { this.__allUsersBgRefresh = false; });
           }
-          return this.__allUsersMem;
+          return this._filterOutLegacyDemoUsers(this.__allUsersMem);
         }
         if (!force && this.__allUsersInflight) {
           return this.__allUsersInflight;
@@ -816,13 +832,14 @@
             if (chunk.length < pageSize) break;
             offset += pageSize;
           }
+          const clean = this._filterOutLegacyDemoUsers(all);
           /* Descarta resultado se outro clear/fetch mais novo rodou no meio (ex.: após Excluir). */
           if (fetchToken !== (this.__allUsersFetchToken || 0)) {
-            return this.__allUsersMem || all;
+            return this._filterOutLegacyDemoUsers(this.__allUsersMem || clean);
           }
-          this.__allUsersMem = all;
+          this.__allUsersMem = clean;
           this.__allUsersMemAt = Date.now();
-          return all;
+          return clean;
         })();
         this.__allUsersInflight = run;
         try {
@@ -831,14 +848,14 @@
             new Promise((_, reject) => setTimeout(() => reject(new Error('users timeout')), 40000)),
           ]);
         } catch (e) {
-          if (this.__allUsersMem?.length) return this.__allUsersMem;
+          if (this.__allUsersMem?.length) return this._filterOutLegacyDemoUsers(this.__allUsersMem);
           console.warn('[DB] getAllUsers:', e);
           return [];
         } finally {
           if (this.__allUsersInflight === run) this.__allUsersInflight = null;
         }
       }
-      return this._lget(this.LK.users);
+      return this._filterOutLegacyDemoUsers(this._lget(this.LK.users));
     },
   
     async _reactivateUser(existingId, data) {
@@ -7609,7 +7626,6 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       // foram removidos — Excluir não “grudava” porque o seed recriava.
       return[
         {id:'fund_rodrigo',name:'Rodrigo Orlando',email:'rodrigo.orlando@soublu.com',password:'rodrigo123',matricula:'ROD001',department:'Direção',role:'fundador',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
-        {id:'dev_owner',name:'Desenvolvedor',email:'desenvolvedor@soublu.com',password:'dev123456',matricula:'DEV001',department:'Desenvolvimento',role:'desenvolvedor',admin_id:'fund_rodrigo',balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'master_sak01',name:'Lucas SAK',email:'lucas@sakpromotora.com.br',password:'master123',matricula:'SAK001',department:'Administracao',role:'master',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'ger_sak01',name:'Gerente Geral',email:'gerente@sakpromotora.com.br',password:'gerente123',matricula:'GRN001',department:'Gerência',role:'gerente',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},
         {id:'master01',name:'Master SOU+BLU',email:'master@soublu.com',password:'master123',matricula:'MST001',department:'Administração',role:'master',admin_id:null,balance:0,points:0,photo_url:'',face_hash:'',doc_verified:false,show_points:true,active:true,created_at:new Date().toISOString()},

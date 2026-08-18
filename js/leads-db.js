@@ -150,6 +150,9 @@ const LeadsDB = {
       for (const l of rows || []) {
         if (!l || !l.id) continue;
         if (l.batch_id && this._GHOST_BATCH_IDS.has(String(l.batch_id))) continue;
+        if (!l.phone2 && l.extra_data && typeof l.extra_data === 'object' && l.extra_data.phone2) {
+          l.phone2 = l.extra_data.phone2;
+        }
         byId.set(l.id, l);
       }
     };
@@ -820,7 +823,14 @@ const LeadsDB = {
     return d.getDay() !== 0 && d.getDay() !== 6;
   },
 
-  /* ── NextBilling Click2Call ── */
+  normalizeBrPhone(raw) {
+    let d = String(raw || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+    if (d.length >= 11 && d[0] === '0') d = d.slice(1);
+    if (d.length < 10 || d.length > 11) return '';
+    return d;
+  },
   _nextBillingApiBase() {
     const cfg = window.SOUBLU_CONFIG || {};
     const base = String(cfg.API_BASE_URL || cfg.SITE_URL || '').replace(/\/+$/, '');
@@ -880,41 +890,38 @@ const LeadsDB = {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || data.hint || `HTTP ${res.status}`);
-    // MicroSIP: abre discagem no softphone (conta Online, ex. blu-209)
-    if (data.method === 'sip' && data.dial_uri) {
-      this.openSoftphoneDial(data);
-    }
     return data;
   },
 
-  /** Dispara URI sip:/callto: para o MicroSIP (handler do Windows). */
-  openSoftphoneDial(data) {
-    const uri = String(data?.dial_uri || '').trim();
-    const uriHost = String(data?.dial_uri_host || '').trim();
-    const dst = String(data?.dst || '').trim();
-    if (!uri && !dst) return false;
-    const tryOpen = (href) => {
-      try {
-        const a = document.createElement('a');
-        a.href = href;
-        a.style.display = 'none';
+  /** Abre o MicroSIP só com o número (conta blu-209). Não usar numero@IP. */
+  openSoftphoneDialNow(rawNumber) {
+    const dst = this.normalizeBrPhone(rawNumber);
+    if (!dst) return false;
+    const href = 'sip:' + dst;
+    try {
+      let a = document.getElementById('leads-sip-anchor');
+      if (!a) {
+        a = document.createElement('a');
+        a.id = 'leads-sip-anchor';
+        a.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px';
         document.body.appendChild(a);
-        a.click();
-        a.remove();
-        return true;
-      } catch (_) {
-        try {
-          window.location.href = href;
-          return true;
-        } catch (__) {
-          return false;
-        }
       }
-    };
-    if (uri && tryOpen(uri)) return true;
-    if (uriHost && uriHost !== uri && tryOpen(uriHost)) return true;
-    if (dst && tryOpen('callto:' + dst)) return true;
-    if (dst && tryOpen('tel:' + dst)) return true;
-    return false;
+      a.setAttribute('href', href);
+      a.click();
+    } catch (_) { /* ignore */ }
+    try {
+      let iframe = document.getElementById('leads-sip-frame');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'leads-sip-frame';
+        iframe.title = 'sip-dial';
+        iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none';
+        iframe.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(iframe);
+      }
+      iframe.src = 'about:blank';
+      iframe.src = href;
+    } catch (_) { /* ignore */ }
+    return true;
   },
 };

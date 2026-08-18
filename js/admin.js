@@ -3271,7 +3271,8 @@ async function renderMasterPanel() {
     DB.getWithdrawals().catch(() => []),
   ]);
   /* Inativos/removidos ficam fora da lista principal (Excluir some da tela). */
-  const allUsers = (allUsersRaw || []).filter((u) => _masterUserIsActive(u));
+  const allUsers = (allUsersRaw || []).filter((u) => _masterUserIsActive(u)
+    && !(typeof DB !== 'undefined' && typeof DB._isLegacyDemoUser === 'function' && DB._isLegacyDemoUser(u)));
 
   const supervisors    = allUsers.filter(u => u.role === 'supervisor');
   const desenvolvedores = allUsers.filter(u => u.role === 'desenvolvedor');

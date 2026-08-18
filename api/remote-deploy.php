@@ -157,6 +157,7 @@ $allowed = [
     'api/migrate-users-columns.php',
     'api/migrate-users-acesso-clube.php',
     'api/migrate-users-cc-money.php',
+    'api/purge-demo-users.php',
     'api/migrate-finance-proposta-ops.php',
     'api/migrate-proposals-comissao.php',
     'api/migrate-bolao-copa.php',

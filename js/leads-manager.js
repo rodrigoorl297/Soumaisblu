@@ -91,6 +91,13 @@ function _updateUserUI(session) {
   if (nameEl) nameEl.textContent = session.name || 'Usuário';
   if (roleEl) roleEl.textContent = session.role || 'Gerente';
   if (avatarEl) avatarEl.textContent = (session.name || '?')[0].toUpperCase();
+  const telBtn = document.getElementById('btnLeadsTelefonia');
+  if (telBtn) telBtn.style.display = _canEditTelefonia(session) ? '' : 'none';
+}
+
+function _canEditTelefonia(session) {
+  const role = String(session?.role || '').toLowerCase();
+  return ['master', 'fundador', 'gerente', 'gerencia', 'desenvolvedor', 'admin'].includes(role);
 }
 
 /* ── Navigation ── */
@@ -965,6 +972,11 @@ function _showAlert(containerId, type, msg, replace = false) {
 
 /* ── Telefonia / NextBilling ── */
 async function openTelefoniaModal() {
+  const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+  if (!_canEditTelefonia(session)) {
+    alert('Apenas master, fundador ou gerente pode configurar a telefonia.');
+    return;
+  }
   const modal = document.getElementById('telefoniaModal');
   if (!modal) return;
   modal.classList.add('open');
@@ -1018,9 +1030,11 @@ async function openTelefoniaModal() {
         <div style="max-height:180px;overflow:auto;font-size:12px;">
           ${rows.map((u) => {
             const phone = String(u.phone || '').trim();
+            const digits = phone.replace(/\D/g, '');
+            const ok = soft ? (digits.length >= 2) : (digits.length >= 10 && digits.length <= 13);
             return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--color-border);">
               <span>${_esc(u.name || u.id)}</span>
-              <span style="color:${phone ? 'var(--color-text)' : 'var(--color-text-muted)'};">${phone ? _esc(phone) : (soft ? `padrão ${_esc(String(st.src_ramal || '—'))}` : 'sem telefone')}</span>
+              <span style="color:${ok ? 'var(--color-text)' : 'var(--color-danger)'};font-weight:${ok ? '500' : '700'};">${ok ? _esc(phone) : '⚠ sem telefone (Click2Call não liga)'}</span>
             </div>`;
           }).join('') || '<span class="text-muted">Nenhum funcionário listado.</span>'}
         </div>`;
@@ -1069,19 +1083,34 @@ async function testTelefoniaCall() {
   const src = String(document.getElementById('telefoniaTestSrc')?.value || '').trim();
   const dst = String(document.getElementById('telefoniaTestDst')?.value || '').trim();
   const ramal = String(document.getElementById('telefoniaSrcRamal')?.value || '').trim();
+  const mode = String(document.getElementById('telefoniaCallMode')?.value || 'softphone').trim();
   if (!dst) {
-    alert('Digite o número para testar (destino).');
+    alert('Digite o número para testar (destino), com DDD.');
     document.getElementById('telefoniaTestDst')?.focus();
     return;
   }
-  const origin = src || ramal || '(ramal / conta MicroSIP)';
-  if (!confirm(`Testar ligação via MicroSIP?\n\nConta softphone: ${origin}\nDestino: ${dst}\n\nO MicroSIP precisa estar Online.`)) return;
+  const origin = src || ramal || Auth.getSession()?.phone || '';
+  if (!origin && mode === 'cellphone') {
+    alert('Cadastre seu telefone no perfil para usar o Click2Call.');
+    return;
+  }
+  if (!confirm(
+    mode === 'softphone'
+      ? `Testar MicroSIP?\n\nDestino: ${dst}\n\nO MicroSIP vai discar este número na conta registrada (sem @IP).`
+      : `Testar Click2Call?\n\nOrigem (toca primeiro): ${origin || '(perfil)'}\nDestino: ${dst}\n\nAtenda seu telefone; em seguida o destino será chamado.`
+  )) return;
   const btn = document.getElementById('telefoniaTestBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Ligando…'; }
   try {
+    if (mode === 'softphone' && typeof LeadsDB.openSoftphoneDialNow === 'function') {
+      LeadsDB.openSoftphoneDialNow(dst);
+    }
     const r = await LeadsDB.nextBillingClick2Call({ src: src || ramal || undefined, dst });
-    if (typeof showToast === 'function') showToast(r.message || 'Discagem enviada ao MicroSIP.', 'success');
-    else alert(r.message || 'Discagem enviada ao MicroSIP.');
+    const fallback = mode === 'softphone'
+      ? 'MicroSIP discando o número na conta registrada.'
+      : 'Ligando… atenda seu celular; em seguida o lead será chamado.';
+    if (typeof showToast === 'function') showToast(r.message || fallback, 'success');
+    else alert(r.message || 'Ligação iniciada.');
   } catch (e) {
     alert(e.message || 'Falha no Click2Call');
   } finally {

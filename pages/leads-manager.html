@@ -414,7 +414,7 @@
       </div>
       <div class="modal-body" style="padding:16px 20px;">
         <p class="text-muted" style="font-size:13px;margin:0 0 14px;">
-          Modo <strong>MicroSIP</strong>: ao clicar em Ligar, a discagem abre no softphone Online (áudio no headset).
+          Modo <strong>MicroSIP</strong>: Ligar dispara o número na conta registrada (ex.: blu-209). Não usa número@IP.
         </p>
         <div id="telefoniaStatusBox" style="padding:12px;border-radius:8px;background:var(--color-surface-2);margin-bottom:14px;font-size:13px;">
           Carregando status…
@@ -431,8 +431,8 @@
         <div class="form-group">
           <label for="telefoniaCallMode">Modo de origem</label>
           <select id="telefoniaCallMode" class="form-control">
-            <option value="softphone">MicroSIP / ramal (recomendado)</option>
-            <option value="cellphone">Celular do perfil</option>
+            <option value="softphone" selected>MicroSIP / ramal</option>
+            <option value="cellphone">Celular do perfil (Click2Call)</option>
           </select>
         </div>
         <div class="form-group">
@@ -441,21 +441,21 @@
             <input type="text" id="telefoniaSrcRamal" class="form-control" inputmode="numeric" placeholder="Ex: 209" maxlength="6"/>
             <button type="button" class="btn btn-outline btn-sm" onclick="saveTelefoniaConfig()">Salvar</button>
           </div>
-          <div class="small text-muted mt-1">Com MicroSIP registrado neste ramal, o headset toca primeiro.</div>
+          <div class="small text-muted mt-1">MicroSIP precisa estar Online neste ramal (ex.: blu-209).</div>
         </div>
 
         <div style="margin:18px 0 12px;padding:14px;border:1px solid #fdba74;border-radius:12px;background:#fff7ed;">
           <div style="font-weight:800;font-size:14px;margin-bottom:10px;color:#9a3412;">📞 Testar ligação</div>
           <div class="form-group mb-2">
-            <label for="telefoniaTestSrc">Ramal / origem (toca primeiro)</label>
-            <input type="tel" id="telefoniaTestSrc" class="form-control" inputmode="tel" placeholder="Ex: 209"/>
+            <label for="telefoniaTestSrc">Origem (toca primeiro)</label>
+            <input type="tel" id="telefoniaTestSrc" class="form-control" inputmode="tel" placeholder="DDD + seu número ou ramal"/>
           </div>
           <div class="form-group mb-2">
             <label for="telefoniaTestDst">Número para testar (destino)</label>
             <input type="tel" id="telefoniaTestDst" class="form-control" inputmode="tel" placeholder="Digite o número com DDD"/>
           </div>
           <button type="button" class="btn btn-success btn-sm w-100" id="telefoniaTestBtn" onclick="testTelefoniaCall()">📞 Ligar para este número</button>
-          <div class="small text-muted mt-2 mb-0">MicroSIP precisa estar <strong>Online</strong>. O Windows pode pedir para abrir o MicroSIP na primeira vez — aceite.</div>
+          <div class="small text-muted mt-2 mb-0">O MicroSIP disca o destino na conta Online (só o número, sem @IP).</div>
         </div>
 
         <div id="telefoniaPhoneList" style="margin-top:16px;"></div>
@@ -470,8 +470,8 @@
   <script src="../js/config.js?v=20260811_dist_fix1"></script>
   <script src="../js/db.js?v=nodelete-demo1"></script>
   <script src="../js/auth.js?v=1781813000"></script>
-  <script src="../js/leads-db.js?v=20260811_dist_fix1"></script>
+  <script src="../js/leads-db.js?v=sip4"></script>
   <script src="../js/leads-import.js?v=20260811_dist_fix1"></script>
-  <script src="../js/leads-manager.js?v=20260811_dist_fix1"></script>
+  <script src="../js/leads-manager.js?v=sip4"></script>
 <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>
