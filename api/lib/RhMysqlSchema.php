@@ -329,3 +329,134 @@ function soublu_rh_vagas_tables_exist(?PDO $pdo = null): bool
     $cached = true;
     return true;
 }
+
+function soublu_ensure_rh_carreira_schema(?PDO $pdo = null): array
+{
+    $pdo = $pdo ?? soublu_pdo();
+    $added = [];
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS `rh_trilhas_cargos` (
+            `id` VARCHAR(64) NOT NULL,
+            `titulo` VARCHAR(255) NOT NULL,
+            `icone` VARCHAR(64) NOT NULL DEFAULT \'target\',
+            `descricao` TEXT NULL,
+            `niveis` JSON NOT NULL,
+            `sort_order` INT NOT NULL DEFAULT 0,
+            `active` TINYINT(1) NOT NULL DEFAULT 1,
+            `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            PRIMARY KEY (`id`),
+            KEY `idx_rh_trilhas_sort` (`sort_order`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+    );
+    $added[] = 'rh_trilhas_cargos';
+
+    foreach ([
+        'icone' => "VARCHAR(64) NOT NULL DEFAULT 'target'",
+        'descricao' => 'TEXT NULL',
+        'niveis' => "JSON NULL",
+        'sort_order' => 'INT NOT NULL DEFAULT 0',
+        'active' => 'TINYINT(1) NOT NULL DEFAULT 1',
+    ] as $col => $def) {
+        $hit = soublu_rh_add_column($pdo, 'rh_trilhas_cargos', $col, $def);
+        if ($hit) {
+            $added[] = "rh_trilhas_cargos.{$hit}";
+        }
+    }
+
+    $count = (int) $pdo->query('SELECT COUNT(*) FROM `rh_trilhas_cargos`')->fetchColumn();
+    if ($count === 0) {
+        $seed = [
+            [
+                'consultor',
+                'Consultor de Vendas',
+                'target',
+                'Atuação comercial focada em prospecção, atendimento ao cliente e fechamento de contratos de crédito.',
+                [
+                    ['name' => 'Nível I', 'desc' => 'Atendimento inicial, prospecção básica e aprendizado das linhas de crédito.'],
+                    ['name' => 'Nível II', 'desc' => 'Domínio das linhas de crédito, meta contínua atingida e suporte a novos consultores.'],
+                    ['name' => 'Nível III', 'desc' => 'Alta performance de vendas, liderança técnica comercial e parcerias estratégicas.'],
+                ],
+                10,
+            ],
+            [
+                'dev',
+                'Assistente de Desenvolvimento de Sistemas',
+                'code',
+                'Desenvolvimento e manutenção de software, automações e sistemas internos.',
+                [
+                    ['name' => 'Nível I', 'desc' => 'Suporte a código existente, correção de bugs simples e testes de qualidade.'],
+                    ['name' => 'Nível II', 'desc' => 'Desenvolvimento de novas funcionalidades, APIs e integração com parceiros.'],
+                ],
+                20,
+            ],
+            [
+                'supervisor',
+                'Supervisor de Teleatendimento',
+                'headset',
+                'Supervisão de equipe de atendimento remoto, monitoramento de métricas e qualidade de operação.',
+                [
+                    ['name' => 'Nível I', 'desc' => 'Gestão direta de equipe de teleatendimento e acompanhamento de metas diárias.'],
+                    ['name' => 'Nível II', 'desc' => 'Gestão sênior da operação de atendimento, otimização de scripts e treinamento avançado.'],
+                ],
+                30,
+            ],
+            [
+                'rh',
+                'Analista de Recursos Humanos',
+                'users',
+                'Gestão de pessoas, recrutamento, treinamento, clima organizacional e avaliação de desempenho.',
+                [
+                    ['name' => 'Nível I', 'desc' => 'Execução de processos seletivos, integração de novos colaboradores e suporte a RH.'],
+                    ['name' => 'Nível II', 'desc' => 'Gestão de programas de desenvolvimento, avaliação de desempenho e subsistemas de RH.'],
+                ],
+                40,
+            ],
+            [
+                'backoffice',
+                'Analista de Backoffice',
+                'file',
+                'Conferência documental, digitação de propostas de crédito e esteira operacional de contratação.',
+                [
+                    ['name' => 'Nível I', 'desc' => 'Análise de documentos básicos e digitação de propostas de menor complexidade.'],
+                    ['name' => 'Nível II', 'desc' => 'Análise avançada de risco documental, tratamento de pendências complexas e esteira.'],
+                ],
+                50,
+            ],
+        ];
+        $ins = $pdo->prepare(
+            'INSERT INTO `rh_trilhas_cargos` (`id`, `titulo`, `icone`, `descricao`, `niveis`, `sort_order`, `active`)
+             VALUES (?, ?, ?, ?, ?, ?, 1)'
+        );
+        foreach ($seed as $row) {
+            $ins->execute([
+                $row[0],
+                $row[1],
+                $row[2],
+                $row[3],
+                json_encode($row[4], JSON_UNESCAPED_UNICODE),
+                $row[5],
+            ]);
+        }
+        $added[] = 'rh_trilhas_cargos.seed';
+    }
+
+    return $added;
+}
+
+function soublu_rh_carreira_tables_exist(?PDO $pdo = null): bool
+{
+    static $cached = null;
+    if ($cached !== null) {
+        return $cached;
+    }
+    $pdo = $pdo ?? soublu_pdo();
+    $st = $pdo->prepare(
+        'SELECT COUNT(*) FROM information_schema.TABLES
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?'
+    );
+    $st->execute(['rh_trilhas_cargos']);
+    $cached = ((int) $st->fetchColumn()) > 0;
+    return $cached;
+}

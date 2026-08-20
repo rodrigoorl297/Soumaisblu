@@ -363,6 +363,7 @@ const _RH_TAB_TITLES = {
   funcionario: 'Cadastrar Funcionário',
   feedback: 'Feedbacks',
   vagas: 'Vagas',
+  carreira: 'Trilha de Carreira',
   justificativa: 'Justificativa de Falta',
   punicao: 'Registro Punição',
   demissao: 'Demissão',
@@ -1276,6 +1277,9 @@ function switchTab(tabId) {
   }
   if (tabId === 'vagas' && typeof RhVagas !== 'undefined' && typeof RhVagas.render === 'function') {
     RhVagas.render();
+  }
+  if (tabId === 'carreira' && typeof RhCarreira !== 'undefined' && typeof RhCarreira.render === 'function') {
+    RhCarreira.render();
   }
   if (tabId === 'relatorios') {
     if (typeof initRhRelatoriosHub === 'function') initRhRelatoriosHub();

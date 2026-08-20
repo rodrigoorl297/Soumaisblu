@@ -38,6 +38,7 @@
       rh_dismissals:'soublu_rh_dismissals',
       rh_vagas:'soublu_rh_vagas',
       rh_vaga_candidatos:'soublu_rh_vaga_candidatos',
+      rh_trilhas_cargos:'soublu_rh_trilhas_cargos',
       monitoria_atendimento:'soublu_monitoria_atendimento',
       bolao_copa_picks:'soublu_bolao_copa_picks',
       bolao_copa_results:'soublu_bolao_copa_results',
@@ -237,6 +238,7 @@
         this._lset(this.LK.rh_dismissals, []);
         this._lset(this.LK.rh_vagas, []);
         this._lset(this.LK.rh_vaga_candidatos, []);
+        this._lset(this.LK.rh_trilhas_cargos, []);
         this._lset(this.LK.monitoria_atendimento, []);
         this._lset(this.LK.bolao_copa_picks, []);
         this._lset(this.LK.bolao_copa_results, []);
@@ -7694,6 +7696,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       const justifHFlag = force ? null : sessionStorage.getItem('soublu_rh_justif_hours_migrated');
       const avalFlag = force ? null : sessionStorage.getItem('soublu_rh_resume_avaliacao_migrated');
       const vagasFlag = force ? null : sessionStorage.getItem('soublu_rh_vagas_migrated');
+      const carreiraFlag = force ? null : sessionStorage.getItem('soublu_rh_carreira_migrated');
       const headers = { apikey: key, 'X-API-Key': key };
       const steps = {};
 
@@ -7750,6 +7753,12 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
           if (steps.vagas.ok) sessionStorage.setItem('soublu_rh_vagas_migrated', '1');
         } else {
           steps.vagas = { ok: true, skipped: true, path: 'migrate-rh-vagas.php' };
+        }
+        if (!carreiraFlag || force) {
+          steps.carreira = await runMigrate('migrate-rh-carreira.php');
+          if (steps.carreira.ok) sessionStorage.setItem('soublu_rh_carreira_migrated', '1');
+        } else {
+          steps.carreira = { ok: true, skipped: true, path: 'migrate-rh-carreira.php' };
         }
 
         const ok = !Object.values(steps).some((s) => s && s.ok === false);
@@ -7986,6 +7995,20 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       row.created_at = row.created_at || new Date().toISOString();
       row.updated_at = new Date().toISOString();
       return await this._rhLocalSave(this.LK.rh_vaga_candidatos, row, r => r.id === row.id);
+    },
+
+    async getRhTrilhasCargos() {
+      let rows;
+      if (this.online) rows = await this._rhOnlineList('rh_trilhas_cargos', 'sort_order.asc');
+      else rows = this._lget(this.LK.rh_trilhas_cargos) || [];
+      return (rows || []).filter(r => r && r.active !== false && r.active !== 0);
+    },
+    async saveRhTrilhaCargo(row) {
+      if (this.online) return await this._rhOnlineSave('rh_trilhas_cargos', row);
+      if (!row.id) row.id = this._genId('trl');
+      row.created_at = row.created_at || new Date().toISOString();
+      row.updated_at = new Date().toISOString();
+      return await this._rhLocalSave(this.LK.rh_trilhas_cargos, row, r => r.id === row.id);
     },
 
     _normMonitoriaAtendimento(row) {

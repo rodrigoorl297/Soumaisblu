@@ -12,7 +12,7 @@
   <script charset="UTF-8" src="../js/db-connect.js?v=trn-quiz4"></script>
   <title>Treinamentos · SOU+BLU</title>
   <meta name="description" content="Plataforma de Treinamentos - SOU+BLU"/>
-  <!-- LMS_BUILD=trn-quiz13-final-cachebust-7e786d -->
+  <!-- LMS_BUILD=trn-rodrigo-exempt1 -->
   <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
   <link rel="apple-touch-icon" href="../images/logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
@@ -111,7 +111,7 @@
   <script charset="UTF-8" src="../js/ui.js?v=20260811_fix_modal_zindex_v11"></script>
   <script charset="UTF-8" src="../js/db.js?v=1786388320780?v=trn-quiz4"></script>
   <script charset="UTF-8" src="../js/auth.js?v=trn-quiz4"></script>
-  <script charset="UTF-8" src="../js/trainings.js?v=20260811_fix_upload_cover_v14"></script>
+  <script charset="UTF-8" src="../js/trainings.js?v=rodrigo-exempt1"></script>
   <script charset="UTF-8" src="../js/training-tracks.js?v=trn-quiz4"></script>
   <script>
     /* ── Tab labels for topbar section ── */
@@ -1474,6 +1474,8 @@
         } catch {}
         const all = await DB.getTrainings({ partnerRootId: root, activeOnly: true });
         return all.filter(t => {
+          if (typeof Trainings !== 'undefined' && Trainings.isTrainingExemptForUser
+            && Trainings.isTrainingExemptForUser(t.id, user)) return false;
           const roles = t.audience_roles || ['*'];
           if (roles.includes('*')) return true;
           const ur = String(user.role || '').trim().toLowerCase();

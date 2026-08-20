@@ -67,6 +67,9 @@ try {
         if (str_starts_with($table, 'rh_vaga') && !soublu_rh_vagas_tables_exist($pdo)) {
             soublu_ensure_rh_vagas_schema($pdo);
         }
+        if ($table === 'rh_trilhas_cargos' && !soublu_rh_carreira_tables_exist($pdo)) {
+            soublu_ensure_rh_carreira_schema($pdo);
+        }
         if ($table === 'lead_unlock_requests' && !soublu_leads_unlock_schema_ok($pdo)) {
             soublu_ensure_leads_tables($pdo);
         }

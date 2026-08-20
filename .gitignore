@@ -11,6 +11,7 @@ config.boleto.local.php
 config.zapi.local.php
 config.whaticket.local.php
 config.sistemaweb.local.php
+config.hyperflow.local.php
 *.p12
 *.pem
 .env

@@ -152,6 +152,23 @@
     return roles.map(x => String(x).trim().toLowerCase()).includes(ur);
   }
 
+  /** Exceções só para usuários específicos (não afeta os demais). */
+  const USER_TRAINING_EXEMPTIONS = {
+    fund_rodrigo: ['trnmsozbp6skj3lj'], // TREINAMENTO TÉCNICO DE PROCESSOS — retirado só do Rodrigo
+  };
+
+  function isTrainingExemptForUser(trainingId, user) {
+    const uid = String(user?.id || '').trim();
+    if (!uid || !trainingId) return false;
+    const list = USER_TRAINING_EXEMPTIONS[uid];
+    if (!list || !list.length) return false;
+    return list.map(String).includes(String(trainingId));
+  }
+
+  function trainingPassed(att) {
+    return !!(att && (att.passed === true || att.status === 'passed'));
+  }
+
   async function partnerRootForUser(user) {
     if (!user?.id) return null;
     if (String(user.role || '').toLowerCase() === 'parceiro') return user.id;
@@ -161,7 +178,7 @@
   async function trainingsForUser(user, category) {
     const root = await partnerRootForUser(user);
     const all = await DB.getTrainings({ partnerRootId: root, activeOnly: true, category });
-    return all.filter(t => audienceMatch(t, user));
+    return all.filter(t => audienceMatch(t, user) && !isTrainingExemptForUser(t.id, user));
   }
 
   function statusLabel(st, passed, deadline) {
@@ -177,6 +194,7 @@
   const Trainings = {
     canManage,
     canRhReport,
+    isTrainingExemptForUser,
 
     /** Penaliza quem não concluiu no prazo (uma vez por treinamento). */
     async applyDeadlinesForUser(user) {
@@ -219,7 +237,8 @@
       let pending = 0;
       for (const tr of list) {
         const att = await DB.getTrainingAttempt(tr.id, uid);
-        if (!att?.passed) pending++;
+        // Só notifica o que ainda não foi concluído/aprovado
+        if (!trainingPassed(att)) pending++;
       }
       document.querySelectorAll('#trainingsBadge, .trainings-badge').forEach(b => {
         b.textContent = pending;
@@ -1351,7 +1370,7 @@
       const pending = [];
       for (const tr of list) {
         const att = await DB.getTrainingAttempt(tr.id, user.id);
-        if (!att?.passed) pending.push({ tr, att });
+        if (!trainingPassed(att)) pending.push({ tr, att });
       }
       return pending;
     },

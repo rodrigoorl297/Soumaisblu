@@ -111,6 +111,8 @@ window.Proposals = {
       'GOVERNO DO PIAUÍ - PI',
       'PREFEITURA DE PICOS - PI',
       'GOVERNO DO PARANÁ - PR',
+      'GOV DO PARANÁ - PR',
+      'PREFEITURA DE CURITIBA - PR',
       'PREFEITURA DE ARAPONGAS - PR',
       'GOVERNO DO RIO GRANDE DO NORTE - RN',
       'PREFEITURA DE NATAL - RN',
@@ -156,7 +158,7 @@ window.Proposals = {
       'PREFEITURA DE TAUBATÉ - SP',
     ],
     MUNICIPAL: [
-      'PREF SP', 'PREF RJ', 'PREF BH', 'PREF SÃO LUIS', 'PREF CAMPO GRANDE',
+      'PREF SP', 'PREF RJ', 'PREF BH', 'PREF SÃO LUIS', 'PREF CAMPO GRANDE', 'PREF CURITIBA',
     ],
     INSS: ['INSS', 'APOSENTADO', 'PENSIONISTA', 'BPC LOAS'],
     CLT: ['CLT - DATAPREV'],
