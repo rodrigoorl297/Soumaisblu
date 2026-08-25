@@ -271,7 +271,7 @@
     }
   } //Fecha o modal de lançamento de débito, removendo a classe open e limpando o display
 
-    async function confirmManualDebit() {
+  async function confirmManualDebit() {
       const modal = document.getElementById('manualDebitModal');
       const limitId = document.getElementById('manualDebitLimitId')?.value;
       const employeeId = document.getElementById('manualDebitEmployeeId')?.value;
@@ -382,7 +382,7 @@
     } catch (e) {
       alert('Erro ao aprovar limite: ' + e.message);
     }
-  }
+  } //confirma e aprova um limite caso dê certo 
 
   async function loadProviders() {
     const list = await supaReq('GET', 'beneficios_prestadores', null, '?order=nome_fantasia.asc');
@@ -397,47 +397,52 @@
         if (selectClose) selectClose.innerHTML += opt;
       });
     }
-  }
-
-  async function saveProvider(e) {
-    e.preventDefault();
-    try {
-      const waRaw = String(document.getElementById('provWhatsapp')?.value || '').replace(/\D/g, '');
-      const cnpj = String(document.getElementById('provCpfCnpj').value || '').replace(/\D/g, '');
-      const payload = {
-        nome_fantasia: document.getElementById('provNome').value,
-        cnpj_cpf: document.getElementById('provCpfCnpj').value,
-        chave_pix: document.getElementById('provPix').value,
-        dia_pagamento: parseInt(document.getElementById('provDiaPgto').value, 10) || 5,
-        categoria: document.getElementById('provCategoria').value,
-        pagamento_automatico: document.getElementById('provAutoPgto').value,
-        whatsapp: waRaw || null,
-      };
-      let existing = null;
-      if (cnpj) {
-        try {
-          const rows = await supaReq('GET', 'beneficios_prestadores', null,
-            `?cnpj_cpf=eq.${encodeURIComponent(cnpj)}&limit=1`);
-          existing = Array.isArray(rows) && rows[0] ? rows[0] : null;
-        } catch (_) { existing = null; }
+  } //busca os prestadores cadastrados na API e preenche os campos de seleção de prestadores da tela, ordenados por nome.
+  
+  
+    async function saveProvider(e) {
+      e.preventDefault();
+      try {
+        const waRaw = String(document.getElementById('provWhatsapp')?.value || '').replace(/\D/g, '');
+        const cnpj = String(document.getElementById('provCpfCnpj').value || '').replace(/\D/g, '');
+        const payload = {
+          nome_fantasia: document.getElementById('provNome').value,
+          cnpj_cpf: document.getElementById('provCpfCnpj').value,
+          chave_pix: document.getElementById('provPix').value,
+          dia_pagamento: parseInt(document.getElementById('provDiaPgto').value, 10) || 5,
+          categoria: document.getElementById('provCategoria').value,
+          pagamento_automatico: document.getElementById('provAutoPgto').value,
+          whatsapp: waRaw || null,
+        };
+        let existing = null;
+        if (cnpj) {
+          try {
+            const rows = await supaReq('GET', 'beneficios_prestadores', null,
+              `?cnpj_cpf=eq.${encodeURIComponent(cnpj)}&limit=1`);
+            existing = Array.isArray(rows) && rows[0] ? rows[0] : null;
+          } catch (_) { existing = null; }
+        }
+        if (existing?.id) {
+          await supaReq('PATCH', 'beneficios_prestadores', payload, `?id=eq.${encodeURIComponent(existing.id)}`);
+          alert('Prestador atualizado (WhatsApp/dados salvos)!');
+        } else {
+          await supaReq('POST', 'beneficios_prestadores', {
+            id: _benId('ben_pre_'),
+            codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
+            ...payload,
+          });
+          alert('Prestador cadastrado com sucesso!');
+        }
+        document.getElementById('providerForm').reset();
+        await loadAllData();
+      } catch (err) {
+        alert('Erro ao salvar prestador: ' + err.message);
       }
-      if (existing?.id) {
-        await supaReq('PATCH', 'beneficios_prestadores', payload, `?id=eq.${encodeURIComponent(existing.id)}`);
-        alert('Prestador atualizado (WhatsApp/dados salvos)!');
-      } else {
-        await supaReq('POST', 'beneficios_prestadores', {
-          id: _benId('ben_pre_'),
-          codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
-          ...payload,
-        });
-        alert('Prestador cadastrado com sucesso!');
-      }
-      document.getElementById('providerForm').reset();
-      await loadAllData();
-    } catch (err) {
-      alert('Erro ao salvar prestador: ' + err.message);
-    }
-  }
+    } // Recebe os dados do formulário e limpa os campos necessários.
+      // Verifica se o prestador já está cadastrado pelo CPF/CNPJ.
+      // Se existir, atualiza o cadastro existente.
+      // Caso contrário, cria um novo prestador.
+      // Depois, limpa o formulário e atualiza a tela.
 
   async function saveProduct(e) {
     e.preventDefault();
@@ -460,7 +465,10 @@
     } catch (err) {
       alert('Erro ao cadastrar produto: ' + err.message);
     }
-  }
+  } // Recebe os dados do formulário e identifica o prestador selecionado.
+    // Monta os dados do novo produto.
+    // Envia o produto para o banco de dados.
+    // Depois, limpa o formulário após o cadastro.
 
   async function loadActiveOrders() {
     const list = await supaReq('GET', 'beneficios_vouchers', null, '?order=created_at.desc');
@@ -501,7 +509,11 @@
     } catch (e) {
       alert('Erro ao aprovar pedido: ' + e.message);
     }
-  }
+  } // Busca os pedidos registrados e ordena pelos mais recentes.
+    // Limpa a tabela antes de carregar os novos dados.
+    // Exibe uma mensagem caso não existam pedidos.
+    // Monta cada pedido como uma linha da tabela.
+    // Adiciona as ações de aprovação e exclusão conforme o status.
 
   /** Apaga pedido de teste / incorreto e estorna o valor no limite do colaborador. */
   async function deleteMealOrder(id) {
