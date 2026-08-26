@@ -4,6 +4,7 @@ const RH_RELATORIOS = {
   ranking: { label: 'Ranking de Vendas', desc: 'Classificação dos vendedores por faturamento e propostas.' },
   vendas: { label: 'Relatório de Vendas', desc: 'Lista consolidada de propostas com filtros e exportação.' },
   qualidade: { label: 'Relatório de Qualidade', desc: 'Monitoria e indicadores de qualidade da equipe.' },
+  logins: {label: 'Logins do dia',desc: 'Pessoas que entraram no sistema hoje.'},
 };
 
 let _rhRelatorioAtual = 'ranking';
@@ -97,13 +98,31 @@ function _rhDownloadCsv(filename, headers, rows) {
   rows.forEach(r => {
     lines.push(r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(';'));
   });
-  const blob = new Blob(['\ufeff' + lines.join('\
-')], { type: 'text/csv;charset=utf-8;' });
+  const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = filename;
   a.click();
   URL.revokeObjectURL(a.href);
+}
+
+/** Data de hoje (YYYY-MM-DD) — usa o mesmo relógio do AttendancePenalty quando disponível. */
+function _rhTodayYmd() {
+  if (typeof AttendancePenalty !== 'undefined' && typeof AttendancePenalty.brTodayYmd === 'function') {
+    return AttendancePenalty.brTodayYmd();
+  }
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date());
+}
+
+/** Extrai login_days (array de 'YYYY-MM-DD') do registro de presença do funcionário. */
+function _rhLoginDaysOf(emp) {
+  let raw = emp?.attendance_data;
+  if (typeof raw === 'string') {
+    try { raw = JSON.parse(raw); } catch (_) { raw = null; }
+  }
+  if (raw && Array.isArray(raw.login_days)) return raw.login_days;
+  if (Array.isArray(emp?.login_days)) return emp.login_days;
+  return [];
 }
 
 function switchRhRelatorio(tipo) {
@@ -161,6 +180,10 @@ function switchRhRelatorio(tipo) {
       }
       if (next === 'vendas') {
         await renderRhRelatorioVendas(content, gen);
+        return;
+      }
+      if (next === 'logins') {
+        await renderRhRelatorioLogins(content, gen);
         return;
       }
       if (next === 'qualidade') {
@@ -372,6 +395,104 @@ async function renderRhRelatorioVendas(container, gen) {
     console.error('[rh-relatorios] vendas:', e);
     const tbody = panel.querySelector('#rhVendasTbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="text-center text-muted">Erro: ${_rhRelEsc(e.message || e)}</td></tr>`;
+  }
+}
+
+/** Relatório: quem já entrou no sistema hoje x quem ainda não entrou. */
+async function renderRhRelatorioLogins(container, gen) {
+  const panel = container || _ensureRelContent();
+  if (!panel) return;
+  const myGen = gen ?? _rhRelatorioGen;
+  const meta = RH_RELATORIOS.logins;
+
+  if (myGen !== _rhRelatorioGen) return;
+  panel.innerHTML = `
+    <div class="rh-relatorio-panel-head">
+      <h3>${_rhRelEsc(meta.label)}</h3>
+      <p class="text-muted">${_rhRelEsc(meta.desc)}</p>
+    </div>
+    <div class="rh-relatorio-panel-body">
+      <div id="rhLoginsResumo" class="text-muted" style="font-size:13px;margin-bottom:12px;">Carregando...</div>
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+        <button type="button" class="btn btn-outline btn-sm" id="rhLoginsExportar">Exportar CSV</button>
+      </div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Funcionário</th><th>Cargo</th><th>Departamento</th><th>Status hoje</th>
+            </tr>
+          </thead>
+          <tbody id="rhLoginsTbody">
+            <tr><td colspan="4" class="text-center text-muted">Carregando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>`;
+
+  try {
+    // Se houver refresh remoto de usuários disponível, usa; senão cai no cache local (_allEmployees).
+    let emps = _rhGetEmployees();
+    if (typeof DB !== 'undefined' && typeof DB.getAllUsers === 'function') {
+      try {
+        const fresh = await DB.getAllUsers();
+        if (Array.isArray(fresh) && fresh.length) emps = fresh;
+      } catch (_) { /* mantém o cache local em caso de falha */ }
+    }
+    if (myGen !== _rhRelatorioGen) return;
+
+    emps = (emps || []).filter(e => !e.demitido && e.status !== 'demitido' && e.active !== false);
+
+    const today = _rhTodayYmd();
+    const rows = emps.map(e => {
+      const entrou = _rhLoginDaysOf(e).includes(today);
+      return {
+        nome: e.nome || e.name || '—',
+        cargo: e.cargo || '—',
+        departamento: e.departamento || '—',
+        entrou,
+      };
+    }).sort((a, b) => (a.entrou === b.entrou ? 0 : a.entrou ? -1 : 1));
+
+    const total = rows.length;
+    const entraram = rows.filter(r => r.entrou).length;
+
+    const resumo = panel.querySelector('#rhLoginsResumo');
+    if (resumo) {
+      resumo.textContent = `${entraram} de ${total} colaborador(es) já entraram hoje.`;
+    }
+
+    const badge = (entrou) => entrou
+      ? '<span class="badge badge-success">Entrou</span>'
+      : '<span class="badge badge-muted">Não entrou</span>';
+
+    const tbody = panel.querySelector('#rhLoginsTbody');
+    if (tbody) {
+      tbody.innerHTML = !rows.length
+        ? '<tr><td colspan="4" class="text-center text-muted">Nenhum colaborador ativo cadastrado.</td></tr>'
+        : rows.map(r => `
+            <tr>
+              <td><strong>${_rhRelEsc(r.nome)}</strong></td>
+              <td>${_rhRelEsc(r.cargo)}</td>
+              <td>${_rhRelEsc(r.departamento)}</td>
+              <td>${badge(r.entrou)}</td>
+            </tr>`).join('');
+    }
+
+    panel.querySelector('#rhLoginsExportar')?.addEventListener('click', () => {
+      _rhDownloadCsv(
+        `logins-do-dia-${today}.csv`,
+        ['Nome', 'Cargo', 'Departamento', 'Status'],
+        rows.map(r => [r.nome, r.cargo, r.departamento, r.entrou ? 'Entrou' : 'Não entrou'])
+      );
+    });
+  } catch (e) {
+    if (myGen !== _rhRelatorioGen) return;
+    console.error('[rh-relatorios] logins:', e);
+    const body = panel.querySelector('.rh-relatorio-panel-body');
+    if (body) {
+      body.innerHTML = `<div class="text-muted text-center" style="padding:32px;">Erro ao carregar logins: ${_rhRelEsc(e.message || e)}</div>`;
+    }
   }
 }
 

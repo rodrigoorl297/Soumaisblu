@@ -239,7 +239,7 @@ const Auth = {
       }
     }
     if (typeof AttendancePenalty !== 'undefined' && AttendancePenalty.onLogin) {
-      // try { await AttendancePenalty.onLogin(user); } catch (e) { console.warn('[Auth] attendance:', e); }
+       try { await AttendancePenalty.onLogin(user); } catch (e) { console.warn('[Auth] attendance:', e); }
     }
     if (typeof VendorTierPoints !== 'undefined' && VendorTierPoints.onLogin) {
       try { await VendorTierPoints.onLogin(user); } catch (e) { console.warn('[Auth] vendor tier:', e); }

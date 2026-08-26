@@ -206,56 +206,62 @@ const AttendancePenalty = (() => {
   }
 
   /**
+   * Registra o login do dia atual (grava em login_days) e, apenas quando a
+   * penalidade estiver ligada (PENALTY_ENABLED = true), aplica o desconto por
+   * dias úteis sem login.
    * @returns {{ deducted: number, days: number, balance: number|null }}
    */
+  const PENALTY_ENABLED = false; // penalidade continua desligada por enquanto
+
   async function processLogin(user) {
-    return { penalties: 0, days: 0 };
     if (!user?.id || !appliesTo(user)) {
       return { deducted: 0, days: 0, balance: null };
     }
 
     const today = brTodayYmd();
-    const yesterday = addDaysYmd(today, -1);
-    const created = (user.created_at || '').slice(0, 10);
-    const start = maxYmd(FEATURE_START, created || FEATURE_START);
-
     const att = normalizeAttendance(user);
     const loginSet = new Set(att.login_days);
 
-    let through = att.penalty_through || addDaysYmd(start, -1);
-    if (through < addDaysYmd(start, -1)) through = addDaysYmd(start, -1);
-
-    const firstCheck = addDaysYmd(through, 1);
-    const missed = [];
-
-    if (yesterday >= firstCheck) {
-      for (const day of iterDays(firstCheck, yesterday)) {
-        if (!isBusinessDay(day)) continue;
-        if (day < start) continue;
-        if (!loginSet.has(day)) missed.push(day);
-      }
-    }
-
     let deducted = 0;
     let balance = null;
+    let missed = [];
 
-    for (const day of missed) {
-      const reason = `Falta de login em dia útil (${formatBr(day)})`;
-      const nb = await DB.deductBalance(user.id, PENALTY_PTS, reason, 'sistema');
-      if (Number.isFinite(nb)) {
-        deducted += PENALTY_PTS;
-        balance = nb;
+    if (PENALTY_ENABLED) {
+      const yesterday = addDaysYmd(today, -1);
+      const created = (user.created_at || '').slice(0, 10);
+      const start = maxYmd(FEATURE_START, created || FEATURE_START);
+
+      let through = att.penalty_through || addDaysYmd(start, -1);
+      if (through < addDaysYmd(start, -1)) through = addDaysYmd(start, -1);
+
+      const firstCheck = addDaysYmd(through, 1);
+
+      if (yesterday >= firstCheck) {
+        for (const day of iterDays(firstCheck, yesterday)) {
+          if (!isBusinessDay(day)) continue;
+          if (day < start) continue;
+          if (!loginSet.has(day)) missed.push(day);
+        }
+      }
+
+      for (const day of missed) {
+        const reason = `Falta de login em dia útil (${formatBr(day)})`;
+        const nb = await DB.deductBalance(user.id, PENALTY_PTS, reason, 'sistema');
+        if (Number.isFinite(nb)) {
+          deducted += PENALTY_PTS;
+          balance = nb;
+        }
       }
     }
 
+    // Sempre grava o dia de hoje, com ou sem penalidade ligada.
     loginSet.add(today);
     const login_days = [...loginSet].sort();
     const trimmed = login_days.length > MAX_LOGIN_DAYS ? login_days.slice(-MAX_LOGIN_DAYS) : login_days;
 
-    const newThrough = yesterday >= start ? yesterday : through;
     await saveAttendance(user.id, {
       login_days: trimmed,
-      penalty_through: newThrough,
+      penalty_through: att.penalty_through || null,
     });
 
     return { deducted, days: missed.length, balance, missed };
@@ -275,7 +281,6 @@ const AttendancePenalty = (() => {
   }
 
   async function onLogin(user) {
-    return;
     if (!user?.id || typeof DB === 'undefined') return null;
     try { await runOneTimeCleanup(); } catch (e) { console.warn('[Attendance] cleanup:', e); }
     const today = brTodayYmd();
@@ -448,4 +453,4 @@ const AttendancePenalty = (() => {
   };
 })();
 
-window.restoreAdvertenciaPoints = () => AttendancePenalty.restoreAdvertenciaPoints();
+window.restoreAdvertenciaPoints = () => AttendancePenalty.restoreAdvertenciaPoints(); 
