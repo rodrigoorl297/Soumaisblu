@@ -102,6 +102,7 @@ const _DEMISSAO_AVISO = {
   aviso_previo_trabalhado: 'Aviso prévio trabalhado',
   aviso_previo_dispensado: 'Aviso prévio dispensado',
   aviso_previo_indenizado: 'Aviso prévio indenizado',
+  demissao_imediata: 'Demissão imediata',
   sem_aviso: 'Sem aviso prévio',
   pedido_imediato: 'Pedido de demissão imediato',
   justa_causa: 'Justa causa',

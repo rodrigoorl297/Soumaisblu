@@ -392,10 +392,10 @@ const Auth = {
     const role = String(s.role || '').toLowerCase();
     // Baseado na tabela de "quem abre"
     if (['vendedor','backoffice','portaria'].includes(role)) {
-      return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Ouvidoria', 'Desenvolvimento'].includes(department);
+      return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Ouvidoria', 'Desenvolvimento', 'TI'].includes(department);
     }
     if (role === 'supervisor') {
-      return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento'].includes(department);
+      return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento', 'TI'].includes(department);
     }
     if (role === 'parceiro') {
       try {
@@ -406,8 +406,8 @@ const Auth = {
       } catch (_) { /* noop */ }
       return department === 'Operacional';
     }
-    // Gerência / Master / Fundador / Financeiro / RH / Jurídico / Diretoria / Desenvolvimento podem direcionar para estes deptos.
-    return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Jurídico', 'Diretoria', 'Ouvidoria', 'Desenvolvimento'].includes(department);
+    // Gerência / Master / Fundador / Financeiro / RH / Jurídico / Diretoria / Desenvolvimento / TI podem direcionar para estes deptos.
+    return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Jurídico', 'Diretoria', 'Ouvidoria', 'Desenvolvimento', 'TI'].includes(department);
   },
 
   /** Visão global da esteira de chamados (Painel Master). */
@@ -417,7 +417,7 @@ const Auth = {
     if (this.isMaster()) return true;
     if (typeof this.hasMasterPanel === 'function' && this.hasMasterPanel()) return true;
     const role = String(s.role || '').toLowerCase();
-    if (role === 'diretoria' || role === 'desenvolvedor') return true;
+    if (role === 'diretoria' || role === 'desenvolvedor' || role === 'desenvolvimento') return true;
     const p = (s.permissions && typeof s.permissions === 'object') ? s.permissions : {};
     return !!(p.canSeeAllTickets || p.canMasterPanel);
   },
@@ -439,7 +439,9 @@ const Auth = {
       case 'Jurídico': return role === 'juridico';
       case 'Diretoria': return role === 'diretoria';
       case 'Desenvolvimento':
-        return ['desenvolvedor', 'fundador', 'master', 'diretoria'].includes(role);
+        return ['desenvolvedor', 'desenvolvimento', 'fundador', 'master', 'diretoria'].includes(role);
+      case 'TI':
+        return ['desenvolvedor', 'desenvolvimento', 'fundador', 'master', 'diretoria'].includes(role);
       default: return false;
     }
   },

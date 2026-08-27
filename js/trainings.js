@@ -156,17 +156,115 @@
   const USER_TRAINING_EXEMPTIONS = {
     fund_rodrigo: ['trnmsozbp6skj3lj'], // TREINAMENTO TÉCNICO DE PROCESSOS — retirado só do Rodrigo
   };
+  const EMAIL_TRAINING_EXEMPTIONS = {
+    'rodrigo.orlando@soublu.com': ['trnmsozbp6skj3lj'],
+  };
+
+  /** Cargos de gestão: não disparam popup de pendência no login (criam/gerenciam treinamentos). */
+  const SKIP_PENDING_ALERT_ROLES = new Set([
+    'fundador', 'master', 'desenvolvedor', 'rh', 'financeiro', 'financial',
+    'diretoria', 'juridico', 'ouvidoria',
+  ]);
 
   function isTrainingExemptForUser(trainingId, user) {
+    const tid = String(trainingId || '');
+    if (!tid) return false;
     const uid = String(user?.id || '').trim();
-    if (!uid || !trainingId) return false;
-    const list = USER_TRAINING_EXEMPTIONS[uid];
-    if (!list || !list.length) return false;
-    return list.map(String).includes(String(trainingId));
+    if (uid) {
+      const byId = USER_TRAINING_EXEMPTIONS[uid];
+      if (byId && byId.map(String).includes(tid)) return true;
+    }
+    const email = String(user?.email || '').trim().toLowerCase();
+    if (email) {
+      const byEmail = EMAIL_TRAINING_EXEMPTIONS[email];
+      if (byEmail && byEmail.map(String).includes(tid)) return true;
+    }
+    return false;
+  }
+
+  function shouldSkipPendingAlert(user) {
+    const r = String(user?.role || sessionRole() || '').trim().toLowerCase();
+    return SKIP_PENDING_ALERT_ROLES.has(r);
+  }
+
+  function coercePassedFlag(v) {
+    if (v === true || v === 1 || v === '1' || v === 'true') return true;
+    if (v === false || v === 0 || v === '0' || v === 'false' || v == null || v === '') return false;
+    return !!v;
   }
 
   function trainingPassed(att) {
-    return !!(att && (att.passed === true || att.status === 'passed'));
+    if (!att) return false;
+    if (coercePassedFlag(att.passed)) return true;
+    const st = String(att.status || '').toLowerCase();
+    return st === 'passed' || st === 'aprovado' || st === 'concluido' || st === 'concluído'
+      || st === 'completo' || st === 'completed';
+  }
+
+  /** Já concluiu (aprovado no LMS/prova) — não notificar de novo. */
+  function trainingDoneForNotify(att, training) {
+    if (trainingPassed(att)) return true;
+    if (!att) return false;
+    const passScore = Number(training?.passing_score) || 70;
+    const score = Number(att.score);
+    const st = String(att.status || '').toLowerCase();
+    if (st === 'failed' || st === 'reprovado' || st === 'penalized') return false;
+    if (Number.isFinite(score) && score >= passScore) return true;
+
+    const lp = att.lesson_progress;
+    if (!lp || typeof lp !== 'object') return false;
+    const pct = Number(lp.percent);
+    if (!(pct >= 100)) return false;
+    const completed = (lp.completed && typeof lp.completed === 'object' && !Array.isArray(lp.completed))
+      ? lp.completed
+      : {};
+    const scoresObj = (lp.module_quiz_scores && typeof lp.module_quiz_scores === 'object')
+      ? lp.module_quiz_scores
+      : {};
+    const scores = Object.values(scoresObj).map(Number).filter(Number.isFinite);
+    const quizDone = Object.keys(completed).filter((k) => /^quiz_\d+$/i.test(k) && completed[k]);
+    const finalDone = !!(completed.quiz_final === true || completed.quiz_final === 1 || completed.quiz_final === 'true');
+
+    if (finalDone || quizDone.length) {
+      if (Number.isFinite(score) && score >= passScore) return true;
+      if (scores.length) {
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        return avg >= passScore;
+      }
+      // Quizzes marcados + 100%, sem nota guardada → considera feito (evita notificar eterno)
+      return quizDone.length > 0 || finalDone;
+    }
+    // Curso só de conteúdo (100% aulas, sem quizzes no progresso)
+    return true;
+  }
+
+  async function maybeHealPassedAttempt(att, training, userId) {
+    if (!att || !training?.id || !userId) return att;
+    if (trainingPassed(att)) return att;
+    if (!trainingDoneForNotify(att, training)) return att;
+    const passScore = Number(training.passing_score) || 70;
+    const scoresObj = att.lesson_progress?.module_quiz_scores || {};
+    const scores = Object.values(scoresObj).map(Number).filter(Number.isFinite);
+    let score = Number(att.score);
+    if (!Number.isFinite(score) && scores.length) {
+      score = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    }
+    if (!Number.isFinite(score)) score = 100;
+    if (score < passScore) return att;
+    try {
+      const saved = await DB.saveTrainingAttempt({
+        training_id: training.id,
+        user_id: userId,
+        score,
+        passed: true,
+        status: 'passed',
+        completed_at: att.completed_at || new Date().toISOString(),
+      });
+      return saved || { ...att, passed: true, status: 'passed', score };
+    } catch (e) {
+      console.warn('[Trainings] heal passed:', e);
+      return { ...att, passed: true, status: 'passed', score };
+    }
   }
 
   async function partnerRootForUser(user) {
@@ -207,6 +305,7 @@
         const att = await DB.getTrainingAttempt(tr.id, user.id);
         if (att?.passed || att?.status === 'penalized') continue;
         if (att?.status === 'passed') continue;
+        if (trainingPassed(att) || trainingDoneForNotify(att, tr)) continue;
         await DB.saveTrainingAttempt({
           ...(att || {}),
           training_id: tr.id,
@@ -232,18 +331,28 @@
       if (!uid) return 0;
       const user = await DB.getUser(uid).catch(() => null);
       if (!user) return 0;
+      if (shouldSkipPendingAlert(user)) {
+        document.querySelectorAll('#trainingsBadge, .trainings-badge').forEach(b => {
+          b.textContent = '0';
+          b.style.display = 'none';
+        });
+        try { await this.syncTrainingBlockForUser(user, []); } catch (_) { /* noop */ }
+        return 0;
+      }
       await this.applyDeadlinesForUser(user);
       const list = await trainingsForUser(user);
-      let pending = 0;
+      const pendingList = [];
       for (const tr of list) {
-        const att = await DB.getTrainingAttempt(tr.id, uid);
-        // Só notifica o que ainda não foi concluído/aprovado
-        if (!trainingPassed(att)) pending++;
+        let att = await DB.getTrainingAttempt(tr.id, uid);
+        att = await maybeHealPassedAttempt(att, tr, uid);
+        if (!trainingDoneForNotify(att, tr)) pendingList.push({ tr, att });
       }
+      const pending = pendingList.length;
       document.querySelectorAll('#trainingsBadge, .trainings-badge').forEach(b => {
         b.textContent = pending;
         b.style.display = pending > 0 ? 'inline' : 'none';
       });
+      try { await this.syncTrainingBlockForUser(user, pendingList); } catch (_) { /* noop */ }
       return pending;
     },
 
@@ -1369,10 +1478,90 @@
       const list = await trainingsForUser(user);
       const pending = [];
       for (const tr of list) {
-        const att = await DB.getTrainingAttempt(tr.id, user.id);
-        if (!trainingPassed(att)) pending.push({ tr, att });
+        let att = await DB.getTrainingAttempt(tr.id, user.id);
+        att = await maybeHealPassedAttempt(att, tr, user.id);
+        if (!trainingDoneForNotify(att, tr)) pending.push({ tr, att });
       }
       return pending;
+    },
+
+    /**
+     * Sincroniza bloqueio 001 (treinamentos obrigatórios) com pendências.
+     * Não altera bloqueios manuais 002–005.
+     */
+    async syncTrainingBlockForUser(user, pendingList) {
+      if (!user?.id) return false;
+      const canSet = typeof DB.setAccountBlock === 'function';
+      const canClear = typeof DB.clearAccountBlock === 'function';
+      const canLegacy = typeof DB.setTrainingBlock === 'function';
+      if (!canSet && !canLegacy) return false;
+
+      const applySessionFlags = (blocked, code) => {
+        try {
+          user.training_block = !!blocked;
+          user.account_block_active = !!blocked;
+          user.account_block_code = blocked ? (code || '001') : null;
+          const s = Auth.getSession?.();
+          if (s && String(s.id) === String(user.id)) {
+            s.training_block = !!blocked;
+            s.account_block_active = !!blocked;
+            s.account_block_code = blocked ? (code || '001') : null;
+            if (typeof Auth.setSession === 'function') Auth.setSession(s);
+          }
+        } catch (_) { /* noop */ }
+      };
+
+      if (shouldSkipPendingAlert(user)) {
+        // Gestão não fica bloqueada por trilha operacional.
+        const lead = await DB.getUser(user.id).catch(() => user);
+        const code = typeof DB.getAccountBlockCode === 'function'
+          ? DB.getAccountBlockCode(lead || user)
+          : null;
+        if (code === '001' || (!code && DB.isTrainingBlocked?.(lead || user))) {
+          try {
+            if (canClear) await DB.clearAccountBlock(user.id, { unlockCode: '001', by: 'system-trainings' });
+            else if (canLegacy) await DB.setTrainingBlock(user.id, false);
+          } catch (_) { /* noop */ }
+          applySessionFlags(false, null);
+        }
+        return false;
+      }
+
+      let pending = pendingList;
+      if (!Array.isArray(pending)) {
+        pending = await this.getPendingForUser(user);
+      }
+      const hasObr = pending.some(({ tr }) => String(tr?.category || '').toLowerCase() === 'obrigatorio');
+      const fresh = await DB.getUser(user.id).catch(() => user);
+      const activeCode = typeof DB.getAccountBlockCode === 'function'
+        ? DB.getAccountBlockCode(fresh || user)
+        : null;
+
+      // Bloqueios financeiros 002–005: sync de treinamento não mexe.
+      if (activeCode && activeCode !== '001') {
+        return true;
+      }
+
+      const cur001 = activeCode === '001' || (!activeCode && DB.isTrainingBlocked?.(fresh || user));
+      if (hasObr === cur001) {
+        applySessionFlags(hasObr, hasObr ? '001' : null);
+        return hasObr;
+      }
+
+      try {
+        if (hasObr) {
+          if (canSet) await DB.setAccountBlock(user.id, { code: '001', by: 'system-trainings' });
+          else await DB.setTrainingBlock(user.id, true);
+          applySessionFlags(true, '001');
+        } else {
+          if (canClear) await DB.clearAccountBlock(user.id, { unlockCode: '001', by: 'system-trainings' });
+          else await DB.setTrainingBlock(user.id, false);
+          applySessionFlags(false, null);
+        }
+      } catch (e) {
+        console.warn('[Trainings] syncTrainingBlock:', e);
+      }
+      return hasObr;
     },
 
     async checkPendingOnLogin() {
@@ -1382,7 +1571,14 @@
       if (flag === '1') return;
       const user = await Auth.getCurrentUser().catch(() => null);
       if (!user) return;
+      // Gestão não recebe popup fantasma de treinamentos da operação.
+      if (shouldSkipPendingAlert(user)) {
+        sessionStorage.setItem('soublu_trn_login_alert', '1');
+        await this.syncTrainingBlockForUser(user, []);
+        return;
+      }
       const pending = await this.getPendingForUser(user);
+      await this.syncTrainingBlockForUser(user, pending);
       sessionStorage.setItem('soublu_trn_login_alert', '1');
       if (!pending.length) return;
       await this.updateBadge();

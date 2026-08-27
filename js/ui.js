@@ -834,10 +834,16 @@ function participatesInVendorRanking(role) {
   return String(role || '').toLowerCase() === 'vendedor';
 }
 
-/** Colaboradores que aparecem no ranking (vendedor + employee de campo). Parceiros e rede ficam de fora. */
-function isRankingParticipant(userOrRole) {
+/** Colaboradores que aparecem no ranking (vendedor + employee de campo). Parceiros e rede ficam de fora.
+ *  @param {object|string} userOrRole
+ *  @param {{ includeInactive?: boolean }} [opts] — includeInactive=true mantém inativos (vendas/fechamento).
+ */
+function isRankingParticipant(userOrRole, opts) {
   if (userOrRole && typeof userOrRole === 'object') {
-    if (userOrRole.active === false) return false;
+    const includeInactive = !!(opts && opts.includeInactive);
+    if (!includeInactive && (userOrRole.active === false || userOrRole.active === 0 || userOrRole.active === '0')) {
+      return false;
+    }
     if (isUserInPartnerNetworkSync(userOrRole)) return false;
     return isRankingParticipant(userOrRole.role);
   }

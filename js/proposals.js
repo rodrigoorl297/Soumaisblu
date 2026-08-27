@@ -197,14 +197,22 @@ window.Proposals = {
     '069 - Crefisa',
   ],
 
-  /** Banco digitado (planilha Banco digitado). */
+  /** Banco para digitação — preenchido pelo vendedor após a simulação. */
   _BANCOS_DIGITADOS: [
-    '329 - Fintech do Corban',
-    '465 - AKI CAPITAL',
-    '321 - 321bank',
-    '318 - BMG',
-    '270 - NEO',
-    '643 - Banco Amigoz',
+    'Banco Neo',
+    'Banco Aki',
+    'Banco Amigoz',
+    'Banco BTW',
+    'Banco Digio',
+  ],
+
+  /** Tipo de operação — preenchido pelo vendedor; operacional digita conforme informado. */
+  _TIPOS_OPERACAO: [
+    'Margem Facultativa',
+    'Cartão Benefício',
+    'Cartão Consignado',
+    'Compra Cartão Benefício',
+    'Compra Cartão Consignado',
   ],
 
   _VENDOR_SITUACOES: [
@@ -356,12 +364,60 @@ window.Proposals = {
     if (cur) sel.value = cur;
   },
 
+  _fillTipoOperacaoSelect: function(selectId, currentValue) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    const cur = String(currentValue != null ? currentValue : sel.value || '').trim();
+    let html = '<option value="">Selecione o tipo</option>';
+    (this._TIPOS_OPERACAO || []).forEach((label) => {
+      html += `<option value="${this._escAttr(label)}"${cur === label ? ' selected' : ''}>${this._escHtml(label)}</option>`;
+    });
+    if (cur && !(this._TIPOS_OPERACAO || []).includes(cur)) {
+      html += `<option value="${this._escAttr(cur)}" selected>${this._escHtml(cur)}</option>`;
+    }
+    sel.innerHTML = html;
+    if (cur) sel.value = cur;
+  },
+
   _initBankSelects: function(preset) {
     const p = preset || {};
     this._fillBankSelect('propBancoComprado', this._BANCOS_COMPRADOS, p.bancoComprado);
     this._fillBankSelect('propBancoDigitado', this._BANCOS_DIGITADOS, p.bancoDigitado);
     this._fillBankSelect('managePropBanco', this._BANCOS_COMPRADOS, p.bancoComprado);
     this._fillBankSelect('managePropBancoDigitado', this._BANCOS_DIGITADOS, p.bancoDigitado);
+    this._fillBankSelect('empPropBancoDigitado', this._BANCOS_DIGITADOS, p.bancoDigitado);
+    this._fillTipoOperacaoSelect('propTipoOperacao', p.tipoOperacao);
+    this._fillTipoOperacaoSelect('managePropTipoOperacao', p.tipoOperacao);
+    this._fillTipoOperacaoSelect('empPropTipoOperacao', p.tipoOperacao);
+  },
+
+  _normTipoOperacao: function(p) {
+    if (!p) return '';
+    const meta = p.meta && typeof p.meta === 'object' ? p.meta : {};
+    return String(
+      p.tipoOperacao || p.tipo_operacao || meta.tipo_operacao || meta.tipoOperacao
+      || this._obsLineValue(p.obs, 'Tipo de operação')
+      || this._obsLineValue(p.obs, 'Tipo de operacao')
+      || ''
+    ).trim();
+  },
+
+  /** Se o banco para digitação mudou após o envio → força Pendenciado. */
+  _applyBancoChangePendencia: function(proposal, oldBanco, newBanco) {
+    const prev = String(oldBanco || '').trim();
+    const next = String(newBanco || '').trim();
+    if (!prev || !next || prev === next) return false;
+    proposal.status = 'Pendenciado';
+    proposal.statusOp = 'Pendenciado';
+    proposal.status_op = 'Pendenciado';
+    proposal.history = proposal.history || [];
+    proposal.history.push({
+      date: new Date().toISOString(),
+      actorName: (typeof Auth !== 'undefined' && Auth.getSession?.()?.name) || 'Sistema',
+      action: `Banco para digitação alterado: [${prev}] → [${next}] · status → Pendenciado`,
+      note: 'Ajuste de banco após envio — proposta colocada em pendência para digitação correta.',
+    });
+    return true;
   },
 
   _initStaticProposalSelects: function() {
@@ -2800,7 +2856,18 @@ window.Proposals = {
       senhaConsignacao: p.senhaConsignacao || p.senha_consignacao || '',
       compraDivida: p.compraDivida || p.compra_divida || '',
       bancoComprado: p.bancoComprado || p.banco_comprado || '',
-      bancoDigitado: p.bancoDigitado || p.banco_digitado || this._obsLineValue(p.obs, 'Banco digitado') || '',
+      bancoDigitado: p.bancoDigitado || p.banco_digitado
+        || this._obsLineValue(p.obs, 'Banco para digitação')
+        || this._obsLineValue(p.obs, 'Banco digitado') || '',
+      tipoOperacao: (() => {
+        const meta = p.meta && typeof p.meta === 'object' ? p.meta : {};
+        return String(
+          p.tipoOperacao || p.tipo_operacao || meta.tipo_operacao || meta.tipoOperacao
+          || this._obsLineValue(p.obs, 'Tipo de operação')
+          || this._obsLineValue(p.obs, 'Tipo de operacao')
+          || ''
+        ).trim();
+      })(),
       solicitouBoleto: p.solicitouBoleto || p.solicitou_boleto || '',
       dataSolicitacao: p.dataSolicitacao || p.data_solicitacao || '',
       protocoloBacen: p.protocoloBacen || p.protocolo_bacen || '',
@@ -3494,8 +3561,44 @@ window.Proposals = {
     this._fillEntidadeSelect('empPropEntidade', conv, '');
   },
 
-  openModal: function() {
+  /** true = pode cadastrar; false = bloqueado (já avisou o usuário). */
+  _assertCanCreateProposal: async function() {
     try {
+      const user = (typeof Auth !== 'undefined' && Auth.getCurrentUser)
+        ? await Auth.getCurrentUser().catch(() => Auth.getSession?.())
+        : (typeof Auth !== 'undefined' ? Auth.getSession?.() : null);
+      if (!user) return true;
+      // Garante Trainings carregado para reavaliar pendências obrigatórias.
+      if (!window.Trainings && typeof ensureScript === 'function') {
+        try { await ensureScript('../js/trainings.js?v=acct-block1'); } catch (_) { /* noop */ }
+      }
+      if (window.Trainings && typeof Trainings.syncTrainingBlockForUser === 'function') {
+        try { await Trainings.syncTrainingBlockForUser(user); } catch (_) { /* noop */ }
+      }
+      const fresh = (typeof DB !== 'undefined' && DB.getUser)
+        ? await DB.getUser(user.id, true).catch(() => user)
+        : user;
+      const blocked = (typeof DB !== 'undefined' && typeof DB.isAccountBlocked === 'function')
+        ? DB.isAccountBlocked(fresh)
+        : (fresh?.account_block_active === true || fresh?.account_block_active === 1 || fresh?.account_block_active === '1'
+          || fresh?.training_block === true || fresh?.training_block === 1 || fresh?.training_block === '1');
+      if (!blocked) return true;
+      const motive = (typeof DB !== 'undefined' && typeof DB.formatAccountBlockMotive === 'function')
+        ? DB.formatAccountBlockMotive(fresh)
+        : 'bloqueio de conta';
+      const msg = `CONTA BLOQUEADA — ${motive || 'bloqueio de conta'}.\n\nNão é possível cadastrar propostas até o desbloqueio.`;
+      if (typeof showToast === 'function') showToast(msg.replace(/\n+/g, ' '), 'error', 9000);
+      else alert(msg);
+      return false;
+    } catch (e) {
+      console.warn('[Proposals] assert account block:', e);
+      return true;
+    }
+  },
+
+  openModal: async function() {
+    try {
+      if (!(await this._assertCanCreateProposal())) return;
       const container = document.getElementById('propFormContainer');
       if (!container) {
         alert('Erro: O formulário de proposta não foi encontrado.');
@@ -3511,7 +3614,7 @@ window.Proposals = {
       this._setFolderContext('propAnexosFolders', 'prop');
       this.resetAnexoFolders();
       ['propProduct','propConvenio','propEntidade','propCompraDivida','propBancoComprado','propBancoDigitado',
-       'propSolicitouBoleto','propBacen','propAssinouTermo','propStatusOp','propPosVenda','propNuvidio','propEtapaVendedor'].forEach(id => {
+       'propTipoOperacao','propSolicitouBoleto','propBacen','propAssinouTermo','propStatusOp','propPosVenda','propNuvidio','propEtapaVendedor'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
       });
       this._initBankSelects();
@@ -3598,6 +3701,7 @@ window.Proposals = {
     try {
       const user = Auth.getSession();
       if (!user) return;
+      if (!(await this._assertCanCreateProposal())) return;
 
       const cpf = document.getElementById('propCpf').value.replace(/\D/g, '');
       const name = document.getElementById('propClientName').value;
@@ -3605,28 +3709,6 @@ window.Proposals = {
       if (!cpf || !name) {
         alert("Busque o cliente primeiro.");
         return;
-      }
-
-      // Não permitir segunda proposta ativa para o mesmo CPF.
-      try {
-        const existingList = typeof DB.listProposals === 'function' ? await DB.listProposals() : [];
-        const dup = typeof DB.findOtherActiveProposalForClient === 'function'
-          ? DB.findOtherActiveProposalForClient(existingList, { clientCpf: cpf }, null)
-          : (existingList || []).find((p) => {
-              const pc = String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '');
-              if (pc !== cpf) return false;
-              const st = String(p.status || '').toUpperCase();
-              const fase = String(p.statusOp || p.status_op || '').toUpperCase();
-              return !st.includes('CANCEL') && !fase.includes('CANCEL');
-            });
-        if (dup) {
-          const num = dup.numero || dup.id;
-          const st = dup.statusOp || dup.status || '—';
-          alert(`Já existe proposta ativa para este cliente.\nNº/ID: ${num}\nStatus: ${st}\n\nNão é permitido cadastrar duplicada.`);
-          return;
-        }
-      } catch (dupErr) {
-        console.warn('[Proposals.submit] checagem de duplicata:', dupErr);
       }
 
       const role = user.role || '';
@@ -3654,6 +3736,19 @@ window.Proposals = {
       }
 
       const gv = id => document.getElementById(id)?.value || '';
+      const bancoDigitado = String(gv('propBancoDigitado') || '').trim();
+      const tipoOperacao = String(gv('propTipoOperacao') || '').trim();
+      if (!bancoDigitado) {
+        alert('Selecione o Banco para digitação (informado na simulação).');
+        if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+        return;
+      }
+      if (!tipoOperacao) {
+        alert('Selecione o Tipo de operação.');
+        if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+        return;
+      }
+
       const valor      = parseFloat(gv('propValor')) || 0;
       const tabela     = '';
       const valorFinal = valor;
@@ -3687,7 +3782,10 @@ window.Proposals = {
         valorFinal: valorFinal,
         compraDivida: gv('propCompraDivida'),
         bancoComprado: gv('propBancoComprado'),
-        bancoDigitado: gv('propBancoDigitado'),
+        bancoDigitado,
+        tipoOperacao,
+        tipo_operacao: tipoOperacao,
+        meta: { tipo_operacao: tipoOperacao },
         solicitouBoleto: gv('propSolicitouBoleto'),
         protocolo: gv('propProtocolo'),
         dataSolicitacao: gv('propDataSolicitacao'),
@@ -3991,7 +4089,8 @@ window.Proposals = {
       Matrícula: p.matricula || '',
       Protocolo: p.protocolo || '',
       'Banco comprado': p.bancoComprado || '',
-      'Banco digitado': p.bancoDigitado || '',
+      'Banco para digitação': p.bancoDigitado || '',
+      'Tipo de operação': p.tipoOperacao || '',
       'Valor Proposta (R$)': num(p.valor),
       'Desconto (R$)': num(p.desconto),
       'Valor Final (R$)': num(p.valorFinal),
@@ -4349,6 +4448,8 @@ window.Proposals = {
           ${proposal.protocolo ? `<strong>Nº Protocolo:</strong> ${this._escHtml(proposal.protocolo)}<br>` : ''}
           ${etapaLabel ? `<strong>Situação:</strong> ${this._escHtml(etapaLabel)}<br>` : ''}
           <strong>Status:</strong> ${this._escHtml(proposal.status || '—')}<br>
+          ${proposal.bancoDigitado ? `<strong>Banco para digitação:</strong> ${this._escHtml(proposal.bancoDigitado)}<br>` : ''}
+          ${proposal.tipoOperacao ? `<strong>Tipo de operação:</strong> ${this._escHtml(proposal.tipoOperacao)}<br>` : ''}
           <strong>Obs:</strong> ${this._escHtml(proposal.obs || '—')}
         `;
       }
@@ -4359,6 +4460,10 @@ window.Proposals = {
       this._fillProductSelect('empPropProduct', proposal.product);
       this._fillConvenioSelect('empPropConvenio', 'empPropEntidade', proposal.convenio);
       this._fillEntidadeSelect('empPropEntidade', proposal.convenio, proposal.entidade);
+      this._initBankSelects({
+        bancoDigitado: proposal.bancoDigitado,
+        tipoOperacao: proposal.tipoOperacao,
+      });
       const etapaSel = document.getElementById('empPropEtapa');
       if (etapaSel) {
         etapaSel.innerHTML = this._vendorSituacaoOptionsHtml(this._vendorStage(proposal));
@@ -4445,9 +4550,33 @@ window.Proposals = {
     proposal.entidade = gv('empPropEntidade');
     proposal.protocolo = gv('empPropProtocolo');
     proposal.obs = gv('empPropObs');
+    const oldBancoDigitado = String(proposal.bancoDigitado || proposal.banco_digitado || '').trim();
+    const newBancoDigitado = String(gv('empPropBancoDigitado') || '').trim();
+    const tipoOperacao = String(gv('empPropTipoOperacao') || '').trim();
+    if (!newBancoDigitado) {
+      alert('Selecione o Banco para digitação.');
+      if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+      return;
+    }
+    if (!tipoOperacao) {
+      alert('Selecione o Tipo de operação.');
+      if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+      return;
+    }
+    proposal.bancoDigitado = newBancoDigitado;
+    proposal.tipoOperacao = tipoOperacao;
+    proposal.tipo_operacao = tipoOperacao;
+    {
+      const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
+      meta.tipo_operacao = tipoOperacao;
+      proposal.meta = meta;
+    }
+    const bancoMudouPendencia = this._applyBancoChangePendencia(proposal, oldBancoDigitado, newBancoDigitado);
     const oldStatus = proposal.status;
     const oldStatusOp = proposal.statusOp || proposal.status_op || '';
-    if (etapa) {
+    if (bancoMudouPendencia) {
+      /* status já setado em Pendenciado */
+    } else if (etapa) {
       proposal.statusOp = etapa;
       proposal.status = etapa;
     }
@@ -4505,8 +4634,18 @@ window.Proposals = {
       }, 'C');
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._employeeEditCache[id];
-      if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
-      else alert('Proposta atualizada!');
+      if (typeof showToast === 'function') {
+        showToast(
+          bancoMudouPendencia
+            ? 'Banco alterado — proposta colocada em Pendenciado.'
+            : 'Proposta atualizada!',
+          bancoMudouPendencia ? 'warning' : 'success',
+          bancoMudouPendencia ? 7000 : 4000
+        );
+      }
+      else alert(bancoMudouPendencia
+        ? 'Banco alterado — proposta colocada em Pendenciado.'
+        : 'Proposta atualizada!');
       closeModal('employeeProposalModal');
       void this.renderEmployeeList();
     } catch (e) {
@@ -4652,7 +4791,8 @@ window.Proposals = {
       ${proposal.matricula ? `<strong>Matrícula:</strong> ${proposal.matricula} &nbsp;|&nbsp; <strong>Senha Contracheque:</strong> ${proposal.senhaContracheque || '—'} &nbsp;|&nbsp; <strong>Senha Consignação:</strong> ${proposal.senhaConsignacao || '—'}<br>` : ''}
       ${proposal.protocolo ? `<strong>Nº Protocolo:</strong> ${proposal.protocolo}<br>` : ''}
       ${proposal.bancoComprado ? `<strong>Banco comprado:</strong> ${proposal.bancoComprado}<br>` : ''}
-      ${proposal.bancoDigitado ? `<strong>Banco digitado:</strong> ${proposal.bancoDigitado}<br>` : ''}
+      ${proposal.bancoDigitado ? `<strong>Banco para digitação:</strong> ${proposal.bancoDigitado}<br>` : ''}
+      ${proposal.tipoOperacao ? `<strong>Tipo de operação:</strong> ${proposal.tipoOperacao}<br>` : ''}
       ${this._vendorStage(proposal) ? `<strong>Situação (vendedor):</strong> ${this._labelEtapaVendedor(this._vendorStage(proposal))}<br>` : ''}
       <strong>Obs:</strong> ${proposal.obs || '—'}
     `;
@@ -4671,6 +4811,7 @@ window.Proposals = {
     this._initBankSelects({
       bancoComprado: proposal.bancoComprado,
       bancoDigitado: proposal.bancoDigitado,
+      tipoOperacao: proposal.tipoOperacao,
     });
     sv('managePropBoleto', proposal.solicitouBoleto || proposal.solicitacaoBoleto);
     sv('managePropValor', proposal.valor);
@@ -4822,7 +4963,19 @@ window.Proposals = {
 
     proposal.compraDivida    = gv('managePropDivida');
     proposal.bancoComprado   = gv('managePropBanco');
-    proposal.bancoDigitado   = gv('managePropBancoDigitado');
+    const oldBancoDigitado = String(proposal.bancoDigitado || proposal.banco_digitado || '').trim();
+    const newBancoDigitado = String(gv('managePropBancoDigitado') || '').trim();
+    proposal.bancoDigitado   = newBancoDigitado;
+    const tipoOperacao = String(gv('managePropTipoOperacao') || '').trim();
+    proposal.tipoOperacao = tipoOperacao;
+    proposal.tipo_operacao = tipoOperacao;
+    {
+      const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
+      if (tipoOperacao) meta.tipo_operacao = tipoOperacao;
+      else delete meta.tipo_operacao;
+      proposal.meta = meta;
+    }
+    const bancoMudouPendencia = this._applyBancoChangePendencia(proposal, oldBancoDigitado, newBancoDigitado);
     proposal.solicitouBoleto = gv('managePropBoleto');
     proposal.protocolo       = gv('managePropProtocolo');
     proposal.dataSolicitacao = gv('managePropDataSol');
@@ -4830,10 +4983,12 @@ window.Proposals = {
     proposal.protocoloBacen  = gv('managePropProtBacen');
     proposal.dataSolicitacaoBacen = gv('managePropDataBacen');
     proposal.assinou         = gv('managePropAssinou');
-    const newStatusOp = gv('managePropStatusOp');
+    const newStatusOp = bancoMudouPendencia ? 'Pendenciado' : gv('managePropStatusOp');
     const oldStatus = proposal.status;
     const oldStatusOp = String(proposal.statusOp || proposal.status_op || '').trim();
-    let newStatus = gv('managePropStatus') || proposal.status;
+    let newStatus = bancoMudouPendencia
+      ? 'Pendenciado'
+      : (gv('managePropStatus') || proposal.status);
     // Parceiro costuma alterar só "Status Proposta (Op.)"; se o geral não mudou, espelha o Op.
     if (newStatusOp && newStatusOp !== oldStatusOp && newStatus === oldStatus) {
       newStatus = newStatusOp;
@@ -4945,8 +5100,18 @@ window.Proposals = {
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._adminEditCache[id];
       this._mergeAdminListCacheRow(proposal);
-      if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
-      else alert('Proposta atualizada!');
+      if (typeof showToast === 'function') {
+        showToast(
+          bancoMudouPendencia
+            ? 'Banco alterado — proposta colocada em Pendenciado.'
+            : 'Proposta atualizada!',
+          bancoMudouPendencia ? 'warning' : 'success',
+          bancoMudouPendencia ? 7000 : 4000
+        );
+      }
+      else alert(bancoMudouPendencia
+        ? 'Banco alterado — proposta colocada em Pendenciado.'
+        : 'Proposta atualizada!');
       const modal = document.getElementById('manageProposalModal');
       if (modal) modal.classList.remove('open');
       const patched = this._patchAdminTableRow(proposal);

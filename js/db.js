@@ -750,7 +750,14 @@
     async getVendorsForSelect(adminId = null) {
       const isVendorRole = (u) => {
         const r = String(u?.role || '').toLowerCase();
-        return r === 'employee' || r === 'vendedor';
+        if (r === 'employee' || r === 'vendedor') return true;
+        // Supervisora autorizada a cadastrar proposta (ex.: Ana Bela) também recebe transferência.
+        if (r === 'supervisor' || r === 'sup_backoffice') {
+          const p = (u.permissions && typeof u.permissions === 'object') ? u.permissions : {};
+          if (p.canProposta === true || p.can_proposta === true) return true;
+          return r === 'supervisor';
+        }
+        return false;
       };
       const isActive = (u) => u?.active !== false && u?.active !== 0 && u?.active !== '0';
       const adminIds = Array.isArray(adminId)
@@ -758,7 +765,10 @@
         : (adminId ? [String(adminId)] : null);
       const inScope = (u) => {
         if (!adminIds?.length) return true;
-        return adminIds.includes(String(u.admin_id || ''));
+        // Inclui o próprio supervisor do escopo (Ana Bela / Viviane mescladas).
+        if (adminIds.includes(String(u.id || ''))) return true;
+        const aid = String(u.admin_id || u.adminId || '');
+        return !!aid && adminIds.includes(aid);
       };
       const sortName = (a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR');
 
@@ -773,15 +783,16 @@
       }
 
       if (this.online) {
-        const cols = 'id,name,email,role,active,admin_id';
+        const cols = 'id,name,email,role,active,admin_id,permissions';
         // active=eq.1 (não "true") — Hostinger/MySQL TINYINT
-        let params = `?role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
+        // Inclui supervisores (podem cadastrar/receber proposta, ex. Ana Bela).
+        let params = `?role=in.(employee,vendedor,supervisor,sup_backoffice)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         if (adminIds?.length === 1) {
-          params = `?admin_id=eq.${encodeURIComponent(adminIds[0])}&role=in.(employee,vendedor)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
+          params = `?or=(admin_id.eq.${encodeURIComponent(adminIds[0])},id.eq.${encodeURIComponent(adminIds[0])})&role=in.(employee,vendedor,supervisor,sup_backoffice)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         }
         try {
           const rows = await supaReq('GET', 'users', null, params);
-          return (Array.isArray(rows) ? rows : []).filter(isActive).sort(sortName);
+          return (Array.isArray(rows) ? rows : []).filter(u => isVendorRole(u) && isActive(u) && inScope(u)).sort(sortName);
         } catch (e) {
           console.warn('[DB] getVendorsForSelect:', e);
           return [];
@@ -822,7 +833,7 @@
         }
         const fetchToken = this.__allUsersFetchToken || 0;
         const run = (async () => {
-          const cols = 'id,name,email,role,cpf,matricula,department,admin_id,balance,points,active,cc_money_active,photo_url,show_points,created_at';
+          const cols = 'id,name,email,role,cpf,matricula,department,admin_id,balance,points,active,cc_money_active,training_block,account_block_active,account_block_code,account_block_at,account_block_by,photo_url,show_points,created_at';
           const pageSize = 400;
           let offset = 0;
           const all = [];
@@ -1454,6 +1465,216 @@
       return true;
     },
 
+    /** Catálogo fixo de motivos de bloqueio/desbloqueio (001–005). */
+    getAccountBlockCatalog() {
+      return {
+        block: [
+          { code: '001', label: 'Treinamentos Obrigatórios' },
+          { code: '002', label: 'Aguardando NFE' },
+          { code: '003', label: 'Aguardando recebimento comissão' },
+          { code: '004', label: 'Contestação procedente não respondida' },
+          { code: '005', label: 'Monitoria atendimento baixa qualidade' },
+        ],
+        unblock: [
+          { code: '001', label: 'Treinamentos Concluídos' },
+          { code: '002', label: 'NFE recebida' },
+          { code: '003', label: 'Baixa de comissão finalizada' },
+          { code: '004', label: 'Termo de conduta e responsabilidade contestação' },
+          { code: '005', label: 'Alinhamento Gestor comercial' },
+        ],
+      };
+    },
+
+    _accountBlockLabel(code, kind = 'block') {
+      const cat = this.getAccountBlockCatalog();
+      const list = kind === 'unblock' ? cat.unblock : cat.block;
+      const hit = list.find((x) => String(x.code) === String(code));
+      return hit ? hit.label : '';
+    },
+
+    /** Código do bloqueio ativo (001–005) ou null. Compat: training_block legado = 001. */
+    getAccountBlockCode(emp) {
+      if (!emp) return null;
+      const active = emp.account_block_active === true || emp.account_block_active === 1
+        || emp.account_block_active === '1' || emp.account_block_active === 'true';
+      const code = String(emp.account_block_code || '').trim();
+      if (active && code) return code.padStart(3, '0').slice(-3);
+      if (this.isTrainingBlocked(emp)) return '001';
+      return null;
+    },
+
+    formatAccountBlockMotive(emp) {
+      const code = this.getAccountBlockCode(emp);
+      if (!code) return '';
+      const label = this._accountBlockLabel(code, 'block') || 'Bloqueio de conta';
+      return `${code} - ${label}`;
+    },
+
+    /** Bloqueio por treinamentos obrigatórios: impede cadastrar proposta. */
+    isTrainingBlocked(emp) {
+      if (!emp) return false;
+      const v = emp.training_block;
+      return v === true || v === 1 || v === '1' || v === 'true';
+    },
+
+    /** Conta bloqueada (estruturado ou training_block legado): impede cadastrar proposta. */
+    isAccountBlocked(emp) {
+      if (!emp) return false;
+      const active = emp.account_block_active === true || emp.account_block_active === 1
+        || emp.account_block_active === '1' || emp.account_block_active === 'true';
+      if (active) return true;
+      return this.isTrainingBlocked(emp);
+    },
+
+    async setTrainingBlock(empId, blocked) {
+      const on = !!blocked;
+      const row = await this.updateUser(empId, { training_block: on });
+      if (this.__allUsersMem) {
+        this.__allUsersMem = null;
+        this.__allUsersMemAt = 0;
+      }
+      _cacheDel('users');
+      return row;
+    },
+
+    async _logAccountBlockEvent({ userId, action, code, label, byUserId, movementId }) {
+      const mov = movementId ? String(movementId) : '';
+      const baseLabel = String(label || '');
+      const row = {
+        id: this._genId('abe'),
+        user_id: String(userId),
+        action: String(action || ''),
+        code: String(code || ''),
+        label: mov ? `${baseLabel} · mov ${mov}` : baseLabel,
+        by_user_id: byUserId ? String(byUserId) : null,
+        created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+      };
+      try {
+        if (this.online) {
+          await supaReq('POST', 'account_block_events', row);
+        }
+      } catch (e) {
+        console.warn('[DB] account_block_events:', e);
+      }
+      return row;
+    },
+
+    /**
+     * Bloqueia a conta com motivo 001–005.
+     * Código 001 também seta training_block = true (compat).
+     */
+    async setAccountBlock(empId, { code, by } = {}) {
+      const c = String(code || '').trim().padStart(3, '0').slice(-3);
+      const label = this._accountBlockLabel(c, 'block');
+      if (!label) throw new Error('Motivo de bloqueio inválido.');
+      const byId = by != null ? String(by) : null;
+      const patch = {
+        account_block_active: true,
+        account_block_code: c,
+        account_block_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+        account_block_by: byId,
+      };
+      if (c === '001') patch.training_block = true;
+      const row = await this.updateUser(empId, patch);
+      await this._logAccountBlockEvent({
+        userId: empId,
+        action: 'block',
+        code: c,
+        label,
+        byUserId: byId,
+      });
+      if (this.__allUsersMem) {
+        this.__allUsersMem = null;
+        this.__allUsersMemAt = 0;
+      }
+      _cacheDel('users');
+      return row;
+    },
+
+    /**
+     * Desbloqueia a conta com motivo de desbloqueio obrigatório.
+     * Preferir chamar a partir de uma movimentação (crédito) com movementId.
+     * Se o bloqueio era 001, também limpa training_block.
+     */
+    async clearAccountBlock(empId, { unlockCode, by, movementId } = {}) {
+      const uCode = String(unlockCode || '').trim().padStart(3, '0').slice(-3);
+      const uLabel = this._accountBlockLabel(uCode, 'unblock');
+      if (!uLabel) throw new Error('Motivo de desbloqueio obrigatório.');
+      const fresh = await this.getUser(empId, true).catch(() => null);
+      const prevCode = this.getAccountBlockCode(fresh) || String(fresh?.account_block_code || '').trim() || '001';
+      const byId = by != null ? String(by) : null;
+      const movId = movementId ? String(movementId) : '';
+      const patch = {
+        account_block_active: false,
+        account_block_code: null,
+        account_block_at: null,
+        account_block_by: null,
+      };
+      if (prevCode === '001') {
+        patch.training_block = false;
+      }
+      const row = await this.updateUser(empId, patch);
+
+      if (movId) {
+        try {
+          await this._markMovementAccountUnblock(empId, movId, {
+            unlockCode: uCode,
+            unlockLabel: uLabel,
+            prevBlockCode: prevCode,
+            by: byId,
+          });
+        } catch (e) {
+          console.warn('[DB] mark movement unblock:', e);
+        }
+      }
+
+      await this._logAccountBlockEvent({
+        userId: empId,
+        action: 'unblock',
+        code: uCode,
+        label: uLabel,
+        byUserId: byId,
+        movementId: movId || null,
+      });
+      if (this.__allUsersMem) {
+        this.__allUsersMem = null;
+        this.__allUsersMemAt = 0;
+      }
+      _cacheDel('users');
+      return row;
+    },
+
+    /** Marca meta do lançamento que liberou o bloqueio (auditoria no extrato). */
+    async _markMovementAccountUnblock(empId, txId, info = {}) {
+      const id = String(txId || '');
+      if (!id) return null;
+      const txs = await this.getTransactions(empId).catch(() => []);
+      const tx = (txs || []).find((t) => String(t.id) === id);
+      if (!tx) return null;
+      const meta = {
+        ...this._parseTxMeta(tx),
+        account_unblock: {
+          code: String(info.unlockCode || ''),
+          label: String(info.unlockLabel || ''),
+          prev_block_code: String(info.prevBlockCode || ''),
+          by: info.by || null,
+          at: new Date().toISOString(),
+        },
+      };
+      if (this.online) {
+        _cacheDel('transactions');
+        await supaReq('PATCH', 'transactions', { meta }, `?id=eq.${encodeURIComponent(id)}`);
+      } else {
+        const listTx = this._lget(this.LK.transactions) || [];
+        const idx = listTx.findIndex((t) => String(t.id) === id);
+        if (idx >= 0) {
+          listTx[idx] = { ...listTx[idx], meta };
+          this._lset(this.LK.transactions, listTx);
+        }
+      }
+      return meta;
+    },
+
     async setCcMoneyActive(empId, active) {
       const on = !!active;
       const row = await this.updateUser(empId, { cc_money_active: on });
@@ -1709,48 +1930,73 @@ if (!allowed) return null;
 
     _OPEN_VOUCHER_DEBIT_STATUSES: new Set(['em_analise', 'utilizado', 'em_processamento']),
 
+    /**
+     * Clube ↔ Conta corrente: DESLIGADO até parametrizar.
+     * Ative com window.SOUBLU_CC_LINK_CLUBE = true (ou SOUBLU_CONFIG.ccLinkClube).
+     */
+    isClubeContaCorrenteLinked() {
+      try {
+        if (typeof window !== 'undefined') {
+          if (window.SOUBLU_CC_LINK_CLUBE === true) return true;
+          if (window.SOUBLU_CONFIG && window.SOUBLU_CONFIG.ccLinkClube === true) return true;
+        }
+      } catch (_) { /* noop */ }
+      return false;
+    },
+
+    _isClubeOpenDebitMeta(meta) {
+      const m = meta && typeof meta === 'object' ? meta : {};
+      const kind = String(m.kind || '').toLowerCase();
+      return kind === 'clube_fatura' || !!m.voucher_id || !!m.voucher_no;
+    },
+
     /** Débitos em aberto na conta (faturas Clube + lançamentos open_debit). Não altera saldo. */
     async getOpenAccountDebitos(empId) {
       const itens = [];
       if (!empId) return { total: 0, itens };
+      const linkClube = this.isClubeContaCorrenteLinked();
 
-      try {
-        let vouchers = [];
-        if (this.online && typeof supaReq === 'function') {
-          vouchers = await supaReq('GET', 'beneficios_vouchers', null,
-            `?employee_id=eq.${encodeURIComponent(empId)}&select=id,voucher_no,valor,status,detalhes_pedido,categoria,created_at&order=created_at.desc&limit=200`);
+      if (linkClube) {
+        try {
+          let vouchers = [];
+          if (this.online && typeof supaReq === 'function') {
+            vouchers = await supaReq('GET', 'beneficios_vouchers', null,
+              `?employee_id=eq.${encodeURIComponent(empId)}&select=id,voucher_no,valor,status,detalhes_pedido,categoria,created_at&order=created_at.desc&limit=200`);
+          }
+          for (const v of (Array.isArray(vouchers) ? vouchers : [])) {
+            const st = String(v.status || '').toLowerCase();
+            if (!this._OPEN_VOUCHER_DEBIT_STATUSES.has(st)) continue;
+            const det = this._parseVoucherDetalhes(v);
+            if (det.settled_from_points || det.settled_on_withdraw) continue;
+            const valor = Math.round((Number(v.valor) || 0) * 100) / 100;
+            if (valor <= 0) continue;
+            itens.push({
+              id: v.id,
+              source: 'clube',
+              voucher_no: v.voucher_no || '',
+              label: `Clube ${v.voucher_no || v.id}${v.categoria ? ' — ' + v.categoria : ''}`,
+              amount: valor,
+              created_at: v.created_at,
+            });
+          }
+        } catch (e) {
+          console.warn('[getOpenAccountDebitos] vouchers:', e);
         }
-        for (const v of (Array.isArray(vouchers) ? vouchers : [])) {
-          const st = String(v.status || '').toLowerCase();
-          if (!this._OPEN_VOUCHER_DEBIT_STATUSES.has(st)) continue;
-          const det = this._parseVoucherDetalhes(v);
-          if (det.settled_from_points || det.settled_on_withdraw) continue;
-          const valor = Math.round((Number(v.valor) || 0) * 100) / 100;
-          if (valor <= 0) continue;
-          itens.push({
-            id: v.id,
-            source: 'clube',
-            voucher_no: v.voucher_no || '',
-            label: `Clube ${v.voucher_no || v.id}${v.categoria ? ' — ' + v.categoria : ''}`,
-            amount: valor,
-            created_at: v.created_at,
-          });
-        }
-      } catch (e) {
-        console.warn('[getOpenAccountDebitos] vouchers:', e);
       }
 
       try {
         const txs = await this.getTransactions(empId).catch(() => []);
         for (const t of (txs || [])) {
           const meta = this._parseTxMeta(t);
+          if (this._isLancamentoFuturoMeta(meta)) continue;
           if (!meta.open_debit || meta.status === 'settled') continue;
+          if (!linkClube && this._isClubeOpenDebitMeta(meta)) continue;
           if (meta.voucher_id && itens.some((i) => String(i.id) === String(meta.voucher_id))) continue;
           const valor = Math.round((Number(t.amount) || 0) * 100) / 100;
           if (valor <= 0) continue;
           itens.push({
             id: t.id,
-            source: 'manual',
+            source: this._isClubeOpenDebitMeta(meta) ? 'clube' : 'manual',
             label: t.reason || 'Débito em aberto',
             amount: valor,
             created_at: t.created_at,
@@ -1769,6 +2015,8 @@ if (!allowed) return null;
     async registerOpenAccountDebito({ employeeId, amount, reason, byUser, voucherId, voucherNo, source }) {
       const amt = Math.round((Number(amount) || 0) * 100) / 100;
       if (!employeeId || !(amt > 0)) return null;
+      // Clube ainda não parametrizado para lançar na conta corrente.
+      if (source === 'clube' && !this.isClubeContaCorrenteLinked()) return null;
       return this.addTransaction({
         employee_id: employeeId,
         type: 'debit',
@@ -1784,6 +2032,88 @@ if (!allowed) return null;
           voucher_no: voucherNo || null,
         },
       });
+    },
+
+    _isLancamentoFuturoMeta(meta) {
+      const m = meta && typeof meta === 'object' ? meta : {};
+      const kind = String(m.kind || '').toLowerCase();
+      return !!m.futuro || kind === 'lancamento_futuro';
+    },
+
+    /**
+     * Lançamentos futuros (crédito a receber / débito a efetuar) — não alteram saldo.
+     * Persistidos em transactions com meta.kind = lancamento_futuro.
+     */
+    async getLancamentosFuturos(empId) {
+      const itens = [];
+      if (!empId) return itens;
+      const txs = await this.getTransactions(empId).catch(() => []);
+      for (const t of (txs || [])) {
+        const meta = this._parseTxMeta(t);
+        if (!this._isLancamentoFuturoMeta(meta)) continue;
+        const st = String(meta.status || 'scheduled').toLowerCase();
+        if (st === 'cancelled' || st === 'applied' || st === 'settled') continue;
+        const k = String(meta.futuro_kind || t.type || 'credit').toLowerCase() === 'debit' ? 'debit' : 'credit';
+        const valor = Math.round((Number(t.amount) || 0) * 100) / 100;
+        if (!(valor > 0)) continue;
+        itens.push({
+          id: t.id,
+          date: meta.scheduled_date || String(t.created_at || '').slice(0, 10),
+          kind: k,
+          amount: valor,
+          label: t.reason || (k === 'debit' ? 'Débitos a efetuar' : 'Créditos a receber'),
+          source: 'db',
+          created_at: t.created_at,
+        });
+      }
+      itens.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+      return itens;
+    },
+
+    /** Agenda crédito/débito futuro (sem mover saldo). */
+    async registerLancamentoFuturo({ employeeId, kind, amount, date, reason, byUser }) {
+      const amt = Math.round((Number(amount) || 0) * 100) / 100;
+      const k = String(kind || '').toLowerCase() === 'debit' ? 'debit' : 'credit';
+      const dateStr = String(date || '').trim().slice(0, 10);
+      if (!employeeId || !(amt > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
+      const label = String(reason || '').trim()
+        || (k === 'credit' ? 'Créditos a receber' : 'Débitos a efetuar');
+      return this.addTransaction({
+        employee_id: employeeId,
+        type: k,
+        amount: amt,
+        reason: label,
+        by_user: byUser || 'admin',
+        created_at: `${dateStr} 12:00:00`,
+        meta: {
+          kind: 'lancamento_futuro',
+          futuro: true,
+          futuro_kind: k,
+          scheduled_date: dateStr,
+          status: 'scheduled',
+          screen: 'conta_corrente_gestao',
+        },
+      });
+    },
+
+    async removeLancamentoFuturo(empId, txId) {
+      if (!empId || !txId) return { ok: false, msg: 'Parâmetros inválidos.' };
+      const txs = await this.getTransactions(empId).catch(() => []);
+      const tx = (txs || []).find((t) => String(t.id) === String(txId));
+      if (!tx) return { ok: false, msg: 'Lançamento não encontrado.' };
+      const meta = this._parseTxMeta(tx);
+      if (!this._isLancamentoFuturoMeta(meta)) {
+        return { ok: false, msg: 'Registro não é lançamento futuro.' };
+      }
+      _cacheDel('transactions');
+      if (this.online) {
+        await supaReq('DELETE', 'transactions', null, `?id=eq.${encodeURIComponent(txId)}`);
+      } else {
+        const list = (this._lget(this.LK.transactions) || [])
+          .filter((t) => String(t.id) !== String(txId));
+        this._lset(this.LK.transactions, list);
+      }
+      return { ok: true };
     },
 
     async _markVoucherSettledFromPoints(voucherId) {
@@ -3721,8 +4051,17 @@ if (!allowed) return null;
           p.bancoDigitado = bancoDig;
           p.banco_digitado = bancoDig;
         } else {
-          p.obs = this._appendProposalObsLine(p.obs, `Banco digitado: ${bancoDig}`);
+          p.obs = this._appendProposalObsLine(p.obs, `Banco para digitação: ${bancoDig}`);
         }
+      }
+
+      const tipoOp = String(p.tipoOperacao ?? p.tipo_operacao ?? '').trim();
+      delete p.tipoOperacao;
+      delete p.tipo_operacao;
+      if (tipoOp) {
+        const meta = this._parseProposalJsonField(p.meta);
+        p.meta = { ...meta, tipo_operacao: tipoOp };
+        p.obs = this._appendProposalObsLine(p.obs, `Tipo de operação: ${tipoOp}`);
       }
 
       if (p.credito !== undefined) {
@@ -4445,7 +4784,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         answers: ans,
         lesson_progress: lp,
         score: row.score != null ? Number(row.score) : null,
-        passed: !!row.passed,
+        passed: row.passed === true || row.passed === 1 || row.passed === '1' || row.passed === 'true',
       };
     },
 
@@ -5736,12 +6075,24 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         ? this._balanceAmt(emp.points ?? emp.balance ?? 0)
         : this._ptsBalance(emp);
       const skipWd = new Set(['cancelado', 'rejeitado', 'estornado']);
+      const linkClube = this.isClubeContaCorrenteLinked();
       const lines = [];
       for (const t of txs || []) {
         let meta = t.meta;
         if (typeof meta === 'string') {
           try { meta = JSON.parse(meta) || {}; } catch (_) { meta = {}; }
         }
+        meta = meta && typeof meta === 'object' ? meta : {};
+        const kind = String(meta.kind || '').toLowerCase();
+        // Lançamento futuro: agenda apenas — não entra no histórico de saldo.
+        if (this._isLancamentoFuturoMeta(meta)) continue;
+        // Débito "em aberto" nunca moveu saldo — não polui extrato (e some do Clube se desligado).
+        if (meta.open_debit) {
+          if (!linkClube && this._isClubeOpenDebitMeta(meta)) continue;
+          if (meta.status !== 'settled') continue;
+        }
+        // Saque já aparece via tabela withdrawals — evita linha duplicada no histórico.
+        if (kind === 'saque_solicitado') continue;
         lines.push({
           id: t.id,
           kind: 'transaction',
@@ -5749,7 +6100,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
           amount: typeof txAmount === 'function' ? txAmount(t) : Number(t.amount) || 0,
           reason: t.reason || 'Movimentação',
           created_at: t.created_at || t.date,
-          meta: meta && typeof meta === 'object' ? meta : {},
+          meta,
           by_user: t.by_user,
         });
       }
@@ -5820,14 +6171,47 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       const all = await this.getTransactions(empId).catch(() => []);
       const byId = new Map((all || []).map((t) => [String(t.id), t]));
       const selected = ids.map((id) => byId.get(id)).filter(Boolean);
-      if (!selected.length) return { ok: false, msg: 'Lançamentos não encontrados.' };
+      if (!selected.length) {
+        return {
+          ok: false,
+          msg: 'Lançamentos não encontrados (saques PIX não podem ser excluídos por aqui — use o fluxo de rejeição/estorno).',
+        };
+      }
+
+      const blocked = [];
+      const deletable = [];
+      for (const t of selected) {
+        const meta = this._parseTxMeta(t);
+        const kind = String(meta.kind || '').toLowerCase();
+        // Excluir saque/quitação no extrato recredita indevidamente enquanto o saque segue vivo.
+        if (
+          kind === 'saque_solicitado'
+          || kind === 'quitacao_debito_aberto'
+          || (meta.screen === 'saque_pix' && !meta.open_debit && !String(kind).startsWith('estorno'))
+        ) {
+          blocked.push(t);
+          continue;
+        }
+        deletable.push(t);
+      }
+      if (!deletable.length) {
+        return {
+          ok: false,
+          msg: blocked.length
+            ? 'Não é permitido excluir lançamento de saque PIX por aqui (gera crédito indevido). Use rejeição/estorno do saque.'
+            : 'Nenhum lançamento elegível para exclusão.',
+        };
+      }
 
       const money = this._isPartnerWalletUser(emp);
       let current = money
         ? this._balanceAmt(emp.points ?? emp.balance ?? 0)
         : this._ptsBalance(emp);
 
-      for (const t of selected) {
+      for (const t of deletable) {
+        const meta = this._parseTxMeta(t);
+        // open_debit / futuro nunca alteraram saldo — só apaga o registro.
+        if (meta.open_debit || this._isLancamentoFuturoMeta(meta)) continue;
         const amt = money
           ? this._moneyAmt(t.amount)
           : (Number(t.amount) > 0 ? Number(t.amount) : NaN);
@@ -5845,7 +6229,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
       _cacheDel('users');
       _cacheDel('transactions');
 
-      const deletedIds = selected.map((t) => String(t.id));
+      const deletedIds = deletable.map((t) => String(t.id));
       if (this.online) {
         for (const id of deletedIds) {
           await supaReq('DELETE', 'transactions', null, `?id=eq.${encodeURIComponent(id)}`);
@@ -5860,6 +6244,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         ok: true,
         balance: current,
         deleted: deletedIds.length,
+        skipped_saque: blocked.length,
         by_user: byUser || 'admin',
       };
     },

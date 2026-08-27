@@ -601,6 +601,19 @@ function askAccountDebitoOnWithdraw(openDebito) {
 
 /* ── Executar o saque ── */
 async function executeWithdrawal() {
+  if (window._wdSubmitting) {
+    showToast('Saque já em andamento. Aguarde…', 'info');
+    return;
+  }
+  window._wdSubmitting = true;
+  try {
+    await _executeWithdrawalBody();
+  } finally {
+    window._wdSubmitting = false;
+  }
+}
+
+async function _executeWithdrawalBody() {
   const amountEl = document.getElementById('withdrawAmount');
   const pixKeyTypeEl = document.getElementById('pixKeyType');
   const pixKeyEl = document.getElementById('pixKey');

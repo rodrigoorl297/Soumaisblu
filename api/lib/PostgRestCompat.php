@@ -44,6 +44,7 @@ final class PostgRestCompat
         'bolao_copa_picks', 'bolao_copa_results',
         'beneficios_limites', 'beneficios_prestadores', 'beneficios_produtos', 'beneficios_vouchers', 'beneficios_fechamentos',
         'internal_chat_threads', 'internal_chat_messages',
+        'account_block_events',
     ];
 
     /** Nome na API (snake_case) → coluna física no MySQL. */
@@ -162,6 +163,11 @@ final class PostgRestCompat
             $cols = $this->tableColumns('users');
             $need = [
                 'sonhos_data' => 'LONGTEXT NULL',
+                'training_block' => "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=bloqueado por treinamentos obrigatorios'",
+                'account_block_active' => "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=conta bloqueada (nao cadastra proposta)'",
+                'account_block_code' => "VARCHAR(8) NULL COMMENT 'codigo motivo bloqueio 001-005'",
+                'account_block_at' => 'DATETIME NULL',
+                'account_block_by' => 'VARCHAR(64) NULL',
             ];
             foreach ($need as $col => $ddl) {
                 if (in_array($col, $cols, true)) {
@@ -460,7 +466,8 @@ final class PostgRestCompat
         static $boolCols = [
             'active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial',
             'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner',
-            'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned',
+            'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned', 'training_block',
+            'account_block_active',
         ];
         if (!in_array($col, $boolCols, true)) {
             return $val;
@@ -623,7 +630,7 @@ final class PostgRestCompat
                     $row[$k] = $decoded;
                 }
             }
-            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner', 'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned'], true)) {
+            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner', 'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned', 'training_block', 'account_block_active'], true)) {
                 $row[$k] = (bool) (int) $v;
             }
         }

@@ -365,6 +365,83 @@ option.cc-opt-inactive { color: #b45309; }
 </div>`;
         document.body.appendChild(del.firstElementChild);
       }
+      if (!document.getElementById('ccAccountBlockModal')) {
+        const blk = document.createElement('div');
+        blk.innerHTML = `
+<div class="modal-overlay" id="ccAccountBlockModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header"><h3>Bloquear conta</h3>
+      <button type="button" class="modal-close" onclick="closeModal('ccAccountBlockModal')"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ccBlockEmpId"/>
+      <p style="font-size:13px;color:var(--color-text-muted);margin:0 0 12px;">A pessoa não poderá cadastrar novas propostas enquanto a conta estiver bloqueada.</p>
+      <div class="form-group"><label>Motivo do bloqueio *</label>
+        <select id="ccBlockCode" class="form-control"></select></div>
+    </div>
+    <div class="modal-footer" style="gap:10px;">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('ccAccountBlockModal')">Cancelar</button>
+      <button type="button" class="btn btn-danger" onclick="ContaCorrente.submitAccountBlock()">Confirmar bloqueio</button>
+    </div>
+  </div>
+</div>`;
+        document.body.appendChild(blk.firstElementChild);
+      }
+      if (document.getElementById('ccAccountUnblockModal') && !document.getElementById('ccUnblockMovementId')) {
+        document.getElementById('ccAccountUnblockModal').remove();
+      }
+      if (!document.getElementById('ccAccountUnblockModal')) {
+        const unb = document.createElement('div');
+        unb.innerHTML = `
+<div class="modal-overlay" id="ccAccountUnblockModal">
+  <div class="modal" style="max-width:440px;">
+    <div class="modal-header"><h3>Desbloquear movimentação</h3>
+      <button type="button" class="modal-close" onclick="closeModal('ccAccountUnblockModal')"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ccUnblockEmpId"/>
+      <input type="hidden" id="ccUnblockMovementId"/>
+      <p id="ccUnblockHint" style="font-size:13px;color:var(--color-text-muted);margin:0 0 12px;"></p>
+      <p id="ccUnblockMovSummary" style="font-size:13px;margin:0 0 12px;padding:10px 12px;background:var(--color-surface-2);border-radius:8px;line-height:1.45;"></p>
+      <div class="form-group"><label>Motivo do desbloqueio *</label>
+        <select id="ccUnblockCode" class="form-control"></select></div>
+      <p style="font-size:11px;color:var(--color-text-muted);margin:8px 0 0;">Ao confirmar, a conta é liberada para cadastrar propostas. Se o bloqueio for 001 (treinamentos) e ainda houver pendência, o bloqueio pode voltar no próximo login.</p>
+    </div>
+    <div class="modal-footer" style="gap:10px;">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('ccAccountUnblockModal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="ContaCorrente.submitMovementUnblock()">Confirmar desbloqueio</button>
+    </div>
+  </div>
+</div>`;
+        document.body.appendChild(unb.firstElementChild);
+      }
+      if (!document.getElementById('ccFuturosModal')) {
+        const fut = document.createElement('div');
+        fut.innerHTML = `
+<div class="modal-overlay" id="ccFuturosModal">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-header"><h3>Lançamento futuro</h3>
+      <button type="button" class="modal-close" onclick="closeModal('ccFuturosModal')"></button></div>
+    <div class="modal-body">
+      <input type="hidden" id="ccFutEmpId"/>
+      <div class="form-group"><label>Data *</label>
+        <input type="date" id="ccFutDate" class="form-control"/></div>
+      <div class="form-group"><label>Conceito *</label>
+        <select id="ccFutKind" class="form-control" onchange="ContaCorrente._onFutKindChange()">
+          <option value="credit">Créditos a receber</option>
+          <option value="debit">Débitos a efetuar</option>
+        </select></div>
+      <div class="form-group"><label>Valor (R$) *</label>
+        <input type="number" id="ccFutAmount" class="form-control" min="0.01" step="0.01" placeholder="0,00"/></div>
+      <div class="form-group"><label>Observação</label>
+        <input type="text" id="ccFutLabel" class="form-control" placeholder="Opcional"/></div>
+    </div>
+    <div class="modal-footer" style="gap:10px;">
+      <button type="button" class="btn btn-ghost" onclick="closeModal('ccFuturosModal')">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="ContaCorrente.submitFuturo()">Salvar</button>
+    </div>
+  </div>
+</div>`;
+        document.body.appendChild(fut.firstElementChild);
+      }
     },
 
     async render(empId) {
@@ -505,13 +582,14 @@ option.cc-opt-inactive { color: #b45309; }
       return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
     },
 
-    _renderLinesGrouped(lines, user, money) {
+    _renderLinesGrouped(lines, user, money, opts = {}) {
       if (!lines.length) {
         return '<div class="text-muted text-center" style="padding:24px;">Nenhuma movimentação no período.</div>';
       }
       const groups = groupLinesByDate(lines);
       const sortedDates = Object.keys(groups).sort((a, b) => b.localeCompare(a));
       const selectMode = !!this.selectMode;
+      const allowUnlock = !!(opts.allowMovementUnlock && canManageMovements());
 
       return sortedDates.map(dateKey => {
         const dateHeader = `<div class="cc-date-group">${formatGroupDate(dateKey)}</div>`;
@@ -525,7 +603,8 @@ option.cc-opt-inactive { color: #b45309; }
           const kind = ln.meta?.kind ? String(ln.meta.kind).replace('conta_', '').replace(/_/g, ' ') : '';
           const openDeb = !!(ln.meta?.open_debit && ln.meta?.status !== 'settled');
           const advDetail = isAdv ? adiantamentoDetail(ln) : '';
-          const extraParts = [advDetail, kind, openDeb ? 'em aberto' : '', ln.status].filter(Boolean);
+          const unlockedBefore = !!(ln.meta?.account_unblock);
+          const extraParts = [advDetail, kind, openDeb ? 'em aberto' : '', ln.status, unlockedBefore ? 'liberou bloqueio' : ''].filter(Boolean);
           const extra = extraParts.join(' · ');
           const canSelect = ln.kind === 'transaction' && !!ln.id;
           const id = String(ln.id || '');
@@ -546,6 +625,10 @@ option.cc-opt-inactive { color: #b45309; }
           const click = canSelect && selectMode
             ? ` onclick="ContaCorrente.toggleSelect('${esc(id)}')"`
             : '';
+          const unlockBtn = (allowUnlock && isCr && canSelect && !selectMode)
+            ? `<button type="button" class="btn btn-outline btn-sm" style="margin-left:8px;white-space:nowrap;border-color:#15803d;color:#15803d;font-size:11px;padding:4px 8px;"
+                onclick="event.stopPropagation();ContaCorrente.openMovementUnblockModal('${esc(opts.empId || '')}','${esc(id)}')">Desbloquear movimentação</button>`
+            : '';
           return `<div class="${lineCls}" data-tx-id="${esc(id)}"${click}${openDeb ? ' style="background:rgba(220,38,38,.06);"' : ''}>
             ${checkHtml}
             <div class="cc-line__icon ${cls}">${icon}</div>
@@ -553,7 +636,7 @@ option.cc-opt-inactive { color: #b45309; }
               <div class="cc-line__title">${esc(ln.reason)}${openDeb ? ' <span style="color:#b91c1c;font-size:11px;font-weight:700;">(em aberto)</span>' : ''}</div>
               <div class="cc-line__meta">${fmtDt(ln.created_at)}${extra ? ' <span class="cc-line__dot"></span> ' + esc(extra) : ''}</div>
             </div>
-            <div class="cc-line__amt ${cls}">${sign}${amt}</div>
+            <div class="cc-line__amt ${cls}" style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;">${sign}${amt}${unlockBtn}</div>
           </div>`;
         }).join('');
         return dateHeader + itemsHtml;
@@ -595,10 +678,17 @@ option.cc-opt-inactive { color: #b45309; }
           ? `${n} selecionado${n === 1 ? '' : 's'}`
           : `${lines.length} lançamento${lines.length === 1 ? '' : 's'}`;
       }
-      const body = document.getElementById('ccGestaoExtratoBody');
-      if (body) body.innerHTML = this._renderLinesGrouped(lines, stmt.user, stmt.money);
       const delBtn = document.getElementById('ccGestaoDelBtn');
       if (delBtn) delBtn.disabled = !this.selectedIds.size;
+      const body = document.getElementById('ccGestaoExtratoBody');
+      const empId = this.gestaoUserId || stmt.user?.id || '';
+      const allowUnlock = !!(this._gestaoAccountBlocked && canManageMovements());
+      if (body) {
+        body.innerHTML = this._renderLinesGrouped(lines, stmt.user, stmt.money, {
+          allowMovementUnlock: allowUnlock,
+          empId,
+        });
+      }
     },
 
     requestDeleteSelected() {
@@ -641,6 +731,9 @@ option.cc-opt-inactive { color: #b45309; }
           return;
         }
         showToast(`${res.deleted || ids.length} lançamento(s) excluído(s).`, 'success');
+        if (res.skipped_saque > 0) {
+          showToast('Saques PIX não foram excluídos (evita crédito indevido). Use rejeição/estorno do saque.', 'warning', 7000);
+        }
         this.selectMode = false;
         this.selectedIds = new Set();
         await this._renderGestaoPreview(empId);
@@ -781,15 +874,50 @@ option.cc-opt-inactive { color: #b45309; }
         ? `${this.selectedIds.size} selecionado${this.selectedIds.size === 1 ? '' : 's'}`
         : `${lines.length} lançamento${lines.length === 1 ? '' : 's'}`;
       const active = isCcMoneyActive(u);
+      const accountBlocked = (typeof DB !== 'undefined' && typeof DB.isAccountBlocked === 'function')
+        ? DB.isAccountBlocked(u)
+        : (u.account_block_active === true || u.account_block_active === 1 || u.account_block_active === '1'
+          || u.training_block === true || u.training_block === 1 || u.training_block === '1');
+      const blockCode = (typeof DB !== 'undefined' && typeof DB.getAccountBlockCode === 'function')
+        ? (DB.getAccountBlockCode(u) || '')
+        : String(u.account_block_code || (accountBlocked ? '001' : '') || '');
+      const blockMotive = (typeof DB !== 'undefined' && typeof DB.formatAccountBlockMotive === 'function')
+        ? DB.formatAccountBlockMotive(u)
+        : (blockCode ? `${blockCode} - Bloqueio de conta` : '');
       const activeBtn = canManageMovements()
         ? (active
           ? `<button type="button" class="cc-card__active-btn" onclick="ContaCorrente.toggleAccountActive('${esc(empId)}', false)">Inativar conta corrente</button>`
           : `<button type="button" class="cc-card__active-btn is-inactive" onclick="ContaCorrente.toggleAccountActive('${esc(empId)}', true)">Ativar conta corrente</button>`)
         : '';
+      const blockBtn = canManageMovements() && !accountBlocked
+        ? `<button type="button" class="btn btn-danger btn-sm" onclick="ContaCorrente.openAccountBlockModal('${esc(empId)}')">Bloquear conta</button>`
+        : '';
+      const hasCredit = (lines || []).some((ln) => ln.type === 'credit' || isAdiantamentoLine(ln));
+      const fallbackUnlock = (accountBlocked && canManageMovements() && !hasCredit)
+        ? `<button type="button" class="btn btn-outline btn-sm" style="border-color:#15803d;color:#15803d;" onclick="ContaCorrente.openMovementUnblockModal('${esc(empId)}','')">Desbloquear movimentação</button>`
+        : '';
+      const blockBanner = accountBlocked
+        ? `<div class="card card-padded" style="margin-bottom:12px;border:1px solid rgba(185,28,28,.45);background:rgba(220,38,38,.08);">
+            <div style="font-size:13px;font-weight:800;color:#b91c1c;letter-spacing:.02em;">CONTA BLOQUEADA — ${esc(blockMotive || blockCode || '—')}</div>
+            <p style="margin:6px 0 0;font-size:12px;color:var(--color-text-secondary);">Esta pessoa não pode cadastrar novas propostas. Para liberar, use <strong>Desbloquear movimentação</strong> em um crédito do histórico abaixo.</p>
+            ${fallbackUnlock ? `<div style="margin-top:10px;">${fallbackUnlock}<span style="margin-left:8px;font-size:11px;color:var(--color-text-muted);">Sem créditos no histórico — liberar com motivo.</span></div>` : ''}
+          </div>`
+        : '';
+      const blockActionRow = (blockBtn || accountBlocked)
+        ? `<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:0 0 12px;">
+            ${blockBtn || ''}
+            <span style="font-size:11px;color:var(--color-text-muted);">${accountBlocked
+              ? 'Desbloqueio é feito na linha do crédito (histórico).'
+              : 'Impede cadastrar propostas enquanto houver bloqueio.'}</span>
+          </div>`
+        : '';
 
+      this._gestaoAccountBlocked = !!accountBlocked;
+
+      let openDeb = { total: 0, itens: [] };
       let openDebHtml = '';
       try {
-        const openDeb = typeof DB.getOpenAccountDebitos === 'function'
+        openDeb = typeof DB.getOpenAccountDebitos === 'function'
           ? await DB.getOpenAccountDebitos(empId)
           : { total: 0, itens: [] };
         if (openDeb.total > 0) {
@@ -806,18 +934,51 @@ option.cc-opt-inactive { color: #b45309; }
         console.warn('[ContaCorrente] open debits:', e);
       }
 
+      const irpfPct = (typeof WithdrawalRules !== 'undefined' && WithdrawalRules.getIrpfRatePct)
+        ? WithdrawalRules.getIrpfRatePct()
+        : 1.89;
+      const irpfCfgHtml = canManageMovements()
+        ? `<div class="card card-padded" style="margin-bottom:12px;">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px;">Parametrizar saque — IRPF funcionário</div>
+            <div class="form-row" style="align-items:flex-end;gap:10px;flex-wrap:wrap;">
+              <div class="form-group" style="margin:0;min-width:140px;">
+                <label style="font-size:12px;">IRPF (%)</label>
+                <input type="number" id="ccIrpfPct" class="form-control" min="0" max="99" step="0.01" value="${esc(String(irpfPct))}"/>
+              </div>
+              <button type="button" class="btn btn-primary btn-sm" onclick="ContaCorrente.saveIrpfRate()">Salvar taxa</button>
+              <span style="font-size:11px;color:var(--color-text-muted);">Parceiro permanece manual (taxa/IRPJ). Default planilha: 1,89%.</span>
+            </div>
+          </div>`
+        : '';
+
+      let futurosDb = [];
+      try {
+        await this._migrateLocalFuturos(empId);
+        futurosDb = typeof DB.getLancamentosFuturos === 'function'
+          ? await DB.getLancamentosFuturos(empId)
+          : this._loadFuturos(empId);
+      } catch (e) {
+        console.warn('[ContaCorrente] futuros:', e);
+        futurosDb = this._loadFuturos(empId);
+      }
+      const futurosHtml = this._renderFuturosSection(empId, openDeb, futurosDb, stmt.money, u);
+
       box.innerHTML = `
         <div class="cc-card ${neg ? 'negative' : ''}" style="margin-bottom:12px;height:auto;min-height:160px;">
           <div class="cc-card__top">
             <span class="cc-card__brand">Prévia</span>
             <div class="cc-card__top-actions">
-              <span class="cc-card__name">${esc(name)}${active ? '' : '<span class="cc-card__badge-off">CC INATIVA</span>'}</span>
+              <span class="cc-card__name">${esc(name)}${active ? '' : '<span class="cc-card__badge-off">CC INATIVA</span>'}${accountBlocked ? `<span class="cc-card__badge-off" style="background:#b91c1c;">BLOQUEIO ${esc(blockCode || '')}</span>` : ''}</span>
               ${activeBtn}
             </div>
           </div>
           <div class="cc-card__balance" style="margin-top:14px;">${fmtBal(stmt.balance, stmt.money, u)}</div>
         </div>
+        ${blockActionRow}
+        ${blockBanner}
+        ${irpfCfgHtml}
         ${openDebHtml}
+        ${futurosHtml}
         <div class="cc-extrato${selCls}" id="ccGestaoExtrato">
           <div class="cc-extrato__head">
             <span class="cc-extrato__title">Histórico</span>
@@ -835,8 +996,392 @@ option.cc-opt-inactive { color: #b45309; }
               </div>
             </div>
           </div>
-          <div id="ccGestaoExtratoBody">${this._renderLinesGrouped(lines, u, stmt.money)}</div>
+          <div id="ccGestaoExtratoBody">${this._renderLinesGrouped(lines, u, stmt.money, {
+            allowMovementUnlock: !!accountBlocked && canManageMovements(),
+            empId,
+          })}</div>
         </div>`;
+    },
+
+    _fillAccountBlockSelect(selId, kind, defaultCode) {
+      const sel = document.getElementById(selId);
+      if (!sel || typeof DB === 'undefined' || typeof DB.getAccountBlockCatalog !== 'function') return;
+      const cat = DB.getAccountBlockCatalog();
+      const list = kind === 'unblock' ? cat.unblock : cat.block;
+      const def = String(defaultCode || list[0]?.code || '001');
+      sel.innerHTML = list.map((x) =>
+        `<option value="${esc(x.code)}"${String(x.code) === def ? ' selected' : ''}>${esc(x.code)} — ${esc(x.label)}</option>`
+      ).join('');
+    },
+
+    openAccountBlockModal(empId) {
+      if (!canManageMovements()) {
+        showToast('Sem permissão para bloquear conta.', 'warning');
+        return;
+      }
+      if (!empId) return;
+      this.ensureModals();
+      const hid = document.getElementById('ccBlockEmpId');
+      if (hid) hid.value = empId;
+      this._fillAccountBlockSelect('ccBlockCode', 'block', '001');
+      openModal('ccAccountBlockModal');
+    },
+
+    async openMovementUnblockModal(empId, movementId) {
+      if (!canManageMovements()) {
+        showToast('Sem permissão para desbloquear.', 'warning');
+        return;
+      }
+      if (!empId) return;
+      this.ensureModals();
+      const hid = document.getElementById('ccUnblockEmpId');
+      if (hid) hid.value = empId;
+      const mid = document.getElementById('ccUnblockMovementId');
+      if (mid) mid.value = movementId || '';
+
+      let paired = '001';
+      let motive = '';
+      let movSummary = movementId
+        ? 'Movimentação selecionada no histórico.'
+        : 'Nenhum crédito selecionado — a conta será liberada com o motivo abaixo.';
+      try {
+        const u = await DB.getUser(empId, true).catch(() => null);
+        paired = (typeof DB.getAccountBlockCode === 'function' ? DB.getAccountBlockCode(u) : null) || '001';
+        motive = (typeof DB.formatAccountBlockMotive === 'function' ? DB.formatAccountBlockMotive(u) : '') || paired;
+        if (movementId && this.gestaoStmt?.lines) {
+          const ln = (this.gestaoStmt.lines || []).find((x) => String(x.id) === String(movementId));
+          if (ln) {
+            const amt = fmtBal(ln.amount, this.gestaoStmt.money, this.gestaoStmt.user);
+            movSummary = `<strong>Crédito:</strong> ${esc(ln.reason || 'Movimentação')}<br/><strong>Valor:</strong> ${esc(amt)} · ${esc(fmtDt(ln.created_at))}`;
+          }
+        }
+      } catch (_) { /* noop */ }
+      const hint = document.getElementById('ccUnblockHint');
+      if (hint) hint.textContent = `Bloqueio atual: ${motive || paired}. Escolha o motivo do desbloqueio (sugerido: ${paired}).`;
+      const sum = document.getElementById('ccUnblockMovSummary');
+      if (sum) sum.innerHTML = movSummary;
+      this._fillAccountBlockSelect('ccUnblockCode', 'unblock', paired);
+      openModal('ccAccountUnblockModal');
+    },
+
+    async submitAccountBlock() {
+      if (!canManageMovements()) return;
+      const empId = document.getElementById('ccBlockEmpId')?.value;
+      const code = document.getElementById('ccBlockCode')?.value;
+      if (!empId) return;
+      if (!code) {
+        showToast('Selecione o motivo do bloqueio.', 'warning');
+        return;
+      }
+      const me = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      if (typeof showLoading === 'function') showLoading('Bloqueando conta...');
+      try {
+        await DB.setAccountBlock(empId, { code, by: me?.id || null });
+        closeModal('ccAccountBlockModal');
+        const motive = (typeof DB.formatAccountBlockMotive === 'function')
+          ? DB.formatAccountBlockMotive({ account_block_active: true, account_block_code: code })
+          : code;
+        showToast(`Conta bloqueada — ${motive}.`, 'warning', 7000);
+        this.gestaoUserId = empId;
+        await this.renderGestao();
+      } catch (e) {
+        console.error('[ContaCorrente] submitAccountBlock', e);
+        showToast('Erro ao bloquear: ' + (e.message || e), 'error');
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
+    },
+
+    async submitMovementUnblock() {
+      if (!canManageMovements()) return;
+      const empId = document.getElementById('ccUnblockEmpId')?.value;
+      const unlockCode = document.getElementById('ccUnblockCode')?.value;
+      const movementId = document.getElementById('ccUnblockMovementId')?.value || '';
+      if (!empId) return;
+      if (!unlockCode) {
+        showToast('Selecione o motivo do desbloqueio.', 'warning');
+        return;
+      }
+      const me = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      if (typeof showLoading === 'function') showLoading('Desbloqueando movimentação...');
+      try {
+        await DB.clearAccountBlock(empId, {
+          unlockCode,
+          by: me?.id || null,
+          movementId: movementId || null,
+        });
+        closeModal('ccAccountUnblockModal');
+        showToast(movementId
+          ? 'Movimentação desbloqueada — conta liberada.'
+          : 'Conta desbloqueada.', 'success', 6000);
+        this.gestaoUserId = empId;
+        await this.renderGestao();
+      } catch (e) {
+        console.error('[ContaCorrente] submitMovementUnblock', e);
+        showToast('Erro ao desbloquear: ' + (e.message || e), 'error');
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
+    },
+
+    /** @deprecated use openMovementUnblockModal — mantido por compat */
+    openAccountUnblockModal(empId) {
+      return this.openMovementUnblockModal(empId, '');
+    },
+
+    /** @deprecated use submitMovementUnblock */
+    submitAccountUnblock() {
+      return this.submitMovementUnblock();
+    },
+
+    saveIrpfRate() {
+      if (!canManageMovements()) return;
+      const el = document.getElementById('ccIrpfPct');
+      const raw = el?.value;
+      if (typeof WithdrawalRules === 'undefined' || typeof WithdrawalRules.setIrpfRatePct !== 'function') {
+        showToast('Regras de saque indisponíveis.', 'error');
+        return;
+      }
+      try {
+        const n = WithdrawalRules.setIrpfRatePct(raw);
+        showToast(`IRPF funcionário atualizado para ${String(n).replace('.', ',')}%.`, 'success');
+      } catch (e) {
+        showToast(e.message || 'Taxa inválida.', 'warning');
+      }
+    },
+
+    _futurosKey(empId) {
+      return `soublu_cc_futuros_${empId}`;
+    },
+
+    _loadFuturos(empId) {
+      try {
+        const raw = JSON.parse(localStorage.getItem(this._futurosKey(empId)) || '[]');
+        return Array.isArray(raw) ? raw : [];
+      } catch (_) {
+        return [];
+      }
+    },
+
+    _saveFuturos(empId, list) {
+      localStorage.setItem(this._futurosKey(empId), JSON.stringify(list || []));
+    },
+
+    /** Migra lista antiga (localStorage) → transactions no DB (uma vez por usuário). */
+    async _migrateLocalFuturos(empId) {
+      if (!empId || typeof DB.registerLancamentoFuturo !== 'function') return;
+      const local = this._loadFuturos(empId);
+      if (!local.length) return;
+      const me = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      let migrated = 0;
+      for (const m of local) {
+        const amt = Number(m.amount) || 0;
+        const date = String(m.date || '').slice(0, 10);
+        if (!(amt > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        try {
+          await DB.registerLancamentoFuturo({
+            employeeId: empId,
+            kind: m.kind === 'debit' ? 'debit' : 'credit',
+            amount: amt,
+            date,
+            reason: m.label || '',
+            byUser: me?.id || 'admin',
+          });
+          migrated += 1;
+        } catch (e) {
+          console.warn('[ContaCorrente] migrate futuro:', e);
+        }
+      }
+      if (migrated > 0) {
+        try { localStorage.removeItem(this._futurosKey(empId)); } catch (_) { /* noop */ }
+      }
+    },
+
+    _fmtFutDate(d) {
+      if (!d) return '—';
+      try {
+        const [y, m, day] = String(d).split('-');
+        if (y && m && day) return `${day}/${m}/${y}`;
+      } catch (_) { /* noop */ }
+      return String(d);
+    },
+
+    _renderFuturosSection(empId, openDeb, futurosDb, money, user) {
+      const manual = Array.isArray(futurosDb) ? futurosDb : [];
+      const rows = [];
+      for (const i of (openDeb?.itens || [])) {
+        const dt = (i.created_at || '').toString().slice(0, 10);
+        rows.push({
+          id: `open_${i.id}`,
+          date: dt,
+          tipo: 'Débitos a efetuar',
+          credit: '',
+          debit: Number(i.amount) || 0,
+          label: i.label || i.voucher_no || i.id,
+          source: 'open',
+        });
+      }
+      for (const m of manual) {
+        const isCredit = m.kind === 'credit';
+        rows.push({
+          id: m.id,
+          date: m.date || '',
+          tipo: isCredit ? 'Créditos a receber' : 'Débitos a efetuar',
+          credit: isCredit ? (Number(m.amount) || 0) : '',
+          debit: !isCredit ? (Number(m.amount) || 0) : '',
+          label: m.label || '',
+          source: m.source === 'db' ? 'db' : 'manual',
+        });
+      }
+      rows.sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+      const fmtMoney = (n) => {
+        if (n === '' || n == null || !(Number(n) > 0)) return '—';
+        return fmtBal(n, money, user);
+      };
+
+      const canRemove = (r) => r.source === 'db' || r.source === 'manual';
+
+      const bodyRows = rows.length
+        ? rows.map((r) => `<tr>
+            <td style="padding:8px 10px;font-size:12px;">${esc(r.tipo)}</td>
+            <td style="padding:8px 10px;font-size:12px;white-space:nowrap;">${esc(this._fmtFutDate(r.date))}</td>
+            <td style="padding:8px 10px;font-size:12px;color:#15803d;">${r.credit !== '' ? esc(fmtMoney(r.credit)) : '—'}</td>
+            <td style="padding:8px 10px;font-size:12px;color:#b91c1c;">${r.debit !== '' ? esc(fmtMoney(r.debit)) : '—'}</td>
+            <td style="padding:8px 10px;font-size:11px;color:var(--color-text-muted);">${esc(r.label || '')}</td>
+            <td style="padding:8px 6px;text-align:right;">${canRemove(r)
+              ? `<button type="button" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;"
+                  onclick="ContaCorrente.removeFuturo('${esc(empId)}','${esc(r.id)}')">Remover</button>`
+              : '<span style="font-size:10px;color:var(--color-text-muted);">aberto</span>'}</td>
+          </tr>`).join('')
+        : `<tr><td colspan="6" style="padding:14px;text-align:center;color:var(--color-text-muted);font-size:12px;">Nenhum lançamento futuro.</td></tr>`;
+
+      const addBtn = canManageMovements()
+        ? `<button type="button" class="btn btn-outline btn-sm" onclick="ContaCorrente.openFuturoModal('${esc(empId)}')">Adicionar</button>`
+        : '';
+
+      return `<div class="card card-padded" style="margin-bottom:12px;" id="ccFuturosBox">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:13px;font-weight:700;">Lançamentos futuros</div>
+            <div style="font-size:11px;color:var(--color-text-muted);margin-top:2px;">Créditos a receber e débitos a efetuar com data — não alteram o saldo até lançar no histórico.</div>
+          </div>
+          ${addBtn}
+        </div>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:var(--color-surface-2);text-align:left;">
+                <th style="padding:8px 10px;font-size:11px;font-weight:700;">TIPO</th>
+                <th style="padding:8px 10px;font-size:11px;font-weight:700;">DATA</th>
+                <th style="padding:8px 10px;font-size:11px;font-weight:700;">CRÉDITO</th>
+                <th style="padding:8px 10px;font-size:11px;font-weight:700;">DÉBITO</th>
+                <th style="padding:8px 10px;font-size:11px;font-weight:700;">OBS.</th>
+                <th style="padding:8px 6px;"></th>
+              </tr>
+            </thead>
+            <tbody>${bodyRows}</tbody>
+          </table>
+        </div>
+      </div>`;
+    },
+
+    openFuturoModal(empId) {
+      if (!canManageMovements() || !empId) return;
+      this.ensureModals();
+      const hid = document.getElementById('ccFutEmpId');
+      if (hid) hid.value = empId;
+      const d = document.getElementById('ccFutDate');
+      if (d) d.value = new Date().toISOString().slice(0, 10);
+      const amt = document.getElementById('ccFutAmount');
+      if (amt) amt.value = '';
+      const lab = document.getElementById('ccFutLabel');
+      if (lab) lab.value = '';
+      const kind = document.getElementById('ccFutKind');
+      if (kind) kind.value = 'credit';
+      openModal('ccFuturosModal');
+    },
+
+    _onFutKindChange() { /* placeholder for label hint */ },
+
+    async submitFuturo() {
+      if (!canManageMovements()) return;
+      const empId = document.getElementById('ccFutEmpId')?.value;
+      const date = document.getElementById('ccFutDate')?.value;
+      const kind = document.getElementById('ccFutKind')?.value || 'credit';
+      const amount = parseFloat(document.getElementById('ccFutAmount')?.value);
+      let label = (document.getElementById('ccFutLabel')?.value || '').trim();
+      if (!empId || !date) {
+        showToast('Informe a data.', 'warning');
+        return;
+      }
+      if (!Number.isFinite(amount) || amount <= 0) {
+        showToast('Informe um valor válido.', 'warning');
+        return;
+      }
+      if (!label) {
+        label = kind === 'credit' ? 'Créditos a receber' : 'Débitos a efetuar';
+      }
+      const me = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      if (typeof showLoading === 'function') showLoading('Salvando lançamento futuro...');
+      try {
+        if (typeof DB.registerLancamentoFuturo === 'function') {
+          const tx = await DB.registerLancamentoFuturo({
+            employeeId: empId,
+            kind: kind === 'debit' ? 'debit' : 'credit',
+            amount,
+            date,
+            reason: label,
+            byUser: me?.id || 'admin',
+          });
+          if (!tx) {
+            showToast('Não foi possível salvar o lançamento.', 'error');
+            return;
+          }
+        } else {
+          const list = this._loadFuturos(empId);
+          list.push({
+            id: `fut_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            date,
+            kind,
+            amount,
+            label,
+          });
+          this._saveFuturos(empId, list);
+        }
+        closeModal('ccFuturosModal');
+        showToast('Lançamento futuro salvo.', 'success');
+        await this._renderGestaoPreview(empId);
+      } catch (e) {
+        console.error('[ContaCorrente] submitFuturo', e);
+        showToast('Erro ao salvar: ' + (e.message || e), 'error');
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
+    },
+
+    async removeFuturo(empId, id) {
+      if (!canManageMovements() || !empId || !id) return;
+      if (typeof showLoading === 'function') showLoading('Removendo...');
+      try {
+        if (typeof DB.removeLancamentoFuturo === 'function' && !String(id).startsWith('fut_')) {
+          const r = await DB.removeLancamentoFuturo(empId, id);
+          if (!r?.ok) {
+            showToast(r?.msg || 'Não foi possível remover.', 'warning');
+            return;
+          }
+        } else {
+          const list = this._loadFuturos(empId).filter((x) => String(x.id) !== String(id));
+          this._saveFuturos(empId, list);
+        }
+        showToast('Removido.', 'success');
+        await this._renderGestaoPreview(empId);
+      } catch (e) {
+        console.error('[ContaCorrente] removeFuturo', e);
+        showToast('Erro ao remover: ' + (e.message || e), 'error');
+      } finally {
+        if (typeof hideLoading === 'function') hideLoading();
+      }
     },
 
     async toggleAccountActive(empId, activate) {

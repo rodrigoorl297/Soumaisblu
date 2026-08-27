@@ -1,5 +1,5 @@
 window.Tickets = {
-  departments: ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento'],
+  departments: ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento', 'TI'],
   subjects: {
     'Financeiro': ['Alteração dados bancários', 'Representação de pagamentos', 'Contestação pontuação', 'Outros assuntos'],
     'RH': ['Contra cheque', 'Atestado médico', 'Alteração de dados', 'Pedido de demissão', 'Outros assuntos'],
@@ -7,7 +7,8 @@ window.Tickets = {
     'Supervisão': ['Solicitação Treinamento', 'Justificativa de Falta', 'Parcial 12:00', 'Fechamento'],
     'Gerência': ['Solicitação', 'Escalonamento', 'Outros assuntos'],
     'Ouvidoria': ['Sugestão', 'Reclamação'],
-    'Desenvolvimento': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Outros']
+    'Desenvolvimento': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Outros'],
+    'TI': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Suporte técnico', 'Outros']
   },
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,
@@ -51,6 +52,10 @@ if (id) this.openTicketDetail(id);
   },
 
   init: function() {
+    // Guarda referência da UI antes de qualquer alias em Tickets.openModal.
+    this._uiOpenModal = typeof window.openModal === 'function' ? window.openModal : null;
+    this._uiCloseModal = typeof window.closeModal === 'function' ? window.closeModal : null;
+    this._replyBusy = false;
     this.populateDepts();
     this._bindTicketActions();
   },
@@ -275,6 +280,8 @@ if (id) this.openTicketDetail(id);
   _dataUrlToBlobUrl: function(dataUrl) {
     const parts = String(dataUrl).split(',');
     if (parts.length < 2) throw new Error('data URL inválida');
+    // Evita travar a UI com atob síncrono em anexos grandes.
+    if (parts[1].length > 180000) throw new Error('data URL grande demais');
     const mime = (parts[0].match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
     const bin = atob(parts[1]);
     const arr = new Uint8Array(bin.length);
@@ -284,10 +291,35 @@ if (id) this.openTicketDetail(id);
 
   _toDisplayUrl: function(url) {
     if (!url) return '';
-    if (String(url).startsWith('data:')) {
-      try { return this._dataUrlToBlobUrl(url); } catch { return url; }
+    const raw = String(url);
+    if (raw.startsWith('data:')) {
+      // Não materializa base64 gigante na thread (congela o Chrome).
+      if (raw.length > 200000) return '';
+      try { return this._dataUrlToBlobUrl(raw); } catch { return ''; }
     }
     return this._resolveAttachmentUrl(url);
+  },
+
+  /** Remove base64 embutido do thread antes do PATCH (payload leve). */
+  _compactThreadForSave(thread) {
+    if (!Array.isArray(thread)) return [];
+    return thread.map((msg) => {
+      const m = { ...(msg || {}) };
+      const strip = (u) => {
+        const s = String(u || '');
+        if (s.startsWith('data:') && s.length > 8000) return '';
+        return s;
+      };
+      if (m.attachment) m.attachment = strip(m.attachment);
+      if (m.url) m.url = strip(m.url);
+      if (Array.isArray(m.attachments)) {
+        m.attachments = m.attachments.map((a) => {
+          if (!a || typeof a !== 'object') return a;
+          return { ...a, url: strip(a.url) };
+        }).filter((a) => a && a.url);
+      }
+      return m;
+    });
   },
 
   _revokeAttachmentBlobUrl: function() {
@@ -361,12 +393,14 @@ if (id) this.openTicketDetail(id);
     const label = name || 'Anexo';
     const idx = this._cacheAttachment(url, label);
     const resolved = this._resolveAttachmentUrl(url);
-    const safeResolved = resolved.replace(/"/g, '&quot;');
     const safeLabel = this._escAttr(label);
-    const preferDownload = this._isDownloadPreferred(url, label);
+    const isData = String(url || '').startsWith('data:');
+    // Nunca injeta data:URL grande no DOM (trava o Chrome na esteira).
+    const preferDownload = isData || this._isDownloadPreferred(url, label);
     const btnText = preferDownload ? 'Baixar' : 'Ver anexo';
     let preview = '';
-    if (this._isImageUrl(url, label)) {
+    if (!isData && this._isImageUrl(url, label) && resolved && resolved.length < 2000) {
+      const safeResolved = resolved.replace(/"/g, '&quot;');
       preview = `<div style="margin-top:8px;"><img src="${safeResolved}" alt="${safeLabel}" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--color-border);cursor:pointer;object-fit:contain;" onclick="Tickets.openAttachment(${idx})" title="Clique para ampliar"/></div>`;
     }
     return `${preview}<div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="Tickets.openAttachment(${idx})">${btnText}${label && label !== 'Anexo' ? ': ' + safeLabel : ''}</button></div>`;
@@ -678,92 +712,137 @@ try {
       alert('Modal de chamados não encontrado.');
       return;
     }
-    const showUiModal = typeof window.openModal === 'function'
-      ? window.openModal
-      : (typeof openModal === 'function' ? openModal : null);
-    if (showUiModal) showUiModal('manageTicketModal');
-    else modal.classList.add('open');
+    // Abre o modal da UI diretamente — NÃO usar Tickets.openModal (evita recursão).
+    const uiOpen = this._uiOpenModal
+      || (typeof window.openModal === 'function' && window.openModal !== Tickets.openModal ? window.openModal : null)
+      || (typeof openModal === 'function' && openModal !== Tickets.openModal ? openModal : null);
+    if (uiOpen) uiOpen('manageTicketModal');
+    else {
+      modal.classList.add('open');
+      modal.style.display = 'flex';
+      modal.style.opacity = '1';
+      modal.style.visibility = 'visible';
+    }
 } catch (err) {
       console.error('[Tickets.openTicketDetail]', err);
 alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift+R).');
     }
   },
 
+  /** Alias seguro: só abre detalhe se receber id de chamado. */
   openModal(id) {
+    if (!id || id === 'manageTicketModal') return;
     return this.openTicketDetail(id);
   },
 
   reply: async function() {
+    if (this._replyBusy) return;
+    this._replyBusy = true;
+
     const user = Auth.getSession();
-    const id = document.getElementById('manageTicketId').value;
-    const ticket = this._normTicket(await DB.get('tickets', id));
-    if (!ticket) return;
-
-    const replyText = document.getElementById('manageTicketReply').value;
-    let newStatus = ticket.status;
-    if (document.getElementById('manageTicketStatus')) {
-      newStatus = document.getElementById('manageTicketStatus').value;
-    }
-    const replyFilesEl = document.getElementById('manageTicketFiles');
-    const hasFiles = !!(replyFilesEl?.files?.length);
-
-    if (!replyText && !hasFiles && newStatus === ticket.status) {
-      alert("Digite uma resposta, anexe arquivo(s) ou altere o status.");
-      return;
-    }
-
-    const becameResolved = String(ticket.status || '').toLowerCase() !== 'resolvido'
-      && String(newStatus || '').toLowerCase() === 'resolvido';
-
-    ticket.status = newStatus;
-    ticket.updatedAt = new Date().toISOString();
-    ticket.updated_at = ticket.updatedAt;
-
-    if (replyText || hasFiles) {
-      let attachments = [];
-      if (hasFiles) {
-        try {
-          attachments = await this._uploadTicketFiles(replyFilesEl.files, ticket.id);
-        } catch (e) {
-          alert(e.message || 'Erro ao anexar arquivo.');
-          return;
-        }
-      }
-      const first = attachments[0] || null;
-      ticket.thread = ticket.thread || [];
-      ticket.thread.push({
-        senderName: user.name,
-        senderRole: user.role,
-        message: replyText || (attachments.length ? '(anexo)' : ''),
-        attachment: first?.url || null,
-        attachmentName: first?.name || '',
-        attachments,
-        date: new Date().toISOString()
-      });
+    const id = document.getElementById('manageTicketId')?.value;
+    const replyBtn = document.querySelector('#manageTicketModal button[onclick*="Tickets.reply"]');
+    if (replyBtn) {
+      replyBtn.disabled = true;
+      replyBtn.style.opacity = '0.6';
+      replyBtn.style.pointerEvents = 'none';
     }
 
     try {
-      await DB.save('tickets', ticket);
+      if (!id) {
+        alert('Chamado não identificado. Feche e abra novamente.');
+        return;
+      }
+      const ticket = this._normTicket(await DB.get('tickets', id));
+      if (!ticket) {
+        alert('Chamado não encontrado.');
+        return;
+      }
+
+      const replyText = (document.getElementById('manageTicketReply')?.value || '').trim();
+      let newStatus = ticket.status;
+      if (document.getElementById('manageTicketStatus')) {
+        newStatus = document.getElementById('manageTicketStatus').value;
+      }
+      const replyFilesEl = document.getElementById('manageTicketFiles');
+      const hasFiles = !!(replyFilesEl?.files?.length);
+
+      if (!replyText && !hasFiles && newStatus === ticket.status) {
+        alert('Digite uma resposta, anexe arquivo(s) ou altere o status.');
+        return;
+      }
+
+      const becameResolved = String(ticket.status || '').toLowerCase() !== 'resolvido'
+        && String(newStatus || '').toLowerCase() === 'resolvido';
+
+      ticket.status = newStatus;
+      ticket.updatedAt = new Date().toISOString();
+      ticket.updated_at = ticket.updatedAt;
+      ticket.thread = this._compactThreadForSave(ticket.thread || []);
+
+      if (replyText || hasFiles) {
+        let attachments = [];
+        if (hasFiles) {
+          attachments = await this._uploadTicketFiles(replyFilesEl.files, ticket.id);
+        }
+        const first = attachments[0] || null;
+        ticket.thread.push({
+          senderName: user.name,
+          senderRole: user.role,
+          message: replyText || (attachments.length ? '(anexo)' : ''),
+          attachment: first?.url || null,
+          attachmentName: first?.name || '',
+          attachments,
+          date: new Date().toISOString()
+        });
+      }
+
+      const savePromise = DB.save('tickets', ticket);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Tempo esgotado ao salvar. Tente novamente.')), 20000);
+      });
+      await Promise.race([savePromise, timeoutPromise]);
+
+      // Roleta não pode travar a esteira — roda em background.
       if (becameResolved && ticket.employee_id && typeof DB.applyRouletteCriteriaReward === 'function') {
-        await DB.applyRouletteCriteriaReward(ticket.employee_id, 'chamado_resolvido', {
+        void DB.applyRouletteCriteriaReward(ticket.employee_id, 'chamado_resolvido', {
           ticket_id: ticket.id,
           by_user: user?.id || 'sistema_chamados',
         }).catch(() => null);
       }
+
+      if (typeof closeModal === 'function') closeModal('manageTicketModal');
+      else {
+        const modalEl = document.getElementById('manageTicketModal');
+        if (modalEl) {
+          modalEl.classList.remove('open');
+          modalEl.style.display = 'none';
+        }
+      }
+      if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+      if (replyFilesEl) replyFilesEl.value = '';
+
       alert('Chamado atualizado!');
-    } catch(e) {
-      alert("Erro ao salvar resposta: " + e.message);
-      return;
-    }
 
-    document.getElementById('manageTicketModal').classList.remove('open');
-    if (replyFilesEl) replyFilesEl.value = '';
-
-    if (document.getElementById('manageTicketsTbody')) {
-      this.renderAdminList();
-    }
-    if (document.getElementById('ticketsList')) {
-      this.renderEmployeeList();
+      // Refresh da lista fora do caminho crítico.
+      void Promise.resolve().then(async () => {
+        try {
+          if (document.getElementById('manageTicketsTbody')) await this.renderAdminList();
+          if (document.getElementById('ticketsList')) await this.renderEmployeeList();
+        } catch (e) {
+          console.warn('[Tickets] refresh após reply:', e);
+        }
+      });
+    } catch (e) {
+      console.error('[Tickets.reply]', e);
+      alert('Erro ao salvar resposta: ' + (e.message || e));
+    } finally {
+      this._replyBusy = false;
+      if (replyBtn) {
+        replyBtn.disabled = false;
+        replyBtn.style.opacity = '';
+        replyBtn.style.pointerEvents = '';
+      }
     }
   }
 };

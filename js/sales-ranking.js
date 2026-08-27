@@ -374,9 +374,10 @@ window.SalesRanking = {
       const f = funnel[row.user.id] || { count: 0, bruto: 0, efetivado: 0, cobranca: 0, cancelado: 0 };
       return {
         pos: i + 1,
-        name: row.user.name || '—',
+        name: (row.user.name || '—') + (row.user.active === false || row.user.active === 0 ? ' (inativo)' : ''),
         department: row.user.department || '—',
         matricula: row.user.matricula || '—',
+        inactive: row.user.active === false || row.user.active === 0,
         tier: row.tier?.label || 'Abaixo FAIXA1',
         qtd: row.count || 0,
         faturamento: row.total || 0,
@@ -771,8 +772,9 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     } catch (e) {
       console.warn('[SalesRanking] users:', e);
     }
+    /* Inclui inativos: vendas já feitas devem entrar no fechamento/ranking. */
     return (users || [])
-      .filter(u => typeof isRankingParticipant === 'function' && isRankingParticipant(u))
+      .filter(u => typeof isRankingParticipant === 'function' && isRankingParticipant(u, { includeInactive: true }))
       .filter(u => typeof isUserInPartnerNetworkSync !== 'function' || !isUserInPartnerNetworkSync(u));
   },
 
@@ -1051,7 +1053,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
         <div class="ranking-pos ${cls[i] || ''}">${i < 3 ? medals[i] : '#' + pos}</div>
         ${typeof avatarHtml === 'function' ? avatarHtml(e.name, 'avatar-sm', e.photo_url || '') : ''}
         <div class="ranking-item__body">
-          <div class="ranking-name">${e.name}${isMe ? ' <span class="badge badge-primary">Você</span>' : ''}</div>
+          <div class="ranking-name">${this._escHtml(e.name || '—')}${e.active === false || e.active === 0 ? ' <span class="badge badge-danger">Inativo</span>' : ''}${isMe ? ' <span class="badge badge-primary">Você</span>' : ''}</div>
           <div class="ranking-dept">${e.department || '—'} · ${e.matricula || '—'}</div>
           <div class="ranking-item__stats">${statsHtml}</div>
         </div>

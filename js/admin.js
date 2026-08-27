@@ -45,9 +45,9 @@ function ensureScript(src) {
   const abs = url.startsWith('http') || url.startsWith('/')
     ? url
     : (url.startsWith('../') ? url : '../' + url.replace(/^\//, ''));
+  // Só reaproveita a mesma URL completa (?v=…). Não casar só pelo nome do arquivo.
   const existing = document.querySelector(`script[data-ensure-src="${abs}"]`)
-    || document.querySelector(`script[src="${abs}"]`)
-    || document.querySelector(`script[src*="${url.split('/').pop()}"]`);
+    || document.querySelector(`script[src="${abs}"]`);
   if (existing) {
     if (existing.dataset.loaded === '1' || existing.getAttribute('data-loaded') === '1') return Promise.resolve();
     return new Promise((resolve, reject) => {
@@ -91,12 +91,12 @@ async function ensureSectionScripts(sec) {
     secTimEsteira: ['../js/tim.js'],
     secContestacao: ['../js/contestacao.js'],
     secFiscalParceiro: ['../js/fiscal-parceiro.js'],
-    secTrainings: ['../js/trainings.js'],
-    secTrainingsManage: ['../js/trainings.js'],
-    secTrainingsRh: ['../js/trainings.js'],
+    secTrainings: ['../js/trainings.js?v=acct-block1'],
+    secTrainingsManage: ['../js/trainings.js?v=acct-block1'],
+    secTrainingsRh: ['../js/trainings.js?v=acct-block1'],
     secFornecedorFinanceiro: ['../js/fornecedor-financeiro.js'],
-    secContaCorrente: ['../js/conta-corrente.js?v=cc-money1'],
-    secContaCorrenteGestao: ['../js/conta-corrente.js?v=cc-money1'],
+    secContaCorrente: ['../js/conta-corrente.js?v=futuros-db1'],
+    secContaCorrenteGestao: ['../js/conta-corrente.js?v=futuros-db1'],
     secWithdrawals: ['../js/withdrawal-flow.js'],
     secRanking: ['../js/sales-ranking.js?v=bill-paid2', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
     secCreateProposal: ['../js/masterProposal.js', '../js/fontedata.js'],
@@ -874,7 +874,7 @@ function _applyAdminNavVisibility(cfg) {
         jobs.push(ensureScript('../js/fornecedor-financeiro.js').then(() => window.FornecedorFinanceiro?.applyNavVisibility?.(cfg)));
       }
       if (!window.Trainings) {
-        jobs.push(ensureScript('../js/trainings.js').then(async () => {
+        jobs.push(ensureScript('../js/trainings.js?v=acct-block1').then(async () => {
           window.Trainings?.applyNavVisibility?.(cfg);
           window.Trainings?.init?.();
           try { await window.Trainings?.updateBadge?.(); } catch (_) { /* noop */ }
@@ -3288,7 +3288,7 @@ async function renderMasterPanel() {
 
   const roleLabels = {
     fundador:       { label:' Fundador',        cls:'badge-accent'   },
-    desenvolvedor:  { label:' Dev / TI',        cls:'badge-primary' },
+    desenvolvedor:  { label:' TI',             cls:'badge-primary' },
     master:         { label:' Master',          cls:'badge-accent'   },
     supervisor:     { label:' Supervisor',      cls:'badge-info'     },
     financial:      { label:' Financeiro',      cls:'badge-success'  },
@@ -3319,7 +3319,7 @@ async function renderMasterPanel() {
 
   // ── Gerentes, TI, Financeiro, RH (lista compacta ou card único) ──
   html += _renderMasterUserSection('GERENTES', gerentes, allOrders, allWds, roleLabels);
-  html += _renderMasterUserSection('DESENVOLVIMENTO / TI', desenvolvedores, allOrders, allWds, roleLabels);
+  html += _renderMasterUserSection('TI', desenvolvedores, allOrders, allWds, roleLabels);
   html += _renderMasterUserSection('FINANCEIRO', financeiros, allOrders, allWds, roleLabels);
   html += _renderMasterUserSection('RH', rhUsers, allOrders, allWds, roleLabels);
 
@@ -5062,7 +5062,7 @@ function onMasterRoleChange(role) {
     financial:'Financeiro', financeiro:'Financeiro',
     supervisor:'Supervisor', sup_backoffice:'Backoffice',
     backoffice:'Backoffice', rh:'RH', vendedor:'Vendas',
-    desenvolvedor:'Desenvolvimento', portaria:'Portaria',
+    desenvolvedor:'TI', portaria:'Portaria',
     gerente:'Administração'
   };
   if (deptMap[role]) deptSel.value = deptMap[role];
@@ -5148,7 +5148,7 @@ async function saveMasterUser() {
         backoffice:'Backoffice', sup_backoffice:'Sup. Backoffice',
         gerente:'Gerente',
         fundador:'Fundador',
-        desenvolvedor:'Desenvolvimento / TI', portaria:'Portaria',
+        desenvolvedor:'TI', portaria:'Portaria',
       }[role] || role;
       showToast(`${roleNome} "${name}" criado!`, 'success');
     }
@@ -5294,7 +5294,7 @@ async function _qpConfirm(empId) {
 ══════════════════════════════════════════════ */
 function _roleProfileLabel(role) {
   const map = {
-    fundador: 'Fundador', master: 'Master', desenvolvedor: 'Desenvolvimento / TI',
+    fundador: 'Fundador', master: 'Master', desenvolvedor: 'TI',
     gerente: 'Gerente', gerencia: 'Gerência', admin: 'Administrador',
     financeiro: 'Financeiro', financial: 'Financeiro', supervisor: 'Supervisor',
     sup_backoffice: 'Sup. Backoffice', backoffice: 'Backoffice', rh: 'RH',
