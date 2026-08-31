@@ -288,12 +288,12 @@
             </svg></span><span class="nav-label">Sair</span></button><button class="sidebar-toggle" id="sidebarToggle" aria-label="Recolher menu">⇄</button>
       </div>
     </nav>
-    <div class="main-area" id="mainArea">
+    <div class="main-area" id="mainArea"> <!--AQUI ABRE O DASHBOARD-->
       <header class="topbar"><span class="topbar-title" id="topbarTitle">Dashboard</span> <!--Titulo do DashBoard-->
         <div class="topbar-actions"><button type="button" class="btn btn-outline btn-sm minha-conta-topbar" onclick="openMinhaConta()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;vertical-align: middle;">
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
               <circle cx="12" cy="7" r="4"></circle>
-            </svg>Minha Conta</button><button class="btn btn-primary btn-sm rh-financial-only" onclick="openAddEmployeeModal()" style="display:none;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;vertical-align: middle;">
+            <!--Parte minha conta--> </svg>Minha Conta</button><button class="btn btn-primary btn-sm rh-financial-only" onclick="openAddEmployeeModal()" style="display:none;"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;vertical-align: middle;">
               <line x1="12" y1="5" x2="12" y2="19"></line>
               <line x1="5" y1="12" x2="19" y2="12"></line>
             </svg>Funcionário</button><button class="btn btn-ghost btn-sm" onclick="Auth.logout()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 4px;vertical-align: middle;">
@@ -302,13 +302,13 @@
               <line x1="21" y1="12" x2="9" y2="12"></line>
             </svg>Sair</button></div>
       </header>
-      <main class="page-content">
+      <main class="page-content"> <!--Começa clube de benefícios-->
         <section class="section" id="secClubeBeneficios">
           <div id="beneficiosLoadError" class="wa-alert" style="display:none;margin-bottom:16px;"></div>
           <!-- TABS -->
           <div class="menu-tabs">
-            <div class="menu-tab active" onclick="switchTab('meus-limites', this)">Meus Limites</div>
-            <div class="menu-tab" onclick="switchTab('restaurante', this)">Restaurante ZS</div>
+            <div class="menu-tab active" onclick="switchTab('meus-limites', this)">Meus Limites</div> <!--Div Completa, quadrado grandão-->
+            <div class="menu-tab" onclick="switchTab('restaurante', this)">Restaurante ZS</div> 
             <div class="menu-tab" onclick="switchTab('tem-saude', this)">Tem Saúde</div>
             <div class="menu-tab hide-from-sidebar store-shop-nav" onclick="document.querySelector('.sidebar-nav [data-section=\'secStore\']').click()" style="display:none;">Loja de Prêmios</div>
             <div class="menu-tab hide-from-sidebar master-only" onclick="document.querySelector('.sidebar-nav [data-section=\'secOrders\']').click()" style="display:none;">Pedidos</div>
@@ -394,7 +394,7 @@
                         <input type="checkbox" id="chkSalada" value="Salada" /> Salada
                       </label>
                       <label style="display:flex; align-items:center; gap: 6px; cursor:pointer;">
-                        <input type="checkbox" id="chkFeijaoCaldo" value="Feijão de caldo" /> Feijão de Caldo
+                        <input type="checkbox" id="chkFeijaoCaldo" value="Feijão de caldo"/> Feijão de Caldo
                       </label>
                     </div>
                   </div>
@@ -415,14 +415,14 @@
                 <div class="form-group">
                   <label>Valor do Pedido (R$)</label>
                   <input type="number" id="orderValue" class="form-control" placeholder="0,00" step="0.01" required />
-                </div>
+                </div> <!--Valores -->
 
                 <div class="form-group">
                   <label>Observações</label>
                   <textarea id="orderObs" class="form-control" rows="2" placeholder="Ex: Sem cebola, talheres descartáveis..."></textarea>
                 </div>
 
-                <button type="submit" class="btn btn-primary btn-full">Salvar Pedido</button>
+                <button type="submit" class="btn btn-primary btn-full">Salvar Pedido</button> <!--Botão de enviar formulário-->
               </form>
             </div>
           </div>
@@ -461,7 +461,7 @@
             <div class="table-responsive">
               <table class="data-table" id="adminCbTable">
                 <thead>
-                  <tr>
+                  <tr>  <!--Lista para gerir benefícios-->
                     <th>Colaborador</th>
                     <th>Status (Vínculo)</th>
                     <th>Limite Atual</th>
@@ -473,18 +473,20 @@
             </div>
           </div>
         </section>
+
+
         <section class="section" id="secInicio">
-          <div id="painelSonhosRoot"></div>
+          <div id="painelSonhosRoot"></div> 
         </section><!-- DASHBOARD -->
         <section class="section" id="secDashboard">
           <div class="stat-grid" id="dashStats"></div><!-- GRÁFICO DE FATURAMENTO POR EQUIPE -->
           <div class="team-billing-card team-billing-panel" id="teamBillingCard" style="display:none;margin-top:var(--space-lg);">
             <h3 class="team-billing-title">Faturamento por Equipe de Supervisor</h3>
             <div class="team-billing-toolbar">
-              <div class="team-billing-filter-group"><span class="team-billing-filter-label">PERÍODO</span>
+              <div class="team-billing-filter-group"><span class="team-billing-filter-label">PERÍODO</span> <!--Filtra por data-->
                 <div class="team-billing-pills" role="group" aria-label="Período"><button type="button" class="team-billing-pill" id="filterBtnDay" onclick="setTeamFilter('day')">Hoje</button><button type="button" class="team-billing-pill team-billing-pill--active" id="filterBtnMonth" onclick="setTeamFilter('month')">Este Mês</button><button type="button" class="team-billing-pill" id="filterBtnYear" onclick="setTeamFilter('year')">Este Ano</button><button type="button" class="team-billing-pill" id="filterBtnAll" onclick="setTeamFilter('all')">Tudo</button></div>
               </div>
-              <div class="team-billing-filter-group"><span class="team-billing-filter-label">INTERVALO</span>
+              <div class="team-billing-filter-group"><span class="team-billing-filter-label">INTERVALO</span> <!--continução do periodo-->
                 <div class="team-billing-dates"><input type="date" class="team-billing-date-input" id="filterDateFrom" aria-label="Data inicial" onchange="setTeamFilter('custom')"><span class="team-billing-date-sep">até</span><input type="date" class="team-billing-date-input" id="filterDateTo" aria-label="Data final" onchange="setTeamFilter('custom')"></div>
               </div>
               <div class="team-billing-filter-group team-billing-filter-group--status"><span class="team-billing-filter-label">STATUS</span><select id="teamBillingStatusFilter" class="team-billing-status-select" aria-label="Status da fatura" onchange="setTeamBillingStatus(this.value)">
@@ -494,11 +496,15 @@
                   <option value="pagas">Pagas</option>
                   <option value="canceladas">Canceladas</option>
                 </select></div>
-            </div>
+            </div> <!--Filtros-->
+
+            <!--Gráficos por equipe -->
             <div id="teamBillingKpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;"></div>
             <div id="teamBillingChart" class="team-billing-chart-host"></div>
             <div id="teamBillingTable" style="margin-top:18px;"></div>
-          </div>
+            </div>
+
+
           <div style="display:grid;grid-template-columns:1.6fr 1fr;gap:var(--space-lg);margin-top:var(--space-lg);">
             <div class="card card-padded">
               <h3 style="font-family:var(--font-display);font-weight:800;margin-bottom:16px;"> Top Funcionários</h3>
@@ -509,8 +515,9 @@
               <h3 style="font-family:var(--font-display);font-weight:800;margin-bottom:16px;"> Últimos Pedidos</h3>
               <div id="dashOrders"></div>
             </div>
-          </div>
-        </section><!-- PAINEL MASTER -->
+          </div> <!--Painel de top funcionários-->
+          
+        </section><!-- PAINEL MASTER  começa bem aq-->
         <section class="section" id="secMaster">
           <div class="page-header">
             <div class="page-header-text">
@@ -529,14 +536,31 @@
           </div>
           <div id="partnersContent"></div>
         </section><!-- FUNCIONÁRIOS -->
+        <!-- ============================================================
+             FUNCIONÁRIOS
+             Cadastro e gestão da equipe SOU+BLU (não confundir com a aba
+             "Parceiros" acima, que usa R$ e fica fora do ranking de pontos).
+             Tabela é populada via JS por renderEmployeesTable() (admin.js),
+             que lê #employeesTbody e filtra pelo texto digitado em #empSearch.
+        ============================================================= -->
         <section class="section" id="secEmployees">
           <div class="page-header">
             <div class="page-header-text">
               <h2>Funcionários</h2>
+              <!-- Subtítulo é atualizado dinamicamente pelo JS (admin.js) -->
               <p id="empPageSubtitle">Cadastro e gestão da equipe</p>
             </div>
             <div style="display:flex;gap:8px;">
-              <div class="search-bar" style="width:220px;"><span class="search-icon"></span><input type="text" id="empSearch" placeholder="Buscar..." oninput="renderEmployeesTable()" /></div><button class="btn btn-primary btn-sm rh-financial-only" onclick="openAddEmployeeModal()" style="display:none;">+ Novo</button>
+              <!-- Campo de busca: dispara renderEmployeesTable() a cada tecla -->
+              <div class="search-bar" style="width:220px;">
+                <span class="search-icon"></span>
+                <input type="text" id="empSearch" placeholder="Buscar..." oninput="renderEmployeesTable()" />
+              </div>
+              <!-- Botão "+ Novo" só aparece para quem tem permissão RH/Financeiro
+                   (classe .rh-financial-only é exibida via JS, ver admin.js:557) -->
+              <button class="btn btn-primary btn-sm rh-financial-only" onclick="openAddEmployeeModal()" style="display:none;">
+                + Novo
+              </button>
             </div>
           </div>
           <div class="card">
@@ -553,6 +577,7 @@
                     <th>Ações</th>
                   </tr>
                 </thead>
+                <!-- Linhas geradas dinamicamente por renderEmployeesTable() (admin.js) -->
                 <tbody id="employeesTbody"></tbody>
               </table>
             </div>
@@ -1037,7 +1062,7 @@
           </div>
           <div class="coins-banner">
             <div class="coins-banner-left">
-              <h3>Seus pontos disponíveis</h3>
+              <h3>Seus pontos disponíveis</h3> <!--acumulador de pontos etc etc -->
               <div class="coins-amount" id="bannerPoints">0 pts</div>
             </div>
             <div class="coins-banner-right"><svg xmlns="http://www.w3.org/2000/svg" width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity:.8;color:#fff;">
@@ -1051,7 +1076,7 @@
         <section class="section" id="secRanking">
           <div class="page-header">
             <div class="page-header-text">
-              <h2>Ranking de Vendas</h2>
+              <h2>Ranking de Vendas</h2> <!--CLassificação de vendas -->
               <p>Classificação por faturamento (faixas) — filtros por status e fase da proposta</p>
             </div>
           </div>
@@ -1103,7 +1128,7 @@
             </div>
           </div>
           <div id="reportContent"></div>
-        </section><!-- MEU PERFIL -->
+        </section><!-- WHATSAPP -->
         <section class="section" id="secWhatsApp">
           <div class="page-header">
             <div class="page-header-text">
@@ -1121,7 +1146,7 @@
               </div>
             </div>
           </div>
-        </section>
+        </section><!-- MEU PERFIL -->
         <section class="section" id="secMyProfile">
           <div id="myProfileMaster">
             <div class="page-header">
@@ -1364,7 +1389,7 @@
       </div>
       <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('partnerModal')">Cancelar</button><button class="btn btn-primary" onclick="savePartner()"> Salvar parceiro</button></div>
     </div>
-  </div><!-- MODAL: DISTRIBUIR SALDO — REDE DO PARCEIRO --><!-- MODAL: DISTRIBUIR SALDO — REDE DO PARCEIRO --><!-- MODAL: DISTRIBUIR SALDO — REDE DO PARCEIRO --><!-- MODAL: DISTRIBUIR SALDO — REDE DO PARCEIRO -->
+  </div><!-- MODAL: DISTRIBUIR SALDO — REDE DO PARCEIRO -->
   <div class="modal-overlay" id="partnerBalanceModal">
     <div class="modal" style="max-width:720px;">
       <div class="modal-header">
@@ -1719,7 +1744,15 @@
       </div>
       <div class="modal-footer"><button type="button" class="btn btn-ghost" onclick="closeModal('changePasswordModal')">Cancelar</button><button type="button" class="btn btn-primary" onclick="saveProfilePassword()"> Salvar</button></div>
     </div>
-  </div><!-- -------- PASSO 1: DADOS DO SAQUE (modal normal) -------- -->
+  </div><!--
+    FLUXO DE SAQUE (PIX) — 4 telas em sequência, cada uma chama a próxima via onclick:
+      1. #withdrawalModal  → valor + dados da chave PIX               → goToTermStep()
+      1.5 #docScreen       → só no 1º saque: envio de RG/CNH          → goToFaceStepFromDoc()
+      2.  #termFullscreen  → termo de ciência (rolagem obrigatória)   → confirmTermStep()
+      3.  #faceScreen      → reconhecimento facial obrigatório        → conclui o saque
+    A ordem real (com ou sem passo 1.5) é decidida em withdrawal-flow.js conforme
+    o funcionário já ter ou não biometria/documento cadastrados.
+  --><!-- PASSO 1: DADOS DO SAQUE (modal normal) -->
   <div class="modal-overlay" id="withdrawalModal">
     <div class="modal" style="max-width:520px;">
       <div class="modal-header">
@@ -1902,7 +1935,14 @@
           </button></div>
       </div>
     </div>
-  </div><!-- MODAL: RESPONDER CHAMADO -->
+  </div><!--
+    ATENÇÃO: #manageTicketModal, #clientModal e #attachmentViewerModal (abaixo, até
+    "MODAL: VER / EDITAR PROPOSTA") são cópias EXATAS dos modais já declarados acima
+    (perto de manageProposalModal / masterProposalModal). IDs duplicados no DOM —
+    document.getElementById() sempre pega a 1ª ocorrência, então este segundo bloco
+    fica morto (nunca é exibido nem recebe os listeners). Parece resíduo de um
+    copy/paste; avaliar remoção.
+  --><!-- MODAL: RESPONDER CHAMADO (duplicado — ver nota acima) -->
   <div class="modal-overlay" id="manageTicketModal">
     <div class="modal" style="max-width:600px;">
       <div class="modal-header">
@@ -1918,7 +1958,7 @@
       </div>
       <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('manageTicketModal')">Fechar</button><button class="btn btn-primary" onclick="Tickets.reply()"> Enviar Resposta</button></div>
     </div>
-  </div><!-- MODAL: CADASTRAR CLIENTE -->
+  </div><!-- MODAL: CADASTRAR CLIENTE (duplicado — ver nota acima) -->
   <div class="modal-overlay" id="clientModal">
     <div class="modal" style="max-width:700px;">
       <div class="modal-header">
@@ -1952,7 +1992,7 @@
       </div>
       <div class="modal-footer"><button class="btn btn-ghost" onclick="closeModal('clientModal')">Cancelar</button><button class="btn btn-primary" onclick="Clients.save()"> Salvar Cliente</button></div>
     </div>
-  </div><!-- MODAL: VISUALIZAR ANEXO -->
+  </div><!-- MODAL: VISUALIZAR ANEXO (duplicado — ver nota acima) -->
   <div class="modal-overlay" id="attachmentViewerModal">
     <div class="modal" style="max-width:900px;">
       <div class="modal-header">
