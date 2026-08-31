@@ -99,7 +99,7 @@ async function ensureSectionScripts(sec) {
     secContaCorrenteGestao: ['../js/conta-corrente.js?v=cc-money1'],
     secWithdrawals: ['../js/withdrawal-flow.js'],
     secRanking: ['../js/sales-ranking.js?v=bill-paid2', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
-    secCreateProposal: ['../js/masterProposal.js', '../js/fontedata.js'],
+    secCreateProposal: ['../js/masterProposal.js?v=prop-modal2', '../js/fontedata.js'],
     secPartnersForm: ['../js/fontedata.js'],
   };
   const list = map[sec] || [];

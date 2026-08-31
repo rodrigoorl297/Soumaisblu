@@ -3515,6 +3515,8 @@ window.Proposals = {
       this._initBankSelects();
       const area = document.getElementById('propFormArea');
       if (area) area.style.display = 'none';
+      const popupEl = document.getElementById('propCpfPopup');
+      if (popupEl) popupEl.style.display = 'none';
       const fileEl = document.getElementById('filePaystub');
       if (fileEl) fileEl.value = '';
 
@@ -3523,9 +3525,30 @@ window.Proposals = {
       this.initAnexoFolders();
       this._initStaticProposalSelects();
       this._applyVendedorFormRules();
-      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      // Se existir o pop-up (admin), abre como modal por cima da página; senão
+      // (tela do vendedor) mantém o comportamento antigo de card inline na página.
+      const overlay = document.getElementById('propFormModal');
+      if (overlay) {
+        if (typeof openModal === 'function') openModal('propFormModal');
+        else overlay.classList.add('open');
+      } else {
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     } catch(e) {
       alert("Erro ao abrir formulário: " + e.message);
+    }
+  },
+
+  // Fecha o pop-up de "Cadastrar Proposta" (admin) ou esconde o card inline (vendedor).
+  closeModal: function() {
+    const overlay = document.getElementById('propFormModal');
+    if (overlay) {
+      if (typeof closeModal === 'function') closeModal('propFormModal');
+      else overlay.classList.remove('open');
+    } else {
+      const container = document.getElementById('propFormContainer');
+      if (container) container.style.display = 'none';
     }
   },
 
@@ -3541,23 +3564,60 @@ window.Proposals = {
     }
   },
 
-  searchCpf: async function() {
+  // Dispara a busca automaticamente enquanto o usuário digita o CPF.
+  // Assim que completar 11 dígitos, o pop-up aparece sozinho (sem precisar clicar em "Buscar Cliente").
+  _cpfPopupTimer: null,
+
+  onCpfInput: function() {
+    const input = document.getElementById('propCpf');
+    const popup = document.getElementById('propCpfPopup');
+    if (!input) return;
+
+    const cpf = input.value.replace(/\D/g, '');
+    clearTimeout(this._cpfPopupTimer);
+
+    if (cpf.length !== 11) {
+      if (popup) popup.style.display = 'none';
+      const area = document.getElementById('propFormArea');
+      if (area) area.style.display = 'none';
+      return;
+    }
+
+    // pequeno debounce para não buscar a cada tecla enquanto ainda digita
+    this._cpfPopupTimer = setTimeout(() => {
+      this.searchCpf({ silent: true });
+    }, 350);
+  },
+
+  searchCpf: async function(opts) {
+    opts = opts || {};
+    const popup = document.getElementById('propCpfPopup');
     try {
       const cpfStr = document.getElementById('propCpf').value;
       const cpf = cpfStr.replace(/\D/g, '');
       if (cpf.length !== 11) {
-        alert("Por favor, digite um CPF válido.");
+        if (!opts.silent) alert("Por favor, digite um CPF válido.");
         return;
       }
-      
-      const btn = event.target || document.querySelector('#propFormContainer .btn-primary');
-      const oldText = btn ? btn.innerText : 'Buscar Cliente';
-      if(btn) btn.innerText = 'Buscando...';
+
+      let btn = null;
+      let oldText = '';
+      if (opts.silent) {
+        if (popup) {
+          popup.className = 'prop-cpf-popup';
+          popup.style.display = 'block';
+          popup.innerHTML = '<span style="color:var(--color-text-muted);">Buscando cliente...</span>';
+        }
+      } else {
+        btn = (typeof event !== 'undefined' && event && event.target) || document.querySelector('#propFormContainer .btn-primary');
+        oldText = btn ? btn.innerText : 'Buscar Cliente';
+        if (btn) btn.innerText = 'Buscando...';
+      }
 
       // Procura por CPF (id ou campo cpf)
       const client = await this._lookupClientByCpf(cpf);
-      
-      if(btn) btn.innerText = oldText;
+
+      if (btn) btn.innerText = oldText;
 
       if (client) {
         let summary = `<strong>Nome:</strong> ${client.name}<br>
@@ -3573,12 +3633,31 @@ window.Proposals = {
         this._setFolderContext('propAnexosFolders', 'prop');
         this.initAnexoFolders();
         this._applyVendedorFormRules();
+
+        if (popup) {
+          popup.className = 'prop-cpf-popup prop-cpf-popup--found';
+          popup.innerHTML = `✓ Cliente encontrado: <strong>${client.name}</strong>`;
+          setTimeout(() => { popup.style.display = 'none'; }, 1800);
+        }
       } else {
-        alert("Cliente não encontrado. Por favor, vá na aba 'Clientes' e cadastre o cliente primeiro.");
         document.getElementById('propFormArea').style.display = 'none';
+        if (opts.silent) {
+          if (popup) {
+            popup.className = 'prop-cpf-popup prop-cpf-popup--notfound';
+            popup.innerHTML = "Cliente não encontrado. Vá em 'Clientes' e cadastre primeiro.";
+          }
+        } else {
+          alert("Cliente não encontrado. Por favor, vá na aba 'Clientes' e cadastre o cliente primeiro.");
+          if (popup) popup.style.display = 'none';
+        }
       }
     } catch (e) {
-      alert("Erro ao buscar cliente: " + e.message);
+      if (opts.silent && popup) {
+        popup.className = 'prop-cpf-popup prop-cpf-popup--notfound';
+        popup.innerHTML = "Erro ao buscar cliente.";
+      } else if (!opts.silent) {
+        alert("Erro ao buscar cliente: " + e.message);
+      }
     }
   },
 
@@ -3726,7 +3805,7 @@ window.Proposals = {
       if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
       alert("Proposta enviada com sucesso!");
       
-      document.getElementById('propFormContainer').style.display = 'none';
+      this.closeModal();
       /* Limpa slots e arquivos selecionados — evita anexos "fantasma" na próxima proposta. */
       this._setFolderContext('propAnexosFolders', 'prop');
       this.resetAnexoFolders();
