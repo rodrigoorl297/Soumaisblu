@@ -207,9 +207,11 @@
     if (!att) return false;
     const passScore = Number(training?.passing_score) || 70;
     const score = Number(att.score);
-    const st = String(att.status || '').toLowerCase();
-    if (st === 'failed' || st === 'reprovado' || st === 'penalized') return false;
     if (Number.isFinite(score) && score >= passScore) return true;
+
+    const st = String(att.status || '').toLowerCase();
+    // Reprovação de prova (com nota) continua pendente. Penalidade de prazo NÃO apaga quem já fez o conteúdo.
+    if ((st === 'failed' || st === 'reprovado') && Number.isFinite(score) && score < passScore) return false;
 
     const lp = att.lesson_progress;
     if (!lp || typeof lp !== 'object') return false;
@@ -226,15 +228,13 @@
     const finalDone = !!(completed.quiz_final === true || completed.quiz_final === 1 || completed.quiz_final === 'true');
 
     if (finalDone || quizDone.length) {
-      if (Number.isFinite(score) && score >= passScore) return true;
       if (scores.length) {
         const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
-        return avg >= passScore;
+        if (avg < passScore) return false;
       }
-      // Quizzes marcados + 100%, sem nota guardada → considera feito (evita notificar eterno)
-      return quizDone.length > 0 || finalDone;
+      return true;
     }
-    // Curso só de conteúdo (100% aulas, sem quizzes no progresso)
+    // 100% das aulas = concluiu (prova extra cadastrada depois não desfaz)
     return true;
   }
 
@@ -1486,15 +1486,15 @@
     },
 
     /**
-     * Sincroniza bloqueio 001 (treinamentos obrigatórios) com pendências.
-     * Não altera bloqueios manuais 002–005.
+     * Sincroniza bloqueio 001 (treinamentos obrigatórios).
+     * Não aplica bloqueio automático — pendência só avisa no login.
+     * Se já estiver 001, libera. Não altera bloqueios manuais 002–005.
      */
-    async syncTrainingBlockForUser(user, pendingList) {
+    async syncTrainingBlockForUser(user) {
       if (!user?.id) return false;
-      const canSet = typeof DB.setAccountBlock === 'function';
       const canClear = typeof DB.clearAccountBlock === 'function';
       const canLegacy = typeof DB.setTrainingBlock === 'function';
-      if (!canSet && !canLegacy) return false;
+      if (!canClear && !canLegacy) return false;
 
       const applySessionFlags = (blocked, code) => {
         try {
@@ -1511,57 +1511,27 @@
         } catch (_) { /* noop */ }
       };
 
-      if (shouldSkipPendingAlert(user)) {
-        // Gestão não fica bloqueada por trilha operacional.
-        const lead = await DB.getUser(user.id).catch(() => user);
-        const code = typeof DB.getAccountBlockCode === 'function'
-          ? DB.getAccountBlockCode(lead || user)
-          : null;
-        if (code === '001' || (!code && DB.isTrainingBlocked?.(lead || user))) {
-          try {
-            if (canClear) await DB.clearAccountBlock(user.id, { unlockCode: '001', by: 'system-trainings' });
-            else if (canLegacy) await DB.setTrainingBlock(user.id, false);
-          } catch (_) { /* noop */ }
-          applySessionFlags(false, null);
-        }
+      const lead = await DB.getUser(user.id).catch(() => user);
+      const code = typeof DB.getAccountBlockCode === 'function'
+        ? DB.getAccountBlockCode(lead || user)
+        : null;
+
+      if (code && code !== '001') return true;
+
+      const cur001 = code === '001' || DB.isTrainingBlocked?.(lead || user);
+      if (!cur001) {
+        applySessionFlags(false, null);
         return false;
       }
 
-      let pending = pendingList;
-      if (!Array.isArray(pending)) {
-        pending = await this.getPendingForUser(user);
-      }
-      const hasObr = pending.some(({ tr }) => String(tr?.category || '').toLowerCase() === 'obrigatorio');
-      const fresh = await DB.getUser(user.id).catch(() => user);
-      const activeCode = typeof DB.getAccountBlockCode === 'function'
-        ? DB.getAccountBlockCode(fresh || user)
-        : null;
-
-      // Bloqueios financeiros 002–005: sync de treinamento não mexe.
-      if (activeCode && activeCode !== '001') {
-        return true;
-      }
-
-      const cur001 = activeCode === '001' || (!activeCode && DB.isTrainingBlocked?.(fresh || user));
-      if (hasObr === cur001) {
-        applySessionFlags(hasObr, hasObr ? '001' : null);
-        return hasObr;
-      }
-
       try {
-        if (hasObr) {
-          if (canSet) await DB.setAccountBlock(user.id, { code: '001', by: 'system-trainings' });
-          else await DB.setTrainingBlock(user.id, true);
-          applySessionFlags(true, '001');
-        } else {
-          if (canClear) await DB.clearAccountBlock(user.id, { unlockCode: '001', by: 'system-trainings' });
-          else await DB.setTrainingBlock(user.id, false);
-          applySessionFlags(false, null);
-        }
+        if (canClear) await DB.clearAccountBlock(user.id, { unlockCode: '001', by: 'system-trainings' });
+        else if (canLegacy) await DB.setTrainingBlock(user.id, false);
+        applySessionFlags(false, null);
       } catch (e) {
         console.warn('[Trainings] syncTrainingBlock:', e);
       }
-      return hasObr;
+      return false;
     },
 
     async checkPendingOnLogin() {

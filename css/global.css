@@ -270,8 +270,9 @@ body.modal-open {
   transition: opacity var(--transition-slow);
 }
 .modal-overlay.open {
-  opacity: 1;
-  visibility: visible;
+  display: flex !important;
+  opacity: 1 !important;
+  visibility: visible !important;
   pointer-events: auto !important;
 }
 .modal-overlay.modal-stack-front { z-index: 13000; }
@@ -1419,4 +1420,168 @@ select.header-filter.filter-active + .header-filter-chevron {
 /* Hide specific sidebar items */
 .sidebar-nav .hide-from-sidebar {
     display: none !important;
+}
+
+/* ===== Mobile UX (admin/employee) ===== */
+@media (max-width: 900px) {
+  html, body {
+    overflow-x: hidden;
+    max-width: 100%;
+  }
+
+  .app-layout,
+  .main-area,
+  .page-content,
+  .section.active,
+  .card {
+    max-width: 100%;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .card > .table,
+  .card > table,
+  .section .table:not(.table-wrap *) {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .modal-overlay {
+    padding: 0;
+    align-items: stretch;
+    justify-content: stretch;
+  }
+  .modal-overlay .modal,
+  .modal-overlay.open .modal,
+  .emp-prop-modal {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100dvh;
+    height: 100%;
+    border-radius: 0;
+    margin: 0;
+  }
+  .emp-prop-modal__body,
+  .modal-body {
+    max-height: calc(100dvh - 130px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .modal-close {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-grid,
+  .pix-form-grid,
+  .prop-valores-row,
+  .sim-troco-inputs {
+    grid-template-columns: 1fr !important;
+  }
+
+  .btn,
+  .btn-sm,
+  .form-control,
+  select.form-control,
+  input.form-control,
+  textarea.form-control {
+    min-height: 44px;
+  }
+  .btn {
+    white-space: normal;
+    text-align: center;
+  }
+
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .page-header > div[style*="display:flex"],
+  .page-header .search-bar {
+    width: 100% !important;
+    max-width: 100%;
+  }
+  .proposal-date-filter {
+    width: 100%;
+  }
+  .proposal-date-filter label {
+    flex: 1;
+  }
+  .proposal-date-filter input[type="date"] {
+    width: 100% !important;
+  }
+
+  /* iOS: evita zoom automático ao focar input */
+  input.form-control,
+  select.form-control,
+  textarea.form-control,
+  .search-bar input {
+    font-size: 16px !important;
+  }
+
+  .client-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .client-actions__btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .mobile-list-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 4px 0 12px;
+  }
+  .mobile-list-card {
+    background: var(--color-surface, #fff);
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    padding: 14px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  }
+  .mobile-list-card__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .mobile-list-card__body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 14px;
+    margin-bottom: 12px;
+  }
+  .mobile-list-card__meta,
+  .mobile-list-card__muted {
+    font-size: 12px;
+    color: var(--color-text-muted);
+  }
+  .mobile-list-card__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .topbar {
+    padding-top: max(0px, env(safe-area-inset-top));
+  }
+  .card {
+    padding: 14px;
+  }
 }

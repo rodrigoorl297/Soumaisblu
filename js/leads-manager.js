@@ -532,6 +532,62 @@ async function confirmImport() {
 }
 
 /* ── Distribution ── */
+function _canDistributeAdvanced(session) {
+  const role = String(session?.role || '').toLowerCase();
+  return ['master', 'fundador', 'desenvolvedor', 'gerente', 'gerencia', 'admin'].includes(role);
+}
+
+function _canRepassToSupervisors(session) {
+  const role = String(session?.role || '').toLowerCase();
+  return ['master', 'fundador', 'desenvolvedor'].includes(role);
+}
+
+function _isUserActiveRow(u) {
+  return u && u.active !== false && u.active !== 0 && u.active !== '0' && String(u.active).toLowerCase() !== 'false';
+}
+
+function _getDistTarget() {
+  const radio = document.querySelector('input[name="distTarget"]:checked');
+  return radio ? String(radio.value || 'employees') : 'employees';
+}
+
+async function _loadPartnerOptionsForDist() {
+  const sel = document.getElementById('distPartnerSelect');
+  if (!sel) return;
+  const prev = sel.value || '';
+  let partners = [];
+  try {
+    partners = typeof DB.getPartners === 'function' ? await DB.getPartners() : [];
+  } catch (_) {
+    partners = [];
+  }
+  const active = (partners || []).filter((p) => {
+    if (!p?.user_id) return false;
+    if (p.active === false || p.active === 0 || p.active === '0') return false;
+    return true;
+  }).sort((a, b) => String(a.razao_social || '').localeCompare(String(b.razao_social || ''), 'pt-BR'));
+
+  sel.innerHTML = '<option value="">Selecione o parceiro...</option>' + active.map((p) => {
+    const label = String(p.razao_social || p.user_id || 'Parceiro').toUpperCase();
+    return `<option value="${_escAttr(p.user_id)}">${_esc(label)}</option>`;
+  }).join('');
+  if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+
+function _escAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;');
+}
+
+async function onDistPartnerChange() {
+  _selectedEmployees.clear();
+  _allEmployeesChecked = false;
+  await loadDistributeTab();
+}
+
 async function loadDistributeTab() {
   if (!_currentBatch) {
     document.getElementById('distNoBatch').classList.remove('hidden');
@@ -556,67 +612,130 @@ async function loadDistributeTab() {
     return;
   }
 
-  // Load employees or supervisors
   const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
-  const isMaster = session && (session.role === 'master' || session.role === 'fundador' || session.role === 'desenvolvedor');
-  
-  if (isMaster) {
-    document.getElementById('distTargetToggle').classList.remove('hidden');
+  const canAdvanced = _canDistributeAdvanced(session);
+  const canSupervisors = _canRepassToSupervisors(session);
+  const toggle = document.getElementById('distTargetToggle');
+  const partnerWrap = document.getElementById('distPartnerPickWrap');
+  const supervisorsLabel = document.getElementById('distTargetSupervisorsLabel');
+
+  if (canAdvanced) {
+    toggle?.classList.remove('hidden');
   } else {
-    document.getElementById('distTargetToggle').classList.add('hidden');
+    toggle?.classList.add('hidden');
+    const empRadio = document.querySelector('input[name="distTarget"][value="employees"]');
+    if (empRadio) empRadio.checked = true;
+  }
+  if (supervisorsLabel) supervisorsLabel.style.display = canSupervisors ? '' : 'none';
+  if (!canSupervisors) {
+    const supRadio = document.querySelector('input[name="distTarget"][value="supervisors"]');
+    if (supRadio?.checked) {
+      const empRadio = document.querySelector('input[name="distTarget"][value="employees"]');
+      if (empRadio) empRadio.checked = true;
+    }
   }
 
-  let distTarget = 'employees';
-  const radio = document.querySelector('input[name="distTarget"]:checked');
-  if (radio && isMaster) {
-    distTarget = radio.value;
+  const distTarget = canAdvanced ? _getDistTarget() : 'employees';
+  if (partnerWrap) {
+    partnerWrap.classList.toggle('hidden', distTarget !== 'partners');
   }
 
   let employees = [];
-  
-  if (distTarget === 'supervisors') {
-    // Show only supervisors
-    document.getElementById('distListTitle').textContent = 'Selecionar Supervisores';
-    document.getElementById('weeksConfigGroup').classList.add('hidden');
-    const allUsers = await DB.getUsers();
-    employees = allUsers.filter(u => ['supervisor','gerente','gerencia'].includes(u.role));
+  const listTitle = document.getElementById('distListTitle');
+  const weeksGroup = document.getElementById('weeksConfigGroup');
+
+  if (distTarget === 'supervisors' && canSupervisors) {
+    if (listTitle) listTitle.textContent = 'Selecionar Supervisores';
+    weeksGroup?.classList.add('hidden');
+    const allUsers = typeof DB.getUsers === 'function'
+      ? await DB.getUsers().catch(() => [])
+      : (await DB.getAllUsers().catch(() => []));
+    employees = (allUsers || []).filter((u) => {
+      const r = String(u.role || '').toLowerCase();
+      return ['supervisor', 'gerente', 'gerencia'].includes(r) && _isUserActiveRow(u);
+    });
+  } else if (distTarget === 'partners' && canAdvanced) {
+    if (listTitle) listTitle.textContent = 'Vendedores do parceiro';
+    weeksGroup?.classList.remove('hidden');
+    await _loadPartnerOptionsForDist();
+    const partnerId = document.getElementById('distPartnerSelect')?.value || '';
+    if (!partnerId) {
+      employees = [];
+    } else {
+      let team = [];
+      try {
+        team = typeof DB.getPartnerTeam === 'function'
+          ? await DB.getPartnerTeam(partnerId)
+          : [];
+      } catch (_) {
+        team = [];
+      }
+      // Fallback: quem tem admin_id = parceiro (cobre cadastro sem partner_root_id)
+      if (!team.length) {
+        try {
+          const byAdmin = typeof DB.getEmployeesByAdmin === 'function'
+            ? await DB.getEmployeesByAdmin(partnerId)
+            : [];
+          team = byAdmin || [];
+        } catch (_) { /* noop */ }
+      }
+      employees = (team || []).filter((u) => {
+        const r = String(u.role || '').toLowerCase();
+        const isSeller = r === 'vendedor' || r === 'employee';
+        return isSeller && _isUserActiveRow(u);
+      });
+      const partnerOpt = document.getElementById('distPartnerSelect')?.selectedOptions?.[0];
+      const partnerName = partnerOpt?.textContent || 'Parceiro';
+      if (listTitle) listTitle.textContent = `Vendedores — ${partnerName}`;
+    }
   } else {
-    // Show only SOU+BLU internal vendedores
-    document.getElementById('distListTitle').textContent = 'Selecionar Vendedores SOU+BLU';
-    document.getElementById('weeksConfigGroup').classList.remove('hidden');
-    
+    if (listTitle) listTitle.textContent = 'Selecionar Vendedores SOU+BLU';
+    weeksGroup?.classList.remove('hidden');
+
     let rawEmployees = await DB.getAllEmployees().catch(() => []);
     if (!rawEmployees.length && session?.id) {
       rawEmployees = await DB.getEmployeesByAdmin(session.id).catch(() => []);
     }
 
-    // Filtrar estritamente SOMENTE vendedores internos do SOU+BLU
-    employees = rawEmployees.filter(e => {
+    const partnerRoots = new Set();
+    try {
+      const partners = typeof DB.getPartners === 'function' ? await DB.getPartners() : [];
+      (partners || []).forEach((p) => { if (p?.user_id) partnerRoots.add(String(p.user_id)); });
+    } catch (_) { /* noop */ }
+
+    employees = (rawEmployees || []).filter((e) => {
       const r = String(e.role || '').toLowerCase();
       const isSeller = (r === 'vendedor' || r === 'employee');
-      const isNotPartner = !e.partner_root_id && !r.includes('parceiro') && !(e.department && String(e.department).toLowerCase().includes('parceiro'));
+      const underPartner = !!(e.partner_root_id)
+        || partnerRoots.has(String(e.admin_id || ''))
+        || r.includes('parceiro')
+        || (e.department && String(e.department).toLowerCase().includes('parceiro'));
       const isNotBackoffice = r !== 'backoffice' && r !== 'sup_backoffice' && r !== 'operacional' && r !== 'supervisor' && r !== 'gerente';
-      const isActive = e.active !== false && String(e.active) !== '0' && e.active !== 0;
-      return isSeller && isNotPartner && isNotBackoffice && isActive;
+      return isSeller && !underPartner && isNotBackoffice && _isUserActiveRow(e);
     });
   }
 
   const selector = document.getElementById('employeeSelector');
-  selector.innerHTML = employees.map(emp => `
-    <label class="employee-check" data-name="${_esc((emp.name || '').toLowerCase())}">
-      <input type="checkbox" value="${emp.id}" onchange="toggleEmployee('${emp.id}', this.checked); updateDistPreview();" />
-      <div>
-        <div class="emp-name">${_esc(emp.name)}</div>
-        <div class="emp-role">${_esc(emp.role || 'vendedor')} · ${_esc(emp.email || '')}</div>
-      </div>
-    </label>
-  `).join('');
-
-  if (!employees.length) {
-    selector.innerHTML = '<p class="text-muted" style="padding:20px;text-align:center;">Nenhum funcionário ativo encontrado.</p>';
+  if (distTarget === 'partners' && !(document.getElementById('distPartnerSelect')?.value)) {
+    selector.innerHTML = '<p class="text-muted" style="padding:20px;text-align:center;">Selecione o parceiro acima para ver os vendedores.</p>';
+  } else if (!employees.length) {
+    selector.innerHTML = distTarget === 'partners'
+      ? '<p class="text-muted" style="padding:20px;text-align:center;">Nenhum vendedor ativo neste parceiro.</p>'
+      : '<p class="text-muted" style="padding:20px;text-align:center;">Nenhum funcionário ativo encontrado.</p>';
+  } else {
+    selector.innerHTML = employees.map((emp) => `
+      <label class="employee-check" data-name="${_esc((emp.name || '').toLowerCase())}">
+        <input type="checkbox" value="${_escAttr(emp.id)}" onchange="toggleEmployee('${_escAttr(emp.id)}', this.checked); updateDistPreview();" />
+        <div>
+          <div class="emp-name">${_esc(emp.name)}</div>
+          <div class="emp-role">${_esc(emp.role || 'vendedor')} · ${_esc(emp.email || '')}</div>
+        </div>
+      </label>
+    `).join('');
   }
 
   _selectedEmployees.clear();
+  _allEmployeesChecked = false;
   updateDistPreview();
 }
 
@@ -645,8 +764,9 @@ async function updateDistPreview() {
     return;
   }
 
-  const radio = document.querySelector('input[name="distTarget"]:checked');
-  const isSupervisors = radio && radio.value === 'supervisors';
+  const distTarget = _getDistTarget();
+  const isSupervisors = distTarget === 'supervisors';
+  const isPartners = distTarget === 'partners';
 
   try {
     const unassigned = await LeadsDB.getUnassignedLeads(_currentBatch.id);
@@ -665,11 +785,15 @@ async function updateDistPreview() {
       const weeks = parseInt(document.getElementById('weeksInput').value) || 1;
       const perWeek = Math.ceil(perEmployee / weeks);
       const perDay = Math.ceil(perWeek / 5);
+      const partnerLabel = isPartners
+        ? (document.getElementById('distPartnerSelect')?.selectedOptions?.[0]?.textContent || 'Parceiro')
+        : '';
 
       summary.innerHTML = `
+        ${isPartners ? `<div class="dist-summary-item"><span class="label">Parceiro</span><span class="value">${_esc(partnerLabel)}</span></div>` : ''}
         <div class="dist-summary-item"><span class="label">Leads disponíveis</span><span class="value">${unassigned.length.toLocaleString('pt-BR')}</span></div>
-        <div class="dist-summary-item"><span class="label">Funcionários</span><span class="value">${empCount}</span></div>
-        <div class="dist-summary-item"><span class="label">Leads por funcionário</span><span class="value">${perEmployee.toLocaleString('pt-BR')}</span></div>
+        <div class="dist-summary-item"><span class="label">${isPartners ? 'Vendedores do parceiro' : 'Funcionários'}</span><span class="value">${empCount}</span></div>
+        <div class="dist-summary-item"><span class="label">Leads por pessoa</span><span class="value">${perEmployee.toLocaleString('pt-BR')}</span></div>
         ${remainder > 0 ? `<div class="dist-summary-item"><span class="label">Excedente (${remainder})</span><span class="value">Distribuído entre os primeiros</span></div>` : ''}
         <div class="dist-summary-item"><span class="label">Semanas</span><span class="value">${weeks}</span></div>
         <div class="dist-summary-item"><span class="label">Leads por semana</span><span class="value" style="color:var(--color-accent);font-size:18px;">${perWeek.toLocaleString('pt-BR')}</span></div>
@@ -692,8 +816,9 @@ async function confirmDistribute() {
   btn.disabled = true;
   btn.textContent = 'Processando...';
 
-  const radio = document.querySelector('input[name="distTarget"]:checked');
-  const isSupervisors = radio && radio.value === 'supervisors';
+  const distTarget = _getDistTarget();
+  const isSupervisors = distTarget === 'supervisors';
+  const isPartners = distTarget === 'partners';
 
   try {
     if (isSupervisors) {
@@ -703,14 +828,22 @@ async function confirmDistribute() {
         true
       );
     } else {
+      if (isPartners && !document.getElementById('distPartnerSelect')?.value) {
+        throw new Error('Selecione o parceiro antes de distribuir.');
+      }
       const weeks = parseInt(document.getElementById('weeksInput').value) || 1;
       const result = await LeadsDB.distributeLeads(
         _currentBatch.id,
         [..._selectedEmployees],
         weeks
       );
+      const partnerName = isPartners
+        ? (document.getElementById('distPartnerSelect')?.selectedOptions?.[0]?.textContent || 'parceiro')
+        : '';
       _showAlert('distBatchInfo', 'success',
-        `✅ ${result.distributed.toLocaleString('pt-BR')} leads distribuídos entre ${_selectedEmployees.size} funcionários! Meta diária: ${result.dailyTarget} leads.`,
+        isPartners
+          ? `✅ ${result.distributed.toLocaleString('pt-BR')} leads enviados para ${_selectedEmployees.size} vendedores de ${_esc(partnerName)}. Meta diária: ${result.dailyTarget}.`
+          : `✅ ${result.distributed.toLocaleString('pt-BR')} leads distribuídos entre ${_selectedEmployees.size} funcionários! Meta diária: ${result.dailyTarget} leads.`,
         true
       );
     }

@@ -415,6 +415,7 @@ if (!window.PartnerOps?.renderPanel) {
     if (inicio) { inicio.classList.remove('active'); inicio.style.display = 'none'; }
     if (modulos) { modulos.classList.add('active'); modulos.style.display = 'block'; }
     finNavigateTo(sectionId);
+    if (typeof closeMobileNav === 'function') closeMobileNav();
     const title = document.getElementById('pageTitle');
     if (title) {
       if (window._finNavIntent && FIN_PROP_NAV_TITLES[window._finNavIntent.tab]) {
@@ -447,6 +448,7 @@ if (!window.PartnerOps?.renderPanel) {
     const modulos = document.getElementById('tab-modulos');
     if (modulos) { modulos.classList.remove('active'); modulos.style.display = 'none'; }
     if (inicio) { inicio.classList.add('active'); inicio.style.display = 'block'; }
+    if (typeof closeMobileNav === 'function') closeMobileNav();
     document.querySelectorAll('#finSidebarNav .nav-item[data-section]').forEach(n => n.classList.remove('active'));
     document.querySelectorAll('#finSidebarNav .nav-item[data-tab="inicio"], #navFinInicio').forEach(n => {
       n.classList.add('active');

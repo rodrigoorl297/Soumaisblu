@@ -54,7 +54,7 @@
      if (_bgRefresh.has(cacheKey)) return;
      _bgRefresh.add(cacheKey);
      const genAtStart = _tableWriteGen[table] || 0;
-     supaReqOnce(method, table, body, params)
+       supaReqOnceWithFailover(method, table, body, params)
        .then((data) => {
          if ((_tableWriteGen[table] || 0) !== genAtStart) return;
          if (cacheKey && (Array.isArray(data) ? data.length > 0 : data)) _cacheSet(cacheKey, data);
@@ -67,7 +67,54 @@
      const code = Number(status) || 0;
      if (code === 429 || code === 502 || code === 503 || code === 504) return true;
      const msg = String(err?.message || err || '');
-     return /Sem conexão|Failed to fetch|NetworkError|network|timeout|temporariamente indisponível|aborted/i.test(msg);
+     return /Sem conexão|Failed to fetch|NetworkError|network|timeout|temporariamente indisponível|aborted|supabase/i.test(msg);
+   }
+
+   /**
+    * Failover Supabase → Localweb: quando o REST do Supabase cai, usa MySQL em soumaisblu.com.br.
+    * Produção já usa Localweb direto; isso protege dev/FORCE_SUPABASE e quedas pontuais.
+    */
+   const FAILOVER_STICKY_MS = 5 * 60 * 1000;
+   let _apiUseHostingerFailover = false;
+   let _failoverStickyUntil = 0;
+
+   function _locawebFallbackUrl() {
+     const c = typeof window !== 'undefined' ? (window.SOUBLU_CONFIG || {}) : {};
+     const raw = c.LOCAWEB_FALLBACK_URL || c.API_BASE_URL || c.SITE_URL || 'https://www.soumaisblu.com.br';
+     return String(raw).replace(/\/+$/, '');
+   }
+
+   function _resolveUseHostingerApi() {
+     if (HOSTINGER_CONFIGURED) return true;
+     if (_apiUseHostingerFailover && Date.now() > _failoverStickyUntil) {
+       _apiUseHostingerFailover = false;
+     }
+     return _apiUseHostingerFailover;
+   }
+
+   function _activateLocawebFailover(reason) {
+     if (HOSTINGER_CONFIGURED) return;
+     const c = typeof window !== 'undefined' ? (window.SOUBLU_CONFIG || {}) : {};
+     if (c.ENABLE_LOCawEB_FAILOVER === false || !API_KEY) return;
+     _apiUseHostingerFailover = true;
+     _failoverStickyUntil = Date.now() + FAILOVER_STICKY_MS;
+     if (typeof window !== 'undefined') {
+       window.SOUBLU_RUNTIME = window.SOUBLU_RUNTIME || {};
+       window.SOUBLU_RUNTIME.dbBackend = 'hostinger-failover';
+       window.SOUBLU_RUNTIME.failoverActive = true;
+       window.SOUBLU_RUNTIME.failoverReason = String(reason || '').slice(0, 200);
+     }
+     console.warn('[SOUBLU] Supabase indisponível — dados via MySQL Localweb.', reason || '');
+   }
+
+   /** Só faz failover em queda de rede/servidor — não em erro de permissão ou registro. */
+   function _shouldFailoverToLocaweb(err, status) {
+     if (HOSTINGER_CONFIGURED) return false;
+     const c = typeof window !== 'undefined' ? (window.SOUBLU_CONFIG || {}) : {};
+     if (c.ENABLE_LOCawEB_FAILOVER === false || !API_KEY) return false;
+     const code = Number(status) || 0;
+     if (code === 401 || code === 403 || code === 404 || code === 409 || code === 422) return false;
+     return _isTransientApiFailure(status, err) || code === 0 || code >= 500;
    }
     
     function _cacheGet(key) {
@@ -257,17 +304,22 @@
       }
     }
 
-    async function supaReqOnce(method, table, body = null, params = '') {
-     const url = HOSTINGER_CONFIGURED
-       ? `${API_BASE_URL}/api/rest/v1/${table}${params}`
+    async function supaReqOnce(method, table, body = null, params = '', opts = {}) {
+     const forceHostinger = opts.forceHostinger === true || _resolveUseHostingerApi();
+     const url = forceHostinger
+       ? `${HOSTINGER_CONFIGURED ? API_BASE_URL : _locawebFallbackUrl()}/api/rest/v1/${table}${params}`
        : `${SUPABASE_URL}/rest/v1/${table}${params}`;
 
      const headers = {
        'Content-Type': 'application/json',
        'Prefer': 'return=representation',
      };
-     if (HOSTINGER_CONFIGURED) {
+     if (forceHostinger) {
        headers['X-API-Key'] = API_KEY;
+       // Quem clicou em excluir (deleteProposal grava window.__soubluActor). A API usa isso no arquivo Localweb.
+       if (typeof window !== 'undefined' && window.__soubluActor) {
+         headers['X-Soublu-Actor'] = String(window.__soubluActor).slice(0, 120);
+       }
      } else {
        headers['apikey'] = SUPABASE_KEY;
        headers['Authorization'] = `Bearer ${SUPABASE_KEY}`;
@@ -288,7 +340,7 @@
      } catch (netErr) {
        const aborted = netErr && netErr.name === 'AbortError';
        const netMsg = aborted ? 'tempo esgotado' : (netErr && netErr.message ? netErr.message : 'rede');
-       const hint = HOSTINGER_CONFIGURED
+       const hint = forceHostinger
          ? 'Confira se o site e a API (/api/rest/v1) estão no ar.'
          : 'Confira internet, bloqueador de anúncios ou status do Supabase.';
        const err = new Error(`Sem conexão com o servidor (${netMsg}). ${hint}`);
@@ -309,6 +361,18 @@
 
      const text = await res.text();
      return text ? _parseApiJson(text) : [];
+   }
+
+   async function supaReqOnceWithFailover(method, table, body = null, params = '') {
+     try {
+       return await supaReqOnce(method, table, body, params);
+     } catch (e) {
+       if (!HOSTINGER_CONFIGURED && _shouldFailoverToLocaweb(e, e.status)) {
+         _activateLocawebFailover(e.message);
+         return await supaReqOnce(method, table, body, params, { forceHostinger: true });
+       }
+       throw e;
+     }
    }
 
     async function supaReq(method, table, body = null, params = '') {
@@ -338,7 +402,7 @@
      let lastErr;
      for (let attempt = 1; attempt <= API_RETRY_MAX; attempt++) {
        try {
-         const data = await supaReqOnce(method, table, body, params);
+         const data = await supaReqOnceWithFailover(method, table, body, params);
          if (method !== 'GET') {
            _bumpTableWriteGen(table);
            _cacheDel(table);

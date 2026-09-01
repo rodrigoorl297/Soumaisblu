@@ -439,6 +439,70 @@ function soublu_file_upload_bytes_to_supabase(string $bucket, string $object, st
 }
 
 /**
+ * soublu_file_upload_bytes_to_local — grava bytes em uploads/ na Localweb.
+ * Entrada: bucket, caminho do objeto, corpo e mime. Saída: url/caminho ou null.
+ * Usado quando Supabase Storage está fora do ar.
+ *
+ * @return array{url:string,caminho:string,base:string,storage:string}|null
+ */
+function soublu_file_upload_bytes_to_local(string $bucket, string $object, string $body, string $mime): ?array
+{
+    if ($bucket === 'propostas') {
+        $bucket = 'proposal-attachments';
+    }
+    $object = ltrim(str_replace('\\', '/', $object), '/');
+    if ($object === '' || str_contains($object, '..') || $body === '') {
+        return null;
+    }
+
+    $siteRoot = dirname(__DIR__, 2);
+    $uploadBase = defined('UPLOAD_DIR') ? rtrim((string) UPLOAD_DIR, '/\\') : ($siteRoot . '/uploads');
+    $destDir = $uploadBase . '/' . $bucket;
+    if (str_contains($object, '/')) {
+        $destDir .= '/' . dirname($object);
+    }
+    if (!is_dir($destDir) && !@mkdir($destDir, 0755, true) && !is_dir($destDir)) {
+        return null;
+    }
+
+    $fileName = basename($object);
+    $fullPath = $destDir . '/' . $fileName;
+    if (@file_put_contents($fullPath, $body) === false) {
+        return null;
+    }
+
+    $rel = $bucket . '/' . $object;
+    return [
+        'url' => soublu_file_serve_url($rel),
+        'caminho' => $rel,
+        'base' => 'localweb',
+        'storage' => 'localweb',
+    ];
+}
+
+/**
+ * soublu_file_upload_with_failover — tenta Supabase; se falhar, salva na Localweb.
+ *
+ * @return array{url:string,caminho:string,base:string,storage:string}|null
+ */
+function soublu_file_upload_with_failover(string $bucket, string $object, string $body, string $mime): ?array
+{
+    $pushed = soublu_file_upload_bytes_to_supabase($bucket, $object, $body, $mime);
+    if ($pushed) {
+        $pushed['storage'] = 'supabase';
+        return $pushed;
+    }
+
+    $local = soublu_file_upload_bytes_to_local($bucket, $object, $body, $mime);
+    if ($local) {
+        error_log('[FileStorage] Supabase indisponível — anexo salvo na Localweb: ' . $local['caminho']);
+        return $local;
+    }
+
+    return null;
+}
+
+/**
  * Envia arquivo do disco Locaweb para o Supabase legado (proposal-attachments).
  *
  * @return array{url:string,caminho:string,base:string}|null

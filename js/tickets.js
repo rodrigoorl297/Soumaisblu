@@ -13,6 +13,59 @@ window.Tickets = {
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,
   _actionsWired: false,
+  _replyAudioCtx: null,
+  _replyAudioUnlocked: false,
+
+  /**
+   * _unlockReplyAudio — desbloqueia Web Audio no primeiro clique (política do navegador).
+   */
+  _unlockReplyAudio() {
+    if (this._replyAudioUnlocked) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      this._replyAudioCtx = this._replyAudioCtx || new Ctx();
+      if (this._replyAudioCtx.state === 'suspended') this._replyAudioCtx.resume();
+      const osc = this._replyAudioCtx.createOscillator();
+      const gain = this._replyAudioCtx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(this._replyAudioCtx.destination);
+      osc.start();
+      osc.stop(this._replyAudioCtx.currentTime + 0.01);
+      this._replyAudioUnlocked = true;
+    } catch (_) { /* noop */ }
+  },
+
+  /**
+   * _playReplySentSound — feedback sonoro ao enviar resposta no chamado.
+   */
+  _playReplySentSound() {
+    try {
+      this._unlockReplyAudio();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      this._replyAudioCtx = this._replyAudioCtx || new Ctx();
+      const ctx = this._replyAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const notes = [523.25, 659.25];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t0 = now + i * 0.12;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.14, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.22);
+      });
+    } catch (_) { /* noop */ }
+  },
 
   _ticketDbgLog(location, message, data, hypothesisId) {
     const payload = {
@@ -58,6 +111,12 @@ if (id) this.openTicketDetail(id);
     this._replyBusy = false;
     this.populateDepts();
     this._bindTicketActions();
+    if (!this._replyAudioUnlockBound) {
+      this._replyAudioUnlockBound = true;
+      const unlock = () => this._unlockReplyAudio();
+      document.addEventListener('click', unlock, { once: true, capture: true });
+      document.addEventListener('keydown', unlock, { once: true, capture: true });
+    }
   },
 
   /** Perfis que podem abrir chamado (não só vendedor/backoffice na área employee). */
@@ -476,10 +535,10 @@ if (id) this.openTicketDetail(id);
       targetDept: dept,
       subject: subject,
       status: 'aberto',
-      createdAt: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      createdAt: nowBrazilSql(),
+      created_at: nowBrazilSql(),
+      updatedAt: nowBrazilSql(),
+      updated_at: nowBrazilSql(),
       thread: [
         {
           senderName: user.name,
@@ -488,7 +547,7 @@ if (id) this.openTicketDetail(id);
           attachment: first?.url || null,
           attachmentName: first?.name || '',
           attachments,
-          date: new Date().toISOString()
+          date: nowBrazilSql()
         }
       ]
     };
@@ -602,8 +661,61 @@ alert("Erro ao abrir chamado: " + e.message);
 
     filteredTickets.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
+    const mobileList = (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
+      || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    const listLimit = mobileList ? 60 : filteredTickets.length;
+    const visible = filteredTickets.slice(0, listLimit);
+
+    const tableWrap = tbody.closest('.table-wrap') || tbody.closest('.card');
+    let mobileHost = document.getElementById('manageTicketsMobileList');
+    if (!mobileHost && tableWrap?.parentElement) {
+      mobileHost = document.createElement('div');
+      mobileHost.id = 'manageTicketsMobileList';
+      mobileHost.className = 'mobile-list-cards';
+      const insertBefore = tbody.closest('.table-wrap') || tbody.closest('table');
+      if (insertBefore?.parentElement) insertBefore.parentElement.insertBefore(mobileHost, insertBefore);
+      else tableWrap.parentElement.insertBefore(mobileHost, tableWrap);
+    }
+    const wrapEl = tbody.closest('.table-wrap') || tbody.closest('table');
+    if (mobileHost) mobileHost.style.display = mobileList ? 'block' : 'none';
+    if (wrapEl) wrapEl.style.display = mobileList ? 'none' : '';
+
+    if (mobileList && mobileHost) {
+      let cards = '';
+      visible.forEach(t => {
+        let statusColor = '#3b82f6';
+        if (t.status === 'em_andamento') statusColor = '#f59e0b';
+        if (t.status === 'resolvido') statusColor = '#10b981';
+        let statusText = t.status === 'em_andamento' ? 'Em Andamento' :
+          t.status === 'resolvido' ? 'Resolvido' : 'Aberto';
+        cards += `
+          <article class="mobile-list-card">
+            <div class="mobile-list-card__head">
+              <div>
+                <strong>#${this._escHtml(t.id)}</strong>
+                <div class="mobile-list-card__meta">${this._escHtml(t.openedByName)} (${this._escHtml(t.openedByDept || 'N/A')})</div>
+              </div>
+              <span style="background:${statusColor};color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">${statusText}</span>
+            </div>
+            <div class="mobile-list-card__body">
+              <div><strong>${this._escHtml(t.targetDept)}</strong> — ${this._escHtml(t.subject)}</div>
+              <div class="mobile-list-card__muted">${formatDate(t.createdAt)}</div>
+            </div>
+            <div class="mobile-list-card__actions">
+              <button type="button" class="btn btn-primary btn-sm" data-ticket-open="${this._escAttr(t.id)}" style="min-width:120px;">Tratar</button>
+            </div>
+          </article>`;
+      });
+      if (filteredTickets.length > visible.length) {
+        cards += `<p class="mobile-list-card__muted" style="text-align:center;padding:8px;">Mostrando ${visible.length} de ${filteredTickets.length} chamados.</p>`;
+      }
+      mobileHost.innerHTML = cards;
+      tbody.innerHTML = '';
+      return;
+    }
+
     let html = '';
-    filteredTickets.forEach(t => {
+    visible.forEach(t => {
       let statusColor = '#3b82f6';
       if(t.status === 'em_andamento') statusColor = '#f59e0b';
       if(t.status === 'resolvido') statusColor = '#10b981';
@@ -624,6 +736,9 @@ alert("Erro ao abrir chamado: " + e.message);
         </tr>
       `;
     });
+    if (mobileList && filteredTickets.length > visible.length) {
+      html += `<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:14px;font-size:13px;">Mostrando ${visible.length} de ${filteredTickets.length} chamados (lista limitada no celular).</td></tr>`;
+    }
     tbody.innerHTML = html;
   },
 
@@ -776,7 +891,7 @@ alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift
         && String(newStatus || '').toLowerCase() === 'resolvido';
 
       ticket.status = newStatus;
-      ticket.updatedAt = new Date().toISOString();
+      ticket.updatedAt = nowBrazilSql();
       ticket.updated_at = ticket.updatedAt;
       ticket.thread = this._compactThreadForSave(ticket.thread || []);
 
@@ -793,7 +908,7 @@ alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift
           attachment: first?.url || null,
           attachmentName: first?.name || '',
           attachments,
-          date: new Date().toISOString()
+          date: nowBrazilSql()
         });
       }
 
@@ -802,6 +917,10 @@ alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift
         setTimeout(() => reject(new Error('Tempo esgotado ao salvar. Tente novamente.')), 20000);
       });
       await Promise.race([savePromise, timeoutPromise]);
+
+      if (replyText || hasFiles) {
+        this._playReplySentSound();
+      }
 
       // Roleta não pode travar a esteira — roda em background.
       if (becameResolved && ticket.employee_id && typeof DB.applyRouletteCriteriaReward === 'function') {

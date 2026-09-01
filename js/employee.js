@@ -461,11 +461,21 @@ function _ensureEmployeeSectionVisible() {
   }
 }
 
+function _isEmployeeMobileBoot() {
+  try {
+    if (typeof window.isSoubluMobile === 'function') return !!window.isSoubluMobile();
+    return !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+  } catch (_) {
+    return (window.innerWidth || 0) <= 900;
+  }
+}
+
 async function _deferredEmployeeBoot(_inPartnerOrg) {
   const t0 = Date.now();
+  const mobileBoot = _isEmployeeMobileBoot();
   const tasks = [];
   if (!window.__PERFIL_MODE__) {
-    if (!_inPartnerOrg) {
+    if (!_inPartnerOrg && !mobileBoot) {
       tasks.push(
         renderCategories(),
         renderProducts(),
@@ -474,8 +484,8 @@ async function _deferredEmployeeBoot(_inPartnerOrg) {
       );
     }
     tasks.push(renderProfile());
-    if (window.RouletteUI) tasks.push(RouletteUI.renderRoulettePage());
-    if (window.BolaoCopa) {
+    if (!mobileBoot && window.RouletteUI) tasks.push(RouletteUI.renderRoulettePage());
+    if (!mobileBoot && window.BolaoCopa) {
       BolaoCopa.ensureDom();
       BolaoCopa.applyNavVisibility();
       tasks.push(BolaoCopa.init());
@@ -483,7 +493,7 @@ async function _deferredEmployeeBoot(_inPartnerOrg) {
     if (['vendedor', 'backoffice', 'supervisor'].includes(currentUser?.role) && window.Proposals) {
       tasks.push(Proposals.renderEmployeeList());
     }
-    if (!_inPartnerOrg && typeof renderMeetingsEmployee === 'function') {
+    if (!mobileBoot && !_inPartnerOrg && typeof renderMeetingsEmployee === 'function') {
       tasks.push(renderMeetingsEmployee());
     }
   }

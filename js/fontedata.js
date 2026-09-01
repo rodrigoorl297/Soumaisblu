@@ -1,11 +1,27 @@
 /**
- * SOU+BLU — FonteData (CPF cliente/funcionário + CNPJ parceiro)
- * https://fontedata.com/docs — proxy api/fontedata.php
+ * SOU+BLU — FonteData (CNPJ, certidões TJ, score Quod) + Nova Vida (CPF cadastral).
+ * CPF → Nova Vida NVCHECK (api/novati.php) — mais barato que FonteData.
+ * CNPJ/TJ/ccd → FonteData (api/fontedata.php) — sem equivalente na Nova Vida.
  */
 const FonteData = {
   _lastCpf: '',
   _lastCnpj: '',
   _loading: false,
+
+  /** Endpoints PF que passam pela Nova Vida (NVCHECK) em vez da FonteData. */
+  _NOVA_TI_CPF_CONSULTAS: new Set([
+    'dados-cadastrais-basicos',
+    'cadastro-pf-basica',
+    'receita-federal-pf',
+    'cadastro-rf-pf',
+  ]),
+
+  /**
+   * _cpfViaNovaTI — CPF cadastral usa Nova Vida quando novati.js está no painel.
+   */
+  _cpfViaNovaTI() {
+    return typeof NovaTI !== 'undefined' && typeof NovaTI.lookupCpf === 'function';
+  },
 
   apiUrl() {
     const c = window.SOUBLU_CONFIG || {};
@@ -119,6 +135,19 @@ const FonteData = {
     const cpf = String(cpfDigits || '').replace(/\D/g, '');
     if (cpf.length !== 11) return { ok: false, error: 'CPF inválido (11 dígitos)' };
 
+    const ep = consulta || 'dados-cadastrais-basicos';
+    if (ep === 'pis-trabalho') {
+      return { ok: false, error: 'Consulta PIS não disponível via Nova Vida (use NVCHECK).' };
+    }
+    if (this._NOVA_TI_CPF_CONSULTAS.has(ep) && this._cpfViaNovaTI()) {
+      if (ep === 'receita-federal-pf' || ep === 'cadastro-rf-pf') {
+        return this.lookupReceitaFederalPf(cpfDigits, opts.dataNascimento);
+      }
+      const basico = await this.lookupCpf(cpfDigits);
+      if (!basico.ok) return basico;
+      return { ok: true, raw: basico.raw, consulta: ep, cpf, provider: 'novati' };
+    }
+
     const url = this.apiUrl();
     const token = this.token();
     if (!url || !token) {
@@ -133,7 +162,6 @@ const FonteData = {
     }
 
     const slowConsultas = ['ccd-pf', 'ccd-pj', 'tj-certidao', 'trf-certidao', 'mpf-certidao'];
-    const ep = consulta || 'dados-cadastrais-basicos';
     const timeoutMs = Number(opts.timeoutMs) || (slowConsultas.includes(ep) ? 130000 : 60000);
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
@@ -160,6 +188,24 @@ const FonteData = {
   },
 
   async lookupReceitaFederalPf(cpfDigits, dataNascimento) {
+    if (this._cpfViaNovaTI()) {
+      const res = await this.lookupCpf(cpfDigits);
+      if (!res.ok) return res;
+      const c = res.client || {};
+      const mapped = {
+        cpf: String(c.cpf || cpfDigits || '').replace(/\D/g, ''),
+        nome: String(c.name || '').trim(),
+        situacao_cadastral: String(c.situacao_cadastral || '').trim(),
+        data_nascimento: String(c.birthDate || dataNascimento || '').trim(),
+        data_inscricao: '',
+        codigo_controle: '',
+        digito_verificador: '',
+      };
+      if (!mapped.nome && !mapped.situacao_cadastral) {
+        return { ok: false, error: 'Nenhum dado cadastral para este CPF (Nova Vida).', raw: res.raw };
+      }
+      return { ok: true, receita: mapped, raw: res.raw, provider: 'novati' };
+    }
     const res = await this.lookupCpfConsulta(cpfDigits, 'receita-federal-pf', { dataNascimento });
     if (!res.ok) return res;
     const mapped = this.mapReceitaFederalPf({ data: res.raw });
@@ -170,6 +216,9 @@ const FonteData = {
   },
 
   async lookupPisTrabalho(cpfDigits, dataNascimento) {
+    if (this._cpfViaNovaTI()) {
+      return { ok: false, error: 'Consulta PIS não disponível via Nova Vida (use NVCHECK).' };
+    }
     const res = await this.lookupCpfConsulta(cpfDigits, 'pis-trabalho', { dataNascimento });
     if (!res.ok) return res;
     const mapped = this.mapPisTrabalho({ data: res.raw });
@@ -222,6 +271,30 @@ const FonteData = {
     if (cpf.length !== 11) return { ok: false, error: 'CPF inválido (11 dígitos)' };
 
     const dn = String(dataNascimento || '').trim();
+
+    // Uma consulta NVCHECK (Nova Vida) substitui 3 chamadas FonteData no RH.
+    if (this._cpfViaNovaTI()) {
+      const basico = await this.lookupCpf(cpf).catch((e) => ({ ok: false, error: e.message }));
+      const receita = basico.ok
+        ? {
+          ok: true,
+          receita: {
+            cpf,
+            nome: basico.client?.name || '',
+            situacao_cadastral: basico.client?.situacao_cadastral || '',
+            data_nascimento: basico.client?.birthDate || dn,
+          },
+          raw: basico.raw,
+          provider: 'novati',
+        }
+        : { ok: false, error: basico.error || 'Sem dados cadastrais.' };
+      const pis = { ok: false, error: 'PIS não consultado (Nova Vida / NVCHECK).' };
+      if (!basico.ok) {
+        return { ok: false, error: basico.error || 'Nenhuma consulta retornou dados.', basico, receita, pis };
+      }
+      return { ok: true, basico, receita, pis, provider: 'novati' };
+    }
+
     const [basico, receita, pis] = await Promise.all([
       this.lookupCpf(cpf).catch((e) => ({ ok: false, error: e.message })),
       this.lookupReceitaFederalPf(cpf, dn).catch((e) => ({ ok: false, error: e.message })),
@@ -484,10 +557,42 @@ const FonteData = {
     if (cpf.length !== 11) return { ok: false, error: 'CPF inválido' };
     if (this._loading && this._lastCpf === cpf) return { ok: false, error: 'Aguarde…' };
 
+    /** Nova Vida NVCHECK — padrão para CPF (substitui FonteData). */
+    if (this._cpfViaNovaTI()) {
+      this._loading = true;
+      this._lastCpf = cpf;
+      try {
+        const res = await NovaTI.lookupCpf(cpf);
+        if (!res.ok) return res;
+        const c = res.client || {};
+        const mapped = {
+          cpf: String(c.cpf || cpf).replace(/\D/g, ''),
+          name: String(c.name || '').trim(),
+          phone1: String(c.phone1 || '').replace(/\D/g, ''),
+          phone2: String(c.phone2 || '').replace(/\D/g, ''),
+          email: String(c.email || '').trim(),
+          motherName: String(c.motherName || '').trim(),
+          fatherName: String(c.fatherName || '').trim(),
+          address: String(c.address || '').trim(),
+          civilState: String(c.civilState || '').trim(),
+          birthDate: String(c.birthDate || '').trim(),
+          situacao_cadastral: String(c.situacao_cadastral || '').trim(),
+        };
+        if (!mapped.name) {
+          return { ok: false, error: 'Nenhum dado encontrado para este CPF.' };
+        }
+        return { ok: true, client: mapped, raw: res.raw, provider: 'novati' };
+      } catch (e) {
+        return { ok: false, error: e.message || 'Falha na consulta Nova Vida' };
+      } finally {
+        this._loading = false;
+      }
+    }
+
     const url = this.apiUrl();
     const token = this.token();
     if (!url || !token) {
-      return { ok: false, error: 'Consulta CPF não configurada no servidor (fontedata.php).' };
+      return { ok: false, error: 'Consulta CPF não configurada (carregue novati.js ou fontedata.php).' };
     }
 
     this._loading = true;
@@ -505,7 +610,7 @@ const FonteData = {
       if (!mapped?.name) {
         return { ok: false, error: 'Nenhum dado encontrado para este CPF.' };
       }
-      return { ok: true, client: mapped, raw: json.data };
+      return { ok: true, client: mapped, raw: json.data, provider: 'fontedata' };
     } catch (e) {
       return { ok: false, error: e.message || 'Falha na consulta' };
     } finally {

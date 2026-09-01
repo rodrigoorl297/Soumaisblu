@@ -19,7 +19,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
   <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
-  <link rel="stylesheet" href="../css/global.css?v=modal-bs1"/>
+  <link rel="stylesheet" href="../css/global.css?v=clientmodal1"/>
   <link rel="stylesheet" href="../css/layout.css?v=esteira1"/>
   <link rel="stylesheet" href="../css/colors-orange.css"/>
   <link rel="stylesheet" href="../css/trainings.css?v=trn-quiz4"/>
@@ -108,10 +108,10 @@
   <!-- Scripts -->
   <script charset="UTF-8" src="../js/security-guard.js"></script>
   <script charset="UTF-8" src="../js/config.js?v=trn-quiz4"></script>
-  <script charset="UTF-8" src="../js/ui.js?v=20260811_fix_modal_zindex_v11"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=clientmodal1"></script>
   <script charset="UTF-8" src="../js/db.js?v=1786388320780?v=trn-quiz4"></script>
   <script charset="UTF-8" src="../js/auth.js?v=trn-quiz4"></script>
-  <script charset="UTF-8" src="../js/trainings.js?v=rodrigo-exempt1"></script>
+  <script charset="UTF-8" src="../js/trainings.js?v=cadastro3"></script>
   <script charset="UTF-8" src="../js/training-tracks.js?v=trn-quiz4"></script>
   <script>
     /* ── Tab labels for topbar section ── */
@@ -704,6 +704,104 @@
         return score != null ? Number(score) : null;
       },
 
+      /**
+       * _findResumePosition — primeira aula ou prova pendente no curso.
+       * Ordem: aulas do módulo → prova do módulo → próximo módulo → prova geral.
+       */
+      _findResumePosition(tr, userId) {
+        const modules = this._getModules(tr);
+        for (let mi = 0; mi < modules.length; mi++) {
+          const lessons = modules[mi].lessons || [];
+          for (let li = 0; li < lessons.length; li++) {
+            if (!this.isLessonComplete(tr.id, userId, mi, li)) {
+              return { view: 'lesson', moduleIdx: mi, lessonIdx: li, quizModuleIdx: null };
+            }
+          }
+          const qs = this._getModuleQuestions(tr, mi, modules[mi], modules);
+          if (qs.length && !this._isModuleQuizComplete(tr, userId, mi)) {
+            return {
+              view: 'quiz',
+              moduleIdx: mi,
+              lessonIdx: Math.max(0, lessons.length - 1),
+              quizModuleIdx: mi,
+            };
+          }
+        }
+        const finalQs = this._getFinalQuestions(tr);
+        if (finalQs.length && this._isFinalQuizUnlocked(tr, userId) && !this._isFinalQuizComplete(tr, userId)) {
+          const lastMi = Math.max(0, modules.length - 1);
+          const lastLi = Math.max(0, (modules[lastMi]?.lessons?.length || 1) - 1);
+          return { view: 'quiz', moduleIdx: lastMi, lessonIdx: lastLi, quizModuleIdx: 'final' };
+        }
+        return { view: 'lesson', moduleIdx: 0, lessonIdx: 0, quizModuleIdx: null };
+      },
+
+      /**
+       * _hasMoreLearningAhead — ainda há aula/prova à frente da posição atual.
+       * Usado para habilitar o botão "Próxima" sem pular provas de módulo.
+       */
+      _hasMoreLearningAhead(tr, userId, mi, li) {
+        const modules = this._getModules(tr);
+        const lessons = modules[mi]?.lessons || [];
+        if (li < lessons.length - 1) return true;
+        const qs = this._getModuleQuestions(tr, mi, modules[mi], modules);
+        if (qs.length && !this._isModuleQuizComplete(tr, userId, mi)) return true;
+        for (let m = mi + 1; m < modules.length; m++) {
+          const modLessons = modules[m].lessons || [];
+          if (modLessons.some((_, lIdx) => !this.isLessonComplete(tr.id, userId, m, lIdx))) return true;
+          const mqs = this._getModuleQuestions(tr, m, modules[m], modules);
+          if (mqs.length && !this._isModuleQuizComplete(tr, userId, m)) return true;
+        }
+        const finalQs = this._getFinalQuestions(tr);
+        return !!(finalQs.length && this._isFinalQuizUnlocked(tr, userId) && !this._isFinalQuizComplete(tr, userId));
+      },
+
+      /**
+       * _advanceFromCurrentLesson — após concluir a última aula do módulo, abre a prova
+       * antes de ir para o próximo módulo.
+       */
+      _advanceFromCurrentLesson(opts = {}) {
+        const tr = this._currentTraining;
+        if (!tr || !this._userId) return;
+        const modules = this._getModules(tr);
+        const mi = this._currentModuleIdx;
+        const li = this._currentLessonIdx;
+        const lessons = modules[mi]?.lessons || [];
+
+        if (li < lessons.length - 1) {
+          this._goToLesson(mi, li + 1);
+          return;
+        }
+
+        const qs = this._getModuleQuestions(tr, mi, modules[mi], modules);
+        if (qs.length && !this._isModuleQuizComplete(tr, this._userId, mi)) {
+          if (typeof showToast === 'function' && opts.toastQuiz) {
+            showToast('Agora responda a prova deste módulo para continuar.', 'info', 5000);
+          }
+          this._openModuleQuiz(mi);
+          return;
+        }
+
+        if (mi + 1 < modules.length) {
+          this._goToLesson(mi + 1, 0);
+          return;
+        }
+
+        const finalQs = this._getFinalQuestions(tr);
+        if (finalQs.length && this._isFinalQuizUnlocked(tr, this._userId) && !this._isFinalQuizComplete(tr, this._userId)) {
+          if (typeof showToast === 'function' && opts.toastQuiz) {
+            showToast('Responda a prova geral para concluir o curso.', 'info', 5000);
+          }
+          this._openFinalQuiz();
+          return;
+        }
+
+        this._renderPlayer();
+        if (typeof showToast === 'function' && opts.toastQuiz) {
+          showToast('Aula concluída.', 'success');
+        }
+      },
+
       _esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
       },
@@ -879,22 +977,12 @@
         }
 
         this._currentTraining = tr;
-        this._currentModuleIdx = 0;
-        this._currentLessonIdx = 0;
-        this._playerView = 'lesson';
-        this._quizModuleIdx = null;
         this._userId = user.id;
-
-        for (let mi = 0; mi < modules.length; mi++) {
-          for (let li = 0; li < (modules[mi].lessons || []).length; li++) {
-            if (!this.isLessonComplete(tr.id, user.id, mi, li)) {
-              this._currentModuleIdx = mi;
-              this._currentLessonIdx = li;
-              mi = modules.length;
-              break;
-            }
-          }
-        }
+        const resume = this._findResumePosition(tr, user.id);
+        this._currentModuleIdx = resume.moduleIdx;
+        this._currentLessonIdx = resume.lessonIdx;
+        this._playerView = resume.view;
+        this._quizModuleIdx = resume.quizModuleIdx;
 
         this._renderPlayer();
       },
@@ -950,16 +1038,12 @@
           lessonTitle = lesson?.title || 'Aula';
           lessonDesc = lesson?.description || tr.description || '';
 
-          const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
-          let flatIdx = 0;
-          for (let i = 0; i < mi; i++) flatIdx += (modules[i].lessons?.length || 0);
-          flatIdx += li;
-          const isFirst = flatIdx === 0;
-          const isLast = flatIdx >= totalLessons - 1;
+          const hasMore = this._hasMoreLearningAhead(tr, userId, mi, li);
+          const isFirst = mi === 0 && li === 0;
           const isComplete = this.isLessonComplete(tr.id, userId, mi, li);
           navHtml = `
             <button class="lms-nav-btn" onclick="LMS._prevLesson()" ${isFirst ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>← Anterior</button>
-            <button class="lms-nav-btn btn-next" onclick="LMS._nextLesson()" ${isLast ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>Próxima →</button>
+            <button class="lms-nav-btn btn-next" onclick="LMS._nextLesson()" ${hasMore ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>Próxima →</button>
             <button class="lms-nav-btn btn-complete ${isComplete ? 'completed' : ''}" onclick="LMS._markComplete()">
               ${isComplete ? '✓ Concluída' : '☐ Marcar como concluída'}
             </button>`;
@@ -970,13 +1054,18 @@
         modules.forEach((mod, modIdx) => {
           const lessons = mod.lessons || [];
           const doneLessons = lessons.filter((_, lIdx) => this.isLessonComplete(tr.id, userId, modIdx, lIdx)).length;
+          const modQuestions = this._getModuleQuestions(tr, modIdx, mod, modules);
+          const hasModQuiz = modQuestions.length > 0;
+          const quizDone = hasModQuiz && this._isModuleQuizComplete(tr, userId, modIdx);
+          const modTotal = lessons.length + (hasModQuiz ? 1 : 0);
+          const modDone = doneLessons + (quizDone ? 1 : 0);
           const isOpen = inFinalQuiz ? false : (inQuiz ? modIdx === this._quizModuleIdx : modIdx === mi);
           sidebarHtml += `
             <div class="lms-module ${isOpen ? 'open' : ''}" data-module="${modIdx}">
               <div class="lms-module-header" onclick="LMS._toggleModule(${modIdx})">
                 <span class="lms-module-chevron">▶</span>
                 <span class="lms-module-name">${this._esc(mod.title || 'Módulo ' + (modIdx + 1))}</span>
-                <span class="lms-module-progress">${doneLessons}/${lessons.length}</span>
+                <span class="lms-module-progress">${modDone}/${modTotal}</span>
               </div>
               <div class="lms-lessons-list">
                 ${lessons.map((l, lIdx) => {
@@ -1115,21 +1204,29 @@
       _nextLesson() {
         const modules = this._getModules(this._currentTraining);
         let mi = this._currentModuleIdx, li = this._currentLessonIdx;
-        li++;
-        if (li >= (modules[mi]?.lessons?.length || 0)) {
-          mi++;
-          li = 0;
-          if (mi >= modules.length) return;
+        const lessons = modules[mi]?.lessons || [];
+        if (li < lessons.length - 1) {
+          this._goToLesson(mi, li + 1);
+          return;
         }
-        this._goToLesson(mi, li);
+        this._advanceFromCurrentLesson({ toastQuiz: true });
       },
 
       _markComplete() {
         const tr = this._currentTraining;
         if (!tr || !this._userId) return;
-        this.setLessonComplete(tr.id, this._userId, this._currentModuleIdx, this._currentLessonIdx);
-        this._persistLessonProgress(tr.id, this._userId);
-        this._renderPlayer();
+        const mi = this._currentModuleIdx;
+        const li = this._currentLessonIdx;
+        const wasComplete = this.isLessonComplete(tr.id, this._userId, mi, li);
+        this.setLessonComplete(tr.id, this._userId, mi, li);
+        this._persistLessonProgress(tr.id, this._userId).then(() => {
+          this._checkCourseCompletion(tr, this._userId);
+        }).catch(() => {});
+        if (!wasComplete) {
+          this._advanceFromCurrentLesson({ toastQuiz: true });
+        } else {
+          this._renderPlayer();
+        }
       },
 
       _openModuleQuiz(modIdx) {
@@ -1187,6 +1284,22 @@
 
         if (score >= passing) {
           if (typeof showToast === 'function') showToast(`Prova aprovada! Nota: ${score}%`, 'success');
+          await this._checkCourseCompletion(tr, userId);
+          this._playerView = 'lesson';
+          this._quizModuleIdx = null;
+          const nextMod = modIdx + 1;
+          if (nextMod < modules.length) {
+            this._currentModuleIdx = nextMod;
+            this._currentLessonIdx = 0;
+          } else {
+            const finalQs = this._getFinalQuestions(tr);
+            if (finalQs.length && this._isFinalQuizUnlocked(tr, userId) && !this._isFinalQuizComplete(tr, userId)) {
+              this._playerView = 'quiz';
+              this._quizModuleIdx = 'final';
+            }
+          }
+          this._renderPlayer();
+          return;
         } else {
           if (typeof showToast === 'function') showToast(`Nota: ${score}% — mínimo ${passing}%. Você pode tentar novamente.`, 'warning');
           const p = this.getProgress(tr.id, userId);
@@ -1196,11 +1309,6 @@
           this._renderPlayer();
           return;
         }
-
-        await this._checkCourseCompletion(tr, userId);
-        this._playerView = 'lesson';
-        this._quizModuleIdx = null;
-        this._renderPlayer();
       },
 
       _openFinalQuiz() {
@@ -1299,9 +1407,7 @@
           totalScore += this._finalQuizScore(tr, userId) || 0;
         }
 
-        if (!quizCount) return;
-
-        const avgScore = Math.round(totalScore / quizCount);
+        const avgScore = quizCount ? Math.round(totalScore / quizCount) : 100;
         const passed = avgScore >= (tr.passing_score || 70);
         // #region agent log
         fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'D',location:'treinamentos.html:_checkCourseCompletion',message:'course completion saved',data:{quizCount,avgScore,passed,hasFinal:!!finalQs.length},timestamp:Date.now()})}).catch(()=>{});

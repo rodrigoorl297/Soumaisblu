@@ -36,14 +36,19 @@ function openModal(id) {
   document.documentElement.classList.add('modal-open');
   document.body.classList.add('modal-open');
 }
+function _resetOverlayInline(el) {
+  if (!el || !el.style) return;
+  el.style.display = '';
+  el.style.opacity = '';
+  el.style.visibility = '';
+  el.style.pointerEvents = '';
+  el.style.zIndex = '';
+}
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) {
     el.classList.remove('open');
-    el.style.display = 'none';
-    el.style.opacity = '0';
-    el.style.visibility = 'hidden';
-    el.style.pointerEvents = 'none';
+    _resetOverlayInline(el);
   }
   if (!document.querySelector('.modal-overlay.open')) {
     document.documentElement.classList.remove('modal-open');
@@ -52,12 +57,26 @@ function closeModal(id) {
 }
 /** Fecha overlays/loaders fantasma que bloqueiam cliques no painel. */
 function unlockUiOverlays() {
-  document.querySelectorAll('.modal-overlay.open').forEach((el) => el.classList.remove('open'));
+  try { clearTimeout(window.__soubluLoaderTimer); } catch (_) { /* noop */ }
+  document.querySelectorAll('.modal-overlay').forEach((el) => {
+    el.classList.remove('open');
+    _resetOverlayInline(el);
+  });
   document.documentElement.classList.remove('modal-open');
   document.body.classList.remove('modal-open');
+  try { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; } catch (_) { /* noop */ }
   document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
-  const loader = document.getElementById('globalLoader');
-  if (loader) loader.style.display = 'none';
+  const finDrawer = document.getElementById('finPropDrawerOverlay');
+  if (finDrawer) finDrawer.classList.remove('open');
+  document.querySelectorAll('.loader-overlay, #globalLoader').forEach((el) => {
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
+  });
+  document.querySelectorAll('.nav-overlay').forEach((el) => {
+    el.setAttribute('aria-hidden', 'true');
+  });
+  document.body.classList.remove('nav-open');
+  document.getElementById('sidebar')?.classList.remove('open');
 }
 window.openModal = openModal;
 window.closeModal = closeModal;
@@ -565,28 +584,32 @@ window.filterSouBluInternalUsers = filterSouBluInternalUsers;
 window.canSouBluManagePoints = canSouBluManagePoints;
 const SOUBLU_TZ = 'America/Sao_Paulo';
 
+/**
+ * _parseSouBluDate — interpreta datas do sistema sempre em horário de Brasília.
+ * Strings sem fuso (MySQL) = parede BRT; com Z/offset = instante convertido na exibição.
+ */
 function _parseSouBluDate(iso) {
   if (iso == null || iso === '') return null;
   if (iso instanceof Date) return Number.isNaN(iso.getTime()) ? null : iso;
   const s = String(iso).trim();
   if (!s) return null;
-  // Já com fuso (Z ou ±hh:mm)
+  // Já com fuso (Z ou ±hh:mm) — instante absoluto
   if (/Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  // MySQL "YYYY-MM-DD HH:mm:ss" / ISO sem fuso:
-  // legado pode ser UTC ou parede BRT — escolhe a interpretação mais próxima de agora
+  // Só data (YYYY-MM-DD) — meio-dia BRT evita virar dia anterior
+  const dm = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dm) {
+    const d = new Date(`${dm[1]}-${dm[2]}-${dm[3]}T12:00:00-03:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  // MySQL / ISO sem fuso — sempre horário de Brasília (padrão do sistema)
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
   if (m) {
     const base = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] || '00'}`;
-    const asSp = new Date(`${base}-03:00`);
-    const asUtc = new Date(`${base}Z`);
-    if (Number.isNaN(asSp.getTime()) && Number.isNaN(asUtc.getTime())) return null;
-    if (Number.isNaN(asSp.getTime())) return asUtc;
-    if (Number.isNaN(asUtc.getTime())) return asSp;
-    const now = Date.now();
-    return Math.abs(asUtc.getTime() - now) < Math.abs(asSp.getTime() - now) ? asUtc : asSp;
+    const d = new Date(`${base}-03:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -635,6 +658,8 @@ function formatDayTime(iso) {
 }
 window._parseSouBluDate = _parseSouBluDate;
 window.SOUBLU_TZ = SOUBLU_TZ;
+window.formatDate = formatDate;
+window.formatDateTime = formatDateTime;
 window.formatTime = formatTime;
 window.formatDayTime = formatDayTime;
 function timeAgo(iso) {
@@ -923,9 +948,116 @@ function formatTransactionMetaLine(metaRaw) {
 window.confirm = function() { return true; };
 function confirmAction(msg, cb) { cb(); }
 
+function isNarrowLayout() {
+  try { return window.matchMedia('(max-width: 900px)').matches; }
+  catch (_) { return (window.innerWidth || 0) <= 900; }
+}
+function isSoubluMobile() {
+  try {
+    return isNarrowLayout() || window.matchMedia('(pointer: coarse)').matches;
+  } catch (_) {
+    return isNarrowLayout();
+  }
+}
+function closeMobileNav() {
+  document.body.classList.remove('nav-open');
+  document.getElementById('sidebar')?.classList.remove('open');
+  const ov = document.getElementById('navOverlay');
+  if (ov) ov.setAttribute('aria-hidden', 'true');
+  const ham = document.getElementById('navHamburger');
+  if (ham) ham.setAttribute('aria-expanded', 'false');
+}
+function openMobileNav() {
+  document.body.classList.add('nav-open');
+  document.getElementById('sidebar')?.classList.add('open');
+  const ov = document.getElementById('navOverlay');
+  if (ov) ov.setAttribute('aria-hidden', 'false');
+  const ham = document.getElementById('navHamburger');
+  if (ham) ham.setAttribute('aria-expanded', 'true');
+}
+function toggleMobileNav() {
+  if (document.body.classList.contains('nav-open')) closeMobileNav();
+  else openMobileNav();
+}
+window.isNarrowLayout = isNarrowLayout;
+window.isSoubluMobile = isSoubluMobile;
+window.closeMobileNav = closeMobileNav;
+window.openMobileNav = openMobileNav;
+window.toggleMobileNav = toggleMobileNav;
+
 function initSidebarToggle() {
-  const sb=document.getElementById('sidebar'),ma=document.getElementById('mainArea'),btn=document.getElementById('sidebarToggle');
-  if(!sb||!ma)return; btn?.addEventListener('click',()=>{sb.classList.toggle('collapsed');ma.classList.toggle('collapsed');});
+  const sb = document.getElementById('sidebar');
+  if (!sb) return;
+  const ma = document.getElementById('mainArea')
+    || document.querySelector('.main-area')
+    || document.querySelector('.main-content');
+
+  let ov = document.getElementById('navOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'navOverlay';
+    ov.className = 'nav-overlay';
+    ov.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(ov);
+  }
+  if (!ov.dataset.navWired) {
+    ov.dataset.navWired = '1';
+    ov.addEventListener('click', () => closeMobileNav());
+  }
+
+  const topbar = document.querySelector('#mainArea > .topbar, .main-area > .topbar, .main-content > .topbar, .topbar');
+  let ham = document.getElementById('navHamburger');
+  if (!ham && topbar) {
+    ham = document.createElement('button');
+    ham.type = 'button';
+    ham.id = 'navHamburger';
+    ham.className = 'nav-hamburger';
+    ham.setAttribute('aria-label', 'Abrir menu');
+    ham.setAttribute('aria-expanded', 'false');
+    ham.setAttribute('aria-controls', 'sidebar');
+    ham.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+    topbar.insertBefore(ham, topbar.firstChild);
+  }
+  if (ham && !ham.dataset.navWired) {
+    ham.dataset.navWired = '1';
+    ham.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleMobileNav();
+    });
+  }
+
+  const btn = document.getElementById('sidebarToggle');
+  if (btn && !btn.dataset.navWired) {
+    btn.dataset.navWired = '1';
+    btn.addEventListener('click', () => {
+      if (isNarrowLayout()) {
+        closeMobileNav();
+        return;
+      }
+      sb.classList.toggle('collapsed');
+      ma?.classList.toggle('collapsed');
+    });
+  }
+
+  if (!window.__soubluNavEscWired) {
+    window.__soubluNavEscWired = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('nav-open')) closeMobileNav();
+    });
+    window.addEventListener('resize', () => {
+      if (!isNarrowLayout()) closeMobileNav();
+    });
+  }
+
+  // Financeiro / leads: fechar gaveta ao escolher item do menu
+  if (!sb.dataset.navCloseWired) {
+    sb.dataset.navCloseWired = '1';
+    sb.addEventListener('click', (e) => {
+      const item = e.target.closest('.nav-item, a.nav-item, button.nav-item');
+      if (!item || !isNarrowLayout()) return;
+      setTimeout(() => closeMobileNav(), 0);
+    });
+  }
 }
 function initNav() { document.querySelectorAll('[data-section]').forEach(wireNavButton); }
 function wireNavButton(b) {
@@ -941,6 +1073,7 @@ function navigateTo(id) {
   const nav=document.querySelector(`[data-section="${id}"]`); nav?.classList.add('active');
   const title=nav?.querySelector('.nav-label')?.textContent||'';
   const tb=document.getElementById('topbarTitle'); if(tb&&title)tb.textContent=title;
+  if (isNarrowLayout()) closeMobileNav();
 }
 function updateCartBadge(n){const b=document.getElementById('cartBadge');if(!b)return;b.textContent=n;b.style.display=n>0?'inline':'none';}
 function togglePassword(id,btn){const i=document.getElementById(id);if(!i)return;i.type=i.type==='password'?'text':'password';btn.textContent=i.type==='password'?'👁':'🙈';}
@@ -1082,12 +1215,25 @@ function showLoading(msg='Carregando...') {
     document.body.appendChild(el);
   }
   el.style.display = 'flex';
+  el.style.pointerEvents = 'all';
   const p = el.querySelector('.loader-text, p');
   if (p && msg) p.textContent = msg;
+  try { clearTimeout(window.__soubluLoaderTimer); } catch (_) { /* noop */ }
+  /* Nunca deixar o loader travar a tela se a chamada pendurar (celular / anexos). */
+  window.__soubluLoaderTimer = setTimeout(() => {
+    hideLoading();
+    if (typeof showToast === 'function') {
+      showToast('Demorou demais para carregar. Tente de novo.', 'warning', 5000);
+    }
+  }, 22000);
 }
 function hideLoading() {
+  try { clearTimeout(window.__soubluLoaderTimer); } catch (_) { /* noop */ }
   const el = document.getElementById('globalLoader');
-  if (el) el.style.display = 'none';
+  if (el) {
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
+  }
 }
 window.showLoading = showLoading;
 window.hideLoading = hideLoading;

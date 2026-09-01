@@ -20,6 +20,7 @@ final class PostgRestCompat
         'wa_messages' => 500,
         'wa_chats' => 500,
         'finance_proposta_ops' => 1000,
+        'proposal_archive' => 500,
         'beneficios_vouchers' => 1000,
         'rh_employees' => 1000,
         'internal_chat_messages' => 500,
@@ -45,6 +46,7 @@ final class PostgRestCompat
         'beneficios_limites', 'beneficios_prestadores', 'beneficios_produtos', 'beneficios_vouchers', 'beneficios_fechamentos',
         'internal_chat_threads', 'internal_chat_messages',
         'account_block_events',
+        'proposal_archive',
     ];
 
     /** Nome na API (snake_case) → coluna física no MySQL. */
@@ -110,6 +112,7 @@ final class PostgRestCompat
         'beneficios_limites' => ['distribuicao'],
         'beneficios_vouchers' => ['detalhes_pedido'],
         'beneficios_fechamentos' => ['voucher_ids'],
+        'proposal_archive' => ['snapshot'],
     ];
 
     private PDO $pdo;
@@ -356,8 +359,19 @@ final class PostgRestCompat
         return $this->select($table, $params);
     }
 
+    /**
+     * delete — para propostas NÃO apaga a linha: arquiva na Localweb e cancela.
+     * Outras tabelas seguem DELETE SQL normal.
+     */
     private function delete(string $table, array $params): void
     {
+        if ($table === 'proposals') {
+            $this->archiveInsteadOfDeleteProposals($params);
+            return;
+        }
+        if ($table === 'proposal_archive') {
+            throw new RuntimeException('Arquivo da Localweb não pode ser apagado pela API.', 403);
+        }
         $sql = "DELETE FROM `{$table}`";
         [$where, $bind] = $this->buildWhere($table, $params);
         if ($where === '') {
@@ -373,6 +387,46 @@ final class PostgRestCompat
                 throw new RuntimeException('Não foi possível excluir: há vínculos no banco.', 409);
             }
             throw $e;
+        }
+    }
+
+    /**
+     * archiveInsteadOfDeleteProposals — intercepta DELETE /proposals.
+     * 1) Cópia JSON + linha em proposal_archive (disco Localweb).
+     * 2) Paga: não altera a ficha viva (409 se só tinha paga).
+     * 3) Demais: status Cancelado. A proposta continua pesquisável pelo CPF.
+     */
+    private function archiveInsteadOfDeleteProposals(array $params): void
+    {
+        require_once __DIR__ . '/ProposalArchive.php';
+        soublu_proposal_archive_ensure_table($this->pdo);
+        $lookup = $params;
+        $lookup['select'] = '*';
+        if (($lookup['limit'] ?? null) === null || (int) $lookup['limit'] <= 0) {
+            $lookup['limit'] = 50;
+        }
+        $rows = $this->select('proposals', $lookup);
+        if (!$rows) {
+            return;
+        }
+        $actor = soublu_request_actor_name();
+        $paidKept = 0;
+        foreach ($rows as $row) {
+            if (!is_array($row) || empty($row['id'])) {
+                continue;
+            }
+            soublu_archive_proposal($this->pdo, $row, 'api_delete', $actor);
+            if (soublu_proposal_row_is_paid($row)) {
+                $paidKept++;
+                continue;
+            }
+            soublu_retire_proposal_to_cancelled($this->pdo, $row, $actor);
+        }
+        if ($paidKept > 0 && $paidKept === count($rows)) {
+            throw new RuntimeException(
+                'Proposta paga não é apagada. Cópia de segurança salva na Localweb (uploads/proposal-archive).',
+                409
+            );
         }
     }
 

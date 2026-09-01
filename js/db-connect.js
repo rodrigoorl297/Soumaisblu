@@ -56,19 +56,31 @@
 
   c.API_KEY = c.API_KEY || 'soublu_api_52e8c7a6b3df4019';
   c.PIX_INTERNAL_TOKEN = c.PIX_INTERNAL_TOKEN || 'soublu_pix_52e8c7a6b3df4019';
+  /** Se Supabase REST cair, supaReq em config.js usa este site (MySQL /api/rest/v1/). */
+  c.LOCAWEB_FALLBACK_URL = c.LOCAWEB_FALLBACK_URL || PROD_SITE;
+  c.ENABLE_LOCawEB_FAILOVER = c.ENABLE_LOCawEB_FAILOVER !== false;
   c.PIX_PHP_PAY_URL = phpApiBase + '/api/pix_api.php';
   c.UPLOAD_URL = phpApiBase + '/api/upload.php';
+  /** CPF cadastral → Nova Vida NVCHECK. CNPJ/TJ/certidões → FonteData. */
   c.FONTE_DATA_URL = phpApiBase + '/api/fontedata.php';
   c.FONTE_DATA_TOKEN = c.FONTE_DATA_TOKEN || c.PIX_INTERNAL_TOKEN;
+  c.NOVA_TI_URL = phpApiBase + '/api/novati.php';
+  c.NOVA_TI_TOKEN = c.NOVA_TI_TOKEN || c.FONTE_DATA_TOKEN || c.PIX_INTERNAL_TOKEN;
   c.SITE_URL = panelBase;
 
   /**
    * Banco de dados:
-   * - Produção (soumaisblu.com.br) → MySQL Locaweb via /api/rest/v1/
+   * - Produção (soumaisblu.com.br) → MySQL Locaweb via /api/rest/v1/ (fonte da verdade)
    * - Localhost :8080 com PHP → mesmo MySQL Locaweb (config.db.local.php)
-   * - Outros localhost → Supabase dev (fallback)
+   * - Só FORCE_SUPABASE=true em localhost para fallback legado
+   *
+   * Nunca usar Supabase legado em produção: está defasado (só ~metade das propostas).
    */
-  const useLocawebMysql = c.FORCE_SUPABASE !== true;
+  const isProdSouMaisBlu = !isLocal && /(^|\.)soumaisblu\.com\.br$/i.test(host);
+  if (isProdSouMaisBlu) {
+    try { delete c.FORCE_SUPABASE; } catch (_) { c.FORCE_SUPABASE = false; }
+  }
+  const useLocawebMysql = isProdSouMaisBlu || c.FORCE_SUPABASE !== true;
 
   if (useLocawebMysql) {
     c.FORCE_HOSTINGER = true;

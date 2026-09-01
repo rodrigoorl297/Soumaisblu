@@ -258,7 +258,7 @@ function soublu_json(array $data, int $code = 200): void
         http_response_code($code);
         header('Content-Type: application/json; charset=utf-8');
         header('Access-Control-Allow-Origin: *');
-        header('Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization, Prefer');
+        header('Access-Control-Allow-Headers: Content-Type, X-API-Key, Authorization, Prefer, X-Soublu-Actor');
         header('Access-Control-Allow-Methods: GET, POST, PATCH, DELETE, OPTIONS');
     }
     echo json_encode($data, JSON_UNESCAPED_UNICODE);

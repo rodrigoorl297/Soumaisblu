@@ -3,6 +3,7 @@ window.Proposals = {
   PROPOSAL_MAX_FILE_MB: 50,
 
   init: function() {
+    this._applyMobileListLimits();
     this._initAnexoFolderDelegation();
     this._initStaticProposalSelects();
     if (document.getElementById('propAnexosFolders')) {
@@ -412,7 +413,7 @@ window.Proposals = {
     proposal.status_op = 'Pendenciado';
     proposal.history = proposal.history || [];
     proposal.history.push({
-      date: new Date().toISOString(),
+      date: nowBrazilSql(),
       actorName: (typeof Auth !== 'undefined' && Auth.getSession?.()?.name) || 'Sistema',
       action: `Banco para digitação alterado: [${prev}] → [${next}] · status → Pendenciado`,
       note: 'Ajuste de banco após envio — proposta colocada em pendência para digitação correta.',
@@ -493,6 +494,16 @@ window.Proposals = {
 
   _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '', dateFrom: '', dateTo: '' },
   _employeeList: { page: 1, pageSize: 20, total: 0 },
+
+  _applyMobileListLimits: function() {
+    try {
+      const mobile = (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
+        || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+      if (!mobile) return;
+      this._adminList.pageSize = Math.min(this._adminList.pageSize || 25, 20);
+      this._employeeList.pageSize = Math.min(this._employeeList.pageSize || 20, 15);
+    } catch (_) { /* noop */ }
+  },
   _employeeEditCache: {},
   _adminEditCache: {},
   _adminListCache: null,
@@ -636,107 +647,326 @@ window.Proposals = {
     return false;
   },
 
-  /** Tabelas financeiras (valor final = valor bruto × pct). */
+  /** Tabelas financeiras (valor final = valor bruto × pct) — planilha Ago/2026. */
   _TABELA_GROUPS: [
     {
-      group: 'NEO',
+      group: "AMIGOZ — GOV MG RCC",
       items: [
-        { value: 'NEO_NORMAL', label: 'NEO NORMAL — 100%', pct: 1 },
-        { value: 'NEO_FLEX1', label: 'NEO FLEX 1 — 82%', pct: 0.82 },
-        { value: 'NEO_FLEX2', label: 'NEO FLEX 2 — 67%', pct: 0.67 },
-        { value: 'NEO_FLEX3', label: 'NEO FLEX 3 — 52%', pct: 0.52 },
-        { value: 'NEO_FLEX4', label: 'NEO FLEX 4 — 37%', pct: 0.37 },
-        { value: 'NEO_FLEX5', label: 'NEO FLEX 5 — 17%', pct: 0.17 },
+        { value: "AMIGOZ_GOVMG_RCC_450_100", label: "AMIGOZ GOV MG RCC TX 4,50 — 100%", pct: 1.0 },
+        { value: "AMIGOZ_GOVMG_RCC_425_85", label: "AMIGOZ GOV MG RCC TX 4,25 — 85%", pct: 0.85 },
+        { value: "AMIGOZ_GOVMG_RCC_399_65", label: "AMIGOZ GOV MG RCC TX 3,99 — 65%", pct: 0.65 },
+        { value: "AMIGOZ_GOVMG_RCC_375_50", label: "AMIGOZ GOV MG RCC TX 3,75 — 50%", pct: 0.5 },
+        { value: "AMIGOZ_GOVMG_RCC_350_45", label: "AMIGOZ GOV MG RCC TX 3,50 — 45%", pct: 0.45 },
       ],
     },
     {
-      group: 'GOVSP NEO CGM',
+      group: "AMIGOZ — GOV MG RMC",
       items: [
-        { value: 'GOVSP_NEO_CGM_399_76', label: 'GOVSP NEO CGM 399 — 76%', pct: 0.76 },
-        { value: 'GOVSP_NEO_CGM_379_65', label: 'GOVSP NEO CGM 379 — 65%', pct: 0.65 },
-        { value: 'GOVSP_NEO_CGM_359_40', label: 'GOVSP NEO CGM 359 — 40%', pct: 0.40 },
-        { value: 'GOVSP_NEO_CGM_339_30', label: 'GOVSP NEO CGM 339 — 30%', pct: 0.30 },
-        { value: 'GOVSP_NEO_CGM_319_15', label: 'GOVSP NEO CGM 319 — 15%', pct: 0.15 },
+        { value: "AMIGOZ_GOVMG_RMC_450_100", label: "AMIGOZ GOV MG RMC TX 4,50 — 100%", pct: 1.0 },
+        { value: "AMIGOZ_GOVMG_RMC_425_85", label: "AMIGOZ GOV MG RMC TX 4,25 — 85%", pct: 0.85 },
+        { value: "AMIGOZ_GOVMG_RMC_399_65", label: "AMIGOZ GOV MG RMC TX 3,99 — 65%", pct: 0.65 },
+        { value: "AMIGOZ_GOVMG_RMC_375_50", label: "AMIGOZ GOV MG RMC TX 3,75 — 50%", pct: 0.5 },
+        { value: "AMIGOZ_GOVMG_RMC_350_45", label: "AMIGOZ GOV MG RMC TX 3,50 — 45%", pct: 0.45 },
       ],
     },
     {
-      group: 'PREFSP NEO CGM',
+      group: "AMIGOZ — GOV PB RMC",
       items: [
-        { value: 'PREFSP_NEO_CGM_419_60', label: 'PREFSP NEO CGM 419 — 60%', pct: 0.60 },
-        { value: 'PREFSP_NEO_CGM_399_50', label: 'PREFSP NEO CGM 399 — 50%', pct: 0.50 },
-        { value: 'PREFSP_NEO_CGM_379_40', label: 'PREFSP NEO CGM 379 — 40%', pct: 0.40 },
-        { value: 'PREFSP_NEO_CGM_359_25', label: 'PREFSP NEO CGM 359 — 25%', pct: 0.25 },
+        { value: "AMIGOZ_GOVPB_RMC_500_100", label: "AMIGOZ GOV PB RMC TX 5,00 — 100%", pct: 1.0 },
+        { value: "AMIGOZ_GOVPB_RMC_450_85", label: "AMIGOZ GOV PB RMC TX 4,50 — 85%", pct: 0.85 },
+        { value: "AMIGOZ_GOVPB_RMC_398_55", label: "AMIGOZ GOV PB RMC TX 3,98 — 55%", pct: 0.55 },
+        { value: "AMIGOZ_GOVPB_RMC_375_35", label: "AMIGOZ GOV PB RMC TX 3,75 — 35%", pct: 0.35 },
+        { value: "AMIGOZ_GOVPB_RMC_350_12", label: "AMIGOZ GOV PB RMC TX 3,50 — 12%", pct: 0.12 },
       ],
     },
     {
-      group: 'GOVMA NEO CGM',
+      group: "AMIGOZ — GOV SP RMC",
       items: [
-        { value: 'GOVMA_NEO_CGM_419_60', label: 'GOVMA NEO CGM 419 — 60%', pct: 0.60 },
-        { value: 'GOVMA_NEO_CGM_399_50', label: 'GOVMA NEO CGM 399 — 50%', pct: 0.50 },
-        { value: 'GOVMA_NEO_CGM_379_40', label: 'GOVMA NEO CGM 379 — 40%', pct: 0.40 },
-        { value: 'GOVMA_NEO_CGM_359_25', label: 'GOVMA NEO CGM 359 — 25%', pct: 0.25 },
+        { value: "AMIGOZ_GOVSP_RMC_450_100", label: "AMIGOZ GOV SP RMC TX 4,50 — 100%", pct: 1.0 },
+        { value: "AMIGOZ_GOVSP_RMC_398_85", label: "AMIGOZ GOV SP RMC TX 3,98 — 85%", pct: 0.85 },
+        { value: "AMIGOZ_GOVSP_RMC_375_55", label: "AMIGOZ GOV SP RMC TX 3,75 — 55%", pct: 0.55 },
+        { value: "AMIGOZ_GOVSP_RMC_350_35", label: "AMIGOZ GOV SP RMC TX 3,50 — 35%", pct: 0.35 },
+        { value: "AMIGOZ_GOVSP_RMC_325_12", label: "AMIGOZ GOV SP RMC TX 3,25 — 12%", pct: 0.12 },
       ],
     },
     {
-      group: 'AKI CAPITAL',
+      group: "AMIGOZ — GOV SP CELETISTA RMC",
       items: [
-        { value: 'AKI_L2_110', label: 'AKI CAPITAL L2 — 110%', pct: 1.10 },
-        { value: 'AKI_L3_100', label: 'AKI CAPITAL L3 — 100%', pct: 1.00 },
-        { value: 'AKI_L4_82', label: 'AKI CAPITAL L4 — 82%', pct: 0.82 },
-        { value: 'AKI_L5_67', label: 'AKI CAPITAL L5 — 67%', pct: 0.67 },
-        { value: 'AKI_L6_52', label: 'AKI CAPITAL L6 — 52%', pct: 0.52 },
-        { value: 'AKI_L7_37', label: 'AKI CAPITAL L7 — 37%', pct: 0.37 },
-        { value: 'AKI_L8_17', label: 'AKI CAPITAL L8 — 17%', pct: 0.17 },
-        { value: 'AKI_L9_10', label: 'AKI CAPITAL L9 — 10%', pct: 0.10 },
-        { value: 'AKI_100', label: 'AKI CAPITAL — 100%', pct: 1 },
-        { value: 'AKI_70', label: 'AKI CAPITAL — 70%', pct: 0.70 },
-        { value: 'AKI_35', label: 'AKI CAPITAL — 35%', pct: 0.35 },
-        { value: 'AKI_17', label: 'AKI CAPITAL — 17%', pct: 0.17 },
+        { value: "AMIGOZ_GOVSPCELETISTA_RMC_500_100", label: "AMIGOZ GOV SP CELETISTA RMC TX 5,00 — 100%", pct: 1.0 },
       ],
     },
     {
-      group: 'AMIGOZ',
+      group: "AMIGOZ — GOV SP CELETISTA RCC",
       items: [
-        { value: 'AMIGOZ_100', label: 'AMIGOZ — 100%', pct: 1 },
-        { value: 'AMIGOZ_67', label: 'AMIGOZ — 67%', pct: 0.67 },
-        { value: 'AMIGOZ_58', label: 'AMIGOZ — 58%', pct: 0.58 },
-        { value: 'AMIGOZ_38', label: 'AMIGOZ — 38%', pct: 0.38 },
-        { value: 'AMIGOZ_13', label: 'AMIGOZ — 13%', pct: 0.13 },
+        { value: "AMIGOZ_GOVSPCELETISTA_RCC_500_100", label: "AMIGOZ GOV SP CELETISTA RCC TX 5,00 — 100%", pct: 1.0 },
       ],
     },
     {
-      group: 'FUTURO',
+      group: "AMIGOZ — GOV SP RCC",
       items: [
-        { value: 'FUTURO_100', label: 'FUTURO — 100%', pct: 1 },
-        { value: 'FUTURO_95', label: 'FUTURO — 95%', pct: 0.95 },
-        { value: 'FUTURO_90', label: 'FUTURO — 90%', pct: 0.90 },
-        { value: 'FUTURO_82', label: 'FUTURO — 82%', pct: 0.82 },
-        { value: 'FUTURO_50', label: 'FUTURO — 50%', pct: 0.50 },
-        { value: 'FUTURO_25', label: 'FUTURO — 25%', pct: 0.25 },
-        { value: 'FUTURO_10', label: 'FUTURO — 10%', pct: 0.10 },
+        { value: "AMIGOZ_GOVSP_RCC_450_100", label: "AMIGOZ GOV SP RCC TX 4,50 — 100%", pct: 1.0 },
+        { value: "AMIGOZ_GOVSP_RCC_398_85", label: "AMIGOZ GOV SP RCC TX 3,98 — 85%", pct: 0.85 },
+        { value: "AMIGOZ_GOVSP_RCC_375_55", label: "AMIGOZ GOV SP RCC TX 3,75 — 55%", pct: 0.55 },
+        { value: "AMIGOZ_GOVSP_RCC_350_35", label: "AMIGOZ GOV SP RCC TX 3,50 — 35%", pct: 0.35 },
+        { value: "AMIGOZ_GOVSP_RCC_325_12", label: "AMIGOZ GOV SP RCC TX 3,25 — 12%", pct: 0.12 },
       ],
     },
     {
-      group: 'Outras',
+      group: "AMIGOZ — GOV ES RCC",
       items: [
-        { value: 'FOX', label: 'FOX — 100%', pct: 1 },
-        { value: 'BLU', label: 'BLU — 100%', pct: 1 },
-        { value: 'GL3', label: 'GL3 — 100%', pct: 1 },
+        { value: "AMIGOZ_GOVES_RCC_350_35", label: "AMIGOZ GOV ES RCC TX 3,50 — 35%", pct: 0.35 },
+        { value: "AMIGOZ_GOVES_RCC_246_12", label: "AMIGOZ GOV ES RCC TX 2,46 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "AMIGOZ — GOV PI RMC",
+      items: [
+        { value: "AMIGOZ_GOVPI_RMC_479_80", label: "AMIGOZ GOV PI RMC TX 4,79 — 80%", pct: 0.8 },
+      ],
+    },
+    {
+      group: "AMIGOZ — GOV PI RCC",
+      items: [
+        { value: "AMIGOZ_GOVPI_RCC_479_80", label: "AMIGOZ GOV PI RCC TX 4,79 — 80%", pct: 0.8 },
+      ],
+    },
+    {
+      group: "NEO — GOV SP RCC",
+      items: [
+        { value: "NEO_GOVSP_RCC_399_100", label: "NEO GOV SP RCC TX 3,99 — 100%", pct: 1.0 },
+        { value: "NEO_GOVSP_RCC_379_80", label: "NEO GOV SP RCC TX 3,79 — 80%", pct: 0.8 },
+        { value: "NEO_GOVSP_RCC_359_65", label: "NEO GOV SP RCC TX 3,59 — 65%", pct: 0.65 },
+        { value: "NEO_GOVSP_RCC_339_50", label: "NEO GOV SP RCC TX 3,39 — 50%", pct: 0.5 },
+        { value: "NEO_GOVSP_RCC_319_30", label: "NEO GOV SP RCC TX 3,19 — 30%", pct: 0.3 },
+        { value: "NEO_GOVSP_RCC_299_12", label: "NEO GOV SP RCC TX 2,99 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "NEO — GOV PR RCC",
+      items: [
+        { value: "NEO_GOVPR_RCC_399_100", label: "NEO GOV PR RCC TX 3,99 — 100%", pct: 1.0 },
+        { value: "NEO_GOVPR_RCC_379_80", label: "NEO GOV PR RCC TX 3,79 — 80%", pct: 0.8 },
+        { value: "NEO_GOVPR_RCC_359_65", label: "NEO GOV PR RCC TX 3,59 — 65%", pct: 0.65 },
+        { value: "NEO_GOVPR_RCC_339_50", label: "NEO GOV PR RCC TX 3,39 — 50%", pct: 0.5 },
+        { value: "NEO_GOVPR_RCC_319_30", label: "NEO GOV PR RCC TX 3,19 — 30%", pct: 0.3 },
+        { value: "NEO_GOVPR_RCC_299_12", label: "NEO GOV PR RCC TX 2,99 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "NEO — PREF SP RCC",
+      items: [
+        { value: "NEO_PREFSP_RCC_419_83", label: "NEO PREF SP RCC TX 4,19 — 83%", pct: 0.83 },
+        { value: "NEO_PREFSP_RCC_399_73", label: "NEO PREF SP RCC TX 3,99 — 73%", pct: 0.73 },
+        { value: "NEO_PREFSP_RCC_379_63", label: "NEO PREF SP RCC TX 3,79 — 63%", pct: 0.63 },
+        { value: "NEO_PREFSP_RCC_359_53", label: "NEO PREF SP RCC TX 3,59 — 53%", pct: 0.53 },
+        { value: "NEO_PREFSP_RCC_339_43", label: "NEO PREF SP RCC TX 3,39 — 43%", pct: 0.43 },
+        { value: "NEO_PREFSP_RCC_319_23", label: "NEO PREF SP RCC TX 3,19 — 23%", pct: 0.23 },
+        { value: "NEO_PREFSP_RCC_299_12", label: "NEO PREF SP RCC TX 2,99 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "NEO — GOV MA RCC",
+      items: [
+        { value: "NEO_GOVMA_RCC_419_83", label: "NEO GOV MA RCC TX 4,19 — 83%", pct: 0.83 },
+        { value: "NEO_GOVMA_RCC_399_73", label: "NEO GOV MA RCC TX 3,99 — 73%", pct: 0.73 },
+        { value: "NEO_GOVMA_RCC_379_63", label: "NEO GOV MA RCC TX 3,79 — 63%", pct: 0.63 },
+        { value: "NEO_GOVMA_RCC_359_53", label: "NEO GOV MA RCC TX 3,59 — 53%", pct: 0.53 },
+        { value: "NEO_GOVMA_RCC_339_43", label: "NEO GOV MA RCC TX 3,39 — 43%", pct: 0.43 },
+        { value: "NEO_GOVMA_RCC_319_23", label: "NEO GOV MA RCC TX 3,19 — 23%", pct: 0.23 },
+        { value: "NEO_GOVMA_RCC_299_12", label: "NEO GOV MA RCC TX 2,99 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "NEO — GOV MA RMC",
+      items: [
+        { value: "NEO_GOVMA_RMC_419_83", label: "NEO GOV MA RMC TX 4,19 — 83%", pct: 0.83 },
+        { value: "NEO_GOVMA_RMC_399_73", label: "NEO GOV MA RMC TX 3,99 — 73%", pct: 0.73 },
+        { value: "NEO_GOVMA_RMC_379_63", label: "NEO GOV MA RMC TX 3,79 — 63%", pct: 0.63 },
+        { value: "NEO_GOVMA_RMC_359_53", label: "NEO GOV MA RMC TX 3,59 — 53%", pct: 0.53 },
+        { value: "NEO_GOVMA_RMC_339_43", label: "NEO GOV MA RMC TX 3,39 — 43%", pct: 0.43 },
+        { value: "NEO_GOVMA_RMC_319_23", label: "NEO GOV MA RMC TX 3,19 — 23%", pct: 0.23 },
+        { value: "NEO_GOVMA_RMC_299_12", label: "NEO GOV MA RMC TX 2,99 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "NEO — PREF SP RMC",
+      items: [
+        { value: "NEO_PREFSP_RMC_419_83", label: "NEO PREF SP RMC TX 4,19 — 83%", pct: 0.83 },
+        { value: "NEO_PREFSP_RMC_399_73", label: "NEO PREF SP RMC TX 3,99 — 73%", pct: 0.73 },
+        { value: "NEO_PREFSP_RMC_379_63", label: "NEO PREF SP RMC TX 3,79 — 63%", pct: 0.63 },
+        { value: "NEO_PREFSP_RMC_359_53", label: "NEO PREF SP RMC TX 3,59 — 53%", pct: 0.53 },
+        { value: "NEO_PREFSP_RMC_339_43", label: "NEO PREF SP RMC TX 3,39 — 43%", pct: 0.43 },
+        { value: "NEO_PREFSP_RMC_319_23", label: "NEO PREF SP RMC TX 3,19 — 23%", pct: 0.23 },
+        { value: "NEO_PREFSP_RMC_299_12", label: "NEO PREF SP RMC TX 2,99 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "AKI — PREF RJ RCC",
+      items: [
+        { value: "AKI_PREFRJ_RCC_P5_30", label: "AKI PREF RJ RCC P5 — 30%", pct: 0.3 },
+      ],
+    },
+    {
+      group: "AKI — SIAPE RCC",
+      items: [
+        { value: "AKI_SIAPE_RCC_F12_70", label: "AKI SIAPE RCC F12 — 70%", pct: 0.7 },
+        { value: "AKI_SIAPE_RCC_F13_60", label: "AKI SIAPE RCC F13 — 60%", pct: 0.6 },
+        { value: "AKI_SIAPE_RCC_F14_50", label: "AKI SIAPE RCC F14 — 50%", pct: 0.5 },
+        { value: "AKI_SIAPE_RCC_F15_45", label: "AKI SIAPE RCC F15 — 45%", pct: 0.45 },
+        { value: "AKI_SIAPE_RCC_F16_35", label: "AKI SIAPE RCC F16 — 35%", pct: 0.35 },
+      ],
+    },
+    {
+      group: "AKI — SIAPE RMC",
+      items: [
+        { value: "AKI_SIAPE_RMC_F11_88", label: "AKI SIAPE RMC F11 — 88%", pct: 0.88 },
+        { value: "AKI_SIAPE_RMC_F12_70", label: "AKI SIAPE RMC F12 — 70%", pct: 0.7 },
+        { value: "AKI_SIAPE_RMC_F13_60", label: "AKI SIAPE RMC F13 — 60%", pct: 0.6 },
+        { value: "AKI_SIAPE_RMC_F14_50", label: "AKI SIAPE RMC F14 — 50%", pct: 0.5 },
+        { value: "AKI_SIAPE_RMC_F15_45", label: "AKI SIAPE RMC F15 — 45%", pct: 0.45 },
+        { value: "AKI_SIAPE_RMC_F16_35", label: "AKI SIAPE RMC F16 — 35%", pct: 0.35 },
       ],
     },
   ],
 
   _tabelaPct: {
-    NEO_NORMAL: 1, NEO_FLEX1: 0.82, NEO_FLEX2: 0.67, NEO_FLEX3: 0.52, NEO_FLEX4: 0.37, NEO_FLEX5: 0.17,
-    GOVSP_NEO_CGM_399_76: 0.76, GOVSP_NEO_CGM_379_65: 0.65, GOVSP_NEO_CGM_359_40: 0.40, GOVSP_NEO_CGM_339_30: 0.30, GOVSP_NEO_CGM_319_15: 0.15,
-    PREFSP_NEO_CGM_419_60: 0.60, PREFSP_NEO_CGM_399_50: 0.50, PREFSP_NEO_CGM_379_40: 0.40, PREFSP_NEO_CGM_359_25: 0.25,
-    GOVMA_NEO_CGM_419_60: 0.60, GOVMA_NEO_CGM_399_50: 0.50, GOVMA_NEO_CGM_379_40: 0.40, GOVMA_NEO_CGM_359_25: 0.25,
-    AKI_L2_110: 1.10, AKI_L3_100: 1.00, AKI_L4_82: 0.82, AKI_L5_67: 0.67, AKI_L6_52: 0.52, AKI_L7_37: 0.37, AKI_L8_17: 0.17, AKI_L9_10: 0.10,
-    AKI_100: 1, AKI_70: 0.70, AKI_35: 0.35, AKI_17: 0.17,
-    AMIGOZ_100: 1, AMIGOZ_67: 0.67, AMIGOZ_58: 0.58, AMIGOZ_38: 0.38, AMIGOZ_13: 0.13,
-    FUTURO_100: 1, FUTURO_95: 0.95, FUTURO_90: 0.90, FUTURO_82: 0.82, FUTURO_50: 0.50, FUTURO_25: 0.25, FUTURO_10: 0.10,
-    FOX: 1, BLU: 1, GL3: 1,
-    NORMAL: 1, FLEX1: 0.82, FLEX2: 0.67, FLEX3: 0.52, FLEX4: 0.37, FLEX5: 0.17, S: 1,
+    AMIGOZ_GOVMG_RCC_450_100: 1.0,
+    AMIGOZ_GOVMG_RCC_425_85: 0.85,
+    AMIGOZ_GOVMG_RCC_399_65: 0.65,
+    AMIGOZ_GOVMG_RCC_375_50: 0.5,
+    AMIGOZ_GOVMG_RCC_350_45: 0.45,
+    AMIGOZ_GOVMG_RMC_450_100: 1.0,
+    AMIGOZ_GOVMG_RMC_425_85: 0.85,
+    AMIGOZ_GOVMG_RMC_399_65: 0.65,
+    AMIGOZ_GOVMG_RMC_375_50: 0.5,
+    AMIGOZ_GOVMG_RMC_350_45: 0.45,
+    AMIGOZ_GOVPB_RMC_500_100: 1.0,
+    AMIGOZ_GOVPB_RMC_450_85: 0.85,
+    AMIGOZ_GOVPB_RMC_398_55: 0.55,
+    AMIGOZ_GOVPB_RMC_375_35: 0.35,
+    AMIGOZ_GOVPB_RMC_350_12: 0.12,
+    AMIGOZ_GOVSP_RMC_450_100: 1.0,
+    AMIGOZ_GOVSP_RMC_398_85: 0.85,
+    AMIGOZ_GOVSP_RMC_375_55: 0.55,
+    AMIGOZ_GOVSP_RMC_350_35: 0.35,
+    AMIGOZ_GOVSP_RMC_325_12: 0.12,
+    AMIGOZ_GOVSPCELETISTA_RMC_500_100: 1.0,
+    AMIGOZ_GOVSPCELETISTA_RCC_500_100: 1.0,
+    AMIGOZ_GOVSP_RCC_450_100: 1.0,
+    AMIGOZ_GOVSP_RCC_398_85: 0.85,
+    AMIGOZ_GOVSP_RCC_375_55: 0.55,
+    AMIGOZ_GOVSP_RCC_350_35: 0.35,
+    AMIGOZ_GOVSP_RCC_325_12: 0.12,
+    AMIGOZ_GOVES_RCC_350_35: 0.35,
+    AMIGOZ_GOVES_RCC_246_12: 0.12,
+    AMIGOZ_GOVPI_RMC_479_80: 0.8,
+    AMIGOZ_GOVPI_RCC_479_80: 0.8,
+    NEO_GOVSP_RCC_399_100: 1.0,
+    NEO_GOVSP_RCC_379_80: 0.8,
+    NEO_GOVSP_RCC_359_65: 0.65,
+    NEO_GOVSP_RCC_339_50: 0.5,
+    NEO_GOVSP_RCC_319_30: 0.3,
+    NEO_GOVSP_RCC_299_12: 0.12,
+    NEO_GOVPR_RCC_399_100: 1.0,
+    NEO_GOVPR_RCC_379_80: 0.8,
+    NEO_GOVPR_RCC_359_65: 0.65,
+    NEO_GOVPR_RCC_339_50: 0.5,
+    NEO_GOVPR_RCC_319_30: 0.3,
+    NEO_GOVPR_RCC_299_12: 0.12,
+    NEO_PREFSP_RCC_419_83: 0.83,
+    NEO_PREFSP_RCC_399_73: 0.73,
+    NEO_PREFSP_RCC_379_63: 0.63,
+    NEO_PREFSP_RCC_359_53: 0.53,
+    NEO_PREFSP_RCC_339_43: 0.43,
+    NEO_PREFSP_RCC_319_23: 0.23,
+    NEO_PREFSP_RCC_299_12: 0.12,
+    NEO_GOVMA_RCC_419_83: 0.83,
+    NEO_GOVMA_RCC_399_73: 0.73,
+    NEO_GOVMA_RCC_379_63: 0.63,
+    NEO_GOVMA_RCC_359_53: 0.53,
+    NEO_GOVMA_RCC_339_43: 0.43,
+    NEO_GOVMA_RCC_319_23: 0.23,
+    NEO_GOVMA_RCC_299_12: 0.12,
+    NEO_GOVMA_RMC_419_83: 0.83,
+    NEO_GOVMA_RMC_399_73: 0.73,
+    NEO_GOVMA_RMC_379_63: 0.63,
+    NEO_GOVMA_RMC_359_53: 0.53,
+    NEO_GOVMA_RMC_339_43: 0.43,
+    NEO_GOVMA_RMC_319_23: 0.23,
+    NEO_GOVMA_RMC_299_12: 0.12,
+    NEO_PREFSP_RMC_419_83: 0.83,
+    NEO_PREFSP_RMC_399_73: 0.73,
+    NEO_PREFSP_RMC_379_63: 0.63,
+    NEO_PREFSP_RMC_359_53: 0.53,
+    NEO_PREFSP_RMC_339_43: 0.43,
+    NEO_PREFSP_RMC_319_23: 0.23,
+    NEO_PREFSP_RMC_299_12: 0.12,
+    AKI_PREFRJ_RCC_P5_30: 0.3,
+    AKI_SIAPE_RCC_F12_70: 0.7,
+    AKI_SIAPE_RCC_F13_60: 0.6,
+    AKI_SIAPE_RCC_F14_50: 0.5,
+    AKI_SIAPE_RCC_F15_45: 0.45,
+    AKI_SIAPE_RCC_F16_35: 0.35,
+    AKI_SIAPE_RMC_F11_88: 0.88,
+    AKI_SIAPE_RMC_F12_70: 0.7,
+    AKI_SIAPE_RMC_F13_60: 0.6,
+    AKI_SIAPE_RMC_F14_50: 0.5,
+    AKI_SIAPE_RMC_F15_45: 0.45,
+    AKI_SIAPE_RMC_F16_35: 0.35,
+    FUTURO_100: 1,
+    FUTURO_95: 0.95,
+    FUTURO_90: 0.9,
+    FUTURO_82: 0.82,
+    FUTURO_50: 0.5,
+    FUTURO_25: 0.25,
+    FUTURO_10: 0.1,
+    FOX: 1,
+    BLU: 1,
+    GL3: 1,
+    /* legado (propostas antigas) */
+    NEO_NORMAL: 1,
+    NEO_FLEX1: 0.82,
+    NEO_FLEX2: 0.67,
+    NEO_FLEX3: 0.52,
+    NEO_FLEX4: 0.37,
+    NEO_FLEX5: 0.17,
+    GOVSP_NEO_CGM_399_76: 0.76,
+    GOVSP_NEO_CGM_379_65: 0.65,
+    GOVSP_NEO_CGM_359_40: 0.4,
+    GOVSP_NEO_CGM_339_30: 0.3,
+    GOVSP_NEO_CGM_319_15: 0.15,
+    PREFSP_NEO_CGM_419_60: 0.6,
+    PREFSP_NEO_CGM_399_50: 0.5,
+    PREFSP_NEO_CGM_379_40: 0.4,
+    PREFSP_NEO_CGM_359_25: 0.25,
+    GOVMA_NEO_CGM_419_60: 0.6,
+    GOVMA_NEO_CGM_399_50: 0.5,
+    GOVMA_NEO_CGM_379_40: 0.4,
+    GOVMA_NEO_CGM_359_25: 0.25,
+    AKI_L2_110: 1.1,
+    AKI_L3_100: 1.0,
+    AKI_L4_82: 0.82,
+    AKI_L5_67: 0.67,
+    AKI_L6_52: 0.52,
+    AKI_L7_37: 0.37,
+    AKI_L8_17: 0.17,
+    AKI_L9_10: 0.1,
+    AKI_100: 1,
+    AKI_70: 0.7,
+    AKI_35: 0.35,
+    AKI_17: 0.17,
+    AMIGOZ_100: 1,
+    AMIGOZ_67: 0.67,
+    AMIGOZ_58: 0.58,
+    AMIGOZ_38: 0.38,
+    AMIGOZ_13: 0.13,
+    NORMAL: 1,
+    FLEX1: 0.82,
+    FLEX2: 0.67,
+    FLEX3: 0.52,
+    FLEX4: 0.37,
+    FLEX5: 0.17,
+    S: 1,
   },
 
   _tabelaLabel: function(code) {
@@ -922,7 +1152,7 @@ window.Proposals = {
 
   _matchesVendorIdFilter: function(p, vendorId) {
     const want = String(vendorId || '').trim();
-    if (!want) return true;
+    if (!want || want === 'todos') return true;
     const primary = String(this._proposalVendorId(p) || '').trim();
     return primary === want;
   },
@@ -1698,6 +1928,26 @@ window.Proposals = {
     return icons[name] || '';
   },
 
+  /**
+   * _unlockManageValorFields — libera nº/valor no modal admin (HTML vem com readonly no bruto).
+   * Entrada: editable true quando backoffice/supervisor+ em modo edição.
+   */
+  _unlockManageValorFields: function(editable) {
+    const valorIds = ['managePropValorBruto', 'managePropValorEdit', 'managePropNumeroEdit'];
+    valorIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      if (editable) {
+        el.removeAttribute('readonly');
+        el.disabled = false;
+        el.readOnly = false;
+        if (id === 'managePropValorBruto') {
+          el.style.cursor = 'text';
+        }
+      }
+    });
+  },
+
   /** Ícones compactos — gestão admin, parceiros e cards do vendedor */
   actionsRowHtml: function(id, opts = {}) {
     const safeId = this._escAttr(id);
@@ -1705,9 +1955,11 @@ window.Proposals = {
     const employee = !!opts.employee;
     const canEdit = opts.canEdit !== false;
     const canDelete = !!opts.canDelete;
+    const role = this._normProposalManageRole(typeof Auth !== 'undefined' && Auth.getSession()?.role);
+    const adminOpensEdit = !employee && this._canEditNumeroValor(role);
     const onView = employee
       ? `Proposals.openEmployeeViewModal('${safeId}')`
-      : `Proposals.openAdminViewModal('${safeId}')`;
+      : (adminOpensEdit ? `Proposals.openAdminModal('${safeId}')` : `Proposals.openAdminViewModal('${safeId}')`);
     const onEdit = employee
       ? `Proposals.openEmployeeModal('${safeId}')`
       : `Proposals.openAdminModal('${safeId}')`;
@@ -1720,7 +1972,7 @@ window.Proposals = {
       inner += `<button type="button" class="client-actions__btn" title="Editar" aria-label="Editar proposta" onclick="${onEdit}">${pen}</button>`;
     }
     if (canDelete) {
-      inner += `<button type="button" class="client-actions__btn client-actions__btn--danger" title="Excluir" aria-label="Excluir proposta" onclick="${onDelete}">${trash}</button>`;
+      inner += `<button type="button" class="client-actions__btn client-actions__btn--danger" title="Arquivar na Localweb" aria-label="Arquivar proposta" onclick="${onDelete}">${trash}</button>`;
     }
     return `<div class="client-actions" role="group" aria-label="Ações da proposta">${inner}</div>`;
   },
@@ -1982,7 +2234,9 @@ window.Proposals = {
   _attachmentDisplayUrl: function(raw, caminho) {
     const s = String(raw || '').trim();
     if (!s) return '';
-    if (/^(data:|blob:)/i.test(s)) return this._toDisplayUrl(s);
+    if (/^(data:|blob:)/i.test(s)) {
+      return this._safeUiAttachmentUrl(this._toDisplayUrl(s));
+    }
     if (/file\.php/i.test(s)) return s;
     if (/supabase\.co\/storage/i.test(s)) return s.replace(/ /g, '%20');
     if (/^https?:\/\//i.test(s)) {
@@ -2024,7 +2278,9 @@ window.Proposals = {
   _attachmentPreviewUrl: function(raw, caminho, urls, nome) {
     const r = String(raw || '').trim();
     if (!r) return '';
-    if (/^(data:|blob:)/i.test(r)) return this._toDisplayUrl(r);
+    if (/^(data:|blob:)/i.test(r)) {
+      return this._safeUiAttachmentUrl(this._toDisplayUrl(r));
+    }
     const rel = String(caminho || '').replace(/^\/+/, '') || this._extractStorageRelative(r);
     if (rel) {
       const served = this._fileServeUrl(rel);
@@ -2038,7 +2294,7 @@ window.Proposals = {
       }
       if (this._isDirectUploadsUrl(r)) return r.replace(/ /g, '%20');
     }
-    return this._pickViewerUrl(urls || [], r, caminho);
+    return this._safeUiAttachmentUrl(this._pickViewerUrl(urls || [], r, caminho));
   },
 
   _pickViewerUrl: function(urls, raw, caminho) {
@@ -2102,9 +2358,23 @@ window.Proposals = {
       return (legacyBase + '/' + s).replace(/ /g, '%20');
     }
     if (/^[A-Za-z0-9+/=\s-]+$/.test(s.replace(/\s/g, '')) && s.length > 80) {
-      return 'data:application/octet-stream;base64,' + s.replace(/\s/g, '');
+      /* Nunca materializar base64 gigante como data:URL na UI — congela o Chrome no celular. */
+      return '';
     }
     return '';
+  },
+
+  /** data:URL grande não pode ir para <img>/DOM. */
+  _isHeavyDataUrl: function(s) {
+    const t = String(s || '');
+    return /^data:/i.test(t) && t.length > 2048;
+  },
+
+  _safeUiAttachmentUrl: function(url) {
+    const u = String(url || '').trim();
+    if (!u) return '';
+    if (this._isHeavyDataUrl(u)) return '';
+    return u;
   },
 
   _isDirectUploadsUrl: function(url) {
@@ -2122,7 +2392,8 @@ window.Proposals = {
     };
 
     if (/^(data:|blob:)/i.test(raw)) {
-      add(this._toDisplayUrl(raw));
+      const display = this._toDisplayUrl(raw);
+      if (!this._isHeavyDataUrl(display) && String(display).length <= 2048) add(display);
       return list;
     }
 
@@ -2333,15 +2604,22 @@ window.Proposals = {
     const previewChain = this._attachmentFallbackChain(previewList, previewPrimary);
     const previewFb = this._attachmentFallbackAttrs(previewChain);
     const previewFbStr = Object.keys(previewFb).map((k) => `${k}="${previewFb[k]}"`).join(' ');
-    const safePreview = this._escUrlAttr(previewPrimary);
+    const safePreview = this._escUrlAttr(this._safeUiAttachmentUrl(previewPrimary) || '');
     const safeNome = this._escHtml(nome);
     const shortNome = safeNome.length > 28 ? (safeNome.slice(0, 25) + '…') : safeNome;
-    const openJs = `Proposals.openAttachment('${this._escAttr(String(rawSrc))}','${this._escAttr(nome)}','${this._escAttr(doc.caminho || '')}')`;
+    const openRaw = (String(rawSrc).length > 512 || this._isHeavyDataUrl(rawSrc)) ? '' : String(rawSrc);
+    const openJs = `Proposals.openAttachment('${this._escAttr(openRaw)}','${this._escAttr(nome)}','${this._escAttr(doc.caminho || '')}')`;
     const wrap = 'display:inline-flex;flex-direction:column;align-items:center;max-width:88px;margin-top:6px;vertical-align:top;';
     const card = 'width:80px;height:100px;border-radius:10px;border:2px solid var(--color-success);overflow:hidden;background:#fff;box-shadow:0 2px 6px rgba(0,0,0,.08);cursor:pointer;flex-shrink:0;';
     const previewOnErr = this._attachmentOnErrorHandler();
 
     if (this._isImageUrl(rawSrc, nome)) {
+      if (!safePreview) {
+        return `<div style="${wrap}" title="Anexo legado sem prévia">
+          <div style="${card}display:flex;align-items:center;justify-content:center;font-size:22px;" role="button" tabindex="0" onclick="${openJs}">📎</div>
+          <span style="font-size:9px;line-height:1.15;text-align:center;margin-top:4px;word-break:break-word;color:var(--color-text-muted);">${shortNome}</span>
+        </div>`;
+      }
       return `<div style="${wrap}" title="${safeNome} — clique para ampliar">
         <div style="${card}" role="button" tabindex="0" onclick="${openJs}" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${openJs};}">
           <img src="${safePreview}" ${previewFbStr} alt="${safeNome}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;" loading="lazy" onerror="${previewOnErr}"/>
@@ -2530,6 +2808,11 @@ window.Proposals = {
       name = item.nome || name;
     } else {
       raw = String(cacheIdxOrUrl || '').trim();
+      /* Evita colar base64 gigante no onclick do HTML (trava o celular). */
+      if (raw.length > 4096 || this._isHeavyDataUrl(raw)) {
+        alert('Anexo legado (base64) não pode ser aberto neste aparelho. Peça reenvio do arquivo.');
+        return;
+      }
       caminho = String(caminhoOpt || '').replace(/^\/+/, '');
       urls = this._attachmentOpenUrls(raw, caminho);
       name = nome || name;
@@ -2538,8 +2821,8 @@ window.Proposals = {
     const initialUrl = this._isImageUrl(raw, name)
       ? (this._attachmentPreviewUrl(raw, caminho, urls, name) || this._pickViewerUrl(urls, raw, caminho))
       : this._pickViewerUrl(urls, raw, caminho);
-    if (!initialUrl) {
-      alert('Anexo indisponível ou inválido.');
+    if (!initialUrl || this._isHeavyDataUrl(initialUrl) || String(initialUrl).length > 8192 && /^data:/i.test(initialUrl)) {
+      alert('Anexo indisponível, inválido ou grande demais para visualizar aqui.');
       return;
     }
 
@@ -2670,25 +2953,34 @@ window.Proposals = {
         <span style="word-break:break-word;line-height:1.2;">${this._escHtml(nome)}</span>
       </div>`;
     }
-    const previewPrimary = this._attachmentPreviewUrl(rawSrc, doc.caminho, doc.urls || [], nome)
+    let previewPrimary = this._attachmentPreviewUrl(rawSrc, doc.caminho, doc.urls || [], nome)
       || this._attachmentDisplayUrl(rawSrc, doc.caminho)
       || doc.url;
+    previewPrimary = this._safeUiAttachmentUrl(previewPrimary);
+    const box = 'display:block;width:120px;height:150px;border-radius:10px;border:2px solid var(--color-success);overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;cursor:pointer;';
+    const click = `role="button" tabindex="0" onclick="Proposals.openAttachment(${cacheIdx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Proposals.openAttachment(${cacheIdx});}"`;
+    const safeNome = this._escHtml(nome);
+    const shortNome = safeNome.length > 42 ? (safeNome.slice(0, 39) + '…') : safeNome;
+
+    /* Sem URL leve: ícone clicável (não injeta data:URL no DOM). */
+    if (!previewPrimary || this._isHeavyDataUrl(previewPrimary)) {
+      return `<div ${click} style="${box}display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-primary);padding:8px;text-align:center;" title="${safeNome}">
+        <span style="font-size:28px;margin-bottom:6px;">📎</span>
+        <span style="font-size:10px;line-height:1.25;word-break:break-word;">${shortNome}</span>
+      </div>`;
+    }
     const previewList = [previewPrimary];
     (doc.urls || []).forEach((u) => {
-      const v = String(u || '').trim();
+      const v = this._safeUiAttachmentUrl(u);
       if (v && !previewList.includes(v)) previewList.push(v);
     });
     const previewChain = this._attachmentFallbackChain(previewList, previewPrimary);
     const previewFb = this._attachmentFallbackAttrs(previewChain);
     const previewFbStr = Object.keys(previewFb).map((k) => `${k}="${previewFb[k]}"`).join(' ');
     const safePreview = this._escUrlAttr(previewPrimary);
-    const safeNome = this._escHtml(nome);
-    const shortNome = safeNome.length > 42 ? (safeNome.slice(0, 39) + '…') : safeNome;
     const previewOnErr = this._attachmentOnErrorHandler();
-    const box = 'display:block;width:120px;height:150px;border-radius:10px;border:2px solid var(--color-success);overflow:hidden;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.08);flex-shrink:0;cursor:pointer;';
-    const click = `role="button" tabindex="0" onclick="Proposals.openAttachment(${cacheIdx})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Proposals.openAttachment(${cacheIdx});}"`;
 
-    if (this._isImageUrl(rawSrc, nome)) {
+    if (this._isImageUrl(rawSrc, nome) && !this._isHeavyDataUrl(previewPrimary)) {
       return `<div ${click} style="${box}" title="${safeNome} — clique para ampliar">
         <img src="${safePreview}" ${previewFbStr} alt="${safeNome}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none;background:#f4f4f4;" loading="lazy" onerror="${previewOnErr}"/>
       </div>`;
@@ -2745,7 +3037,7 @@ window.Proposals = {
     if (!p) return '';
     if (typeof DB !== 'undefined' && typeof DB.proposalDigitacaoAt === 'function') {
       const d = DB.proposalDigitacaoAt(p);
-      return d ? d.toISOString() : '';
+      return d ? nowBrazilSql(d) : '';
     }
     if (p.digitacaoAt || p.digitacao_at) return p.digitacaoAt || p.digitacao_at;
     const meta = this._parseProposalMeta(p.meta);
@@ -2770,7 +3062,7 @@ window.Proposals = {
       && !this._isDigitacaoStatus(prevStatusOp)
       && !this._isDigitacaoStatus(prevStatus);
     if (entered) {
-      const at = new Date().toISOString();
+      const at = nowBrazilSql();
       proposal._digitacaoAtMark = at;
       // Persiste se a API aceitar o campo; histórico com kind é o fallback.
       if (!proposal.digitacaoAt && !proposal.digitacao_at) {
@@ -2783,14 +3075,14 @@ window.Proposals = {
 
   _fmtDateTime: function(raw) {
     if (!raw) return '—';
-    try {
-      const d = new Date(raw);
-      if (Number.isNaN(d.getTime())) return '—';
-      return d.toLocaleString('pt-BR', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-      });
-    } catch (_) { return '—'; }
+    if (typeof formatDateTime === 'function') return formatDateTime(raw);
+    const d = typeof _parseSouBluDate === 'function' ? _parseSouBluDate(raw) : new Date(raw);
+    if (!d || Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+      timeZone: this._PROP_TZ,
+    });
   },
 
   _proposalSortAt: function(p) {
@@ -3010,15 +3302,98 @@ window.Proposals = {
   },
 
   _isSupervisorOrAbove: function(role) {
-    return ['supervisor', 'sup_backoffice', 'parceiro', 'backoffice', 'operacional', 'master', 'gerente', 'financeiro', 'financial', 'rh', 'admin'].includes(role || '');
+    const r = this._normProposalManageRole(role);
+    return ['supervisor', 'sup_backoffice', 'parceiro', 'backoffice', 'operacional', 'master', 'gerente', 'financeiro', 'financial', 'rh', 'admin', 'fundador', 'desenvolvedor', 'diretoria', 'gerencia'].includes(r);
+  },
+
+  /**
+   * _normProposalManageRole — normaliza papel do usuário para checagem de permissão no modal.
+   * Aceita variações com espaço, hífen ou acento (ex.: "Back Office", "sup-backoffice").
+   */
+  _normProposalManageRole: function(role) {
+    return String(role || '')
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[\s-]+/g, '_');
   },
 
   _canPickVendor: function(role) {
     return this._isSupervisorOrAbove(role);
   },
 
+  /** Backoffice/supervisor+ podem ajustar nº e valor (inclusive em proposta já paga). */
   _canEditNumeroValor: function(role) {
     return this._isSupervisorOrAbove(role);
+  },
+
+  /**
+   * _readManageValorInput — lê valor bruto do modal (campo verde ou azul).
+   * Prioriza managePropValorEdit; se vazio, usa managePropValorBruto.
+   */
+  _readManageValorInput: function() {
+    const editEl = document.getElementById('managePropValorEdit');
+    const brutoEl = document.getElementById('managePropValorBruto');
+    const editParsed = this._parseBrMoneyInput(editEl?.value);
+    const brutoParsed = this._parseBrMoneyInput(brutoEl?.value);
+    const activeId = document.activeElement?.id || '';
+    if (activeId === 'managePropValorBruto' && !isNaN(brutoParsed)) return brutoParsed;
+    if (activeId === 'managePropValorEdit' && !isNaN(editParsed)) return editParsed;
+    // Evita que "0,00" no bloco verde apague valor digitado no azul ao mudar a tabela (blur).
+    const positives = [editParsed, brutoParsed].filter((v) => !isNaN(v) && v > 0);
+    if (positives.length) return Math.max(...positives);
+    if (!isNaN(editParsed) && editParsed >= 0) return editParsed;
+    if (!isNaN(brutoParsed) && brutoParsed >= 0) return brutoParsed;
+    return NaN;
+  },
+
+  /**
+   * _syncManageValorFields — mantém os dois inputs de valor alinhados ao abrir/editar.
+   */
+  _syncManageValorFields: function(valor) {
+    const v = valor != null && valor !== '' && !isNaN(parseFloat(valor)) ? parseFloat(valor) : null;
+    const txt = v != null
+      ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : '';
+    const fmtBruto = v != null ? ('R$ ' + txt) : '';
+    const editEl = document.getElementById('managePropValorEdit');
+    const brutoEl = document.getElementById('managePropValorBruto');
+    if (editEl) editEl.value = txt;
+    if (brutoEl) brutoEl.value = fmtBruto;
+  },
+
+  _bindManageValorInputs: function() {
+    if (this._manageValorBound) return;
+    this._manageValorBound = true;
+    const onInput = () => {
+      const editEl = document.getElementById('managePropValorEdit');
+      const brutoEl = document.getElementById('managePropValorBruto');
+      const parsed = this._readManageValorInput();
+      if (!isNaN(parsed) && parsed >= 0) {
+        const txt = parsed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        if (editEl && document.activeElement !== editEl) editEl.value = txt;
+        if (brutoEl && document.activeElement !== brutoEl) brutoEl.value = 'R$ ' + txt;
+      }
+      this.calcAdminValorFinal();
+    };
+    ['managePropValorEdit', 'managePropValorBruto'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && !el.dataset.valorBound) {
+        el.dataset.valorBound = '1';
+        el.addEventListener('input', onInput);
+        el.addEventListener('blur', onInput);
+      }
+    });
+    const tabEl = document.getElementById('managePropTabela');
+    if (tabEl && !tabEl.dataset.valorSyncBound) {
+      tabEl.dataset.valorSyncBound = '1';
+      tabEl.addEventListener('change', () => {
+        const parsed = this._readManageValorInput();
+        if (!isNaN(parsed) && parsed >= 0) this._syncManageValorFields(parsed);
+        this.calcAdminValorFinal();
+      });
+    }
   },
 
   _isMaster: function() {
@@ -3053,6 +3428,11 @@ window.Proposals = {
     return false;
   },
 
+  /**
+   * _ensureCleanupDuplicatesBtn — injeta o botão na barra de gestão de propostas.
+   * Só master/gerente/sup_backoffice ( _canDeleteProposal ). Parceiro não vê.
+   * O clique chama cleanupDuplicateProposals: apaga CLONE (mesmo produto+banco), não segundo produto.
+   */
   _ensureCleanupDuplicatesBtn: function() {
     if (document.getElementById('btnLimparPropostasDuplicadas')) return;
     const exportBtn = document.querySelector('#secManageProposals button[onclick*="exportAdminCsv"]');
@@ -3062,30 +3442,33 @@ window.Proposals = {
     btn.type = 'button';
     btn.id = 'btnLimparPropostasDuplicadas';
     btn.className = 'btn btn-outline btn-sm';
-    btn.title = 'Apagar propostas duplicadas do mesmo cliente (mantém a melhor)';
-    btn.textContent = 'Limpar duplicadas';
+    btn.title = 'Só apaga clones: mesmo CPF + mesmo produto + mesmo banco. Dois produtos no mesmo cliente (ex.: Cartão + BTW) NÃO são apagados.';
+    btn.textContent = 'Limpar clones';
     btn.onclick = () => this.cleanupDuplicateProposals();
     exportBtn.parentElement.insertBefore(btn, exportBtn);
   },
 
   /**
-   * Apaga propostas duplicadas do mesmo CPF — mantém 1 por cliente
-   * (prioridade: paga > com número > maior valor > mais recente).
+   * cleanupDuplicateProposals — limpeza manual de CLONES (ficha repetida).
+   * Clone = mesmo CPF + mesmo produto + mesmo banco. Cartão+BTW / dívida+Neo NÃO entram.
+   * Paga nunca vai para a lista de exclusão. DELETE é definitivo (sem log de quem foi).
+   * Confirma no alert antes de apagar. Não rode isso achando que “1 CPF = 1 proposta”.
    */
   cleanupDuplicateProposals: async function() {
     if (!this._canDeleteProposal()) {
       alert('Sem permissão para excluir propostas.');
       return;
     }
-    if (typeof showLoading === 'function') showLoading('Analisando duplicadas…');
+    if (typeof showLoading === 'function') showLoading('Analisando clones (mesmo produto e banco)…');
     try {
       const all = await (typeof DB.listProposals === 'function' ? DB.listProposals() : []);
       const groups = typeof DB.findDuplicateProposalGroups === 'function'
         ? DB.findDuplicateProposalGroups(all)
         : [];
       if (!groups.length) {
-        if (typeof showToast === 'function') showToast('Nenhuma proposta duplicada encontrada.', 'success');
-        else alert('Nenhuma proposta duplicada encontrada.');
+        const msg = 'Nenhum clone encontrado. Cliente com dois produtos diferentes (ex.: Cartão + BTW) é permitido e não é apagado.';
+        if (typeof showToast === 'function') showToast(msg, 'success');
+        else alert(msg);
         return;
       }
       const toDelete = [];
@@ -3095,24 +3478,30 @@ window.Proposals = {
         if (!keep) return;
         const name = keep.clientName || keep.client_name || 'Cliente';
         const cpf = String(keep.clientCpf || keep.client_cpf || '').replace(/\D/g, '');
-        keepPreview.push(`${name} (${cpf || 'sem CPF'}) — mantém ${keep.numero || keep.id}`);
+        const prod = keep.product || 'produto';
+        const bank = keep.bancoDigitado || keep.banco_digitado || '';
+        keepPreview.push(`${name} (${cpf || 'sem CPF'}) ${prod}${bank ? ' / ' + bank : ''} — mantém ${keep.numero || keep.id}`);
         g.proposals.forEach((p) => {
-          if (String(p.id) !== String(keep.id)) toDelete.push(p);
+          if (String(p.id) === String(keep.id)) return;
+          // Segunda operação paga no mesmo clone-key não se apaga (recuperar DELETE é manual).
+          if (typeof DB.isPaidProposal === 'function' && DB.isPaidProposal(p)) return;
+          toDelete.push(p);
         });
       });
       if (!toDelete.length) {
-        alert('Nada para apagar.');
+        alert('Nada para apagar (clones pagos são preservados; dois produtos no mesmo CPF não entram).');
         return;
       }
       const sample = keepPreview.slice(0, 8).join('\n');
-      const more = keepPreview.length > 8 ? `\n… e mais ${keepPreview.length - 8} cliente(s)` : '';
+      const more = keepPreview.length > 8 ? `\n… e mais ${keepPreview.length - 8} grupo(s)` : '';
       if (!confirm(
-        `Encontradas ${groups.length} cliente(s) com propostas duplicadas.\n` +
-        `Serão apagadas ${toDelete.length} proposta(s) extras (mantém 1 por cliente).\n\n` +
-        `${sample}${more}\n\nConfirmar exclusão?`
+        `Encontrados ${groups.length} clone(s) do MESMO produto e banco.\n` +
+        `Serão apagadas ${toDelete.length} ficha(s) repetida(s).\n` +
+        `Cliente com dois produtos diferentes NÃO entra nesta lista.\n\n` +
+        `${sample}${more}\n\nConfirmar exclusão só dos clones?`
       )) return;
 
-      if (typeof showLoading === 'function') showLoading(`Excluindo ${toDelete.length} duplicada(s)…`);
+      if (typeof showLoading === 'function') showLoading(`Arquivando ${toDelete.length} clone(s) na Localweb…`);
       const session = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
       let ok = 0;
       let fail = 0;
@@ -3133,7 +3522,7 @@ window.Proposals = {
       await this.renderAdminList();
       const msg = fail
         ? `Duplicadas: ${ok} apagada(s), ${fail} falha(s).`
-        : `${ok} proposta(s) duplicada(s) apagada(s).`;
+        : `${ok} clone(s) arquivado(s) na Localweb (Cancelado). Dois produtos no mesmo cliente não foram mexidos.`;
       if (typeof showToast === 'function') showToast(msg, fail ? 'warning' : 'success');
       else alert(msg);
     } catch (e) {
@@ -3421,7 +3810,7 @@ window.Proposals = {
       motherName: form.motherName || client?.motherName || client?.mother_name || '',
       fatherName: form.fatherName || client?.fatherName || client?.father_name || '',
       address: form.address || client?.address || '',
-      updatedAt: new Date().toISOString(),
+      updatedAt: nowBrazilSql(),
     };
     if (supervisorId) {
       updated.supervisorId = supervisorId;
@@ -3529,8 +3918,10 @@ window.Proposals = {
   },
 
   calcAdminValorFinal: function() {
-    const fmtR = v => 'R$ ' + parseFloat(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2});
-    const bruto  = parseFloat(document.getElementById('managePropValorBruto')?.value?.replace(/[^\d,]/g,'').replace(',','.')) || 0;
+    const fmtR = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    const parsed = this._readManageValorInput();
+    const bruto = (!isNaN(parsed) && parsed >= 0) ? parsed : 0;
+    if (bruto > 0) this._syncManageValorFields(bruto);
     const tabela = document.getElementById('managePropTabela')?.value || '';
     const pct    = tabela ? (this._tabelaPct[tabela] ?? 1) : null;
     const finalV = pct !== null ? parseFloat((bruto * pct).toFixed(2)) : null;
@@ -3561,39 +3952,9 @@ window.Proposals = {
     this._fillEntidadeSelect('empPropEntidade', conv, '');
   },
 
-  /** true = pode cadastrar; false = bloqueado (já avisou o usuário). */
+  /** Cadastro de proposta liberado para todos. */
   _assertCanCreateProposal: async function() {
-    try {
-      const user = (typeof Auth !== 'undefined' && Auth.getCurrentUser)
-        ? await Auth.getCurrentUser().catch(() => Auth.getSession?.())
-        : (typeof Auth !== 'undefined' ? Auth.getSession?.() : null);
-      if (!user) return true;
-      // Garante Trainings carregado para reavaliar pendências obrigatórias.
-      if (!window.Trainings && typeof ensureScript === 'function') {
-        try { await ensureScript('../js/trainings.js?v=acct-block1'); } catch (_) { /* noop */ }
-      }
-      if (window.Trainings && typeof Trainings.syncTrainingBlockForUser === 'function') {
-        try { await Trainings.syncTrainingBlockForUser(user); } catch (_) { /* noop */ }
-      }
-      const fresh = (typeof DB !== 'undefined' && DB.getUser)
-        ? await DB.getUser(user.id, true).catch(() => user)
-        : user;
-      const blocked = (typeof DB !== 'undefined' && typeof DB.isAccountBlocked === 'function')
-        ? DB.isAccountBlocked(fresh)
-        : (fresh?.account_block_active === true || fresh?.account_block_active === 1 || fresh?.account_block_active === '1'
-          || fresh?.training_block === true || fresh?.training_block === 1 || fresh?.training_block === '1');
-      if (!blocked) return true;
-      const motive = (typeof DB !== 'undefined' && typeof DB.formatAccountBlockMotive === 'function')
-        ? DB.formatAccountBlockMotive(fresh)
-        : 'bloqueio de conta';
-      const msg = `CONTA BLOQUEADA — ${motive || 'bloqueio de conta'}.\n\nNão é possível cadastrar propostas até o desbloqueio.`;
-      if (typeof showToast === 'function') showToast(msg.replace(/\n+/g, ' '), 'error', 9000);
-      else alert(msg);
-      return false;
-    } catch (e) {
-      console.warn('[Proposals] assert account block:', e);
-      return true;
-    }
+    return true;
   },
 
   openModal: async function() {
@@ -3605,6 +3966,8 @@ window.Proposals = {
         return;
       }
       container.style.display = 'block';
+      // Lista da busca anterior; sem isso o submit podia achar clone do cliente de antes.
+      this._cpfExistingProposals = [];
       this._initProposalCatalogSelects();
       const ids = ['propCpf','propNumero','propValor','propDesconto','propValorFinalDisplay','propObs',
                    'propMatricula','propSenhaContracheque','propSenhaConsignacao',
@@ -3628,6 +3991,7 @@ window.Proposals = {
       this.initAnexoFolders();
       this._initStaticProposalSelects();
       this._applyVendedorFormRules();
+      this._ensureSupBackofficeDateUi('prop');
       container.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch(e) {
       alert("Erro ao abrir formulário: " + e.message);
@@ -3646,6 +4010,178 @@ window.Proposals = {
     }
   },
 
+  /**
+   * _isSupBackofficeSession — perfil Super Backoffice (sup_backoffice).
+   * Só esse perfil vê o ajuste manual de data/hora do lançamento.
+   */
+  _isSupBackofficeSession: function() {
+    const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    if (!s) return false;
+    if (typeof DB !== 'undefined' && typeof DB._isSupBackofficeUser === 'function') {
+      return DB._isSupBackofficeUser(s);
+    }
+    return String(s.role || '').trim().toLowerCase() === 'sup_backoffice';
+  },
+
+  /**
+   * _ensureSupBackofficeDateUi — injeta bloco de data/hora manual no formulário.
+   * prefix: 'prop' (cadastro) ou 'manageProp' (edição admin).
+   */
+  _ensureSupBackofficeDateUi: function(prefix) {
+    const isProp = prefix === 'prop';
+    const blockId = `${prefix}SupBackofficeDateBlock`;
+    let block = document.getElementById(blockId);
+    if (!this._isSupBackofficeSession()) {
+      if (block) block.style.display = 'none';
+      return;
+    }
+    if (!block) {
+      block = document.createElement('div');
+      block.id = blockId;
+      block.className = 'card card-padded';
+      block.style.cssText = 'margin-bottom:16px;border:1px solid var(--color-warning);background:var(--color-surface-2);';
+      block.innerHTML = `
+        <h4 style="margin:0 0 8px;font-size:14px;color:var(--color-warning);">Ajustar data/hora do lançamento</h4>
+        <p style="margin:0 0 12px;font-size:12px;color:var(--color-text-muted);line-height:1.5;">
+          Exclusivo Super Backoffice — use para recadastrar propostas que sumiram do filtro por período.
+          Deixe desmarcado para usar o horário atual de Brasília.
+        </p>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:13px;cursor:pointer;">
+          <input type="checkbox" id="${prefix}CustomCreatedEnabled"/>
+          Definir data e hora manualmente
+        </label>
+        <div id="${prefix}CustomCreatedFields" style="display:none;grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="form-group" style="margin:0;">
+            <label>Data do lançamento</label>
+            <input type="date" id="${prefix}CustomCreatedDate" class="form-control"/>
+          </div>
+          <div class="form-group" style="margin:0;">
+            <label>Hora (Brasília)</label>
+            <input type="time" id="${prefix}CustomCreatedTime" class="form-control" step="60"/>
+          </div>
+        </div>
+      `;
+      const chk = block.querySelector(`#${prefix}CustomCreatedEnabled`);
+      const fields = block.querySelector(`#${prefix}CustomCreatedFields`);
+      chk?.addEventListener('change', () => {
+        if (fields) fields.style.display = chk.checked ? 'grid' : 'none';
+      });
+      if (isProp) {
+        const area = document.getElementById('propFormArea');
+        area?.insertBefore(block, area.firstChild);
+      } else {
+        const body = document.getElementById('manageProposalModal')?.querySelector('.modal-body');
+        body?.insertBefore(block, body.firstChild);
+      }
+    }
+    block.style.display = 'block';
+    this._resetSupBackofficeDateUi(prefix);
+  },
+
+  /** Preenche defaults do bloco de data manual (cadastro ou edição). */
+  _resetSupBackofficeDateUi: function(prefix, proposal) {
+    const chk = document.getElementById(`${prefix}CustomCreatedEnabled`);
+    const dateEl = document.getElementById(`${prefix}CustomCreatedDate`);
+    const timeEl = document.getElementById(`${prefix}CustomCreatedTime`);
+    const fields = document.getElementById(`${prefix}CustomCreatedFields`);
+    const tz = this._PROP_TZ || 'America/Sao_Paulo';
+    const now = new Date();
+    const ymd = now.toLocaleDateString('en-CA', { timeZone: tz });
+    const hm = now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+    if (proposal) {
+      const raw = proposal.createdAt || proposal.created_at || '';
+      const d = typeof _parseSouBluDate === 'function' ? _parseSouBluDate(raw) : new Date(raw);
+      if (d && !Number.isNaN(d.getTime())) {
+        if (dateEl) dateEl.value = d.toLocaleDateString('en-CA', { timeZone: tz });
+        if (timeEl) timeEl.value = d.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
+      }
+    } else {
+      if (dateEl) dateEl.value = ymd;
+      if (timeEl) timeEl.value = hm;
+    }
+    if (chk) chk.checked = false;
+    if (fields) fields.style.display = 'none';
+  },
+
+  /**
+   * _readSupBackofficeCreatedAt — lê data/hora manual do formulário (YYYY-MM-DD HH:mm:ss BRT).
+   * Retorna null se checkbox desligado ou dados inválidos.
+   */
+  _readSupBackofficeCreatedAt: function(prefix) {
+    if (!this._isSupBackofficeSession()) return null;
+    const chk = document.getElementById(`${prefix}CustomCreatedEnabled`);
+    if (!chk?.checked) return null;
+    const dateVal = String(document.getElementById(`${prefix}CustomCreatedDate`)?.value || '').trim();
+    const timeVal = String(document.getElementById(`${prefix}CustomCreatedTime`)?.value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) return null;
+    const hm = /^\d{2}:\d{2}/.test(timeVal) ? timeVal.slice(0, 5) : '12:00';
+    const sql = `${dateVal} ${hm}:00`;
+    const d = typeof _parseSouBluDate === 'function'
+      ? _parseSouBluDate(sql)
+      : new Date(`${dateVal}T${hm}:00-03:00`);
+    if (!d || Number.isNaN(d.getTime())) return null;
+    return sql;
+  },
+
+  /**
+   * _applySupBackofficeCreatedAt — grava created_at customizado na proposta.
+   * touchUpdated: true no cadastro novo; false na edição (só muda data do lançamento).
+   */
+  _applySupBackofficeCreatedAt: function(proposal, prefix, user, opts = {}) {
+    const touchUpdated = opts.touchUpdated !== false;
+    const sql = this._readSupBackofficeCreatedAt(prefix);
+    if (!sql || !proposal) return proposal;
+    proposal.createdAt = sql;
+    proposal.created_at = sql;
+    if (touchUpdated) {
+      proposal.updatedAt = sql;
+      proposal.updated_at = sql;
+    }
+    proposal._preserveCreatedAt = true;
+    const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
+    meta._customCreatedAt = true;
+    meta._adjustedBy = user?.id || user?.name || 'sup_backoffice';
+    meta._adjustedAt = typeof nowBrazilSql === 'function' ? nowBrazilSql() : sql;
+    proposal.meta = meta;
+    if (touchUpdated && Array.isArray(proposal.history) && proposal.history[0]) {
+      proposal.history = proposal.history.slice();
+      proposal.history[0] = { ...proposal.history[0], date: sql };
+    }
+    return proposal;
+  },
+
+  /**
+   * _existingProposalsHintHtml — bloco no resumo do CPF após “Buscar Cliente”.
+   * Mostra as fichas já gravadas e deixa explícito: segundo produto é permitido.
+   * rows vem de DB.listProposalsByCpf (sem anexo).
+   */
+  _existingProposalsHintHtml: function(rows) {
+    const list = (rows || []).filter((p) => p && p.id);
+    if (!list.length) {
+      return `<p style="margin:10px 0 0;font-size:13px;color:var(--color-text-muted);">Nenhuma proposta neste CPF. Pode lançar a primeira.</p>`;
+    }
+    const lines = list.slice(0, 8).map((p) => {
+      const prod = this._escHtml(p.product || '—');
+      const bank = this._escHtml(p.bancoDigitado || p.banco_digitado || '');
+      const st = this._escHtml(p.status || p.statusOp || p.status_op || '—');
+      const valor = Number(p.valor || 0);
+      const valorTxt = valor > 0
+        ? valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        : 'R$ 0,00';
+      return `<li>${prod}${bank ? ' · ' + bank : ''} · ${st} · ${valorTxt}</li>`;
+    }).join('');
+    const more = list.length > 8 ? `<li>… e mais ${list.length - 8}</li>` : '';
+    return `<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--color-surface-2);border:1px solid var(--color-border);">
+      <p style="margin:0 0 6px;font-size:13px;font-weight:700;color:var(--color-success);">Este cliente já tem ${list.length} proposta(s). Pode lançar outro produto — as duas ficam no sistema.</p>
+      <ul style="margin:0;padding-left:18px;font-size:12px;line-height:1.5;">${lines}${more}</ul>
+    </div>`;
+  },
+
+  /**
+   * searchCpf — busca o cadastro (1 por CPF) e as propostas já lançadas.
+   * Não bloqueia se já existir ficha: preenche o form e lista produtos atuais.
+   * Grava this._cpfExistingProposals para o submit detectar clone vs segundo produto.
+   */
   searchCpf: async function() {
     try {
       const cpfStr = document.getElementById('propCpf').value;
@@ -3665,16 +4201,22 @@ window.Proposals = {
       if(btn) btn.innerText = oldText;
 
       if (client) {
-        let summary = `<strong>Nome:</strong> ${client.name}<br>
-                       <strong>CPF:</strong> ${client.cpf || cpf}<br>
-                       <strong>RG:</strong> ${client.rg || '—'}<br>
-                       <strong>Celular:</strong> ${client.phone1 || 'Não informado'}<br>
-                       <strong>Celular 2:</strong> ${client.phone2 || '—'}<br>
-                       <strong>E-mail:</strong> ${client.email || 'Não informado'}<br>
-                       <strong>Endereço:</strong> ${client.address || '—'}`;
+        this._cpfExistingProposals = [];
+        if (typeof DB.listProposalsByCpf === 'function') {
+          this._cpfExistingProposals = await DB.listProposalsByCpf(cpf).catch(() => []) || [];
+        }
+        let summary = `<strong>Nome:</strong> ${this._escHtml(client.name)}<br>
+                       <strong>CPF:</strong> ${this._escHtml(client.cpf || cpf)}<br>
+                       <strong>RG:</strong> ${this._escHtml(client.rg || '—')}<br>
+                       <strong>Celular:</strong> ${this._escHtml(client.phone1 || 'Não informado')}<br>
+                       <strong>Celular 2:</strong> ${this._escHtml(client.phone2 || '—')}<br>
+                       <strong>E-mail:</strong> ${this._escHtml(client.email || 'Não informado')}<br>
+                       <strong>Endereço:</strong> ${this._escHtml(client.address || '—')}`;
+        summary += this._existingProposalsHintHtml(this._cpfExistingProposals);
         document.getElementById('propClientSummary').innerHTML = summary;
         document.getElementById('propClientName').value = client.name;
         document.getElementById('propFormArea').style.display = 'block';
+        this._ensureSupBackofficeDateUi('prop');
         this._setFolderContext('propAnexosFolders', 'prop');
         this.initAnexoFolders();
         this._applyVendedorFormRules();
@@ -3749,6 +4291,25 @@ window.Proposals = {
         return;
       }
 
+      // Só pergunta se for o MESMO produto+banco. Outro produto (ex.: Neo) passa direto.
+      const existing = Array.isArray(this._cpfExistingProposals) ? this._cpfExistingProposals : [];
+      const cloneHint = { clientCpf: cpf, product: this._normalizeProductValue(gv('propProduct')), bancoDigitado };
+      const clone = (typeof DB.findOtherCloneProposalForClient === 'function')
+        ? DB.findOtherCloneProposalForClient(existing, cloneHint)
+        : null;
+      if (clone) {
+        const ok = confirm(
+          `Já existe uma proposta deste CPF com o mesmo produto e banco:\n` +
+          `${clone.product || ''} / ${clone.bancoDigitado || clone.banco_digitado || ''} (${clone.status || '—'}).\n\n` +
+          `Isso parece ficha repetida. Confirma lançar mesmo assim?\n` +
+          `(Outro produto neste cliente é permitido — só confirme se for de propósito.)`
+        );
+        if (!ok) {
+          if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
+          return;
+        }
+      }
+
       const valor      = parseFloat(gv('propValor')) || 0;
       const tabela     = '';
       const valorFinal = valor;
@@ -3800,15 +4361,17 @@ window.Proposals = {
         attachments: attachments,
         status: statusInicial,
         history: [{
-          date: new Date().toISOString(),
+          date: nowBrazilSql(),
           actorName: user.name,
           action: 'Proposta Criada',
           note: gv('propObs')
         }],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        createdAt: nowBrazilSql(),
+        updatedAt: nowBrazilSql(),
+        updated_at: nowBrazilSql(),
       };
+
+      this._applySupBackofficeCreatedAt(proposal, 'prop', user, { touchUpdated: true });
 
       if (typeof showLoading === 'function') showLoading('Enviando proposta…');
       try {
@@ -3854,6 +4417,7 @@ window.Proposals = {
   },
 
   renderEmployeeList: async function() {
+    this._applyMobileListLimits();
     const listEl = document.getElementById('proposalsList');
     if (!listEl) return;
 
@@ -4000,7 +4564,8 @@ window.Proposals = {
     const canUseCache = !forceRefresh && !partnerRoot && !isVendorSession && !q && !vendorId
       && (!statusFilter || statusFilter === 'todos')
       && !hasDateFilter
-      && this._adminListCache && (opts.fromCache || (Date.now() - this._adminListCacheAt) < this._ADMIN_LIST_CACHE_TTL);
+      && Array.isArray(this._adminListCache) && this._adminListCache.length > 0
+      && (opts.fromCache || (Date.now() - this._adminListCacheAt) < this._ADMIN_LIST_CACHE_TTL);
 
     let rawRows;
     const filterInit = this._initAdminProposalFilters();
@@ -4008,6 +4573,12 @@ window.Proposals = {
       rawRows = this._adminListCache;
       await filterInit;
     } else {
+      if (forceRefresh && typeof DB._invalidateProposalsCache === 'function') {
+        try { DB._invalidateProposalsCache(); } catch (_) { /* noop */ }
+      }
+      if (forceRefresh && typeof _cacheDel === 'function') {
+        try { _cacheDel('proposals'); } catch (_) { /* noop */ }
+      }
       const [, fetched] = await Promise.all([
         filterInit,
         isVendorSession
@@ -4016,8 +4587,14 @@ window.Proposals = {
       ]);
       rawRows = fetched;
       if (!partnerRoot && !isVendorSession && !q && !vendorId && (!statusFilter || statusFilter === 'todos') && !hasDateFilter) {
-        this._adminListCache = Array.isArray(rawRows) ? rawRows.slice() : [];
-        this._adminListCacheAt = Date.now();
+        const list = Array.isArray(rawRows) ? rawRows.slice() : [];
+        if (list.length > 0) {
+          this._adminListCache = list;
+          this._adminListCacheAt = Date.now();
+        } else {
+          this._adminListCache = null;
+          this._adminListCacheAt = 0;
+        }
       }
     }
 
@@ -4075,7 +4652,7 @@ window.Proposals = {
     const dt = this._proposalCreatedAt(p);
     let dataCriacao = '';
     if (dt) {
-      try { dataCriacao = new Date(dt).toLocaleString('pt-BR'); } catch (_) { dataCriacao = String(dt); }
+      try { dataCriacao = typeof formatDateTime === 'function' ? formatDateTime(dt) : this._fmtDateTime(dt); } catch (_) { dataCriacao = String(dt); }
     }
     return {
       'Nº Proposta': p.numero || p.id || '',
@@ -4107,7 +4684,7 @@ window.Proposals = {
     const headers = rows.length
       ? Object.keys(rows[0])
       : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Status', 'Data criação'];
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = nowBrazilSql().slice(0, 10);
     const fname = `${filenameBase}_${stamp}.csv`;
     const bom = '\uFEFF';
     const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -4151,6 +4728,7 @@ window.Proposals = {
   },
 
   renderAdminList: async function(opts = {}) {
+    this._applyMobileListLimits();
     const tbody = document.getElementById('manageProposalsTbody');
     if (!tbody) return;
 
@@ -4168,7 +4746,22 @@ window.Proposals = {
     }
 
     try {
-      const { proposals: allFiltered, q, vendorId, dateFrom, dateTo } = await this._fetchAdminProposalsFiltered(opts);
+      let { proposals: allFiltered, q, vendorId, dateFrom, dateTo } = await this._fetchAdminProposalsFiltered(opts);
+
+      /* Se veio vazio sem filtro, tenta de novo sem cache (evita “sumiu tudo”). */
+      if (!allFiltered.length && !q && !vendorId && !dateFrom && !dateTo && !opts._retriedEmpty) {
+        this._invalidateAdminListCache();
+        if (typeof DB._invalidateProposalsCache === 'function') DB._invalidateProposalsCache();
+        if (typeof _cacheDel === 'function') {
+          try { _cacheDel('proposals'); } catch (_) { /* noop */ }
+        }
+        const retry = await this._fetchAdminProposalsFiltered({ ...opts, forceRefresh: true, _retriedEmpty: true });
+        allFiltered = retry.proposals;
+        q = retry.q;
+        vendorId = retry.vendorId;
+        dateFrom = retry.dateFrom;
+        dateTo = retry.dateTo;
+      }
 
       this._adminList.total = allFiltered.length;
       let proposals = allFiltered.slice(
@@ -4199,6 +4792,62 @@ window.Proposals = {
       const showPartnerStyle = this._canSeePartnerProposalsInAdminList();
       const partnerIds = showPartnerStyle ? await this._partnerProposalIdSet(allFiltered) : new Set();
       const partnerRoot = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
+      const mobileCards = (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
+        || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+      const tableWrap = tbody.closest('.table-wrap');
+      let mobileHost = document.getElementById('manageProposalsMobileList');
+      if (!mobileHost && tableWrap?.parentElement) {
+        mobileHost = document.createElement('div');
+        mobileHost.id = 'manageProposalsMobileList';
+        mobileHost.className = 'mobile-list-cards';
+        tableWrap.parentElement.insertBefore(mobileHost, tableWrap);
+      }
+      if (mobileHost) mobileHost.style.display = mobileCards ? 'block' : 'none';
+      if (tableWrap) tableWrap.style.display = mobileCards ? 'none' : '';
+
+      if (mobileCards && mobileHost) {
+        let cards = '';
+        proposals.forEach(p => {
+          const stage = this._vendorStage(p);
+          const statusLabel = this._proposalDisplayStatus(p);
+          const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
+          const safeId = this._escAttr(p.id);
+          const isPartnerRow = partnerIds.has(String(p.id));
+          const partnerBadge = isPartnerRow
+            ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
+            : '';
+          const canEditRow = this._isSoubluProposalAdmin() || !partnerRoot || this._canPartnerManageProposals();
+          const finAction = finGestao ? this._finComissaoActionBtn(p.id) : '';
+          cards += `
+            <article class="mobile-list-card${isPartnerRow ? ' proposal-row--partner' : ''}" data-prop-id="${safeId}">
+              <div class="mobile-list-card__head">
+                <div>
+                  ${partnerBadge}<strong>${this._escHtml(p.numero || p.id)}</strong>
+                  <div class="mobile-list-card__meta">${this._escHtml(p.vendorName || '—')}</div>
+                </div>
+                <span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>
+              </div>
+              <div class="mobile-list-card__body">
+                <div><strong>Cliente:</strong> ${this._escHtml(p.clientName || '—')} <span class="mobile-list-card__muted">${this._escHtml(p.clientCpf || '')}</span></div>
+                <div><strong>Produto:</strong> ${this._escHtml(p.product || '—')} · ${this._escHtml(p.convenio || '—')}</div>
+                <div><strong>Final:</strong> <span style="color:var(--color-success);font-weight:800;">${fmtR(p.valorFinal)}</span>
+                  <span class="mobile-list-card__muted"> · ${this._propDateStr(p)}</span></div>
+              </div>
+              <div class="mobile-list-card__actions" onclick="event.stopPropagation()">
+                ${finAction}${this.actionsRowHtml(p.id, {
+                  canEdit: canEditRow,
+                  canDelete: canDelete && canEditRow,
+                  label: p.numero || p.clientName || p.id,
+                })}
+              </div>
+            </article>`;
+        });
+        mobileHost.innerHTML = cards;
+        tbody.innerHTML = '';
+        this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
+        return;
+      }
+
       let html = '';
       proposals.forEach(p => {
         const stage = this._vendorStage(p);
@@ -4387,13 +5036,16 @@ window.Proposals = {
   },
 
   openEmployeeModal: async function(id, viewOnly) {
+    if (this._openModalBusy) return;
+    this._openModalBusy = true;
     viewOnly = !!viewOnly;
     const user = Auth.getSession();
-    if (!user?.id) return;
+    if (!user?.id) { this._openModalBusy = false; return; }
 
     const modal = document.getElementById('employeeProposalModal');
     this._applyEmployeeModalMode(viewOnly);
-    modal?.classList.add('open');
+    if (typeof openModal === 'function') openModal('employeeProposalModal');
+    else modal?.classList.add('open');
 
     const attEl = document.getElementById('empPropAttachments');
     const histEl = document.getElementById('empPropHistoryList');
@@ -4403,16 +5055,18 @@ window.Proposals = {
     if (typeof showLoading === 'function') showLoading('Carregando proposta...');
 
     try {
-      const raw = await DB.getProposal(id);
+      const raw = await DB.getProposal(id, { lite: true });
       const proposal = this._normProposal(raw);
       if (!proposal) {
         alert('Proposta não encontrada.');
-        modal?.classList.remove('open');
+        if (typeof closeModal === 'function') closeModal('employeeProposalModal');
+        else modal?.classList.remove('open');
         return;
       }
       if (!this._ownsProposal(proposal, user)) {
         alert('Você só pode visualizar ou editar suas próprias propostas.');
-        modal?.classList.remove('open');
+        if (typeof closeModal === 'function') closeModal('employeeProposalModal');
+        else modal?.classList.remove('open');
         return;
       }
       // Paga = somente leitura (evitar save que distorce filtros do dashboard).
@@ -4498,12 +5152,21 @@ window.Proposals = {
       this._employeeEditCache[id] = { ...proposal };
 
       if (typeof hideLoading === 'function') hideLoading();
+      this._openModalBusy = false;
 
-      await this._loadProposalAttachments(id, proposal, attEl, this._employeeEditCache[id]);
+      /* Anexos em background — não bloquear o modal (mesmo padrão do chamado). */
+      this._loadProposalAttachments(id, proposal, attEl, this._employeeEditCache[id]).catch((err) => {
+        console.warn('[Proposals] anexos employee:', err);
+      });
     } catch (e) {
       console.error(e);
       alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
-      modal?.classList.remove('open');
+      if (typeof closeModal === 'function') closeModal('employeeProposalModal');
+      else modal?.classList.remove('open');
+      if (typeof hideLoading === 'function') hideLoading();
+      if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+    } finally {
+      this._openModalBusy = false;
       if (typeof hideLoading === 'function') hideLoading();
     }
   },
@@ -4599,7 +5262,7 @@ window.Proposals = {
       empAction = `Status: [${oldStatusOp || oldStatus || '—'}] → [${etapa}]`;
     }
     const empHistEntry = {
-      date: new Date().toISOString(),
+      date: nowBrazilSql(),
       actorName: user.name,
       action: empAction,
       note: proposal.obs || ''
@@ -4658,39 +5321,69 @@ window.Proposals = {
   },
 
   openAdminViewModal: function(id) {
+    const role = this._normProposalManageRole(typeof Auth !== 'undefined' && Auth.getSession()?.role);
+    if (this._canEditNumeroValor(role)) {
+      return this.openAdminModal(id, false);
+    }
     return this.openAdminModal(id, true);
   },
 
-  _applyManageModalMode: function(viewOnly) {
+  _applyManageModalMode: function(viewOnly, opts = {}) {
     const modal = document.getElementById('manageProposalModal');
     if (!modal) return;
 
+    const canEditValor = opts.canEditValor !== false;
+    const valorOnlyMode = !!opts.valorOnlyMode;
+    const valorFieldIds = new Set(['managePropValorBruto', 'managePropValorEdit', 'managePropNumeroEdit']);
+    if (modal.dataset) modal.dataset.valorOnlySave = valorOnlyMode ? '1' : '';
+
     const title = document.getElementById('manageProposalTitle');
-    if (title) title.textContent = viewOnly ? 'Visualizar Proposta' : 'Atualizar Proposta';
+    if (title) {
+      title.textContent = valorOnlyMode
+        ? 'Corrigir Nº e Valor (proposta paga)'
+        : (viewOnly ? 'Visualizar Proposta' : 'Atualizar Proposta');
+    }
+
+    const readonlyIds = new Set(['managePropValorFinalCalc']);
+    if ((!canEditValor || viewOnly) && !valorOnlyMode) {
+      readonlyIds.add('managePropValorBruto');
+      readonlyIds.add('managePropValorEdit');
+      readonlyIds.add('managePropNumeroEdit');
+    }
 
     const body = modal.querySelector('.modal-body');
     if (body) {
-      const alwaysReadonly = ['managePropValorBruto', 'managePropValorFinalCalc'];
       body.querySelectorAll('input, select, textarea').forEach(el => {
         if (el.type === 'hidden') return;
+        const id = el.id || '';
+        if (valorOnlyMode) {
+          const canEditField = valorFieldIds.has(id);
+          if (el.tagName === 'SELECT') el.disabled = !canEditField;
+          else el.readOnly = !canEditField;
+          return;
+        }
         if (viewOnly) {
           if (el.tagName === 'SELECT') el.disabled = true;
           else el.readOnly = true;
         } else {
           el.disabled = false;
-          el.readOnly = alwaysReadonly.includes(el.id);
+          el.readOnly = readonlyIds.has(id);
         }
       });
     }
 
-    if (viewOnly) {
+    if (viewOnly && !valorOnlyMode) {
       document.querySelectorAll('.backoffice-edit-block').forEach(el => { el.style.display = 'none'; });
       const vb = document.getElementById('managePropVendorBlock');
       if (vb) vb.style.display = 'none';
+    } else if (canEditValor || valorOnlyMode) {
+      document.querySelectorAll('.backoffice-edit-block').forEach(el => { el.style.display = ''; });
     }
 
+    this._unlockManageValorFields((canEditValor && !viewOnly) || valorOnlyMode);
+
     const saveBtn = modal.querySelector('.modal-footer .btn-primary');
-    if (saveBtn) saveBtn.style.display = viewOnly ? 'none' : '';
+    if (saveBtn) saveBtn.style.display = (viewOnly && !valorOnlyMode) ? 'none' : '';
     const cancelBtn = modal.querySelector('.modal-footer .btn-ghost');
     if (cancelBtn) cancelBtn.textContent = viewOnly ? 'Fechar' : 'Cancelar';
     const delBtn = document.getElementById('managePropDeleteBtn');
@@ -4698,6 +5391,8 @@ window.Proposals = {
   },
 
     openAdminModal: async function(id, viewOnly) {
+    if (this._openModalBusy) return;
+    this._openModalBusy = true;
     viewOnly = !!viewOnly;
     const modal = document.getElementById('manageProposalModal');
     const attEl = document.getElementById('managePropAttachments');
@@ -4705,14 +5400,28 @@ window.Proposals = {
     if (typeof showLoading === 'function') showLoading('Carregando proposta...');
 
     try {
-    const raw = await DB.getProposal(id);
+    const raw = await DB.getProposal(id, { lite: true });
     const proposal = this._normProposal(raw);
-    if (!proposal) return;
+    if (!proposal) {
+      alert('Proposta não encontrada.');
+      return;
+    }
 
-    // Paga = somente leitura (salvar altera updatedAt e bagunça Digitadas/Pagas no dashboard).
+    // Paga: backoffice+ corrige só nº/valor (preserveUpdatedAt — não mexe na data do dashboard).
+    let valorOnlyMode = false;
+    const roleEarly = this._normProposalManageRole(Auth.getSession()?.role);
+    const canFixPaidValor = this._canEditNumeroValor(roleEarly);
     if (this._isProposalPaid(proposal)) {
-      viewOnly = true;
-      if (typeof showToast === 'function') showToast('Proposta paga: somente visualização (não salva).', 'info');
+      if (canFixPaidValor) {
+        valorOnlyMode = true;
+        viewOnly = false;
+        if (typeof showToast === 'function') {
+          showToast('Proposta paga: corrija número e valor no bloco verde e salve.', 'info', 7000);
+        }
+      } else {
+        viewOnly = true;
+        if (typeof showToast === 'function') showToast('Proposta paga: somente visualização (não salva).', 'info');
+      }
     }
 
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
@@ -4727,7 +5436,7 @@ window.Proposals = {
     sv('managePropId', proposal.id);
 
     const user = Auth.getSession();
-    const role = user?.role || '';
+    const role = this._normProposalManageRole(user?.role);
     const canEditProp = this._canEditNumeroValor(role);
     const canPickVendor = this._canPickVendor(role);
 
@@ -4760,13 +5469,8 @@ window.Proposals = {
       }
     }
     sv('managePropNumeroEdit', proposal.numero);
-    const valEl = document.getElementById('managePropValorEdit');
-    if (valEl) {
-      const v = proposal.valor;
-      valEl.value = (v != null && v !== '' && !isNaN(parseFloat(v)))
-        ? parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-        : '';
-    }
+    this._syncManageValorFields(proposal.valor);
+    this._bindManageValorInputs();
 
     const client = proposal.clientCpf ? await this._lookupClientByCpf(String(proposal.clientCpf).replace(/\D/g, '')) : null;
     const detailEl = document.getElementById('managePropClientDetail');
@@ -4802,7 +5506,7 @@ window.Proposals = {
     // Seção Tabela/Financeiro
     const fmtRaw = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR',{minimumFractionDigits:2}) : '';
     const brutoEl = document.getElementById('managePropValorBruto');
-    if (brutoEl) brutoEl.value = fmtRaw(proposal.valor);
+    if (brutoEl && !canEditProp) brutoEl.value = fmtRaw(proposal.valor);
     this._fillTabelaSelect('managePropTabela', proposal.tabela || '');
     // dispara cálculo visual
     setTimeout(() => this.calcAdminValorFinal(), 50);
@@ -4852,16 +5556,90 @@ window.Proposals = {
       this._setFolderContext('managePropAnexosFolders', 'manageProp');
       this.resetAnexoFolders(proposal.attachments);
     }
-    this._applyManageModalMode(viewOnly);
-    modal?.classList.add('open');
+    this._applyManageModalMode(viewOnly, { canEditValor: canEditProp, valorOnlyMode });
+    this._ensureSupBackofficeDateUi('manageProp');
+    this._resetSupBackofficeDateUi('manageProp', proposal);
+    if (typeof openModal === 'function') openModal('manageProposalModal');
+    else modal?.classList.add('open');
     if (typeof hideLoading === 'function') hideLoading();
+    this._openModalBusy = false;
 
-    await this._loadProposalAttachments(id, proposal, attEl, this._adminEditCache[id]);
+    this._loadProposalAttachments(id, proposal, attEl, this._adminEditCache[id]).catch((err) => {
+      console.warn('[Proposals] anexos admin:', err);
+    });
     } catch (e) {
       console.error(e);
       alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
-      modal?.classList.remove('open');
+      if (typeof closeModal === 'function') closeModal('manageProposalModal');
+      else modal?.classList.remove('open');
       if (typeof hideLoading === 'function') hideLoading();
+      if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+    } finally {
+      this._openModalBusy = false;
+      if (typeof hideLoading === 'function') hideLoading();
+    }
+  },
+
+  /**
+   * _adminSaveValorOnlyPaid — correção de nº/valor em proposta já paga (backoffice+).
+   * Usa preserveUpdatedAt para não alterar a data no dashboard de faturamento.
+   */
+  _adminSaveValorOnlyPaid: async function(proposal, user, gv) {
+    const id = proposal.id;
+    const orig = { valor: proposal.valor, numero: proposal.numero, tabela: proposal.tabela, valorFinal: proposal.valorFinal };
+    const saveBtn = document.querySelector('#manageProposalModal .btn-primary[onclick*="adminSave"], #manageProposalModal button[onclick*="adminSave"]');
+    const saveBtnText = saveBtn?.innerText;
+    if (typeof showLoading === 'function') showLoading('Salvando correção…');
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Salvando…'; }
+    try {
+      const novoNumero = gv('managePropNumeroEdit');
+      const parsedValor = this._readManageValorInput();
+      if (novoNumero) proposal.numero = novoNumero;
+      if (!isNaN(parsedValor) && parsedValor >= 0) proposal.valor = parsedValor;
+      const tabelaEl = document.getElementById('managePropTabela');
+      if (tabelaEl?.value) {
+        const novaTabela = tabelaEl.value;
+        const pct = this._tabelaPct[novaTabela] ?? 1;
+        proposal.tabela = novaTabela;
+        proposal.valorFinal = parseFloat(((proposal.valor || 0) * pct).toFixed(2));
+        proposal.desconto = parseFloat(((proposal.valor || 0) - proposal.valorFinal).toFixed(2));
+      } else if (!isNaN(parsedValor) && parsedValor >= 0 && proposal.tabela) {
+        const pct = this._tabelaPct[proposal.tabela] ?? 1;
+        proposal.valorFinal = parseFloat(((proposal.valor || 0) * pct).toFixed(2));
+        proposal.desconto = parseFloat(((proposal.valor || 0) - proposal.valorFinal).toFixed(2));
+      }
+      const changed = proposal.valor !== orig.valor
+        || proposal.numero !== orig.numero
+        || proposal.tabela !== orig.tabela;
+      if (!changed) {
+        if (typeof showToast === 'function') showToast('Nenhuma alteração em número ou valor.', 'info');
+        return;
+      }
+      proposal.history = Array.isArray(proposal.history) ? proposal.history.slice() : [];
+      proposal.history.push({
+        date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
+        actorName: user?.name || 'Sistema',
+        action: 'Correção de valor/nº (proposta paga)',
+        note: `Valor: ${orig.valor} → ${proposal.valor}${orig.numero !== proposal.numero ? ` · Nº: ${orig.numero || '—'} → ${proposal.numero}` : ''}`,
+        kind: 'valor_fix_paid',
+      });
+      const saved = await DB.saveProposal(proposal, { skipHydrate: true, preserveUpdatedAt: true });
+      const merged = saved ? (this._normProposal({ ...proposal, ...saved }) || { ...proposal, ...saved }) : proposal;
+      delete this._adminEditCache[id];
+      this._mergeAdminListCacheRow(merged);
+      if (typeof showToast === 'function') showToast('Valor atualizado com sucesso!', 'success');
+      else alert('Valor atualizado com sucesso!');
+      const modal = document.getElementById('manageProposalModal');
+      if (modal) modal.classList.remove('open');
+      if (!this._patchAdminTableRow(merged)) {
+        void this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
+      }
+    } catch (e) {
+      console.error('[adminSaveValorOnly]', e);
+      this._proposalSaveErrorNotify(e);
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+      if (saveBtn) { saveBtn.disabled = false; saveBtn.innerText = saveBtnText || 'Salvar'; }
     }
   },
 
@@ -4877,6 +5655,11 @@ window.Proposals = {
       return;
     }
     proposal = this._normProposal(proposal) || proposal;
+    const roleNorm = this._normProposalManageRole(user?.role);
+    const valorOnlySave = document.getElementById('manageProposalModal')?.dataset?.valorOnlySave === '1';
+    if (valorOnlySave && this._canEditNumeroValor(roleNorm)) {
+      return this._adminSaveValorOnlyPaid(proposal, user, gv);
+    }
     if (!this._assertProposalNotPaidForSave(proposal)) return;
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
@@ -4913,7 +5696,7 @@ window.Proposals = {
       }
     }
 
-    const role = user?.role || '';
+    const role = roleNorm;
 
     // Vendedor responsável (supervisor+)
     if (this._canPickVendor(role)) {
@@ -4933,14 +5716,11 @@ window.Proposals = {
     // ── Nº e Valor editados por supervisor+ ──────────────────────────
     if (this._canEditNumeroValor(role)) {
       const novoNumero = gv('managePropNumeroEdit');
-      const novoValor  = document.getElementById('managePropValorEdit')?.value;
+      const parsedValor = this._readManageValorInput();
       if (novoNumero) proposal.numero = novoNumero;
-      if (novoValor !== '' && novoValor != null) {
-        const parsedValor = this._parseBrMoneyInput(novoValor);
-        if (!isNaN(parsedValor)) {
-          proposal.valor = parsedValor;
-          if (!proposal.tabela) proposal.valorFinal = proposal.valor;
-        }
+      if (!isNaN(parsedValor) && parsedValor >= 0) {
+        proposal.valor = parsedValor;
+        if (!proposal.tabela) proposal.valorFinal = proposal.valor;
       }
     }
 
@@ -5022,7 +5802,7 @@ window.Proposals = {
          action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
        }
        const histEntry = {
-         date: new Date().toISOString(),
+         date: nowBrazilSql(),
          actorName: user.name,
          action,
          note: note
@@ -5065,7 +5845,7 @@ window.Proposals = {
       const becamePaid = !wasPaidBefore && isPaidAfter;
       if (becamePaid) {
         if (!proposal._billingPaidAt) {
-          proposal._billingPaidAt = new Date().toISOString();
+          proposal._billingPaidAt = nowBrazilSql();
           proposal._billingPaidBy = user.name;
         }
         if (typeof DB.awardRouletteOnProposalPaid === 'function') {
@@ -5083,6 +5863,18 @@ window.Proposals = {
       }
       const tClient = Date.now();
       const toSave = { ...proposal };
+      const customSql = this._readSupBackofficeCreatedAt('manageProp');
+      if (customSql) {
+        this._applySupBackofficeCreatedAt(toSave, 'manageProp', user, { touchUpdated: false });
+        toSave.history = Array.isArray(toSave.history) ? toSave.history.slice() : [];
+        toSave.history.push({
+          date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : customSql,
+          actorName: user.name,
+          action: 'Data/hora do lançamento ajustada (Super Backoffice)',
+          note: `Nova data do lançamento: ${customSql}`,
+          kind: 'created_at_adjust',
+        });
+      }
       /* Só omite attachments no PATCH se não houve upload novo — senão o boleto some. */
       if (!pendingAtt) delete toSave.attachments;
       const saved = await this._withTimeout(
@@ -5143,7 +5935,11 @@ window.Proposals = {
       return;
     }
     const nome = label || id;
-    if (!confirm(`Excluir definitivamente a proposta "${nome}"?\n\nEsta ação não pode ser desfeita — a proposta será apagada do sistema.`)) return;
+    if (!confirm(
+      `Arquivar a proposta "${nome}" na Localweb?\n\n` +
+      `Ela NÃO some do banco: vira Cancelado e uma cópia JSON fica em uploads/proposal-archive.\n` +
+      `Proposta PAGA não é cancelada — só a cópia de segurança é gravada.`
+    )) return;
 
     if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
     try {
@@ -5159,14 +5955,17 @@ window.Proposals = {
         }
       }
       const session = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
-      await DB.deleteProposal(id, { by: session?.name || session?.email || 'admin' });
+      const result = await DB.deleteProposal(id, { by: session?.name || session?.email || 'admin' });
       delete this._adminEditCache[id];
       delete this._employeeEditCache[id];
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) {
         SalesRanking.invalidateCache();
       }
       if (fromModal) closeModal('manageProposalModal');
-      if (typeof showToast === 'function') showToast('Proposta excluída.', 'success');
+      const toastMsg = result?.keptPaid
+        ? 'Proposta paga permanece. Cópia salva na Localweb.'
+        : 'Proposta arquivada na Localweb (status Cancelado).';
+      if (typeof showToast === 'function') showToast(toastMsg, 'success');
       await this.renderAdminList();
       if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
         try { await renderAdminRanking(); } catch (_) { /* noop */ }

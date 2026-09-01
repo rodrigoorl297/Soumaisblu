@@ -1246,10 +1246,14 @@
 
     async openProposalDrawer(id, tab = 'comissao') {
       if (!canView()) return;
+      if (this._drawerBusy) return;
+      this._drawerBusy = true;
       this.ensureDrawer();
       showLoading('Carregando proposta...');
       try {
-        const raw = await DB.getProposal(id);
+        const raw = (typeof DB.getProposal === 'function')
+          ? await DB.getProposal(id, { lite: true })
+          : await DB.getProposal(id);
         if (!raw) {
           showToast('Proposta não encontrada.', 'warning');
           return;
@@ -1265,7 +1269,9 @@
         document.getElementById('finPropDrawerOverlay')?.classList.add('open');
       } catch (e) {
         showToast(e.message || 'Erro ao abrir proposta.', 'error');
+        if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
       } finally {
+        this._drawerBusy = false;
         hideLoading();
       }
     },
@@ -1273,6 +1279,8 @@
     closeDrawer() {
       document.getElementById('finPropDrawerOverlay')?.classList.remove('open');
       this._drawerProposal = null;
+      this._drawerBusy = false;
+      if (typeof hideLoading === 'function') hideLoading();
     },
 
     async switchDrawerTab(tab) {

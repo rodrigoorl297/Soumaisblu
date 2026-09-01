@@ -136,6 +136,38 @@ window.Clients = {
     return `Este cliente${quem} já está cadastrado no sistema. O CPF não pode ser cadastrado novamente.`;
   },
 
+  _showClientModal: function() {
+    const modal = document.getElementById('clientModal');
+    if (!modal) return false;
+    if (typeof openModal === 'function') {
+      openModal('clientModal');
+      return true;
+    }
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
+    modal.style.zIndex = '999999';
+    document.documentElement.classList.add('modal-open');
+    document.body.classList.add('modal-open');
+    return true;
+  },
+
+  _hideClientModal: function() {
+    if (typeof closeModal === 'function') {
+      closeModal('clientModal');
+      return;
+    }
+    const modal = document.getElementById('clientModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.style.display = '';
+    modal.style.opacity = '';
+    modal.style.visibility = '';
+    modal.style.pointerEvents = '';
+  },
+
   _setCpfDupBlocked: function(blocked) {
     const modal = document.getElementById('clientModal');
     if (modal) {
@@ -180,6 +212,7 @@ window.Clients = {
     const map = {
       clientCpf: client.cpf,
       clientName: client.name,
+      clientRg: client.rg,
       clientPhone1: client.phone1,
       clientPhone2: client.phone2,
       clientEmail: client.email,
@@ -246,23 +279,23 @@ window.Clients = {
         this._setCpfStatus('Cliente já cadastrado — dados carregados do sistema.', 'success');
         return;
       }
-    } catch (_) { /* segue FonteData */ }
+    } catch (_) { /* segue Nova TI */ }
 
     this._setCpfDupBlocked(false);
 
-    if (typeof FonteData === 'undefined') {
+    if (typeof NovaTI === 'undefined') {
       this._setCpfStatus('CPF disponível — preencha os dados do cliente.', 'muted');
       return;
     }
 
-    this._setCpfStatus('Consultando FonteData…', 'muted');
-    const res = await FonteData.lookupCpf(cpf);
+    this._setCpfStatus('Consultando Nova TI…', 'muted');
+    const res = await NovaTI.lookupCpf(cpf);
     if (!res.ok) {
       this._setCpfStatus(res.error || 'Não foi possível consultar o CPF.', 'warning');
       return;
     }
     this._applyFonteDataToForm(res.client, onlyEmpty);
-    this._setCpfStatus('Dados preenchidos automaticamente (FonteData). Revise antes de salvar.', 'success');
+    this._setCpfStatus('Dados preenchidos automaticamente (Nova TI). Revise antes de salvar.', 'success');
     if (typeof showToast === 'function') {
       showToast('Dados do CPF carregados. Confira nome, telefone e endereço.', 'success', 5000);
     }
@@ -292,7 +325,9 @@ window.Clients = {
       if (modal) {
         delete modal.dataset.editCpf;
         delete modal.dataset.cpfDupBlocked;
-        modal.classList.add('open');
+        if (!this._showClientModal()) {
+          alert("Erro: O formulário de cliente não foi encontrado.");
+        }
       } else {
         alert("Erro: O formulário de cliente não foi encontrado.");
       }
@@ -550,7 +585,7 @@ window.Clients = {
     if (modal) {
       modal.dataset.editCpf = digits;
       delete modal.dataset.cpfDupBlocked;
-      modal.classList.add('open');
+      this._showClientModal();
     }
     this._setCpfStatus('Edição — documentos só são obrigatórios em cadastro novo.', 'muted');
     this._bindCpfLookup();
@@ -727,11 +762,11 @@ window.Clients = {
         fatherName: document.getElementById('clientFather').value,
         father_name: document.getElementById('clientFather').value,
         documents: documents,
-        updatedAt: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        updatedAt: nowBrazilSql(),
+        updated_at: nowBrazilSql(),
       };
       if (!isEdit) {
-        const now = new Date().toISOString();
+        const now = nowBrazilSql();
         clientData.created_at = now;
         // Impede DB.save de “atualizar” um CPF existente quando a checagem prévia falhar.
         clientData.__createOnly = true;
@@ -777,7 +812,7 @@ window.Clients = {
 
       if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
       this._notify('Cliente salvo com sucesso!', 'success');
-      document.getElementById('clientModal').classList.remove('open');
+      this._hideClientModal();
       if (typeof invalidateClientsListCache === 'function') invalidateClientsListCache();
       if (typeof renderClientsTable === 'function') await renderClientsTable(true);
       else await this.renderEmployeeList();

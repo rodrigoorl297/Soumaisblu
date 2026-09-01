@@ -80,13 +80,29 @@
     return AVATAR_GRADIENTS[key % AVATAR_GRADIENTS.length];
   }
 
+  function _parseBrDate(dt) {
+    if (!dt) return null;
+    if (typeof dt === 'number') return new Date(dt * 1000);
+    const s = String(dt).trim();
+    if (!s) return null;
+    if (/Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
+      const d = new Date(s);
+      return isNaN(d) ? null : d;
+    }
+    const norm = s.includes('T') ? s : s.replace(' ', 'T');
+    const d = new Date(norm + '-03:00');
+    return isNaN(d) ? null : d;
+  }
+
   function fmtTime(dt) {
-    if (!dt) return '';
-    var d = new Date(typeof dt === 'number' ? dt * 1000 : (String(dt).includes('T') ? dt : dt.replace(' ','T')+'Z'));
-    if (isNaN(d)) return '';
+    var d = _parseBrDate(dt);
+    if (!d) return '';
     var now = new Date();
-    if (d.toDateString() === now.toDateString()) {
-      return d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+    var tz = { timeZone: 'America/Sao_Paulo' };
+    var dKey = d.toLocaleDateString('en-CA', tz);
+    var nKey = now.toLocaleDateString('en-CA', tz);
+    if (dKey === nKey) {
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' });
     }
     var diff = (now - d) / 86400000;
     if (diff < 2) return 'Ontem';
@@ -255,7 +271,7 @@
 
     _messages.forEach(function(m) {
       // Date separator
-      var d = new Date(String(m.created_at || '').includes('T') ? m.created_at : (m.created_at||'').replace(' ','T')+'Z');
+      var d = _parseBrDate(m.created_at || '');
       var dateStr = isNaN(d) ? '' : d.toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'});
       if (dateStr && dateStr !== lastDate) {
         html += '<div class="ws-date-sep">' + esc(dateStr) + '</div>';

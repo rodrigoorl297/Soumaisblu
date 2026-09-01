@@ -134,11 +134,11 @@ if ($bucket === 'proposal-attachments') {
         soublu_json(['ok' => false, 'error' => 'Arquivo vazio ou ilegível.'], 400);
     }
     $mime = $file['type'] !== '' ? (string) $file['type'] : soublu_file_mime($file['name']);
-    $pushed = soublu_file_upload_bytes_to_supabase('proposal-attachments', $object, $body, $mime);
+    $pushed = soublu_file_upload_with_failover('proposal-attachments', $object, $body, $mime);
     if (!$pushed) {
         soublu_json([
             'ok' => false,
-            'error' => 'Falha ao enviar anexo ao Supabase. Verifique SUPABASE_SERVICE_KEY em config.supabase.local.php.',
+            'error' => 'Falha ao enviar anexo (Supabase e Localweb indisponíveis).',
         ], 500);
     }
     $serveUrl = soublu_file_serve_url((string) $pushed['caminho']);
@@ -148,7 +148,7 @@ if ($bucket === 'proposal-attachments') {
         'public_url' => $pushed['url'],
         'caminho' => $pushed['caminho'],
         'path' => $pushed['caminho'],
-        'storage' => 'supabase',
+        'storage' => $pushed['storage'] ?? 'supabase',
         'nome' => (string) ($file['name'] ?? ''),
     ]);
 }

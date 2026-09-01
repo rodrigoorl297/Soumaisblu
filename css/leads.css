@@ -957,17 +957,40 @@ body.leads-app .app-layout .nav-item.active {
     transform: translateX(-100%);
     width: 280px;
   }
-  .sidebar.open {
+  .sidebar.open,
+  body.nav-open .sidebar {
     transform: translateX(0);
   }
-  .main-content {
-    margin-left: 0;
+  .main-content,
+  body.leads-app:not(.leads-employee) .app-layout .main-content,
+  body.leads-app .app-layout .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100%;
   }
   .topbar {
     padding: 0 16px;
+    gap: 8px;
+  }
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+  .topbar-left h1,
+  #pageTitle {
+    font-size: 16px;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .page-content {
     padding: 20px 16px;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   .stats-grid {
     grid-template-columns: 1fr;
@@ -994,6 +1017,29 @@ body.leads-app .app-layout .nav-item.active {
   }
   .column-mapper {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Financeiro / leads: gaveta alinhada ao admin até 900px */
+@media (max-width: 900px) {
+  body.leads-app:not(.leads-employee) .app-layout .sidebar,
+  body.leads-app .app-layout .sidebar {
+    width: min(280px, 88vw);
+    min-width: 0;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    z-index: 200;
+  }
+  body.leads-app.nav-open .app-layout .sidebar,
+  body.leads-app .app-layout .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.28);
+  }
+  body.leads-app:not(.leads-employee) .app-layout .main-content,
+  body.leads-app .app-layout .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100%;
   }
 }
 

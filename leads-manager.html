@@ -10,7 +10,7 @@
   <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
   <link rel="apple-touch-icon" href="../images/logo.png"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
-  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700" rel="stylesheet"/>
   <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
   <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
   <link rel="stylesheet" href="../css/global.css?v=modal-bs1"/>
@@ -207,7 +207,7 @@
 
             <!-- Import Progress -->
             <div id="importProgress" class="hidden mt-lg">
-              <h3><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg> Importando...</h3>
+              <h3><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 16 14"></polyline></svg> Importando...</h3>
               <div class="progress-bar" style="height:16px;margin-top:16px;">
                 <div class="progress-fill" id="importProgressBar" style="width:0%"></div>
               </div>
@@ -241,15 +241,26 @@
                 <!-- Toggle Master -> Supervisor -->
                 <div id="distTargetToggle" class="hidden" style="grid-column: 1 / -1; margin-bottom: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border);">
                   <h4 style="margin-bottom:12px;">Destinatário da Distribuição</h4>
-                  <div class="flex items-center" style="gap: 24px;">
+                  <div class="flex items-center" style="gap: 24px; flex-wrap: wrap;">
                     <label class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
                       <input type="radio" name="distTarget" value="employees" checked onchange="loadDistributeTab()"/>
-                      <strong>Distribuir para Vendedores</strong>
+                      <strong>Vendedores SOU+BLU</strong>
                     </label>
                     <label class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
+                      <input type="radio" name="distTarget" value="partners" onchange="loadDistributeTab()"/>
+                      <strong>Parceiros</strong>
+                    </label>
+                    <label id="distTargetSupervisorsLabel" class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
                       <input type="radio" name="distTarget" value="supervisors" onchange="loadDistributeTab()"/>
                       <strong>Repassar para Supervisores</strong>
                     </label>
+                  </div>
+                  <div id="distPartnerPickWrap" class="hidden" style="margin-top:14px;">
+                    <label for="distPartnerSelect" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;">Qual parceiro</label>
+                    <select id="distPartnerSelect" class="form-control" style="max-width:420px;" onchange="onDistPartnerChange()">
+                      <option value="">Selecione o parceiro...</option>
+                    </select>
+                    <p class="text-muted" style="font-size:12px;margin:8px 0 0;">Depois marque os vendedores desse parceiro que vão receber os leads.</p>
                   </div>
                 </div>
 
@@ -472,6 +483,6 @@
   <script src="../js/auth.js?v=1781813000"></script>
   <script src="../js/leads-db.js?v=sip4"></script>
   <script src="../js/leads-import.js?v=20260811_dist_fix1"></script>
-  <script src="../js/leads-manager.js?v=sip4"></script>
+  <script src="../js/leads-manager.js?v=partner-dist1"></script>
 <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

@@ -7,6 +7,15 @@
 const _DB_LOAD_ERROR =
   'Scripts da camada de dados não carregaram (ex.: js/db.js). Pressione F12 → Rede e Console: verifique 404 ou erros em js/db.js e js/config.js e atualize com Ctrl+F5. Abrir arquivo direto no disco exige servidor local ou publicação (ex.: soumaisblu.com.br).';
 
+function _isMobileBoot() {
+  try {
+    if (typeof window.isSoubluMobile === 'function') return !!window.isSoubluMobile();
+    return !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+  } catch (_) {
+    return (window.innerWidth || 0) <= 900;
+  }
+}
+
 function _peekDB() {
   if (window.DB && typeof window.DB.init === 'function') return window.DB;
   if (typeof DB !== 'undefined' && DB && typeof DB.init === 'function') {
@@ -86,14 +95,14 @@ async function ensureSectionScripts(sec) {
     secProducts: ['../js/store-shop.js'],
     secOrders: ['../js/store-shop.js'],
     secMeetings: ['../js/meetings.js?v=meet-all1'],
-    secSimulacao: ['../js/simulacao.js'],
+    secSimulacao: ['../js/simulacao.js?v=tabelas2'],
     secTimIndicacao: ['../js/tim.js'],
     secTimEsteira: ['../js/tim.js'],
     secContestacao: ['../js/contestacao.js'],
     secFiscalParceiro: ['../js/fiscal-parceiro.js'],
-    secTrainings: ['../js/trainings.js?v=acct-block1'],
-    secTrainingsManage: ['../js/trainings.js?v=acct-block1'],
-    secTrainingsRh: ['../js/trainings.js?v=acct-block1'],
+    secTrainings: ['../js/trainings.js?v=cadastro3'],
+    secTrainingsManage: ['../js/trainings.js?v=cadastro3'],
+    secTrainingsRh: ['../js/trainings.js?v=cadastro3'],
     secFornecedorFinanceiro: ['../js/fornecedor-financeiro.js'],
     secContaCorrente: ['../js/conta-corrente.js?v=futuros-db1'],
     secContaCorrenteGestao: ['../js/conta-corrente.js?v=futuros-db1'],
@@ -874,7 +883,7 @@ function _applyAdminNavVisibility(cfg) {
         jobs.push(ensureScript('../js/fornecedor-financeiro.js').then(() => window.FornecedorFinanceiro?.applyNavVisibility?.(cfg)));
       }
       if (!window.Trainings) {
-        jobs.push(ensureScript('../js/trainings.js?v=acct-block1').then(async () => {
+        jobs.push(ensureScript('../js/trainings.js?v=cadastro3').then(async () => {
           window.Trainings?.applyNavVisibility?.(cfg);
           window.Trainings?.init?.();
           try { await window.Trainings?.updateBadge?.(); } catch (_) { /* noop */ }
@@ -1535,13 +1544,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.RouletteUI) RouletteUI.ensureRouletteDOM();
 
     if (canMasterPanel) {
-      landingSection = 'secDashboard';
+      const mobileBoot = _isMobileBoot();
+      landingSection = mobileBoot && !_explicitLanding ? 'secInicio' : 'secDashboard';
       _bootShowLanding(landingSection);
-      const criticalTasks = [
-        _bootRace(renderDashboard(), 45000, 'Dashboard'),
-        employeesManagedInRhHub() ? Promise.resolve() : _bootRace(renderEmployeesTable(), 45000, 'Funcionários'),
-        _bootRace(renderAdminRanking(), 30000, 'Ranking'),
-      ];
       const deferredTasks = [
         renderTeamBillingChart(),
         renderMasterPanel(),
@@ -1553,8 +1558,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       ];
       if (canSupervisorPanel) deferredTasks.push(renderFeedbackSection());
       if (canSaques) deferredTasks.push(renderWithdrawalsTable());
-      await _bootSettle(criticalTasks, 50000);
-      void _bootSettle(deferredTasks, 45000);
+      if (mobileBoot) {
+        /* Mobile: só a landing; dashboard/ranking/funcionários sob demanda */
+        if (landingSection === 'secDashboard') {
+          await _bootRace(renderDashboard(), 45000, 'Dashboard').catch(e => console.warn('[dashboard boot]', e));
+        } else if (landingSection === 'secManageProposals' && window.Proposals) {
+          await Proposals.renderAdminList().catch(e => console.warn('[proposals boot]', e));
+        } else if (landingSection === 'secManageTickets' && window.Tickets) {
+          try { Tickets.init(); } catch (_) { /* noop */ }
+        }
+        void _bootSettle(deferredTasks, 45000);
+      } else {
+        const criticalTasks = [
+          _bootRace(renderDashboard(), 45000, 'Dashboard'),
+          employeesManagedInRhHub() ? Promise.resolve() : _bootRace(renderEmployeesTable(), 45000, 'Funcionários'),
+          _bootRace(renderAdminRanking(), 30000, 'Ranking'),
+        ];
+        await _bootSettle(criticalTasks, 50000);
+        void _bootSettle(deferredTasks, 45000);
+      }
       try { updatePendingBadge(); } catch (_) { /* noop */ }
       try { if (typeof updateMeetingsBadge === 'function') updateMeetingsBadge(); } catch (_) { /* noop */ }
       if (canSaques) { try { updateWithdrawalsBadge(); } catch (_) { /* noop */ } }
@@ -1590,16 +1612,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     } else if (IS_SUPERVISOR || IS_OUVIDORIA) {
       landingSection = (IS_SUPERVISOR && !IS_SUP_BACKOFFICE) || (IS_SUP_BACKOFFICE && canProposta) ? 'secManageProposals' : 'secMeetings';
-      const bootTasks = [typeof renderMeetingsAdmin === 'function' ? renderMeetingsAdmin() : Promise.resolve()];
-      if (CAN_EMPLOYEES_PANEL) bootTasks.unshift(renderEmployeesTable());
+      const mobileBoot = _isMobileBoot();
+      const bootTasks = [];
+      if (!mobileBoot && typeof renderMeetingsAdmin === 'function') bootTasks.push(renderMeetingsAdmin());
+      if (!mobileBoot && CAN_EMPLOYEES_PANEL) bootTasks.unshift(renderEmployeesTable());
       if (landingSection === 'secManageProposals' && window.Proposals) {
         bootTasks.push(Proposals.renderAdminList().catch(e => console.warn('[proposals boot]', e)));
       }
-      if (canTeamBillingChart) {
+      if (!mobileBoot && canTeamBillingChart) {
         bootTasks.push(renderDashboard().catch(e => console.warn('[dashboard boot]', e)));
         bootTasks.push(renderTeamBillingChart().catch(e => console.warn('[team billing boot]', e)));
       }
-      if (canRanking) {
+      if (!mobileBoot && canRanking) {
         bootTasks.push(renderAdminRanking().catch(e => console.warn('[ranking boot]', e)));
       }
       await _bootSettle(bootTasks);
@@ -2021,9 +2045,7 @@ async function _renderDashboardBody() {
     const _ds = document.getElementById('dashStats');
     if (_ds) _ds.innerHTML = html;
     const _dr = document.getElementById('dashRanking');
-    const _do = document.getElementById('dashOrders');
     if (_dr) _dr.innerHTML = '<div class="text-muted text-center" style="padding:20px;">Indisponível.</div>';
-    if (_do) _do.innerHTML = '<div class="text-muted text-center" style="padding:20px;">Indisponível.</div>';
   };
   _ensureDashPlaceholder('Carregando dashboard…');
   try {
@@ -2188,18 +2210,6 @@ async function _renderDashboardBody() {
             <div style="flex:1;"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:11px;color:var(--color-text-muted);">${_PARTNER_ROLE_LABELS[e.role] || e.role}</div></div></div>`).join('');
     }
 
-    const _do = document.getElementById('dashOrders');
-    if (_do) {
-      const h3o = _do.closest('.card')?.querySelector('h3');
-      if (h3o) h3o.textContent = ' Últimas propostas';
-      _do.innerHTML = !stats.recent.length
-        ? '<div class="text-muted text-center" style="padding:20px;">Nenhuma proposta.</div>'
-        : stats.recent.map(pr => {
-          const st = pr.status || '—';
-          const badge = st === 'Pago' ? 'badge-success' : st === 'Cancelado' ? 'badge-danger' : 'badge-warning';
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);"><div style="flex:1;"><div style="font-weight:700;font-size:13px;">${pr.numero || pr.id} · ${pr.clientName || '—'}</div><div style="font-size:11px;color:var(--color-text-muted);">${pr.vendorName || '—'}</div></div><span class="badge ${badge}">${st}</span></div>`;
-        }).join('');
-    }
     return;
   }
 
@@ -2258,51 +2268,6 @@ async function _renderDashboardBody() {
         <div style="flex:1;"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:11px;color:var(--color-text-muted);">${e.department}</div></div></div>`).join('');
   }
 
-  const _do = document.getElementById('dashOrders');
-  if (_do) {
-    const card = _do.closest('.card');
-    const h3o = card?.querySelector('h3');
-    if (_fullOrg && (allProps || []).length) {
-      if (h3o) h3o.textContent = ' Últimas Propostas';
-      const recentProps = (allProps || []).slice().sort((a, b) => {
-        const da = typeof DB.proposalSortTime === 'function' ? DB.proposalSortTime(a)
-          : (typeof DB.proposalDate === 'function' ? DB.proposalDate(a).getTime() : new Date(a.created_at || 0).getTime());
-        const db = typeof DB.proposalSortTime === 'function' ? DB.proposalSortTime(b)
-          : (typeof DB.proposalDate === 'function' ? DB.proposalDate(b).getTime() : new Date(b.created_at || 0).getTime());
-        return db - da;
-      }).slice(0, 5);
-      _do.innerHTML = !recentProps.length
-        ? '<div class="text-muted text-center" style="padding:20px;">Nenhuma proposta.</div>'
-        : recentProps.map(p => {
-          const st = p.statusOp || p.status || '—';
-          const badge = st === 'Pago' ? 'badge-success' : st === 'Cancelado' ? 'badge-danger' : 'badge-warning';
-          const val = propAmtDash(p);
-          const bruto = propBrutoDash(p);
-          const valLabel = alignWithBillingChart && dashStatusKey === 'pagas' && bruto > 0 && Math.abs(bruto - val) > 0.01
-            ? `${fmtR(val)} <span style="font-size:10px;color:var(--color-text-muted);">(bruto ${fmtR(bruto)})</span>`
-            : fmtR(val > 0 ? val : bruto);
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);">
-            <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;">${p.numero || p.id} · ${p.clientName || p.client_name || '—'}</div>
-              <div style="font-size:11px;color:var(--color-text-muted);">${p.vendorName || p.vendor_name || '—'}</div>
-            </div>
-            <span style="font-weight:800;font-size:13px;color:var(--color-success);">${valLabel}</span>
-            <span class="badge ${badge}">${st}</span>
-          </div>`;
-        }).join('');
-    } else {
-      if (h3o) h3o.textContent = ' Últimos Pedidos';
-      const recent = orders.slice(0, 5);
-      _do.innerHTML = !recent.length
-        ? '<div class="text-muted text-center" style="padding:20px;">Nenhum pedido.</div>'
-        : recent.map(o => {
-          const emp = userNameById.get(o.employee_id);
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);"><div style="flex:1;"><div style="font-weight:700;font-size:13px;">${o.order_code || o.id}</div><div style="font-size:11px;color:var(--color-text-muted);">${emp?.name || '–'} · ${timeAgo(o.created_at)}</div></div><span class="pts-orange" style="font-weight:900;font-size:13px;">${formatCurrency(o.total_points ?? o.total_price ?? 0)}</span>
-            ${orderStatusBadge(o.status)}
-          </div>`;
-        }).join('');
-    }
-  }
   } catch (err) {
     console.warn('[renderDashboard]', err);
     _fillDashErr('Não foi possível carregar o resumo. Atualize a página (Ctrl+F5) ou tente novamente.');
@@ -2391,6 +2356,192 @@ function _recalcTeamBillingRowTotals(row, statusKey) {
   return row;
 }
 
+/** _TEAM_BILLING_CHART_PALETTE — cores vivas para gráfico, KPIs e destaques da tabela. */
+const _TEAM_BILLING_CHART_PALETTE = ['#2563EB', '#059669', '#7C3AED', '#EA580C', '#0891B2', '#DB2777'];
+
+/**
+ * _teamBillingBarFill — cor sólida da barra (sem alpha que deixa o gráfico opaco/desbotado).
+ */
+function _teamBillingBarFill(hex) {
+  return String(hex || '#2563EB');
+}
+
+/**
+ * _teamBillingChartPalette — retorna N cores da paleta do painel por equipe.
+ */
+function _teamBillingChartPalette(n) {
+  return Array.from({ length: n }, (_, i) => _TEAM_BILLING_CHART_PALETTE[i % _TEAM_BILLING_CHART_PALETTE.length]);
+}
+
+/** @deprecated alias — mantido para chamadas antigas */
+function _teamBillingGrayPalette(n) {
+  return _teamBillingChartPalette(n);
+}
+
+/**
+ * _teamBillingKpiHtml — card KPI do painel com faixa de cor sutil no topo.
+ */
+function _teamBillingKpiHtml(label, value, sub, accentIdx) {
+  const accent = _TEAM_BILLING_CHART_PALETTE[(accentIdx || 0) % _TEAM_BILLING_CHART_PALETTE.length];
+  return `<div class="tb-kpi" style="--tb-kpi-accent:${accent}">
+    <div class="tb-kpi__label">${label}</div>
+    <div class="tb-kpi__value">${value}</div>
+    ${sub ? `<div class="tb-kpi__sub">${sub}</div>` : ''}
+  </div>`;
+}
+
+/** alias legado */
+function _teamBillingKpiBwHtml(label, value, sub) {
+  return _teamBillingKpiHtml(label, value, sub, 0);
+}
+
+/**
+ * _teamBillingVendorProducingCount — vendedores distintos com ao menos 1 proposta na equipe.
+ */
+function _teamBillingVendorProducingCount(d) {
+  const names = new Set();
+  (d.props || []).forEach((p) => {
+    const n = String(p.vendorName || p.vendor_name || '').trim().toLocaleLowerCase('pt-BR');
+    if (n) names.add(n);
+  });
+  return names.size;
+}
+
+/**
+ * _teamBillingRowMetrics — ticket médio, produtividade e cobertura da equipe.
+ */
+function _teamBillingRowMetrics(d) {
+  const count = d.count || 0;
+  const total = d.total || 0;
+  const teamSize = (d.team || []).length;
+  const producing = _teamBillingVendorProducingCount(d);
+  return {
+    ticketMedio: count > 0 ? total / count : 0,
+    propsPerVendor: teamSize > 0 ? count / teamSize : count,
+    producing,
+    coberturaPct: teamSize > 0 ? Math.round((producing / teamSize) * 100) : (count > 0 ? 100 : 0),
+  };
+}
+
+/**
+ * _buildTeamBillingTableHtml — tabela analítica principal (P&B) com métricas por equipe.
+ */
+function _buildTeamBillingTableHtml(teamData, opts) {
+  const { fmtR, grandTotal, grandCount, grandTotalBruto, isPagas, propAmt, propBruto, colors } = opts;
+  const colSpan = isPagas ? 11 : 10;
+  const avgTicket = grandCount > 0 ? grandTotal / grandCount : 0;
+  const totalMembers = teamData.reduce((s, d) => s + (d.team?.length || 0), 0);
+  const totalProducing = teamData.reduce((s, d) => s + _teamBillingVendorProducingCount(d), 0);
+
+  const rows = teamData.map((d, i) => {
+    const share = grandTotal > 0 ? Math.round((d.total / grandTotal) * 100) : 0;
+    const m = _teamBillingRowMetrics(d);
+    const supSub = d.sup._mergedFrom?.length
+      ? `Supervisores: ${d.sup._mergedFrom.join(' · ')} · ${d.team.length} funcionário(s)`
+      : `${d.team.length} funcionário(s)`;
+    const detailHtml = _buildTeamBillingDetailHtml(d, null, fmtR, isPagas, propAmt, propBruto);
+    const propsPerVend = m.propsPerVendor;
+    const propsPerVendStr = propsPerVend % 1 === 0
+      ? String(propsPerVend)
+      : propsPerVend.toFixed(1).replace('.', ',');
+    const accent = (colors || _TEAM_BILLING_CHART_PALETTE)[i % _TEAM_BILLING_CHART_PALETTE.length];
+    return `
+      <tr id="trow_${i}" style="--tb-accent:${accent}">
+        <td><span class="tb-rank">#${i + 1}</span></td>
+        <td><span class="tb-sup-name">${d.sup.name}</span><div class="tb-sup-sub">${supSub}</div></td>
+        <td class="tb-num">${d.team.length}</td>
+        <td class="tb-num">${m.producing}${d.team.length ? `<span class="tb-sup-sub"> / ${d.team.length}</span>` : ''}</td>
+        <td class="tb-num">${d.count}</td>
+        <td class="tb-money">${fmtR(d.total)}</td>
+        ${isPagas ? `<td class="tb-money tb-money--muted">${fmtR(d.totalBruto || 0)}</td>` : ''}
+        <td class="tb-num">${fmtR(m.ticketMedio)}</td>
+        <td class="tb-num">${propsPerVendStr}</td>
+        <td>
+          <div class="tb-share">
+            <div class="tb-share__track"><div class="tb-share__fill" style="width:${share}%;"></div></div>
+            <span class="tb-share__pct">${share}%</span>
+          </div>
+        </td>
+        <td>
+          <button type="button" class="btn btn-ghost btn-sm tb-detail-toggle" data-tdetail="tdetail_${i}" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver detalhes</button>
+        </td>
+      </tr>
+      <tr id="tdetail_${i}" class="tb-detail-row" style="display:none;">
+        <td colspan="${colSpan}" class="tb-detail-cell">${detailHtml}</td>
+      </tr>`;
+  }).join('');
+
+  return `<div class="tb-analytics-head">
+      <h4>Análise detalhada por equipe</h4>
+      <button type="button" class="btn btn-ghost btn-sm" onclick="_exportTeamBillingCsv()">Exportar CSV</button>
+    </div>
+    <p class="tb-analytics-summary">Ticket médio geral: <strong>${fmtR(avgTicket)}</strong> · Vendedores com produção: <strong>${totalProducing}</strong> de <strong>${totalMembers}</strong></p>
+    <div class="tb-analytics-table-wrap">
+      <table class="tb-analytics-table">
+        <thead><tr>
+          <th>#</th>
+          <th>Supervisor</th>
+          <th>Equipe</th>
+          <th>c/ produção</th>
+          <th>Propostas</th>
+          <th>${isPagas ? 'Final pago' : 'Valor bruto'}</th>
+          ${isPagas ? '<th>Valor bruto</th>' : ''}
+          <th>Ticket médio</th>
+          <th>Prop./vend.</th>
+          <th>% do total</th>
+          <th></th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+        <tfoot><tr>
+          <td colspan="4">TOTAL GERAL</td>
+          <td class="tb-num">${grandCount}</td>
+          <td class="tb-money">${fmtR(grandTotal)}</td>
+          ${isPagas ? `<td class="tb-money tb-money--muted">${fmtR(grandTotalBruto)}</td>` : ''}
+          <td class="tb-num">${fmtR(avgTicket)}</td>
+          <td class="tb-num">—</td>
+          <td class="tb-share__pct">100%</td>
+          <td></td>
+        </tr></tfoot>
+      </table>
+    </div>`;
+}
+
+/**
+ * _exportTeamBillingCsv — exporta a tabela analítica atual para planilha.
+ */
+function _exportTeamBillingCsv() {
+  const pack = window._teamBillingExportData;
+  if (!pack?.rows?.length) return;
+  const { rows, fmtPlain, isPagas, grandTotal, grandCount } = pack;
+  const esc = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const header = [
+    'Rank', 'Supervisor', 'Tamanho equipe', 'Vendedores c/ produção',
+    'Propostas', isPagas ? 'Final pago' : 'Valor bruto',
+    ...(isPagas ? ['Valor bruto'] : []),
+    'Ticket médio', 'Propostas/vendedor', '% do total',
+  ];
+  const lines = [header.map(esc).join(';')];
+  rows.forEach((d, i) => {
+    const m = _teamBillingRowMetrics(d);
+    const share = grandTotal > 0 ? Math.round((d.total / grandTotal) * 100) : 0;
+    lines.push([
+      i + 1, d.sup.name, d.team.length, m.producing, d.count,
+      fmtPlain(d.total),
+      ...(isPagas ? [fmtPlain(d.totalBruto || 0)] : []),
+      fmtPlain(m.ticketMedio),
+      m.propsPerVendor.toFixed(2).replace('.', ','),
+      share + '%',
+    ].map(esc).join(';'));
+  });
+  const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `analise-equipes-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+window._exportTeamBillingCsv = _exportTeamBillingCsv;
+
 function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
   const chartHost = document.getElementById('teamBillingChart');
   if (!chartHost) return;
@@ -2458,10 +2609,10 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
         {
           label: barLabel,
           data: teamData.map((d) => d.total),
-          backgroundColor: barColors.map((c) => c + 'E6'),
+          backgroundColor: barColors.map(_teamBillingBarFill),
           borderColor: barColors,
-          borderWidth: 2.5,
-          borderRadius: 10,
+          borderWidth: 2,
+          borderRadius: 8,
           borderSkipped: false,
           maxBarThickness: 72,
           yAxisID: 'y',
@@ -2471,11 +2622,12 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
           type: 'line',
           label: 'Propostas (qtd)',
           data: teamData.map((d) => d.count),
-          borderColor: '#1e293b',
-          backgroundColor: '#1e293b',
+          borderColor: '#1D4ED8',
+          backgroundColor: 'rgba(29, 78, 216, 0.08)',
           borderWidth: 3,
           pointRadius: 6,
           pointHoverRadius: 8,
+          pointBackgroundColor: '#1D4ED8',
           pointBorderWidth: 2,
           pointBorderColor: '#fff',
           tension: 0.2,
@@ -2500,13 +2652,21 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
             boxHeight: 12,
             padding: 16,
             font: { size: 14, weight: '700' },
-            color: '#0f172a',
+            color: '#1e293b',
           },
         },
         tooltip: {
+          backgroundColor: '#ffffff',
+          titleColor: '#0f172a',
+          bodyColor: '#334155',
+          borderColor: '#cbd5e1',
+          borderWidth: 1,
+          padding: 14,
+          boxPadding: 6,
           titleFont: { size: 14, weight: '700' },
           bodyFont: { size: 13, weight: '600' },
-          padding: 12,
+          footerFont: { size: 12 },
+          displayColors: true,
           callbacks: {
             title: (items) => {
               const i = items[0]?.dataIndex ?? 0;
@@ -2534,7 +2694,7 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
           grid: { display: false },
           ticks: {
             font: { size: 13, weight: '800' },
-            color: '#0f172a',
+            color: '#1e293b',
             maxRotation: 0,
             padding: 8,
           },
@@ -2543,11 +2703,12 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
           position: 'left',
           beginAtZero: true,
           grace: '12%',
+          grid: { color: 'rgba(148, 163, 184, 0.35)' },
           title: {
             display: true,
             text: isPagas ? 'Valor final pago (R$)' : 'Valor bruto (R$)',
             font: { size: 13, weight: '800' },
-            color: '#0f172a',
+            color: '#1e293b',
             padding: { bottom: 8 },
           },
           ticks: {
@@ -2571,7 +2732,7 @@ function _paintTeamBillingChart(teamData, colors, fmtR, statusKey) {
             display: true,
             text: 'Propostas',
             font: { size: 13, weight: '800' },
-            color: '#0f172a',
+            color: '#475569',
             padding: { bottom: 8 },
           },
           ticks: { font: { size: 12, weight: '600' }, color: '#334155', precision: 0, padding: 6 },
@@ -2942,6 +3103,105 @@ function _startAdminLiveRefresh() {
 
 window.addEventListener('pagehide', () => { _stopAdminLiveRefresh(); });
 
+/**
+ * _buildTeamBillingDetailHtml — painel expandido da equipe no faturamento por supervisor.
+ * Usa tabelas (vendedores | propostas) para leitura mais clara que cards soltos.
+ */
+function _buildTeamBillingDetailHtml(d, cor, fmtR, isPagas, propAmt, propBruto) {
+  const vendorStats = (() => {
+    const map = new Map();
+    (d.props || []).forEach((p) => {
+      const name = String(p.vendorName || p.vendor_name || '').trim() || 'Sem vendedor';
+      const key = name.toLocaleLowerCase('pt-BR');
+      const cur = map.get(key) || { name, count: 0, total: 0 };
+      cur.count += 1;
+      cur.total += propAmt(p) || propBruto(p) || 0;
+      map.set(key, cur);
+    });
+    (d.team || []).forEach((u) => {
+      const name = String(u.name || '').trim();
+      if (!name) return;
+      const key = name.toLocaleLowerCase('pt-BR');
+      if (!map.has(key)) map.set(key, { name, count: 0, total: 0, idle: true });
+    });
+    return [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
+  })();
+
+  const vendorsSection = vendorStats.length
+    ? `<div class="tb-detail-section">
+        <div class="tb-detail-section__head">
+          <span class="tb-detail-section__title">Vendedores da equipe</span>
+          <span class="tb-detail-section__count">${vendorStats.length}</span>
+        </div>
+        <div class="tb-detail-table-wrap">
+          <table class="tb-detail-table">
+            <thead><tr>
+              <th>Vendedor</th><th>Propostas</th><th>Valor</th><th>Situação</th>
+            </tr></thead>
+            <tbody>
+              ${vendorStats.map((v) => `
+                <tr class="${v.idle && !v.count ? 'tb-detail-row--idle' : ''}">
+                  <td class="tb-detail-name">${v.name}</td>
+                  <td>${v.count}</td>
+                  <td class="tb-detail-money">${fmtR(v.total)}</td>
+                  <td>${v.idle && !v.count
+                    ? '<span class="tb-badge tb-badge--muted">Sem proposta</span>'
+                    : (v.count
+                      ? '<span class="tb-badge tb-badge--ok">Com produção</span>'
+                      : '<span class="tb-badge tb-badge--muted">—</span>')}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>`
+    : '';
+
+  const proposalsSection = !d.props.length
+    ? `<div class="tb-detail-section">
+        <div class="tb-detail-section__head">
+          <span class="tb-detail-section__title">Propostas</span>
+          <span class="tb-detail-section__count">0</span>
+        </div>
+        <p class="tb-detail-empty">Nenhuma proposta neste período.</p>
+      </div>`
+    : `<div class="tb-detail-section">
+        <div class="tb-detail-section__head">
+          <span class="tb-detail-section__title">Propostas</span>
+          <span class="tb-detail-section__count">${d.props.length}</span>
+        </div>
+        <div class="tb-detail-table-wrap tb-detail-table-wrap--scroll">
+          <table class="tb-detail-table">
+            <thead><tr>
+              <th>Nº</th><th>Vendedor</th><th>Cliente</th><th>Convênio</th><th>Valor</th><th>Status</th>
+            </tr></thead>
+            <tbody>
+              ${d.props.slice(0, 50).map((p) => {
+                const finalV = propAmt(p);
+                const brutoV = propBruto(p);
+                const valCell = isPagas && brutoV > 0 && Math.abs(brutoV - finalV) > 0.01
+                  ? `${fmtR(finalV)}<span class="tb-detail-sub">bruto ${fmtR(brutoV)}</span>`
+                  : fmtR(finalV || brutoV);
+                const st = p.statusOp || p.status || '—';
+                return `<tr>
+                  <td class="tb-detail-num">${p.numero || p.id}</td>
+                  <td>${p.vendorName || p.vendor_name || '—'}</td>
+                  <td class="tb-detail-name">${p.clientName || '—'}</td>
+                  <td>${p.convenio || '—'}</td>
+                  <td class="tb-detail-money">${valCell}</td>
+                  <td><span class="tb-badge tb-badge--muted">${st}</span></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          ${d.props.length > 50 ? `<p class="tb-detail-more">+${d.props.length - 50} propostas não exibidas</p>` : ''}
+        </div>
+      </div>`;
+
+  return `<div class="tb-detail-panel">
+    <div class="tb-detail-grid">${vendorsSection}${proposalsSection}</div>
+  </div>`;
+}
+
 async function renderTeamBillingChart() {
   const card = document.getElementById('teamBillingCard');
   const canBilling = _canViewTeamBillingChart();
@@ -2951,6 +3211,9 @@ async function renderTeamBillingChart() {
   if (!card) return;
   if (!canBilling) { card.style.display = 'none'; return; }
   card.style.display = '';
+  card.classList.add('team-billing-analytics');
+  const titleEl = card.querySelector('.team-billing-title');
+  if (titleEl) titleEl.textContent = 'Análise de Faturamento por Equipe';
 
   if (!_allProposalsCache?.length) {
     await _loadBillingProposals(true);
@@ -2991,7 +3254,7 @@ async function renderTeamBillingChart() {
   let periodHint = '';
   if (!inRange.length && proposals.length > 0 && (f === 'month' || f === 'day')) {
     inRange = _filterPropsForTeamBilling(proposals, 'all', statusKey);
-    periodHint = `<div class="alert" style="margin-bottom:12px;font-size:13px;padding:10px 14px;background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;color:#1e40af;">
+    periodHint = `<div class="tb-alert">
       Nenhuma proposta no período «${periodLabels[f] || f}». Exibindo <strong>todo o histórico</strong> (${proposals.length} proposta(s) no banco).
     </div>`;
   }
@@ -3034,26 +3297,33 @@ async function renderTeamBillingChart() {
     ? `<div class="team-billing-meta">${proposals.length} proposta(s) carregadas do banco</div>`
     : '';
 
-  /* Layout original (statKpiHtml) — revert kpi-align experiments */
+  const totalTeamMembers = teamData.reduce((s, d) => s + (d.team?.length || 0), 0);
+  const totalProducingVendors = teamData.reduce((s, d) => s + _teamBillingVendorProducingCount(d), 0);
+  const avgTicketGeral = grandCount > 0 ? grandTotal / grandCount : 0;
+  const activeTeams = teamData.filter((d) => d.count > 0).length;
+
   const kpiCards = [
-    statKpiHtml({ icon: 'proposals', colorClass: 'blue', label: propKpiLabel, value: grandCount, valueColor: '#3b82f6' }),
-    statKpiHtml({
-      icon: 'billing',
-      colorClass: 'green',
-      label: billKpiLabel,
-      value: fmtR(grandTotal),
-      valueColor: '#10b981',
-      valueStyle: isPagas ? 'font-size:17px;' : '',
-    }),
-    ...(isPagas ? [statKpiHtml({
-      icon: 'chart',
-      colorClass: 'teal',
-      label: 'Valor Bruto',
-      value: fmtR(grandTotalBruto),
-      valueColor: '#06b6d4',
-    })] : []),
-    statKpiHtml({ icon: 'users', colorClass: 'purple', label: 'Equipes Ativas', value: teamData.filter(d => d.count > 0).length, valueColor: '#8b5cf6' }),
-    statKpiHtml({ icon: 'calendar', colorClass: 'yellow', label: 'Período', value: periodStatusLabel, valueColor: '#f59e0b', valueStyle: 'font-size:14px;line-height:1.3;' }),
+    _teamBillingKpiHtml(propKpiLabel, grandCount, statusLabel, 0),
+    _teamBillingKpiHtml(
+      billKpiLabel,
+      fmtR(grandTotal),
+      isPagas && grandTotalBruto > 0 ? `Bruto: ${fmtR(grandTotalBruto)}` : '',
+      1,
+    ),
+    _teamBillingKpiHtml('Ticket médio', fmtR(avgTicketGeral), 'Por proposta no período', 2),
+    _teamBillingKpiHtml(
+      'Equipes ativas',
+      `${activeTeams} / ${teamData.length}`,
+      'Com ao menos 1 proposta',
+      3,
+    ),
+    _teamBillingKpiHtml(
+      'Vendedores c/ produção',
+      `${totalProducingVendors} / ${totalTeamMembers}`,
+      totalTeamMembers ? `${Math.round((totalProducingVendors / totalTeamMembers) * 100)}% da equipe` : '—',
+      4,
+    ),
+    _teamBillingKpiHtml('Período', periodLabel, statusLabel, 5),
   ];
   const kpisEl = document.getElementById('teamBillingKpis');
   if (kpisEl) {
@@ -3074,8 +3344,8 @@ async function renderTeamBillingChart() {
   const statusSel = document.getElementById('teamBillingStatusFilter');
   if (statusSel && statusSel.value !== statusKey) statusSel.value = statusKey;
 
-  // ── Gráfico Chart.js (barras = faturamento, linha = propostas) ───────
-  const colors = ['#3b82f6','#10b981','#f59e0b','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f97316'];
+  // ── Gráfico Chart.js — paleta suave ───────
+  const colors = _teamBillingChartPalette(teamData.length || 1);
   const chartEl = document.getElementById('teamBillingChart');
   if (chartEl) {
     chartEl.className = 'team-billing-chart-host';
@@ -3091,68 +3361,28 @@ async function renderTeamBillingChart() {
     }
   }
 
-  // ── Tabela detalhada ─────────────────────────────────────────────────
-  document.getElementById('teamBillingTable').innerHTML = `
-    <h4 style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--color-text-muted);">Detalhes por Equipe</h4><div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="border-bottom:2px solid var(--color-border);text-align:left;"><th style="padding:8px 12px;font-weight:700;">#</th><th style="padding:8px 12px;font-weight:700;">Supervisor</th><th style="padding:8px 12px;font-weight:700;">Tamanho Equipe</th><th style="padding:8px 12px;font-weight:700;">Propostas</th><th style="padding:8px 12px;font-weight:700;">${isPagas ? 'Final pago' : 'Valor bruto'}</th>${isPagas ? '<th style="padding:8px 12px;font-weight:700;">Valor bruto</th>' : ''}<th style="padding:8px 12px;font-weight:700;">% do Total</th><th style="padding:8px 12px;font-weight:700;"></th></tr></thead><tbody>
-          ${teamData.map((d, i) => {
-            const cor   = colors[i % colors.length];
-            const share = grandTotal > 0 ? Math.round((d.total / grandTotal) * 100) : 0;
-            const supSub = d.sup._mergedFrom?.length
-              ? `Supervisores: ${d.sup._mergedFrom.join(' · ')} · ${d.team.length} funcionário(s)`
-              : `${d.team.length} funcionário(s)`;
-            const propValHtml = (p) => {
-              const finalV = propAmt(p);
-              const brutoV = propBruto(p);
-              if (isPagas && brutoV > 0 && Math.abs(brutoV - finalV) > 0.01) {
-                return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV)}</div><div style="font-size:10px;color:var(--color-text-muted);">bruto ${fmtR(brutoV)}</div>`;
-              }
-              return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV || brutoV)}</div>`;
-            };
-            /* Resumo por vendedor — controle de quem produziu no período. */
-            const vendorStats = (() => {
-              const map = new Map();
-              (d.props || []).forEach((p) => {
-                const name = String(p.vendorName || p.vendor_name || '').trim() || 'Sem vendedor';
-                const key = name.toLocaleLowerCase('pt-BR');
-                const cur = map.get(key) || { name, count: 0, total: 0 };
-                cur.count += 1;
-                cur.total += propAmt(p) || propBruto(p) || 0;
-                map.set(key, cur);
-              });
-              (d.team || []).forEach((u) => {
-                const name = String(u.name || '').trim();
-                if (!name) return;
-                const key = name.toLocaleLowerCase('pt-BR');
-                if (!map.has(key)) map.set(key, { name, count: 0, total: 0, idle: true });
-              });
-              return [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
-            })();
-            const vendorsHtml = vendorStats.length
-              ? `<div style="margin-bottom:12px;">
-                  <div style="font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--color-text-muted);margin-bottom:6px;">VENDEDORES DA EQUIPE (${vendorStats.length})</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:6px;">
-                    ${vendorStats.map((v) => `
-                      <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:6px 10px;min-width:140px;">
-                        <div style="font-weight:700;font-size:12px;">${v.name}</div>
-                        <div style="font-size:11px;color:var(--color-text-muted);">${v.count} prop. · ${fmtR(v.total)}${v.idle && !v.count ? ' · sem proposta no período' : ''}</div>
-                      </div>`).join('')}
-                  </div>
-                </div>`
-              : '';
-            return `
-            <tr style="border-bottom:1px solid var(--color-border);" id="trow_${i}"><td style="padding:8px 12px;"><span style="font-weight:800;color:${cor};">#${i+1}</span></td><td style="padding:8px 12px;"><span style="font-weight:700;">${d.sup.name}</span><div style="font-size:11px;color:var(--color-text-muted);">${supSub}</div></td><td style="padding:8px 12px;">${d.team.length}</td><td style="padding:8px 12px;font-weight:700;">${d.count}</td><td style="padding:8px 12px;font-weight:800;color:${cor};">${fmtR(d.total)}</td>${isPagas ? `<td style="padding:8px 12px;font-weight:700;color:var(--color-text-muted);">${fmtR(d.totalBruto || 0)}</td>` : ''}<td style="padding:8px 12px;"><div style="display:flex;align-items:center;gap:8px;"><div style="background:var(--color-surface-2);border-radius:4px;height:6px;width:80px;overflow:hidden;"><div style="height:6px;width:${share}%;background:${cor};border-radius:4px;"></div></div><span style="font-size:12px;">${share}%</span></div></td><td style="padding:8px 12px;"><button class="btn btn-ghost btn-sm" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver</button></td></tr><tr id="tdetail_${i}" style="display:none;background:var(--color-surface-2);"><td colspan="${isPagas ? 8 : 7}" style="padding:12px 20px;">
-                ${vendorsHtml}
-                ${!d.props.length
-                  ? '<span style="color:var(--color-text-muted);font-size:12px;">Nenhuma proposta neste período.</span>'
-                  : `<div style="font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--color-text-muted);margin-bottom:6px;">PROPOSTAS</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                      ${d.props.slice(0,20).map(p => `
-                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;min-width:200px;"><div style="font-weight:700;font-size:12px;">${p.numero || p.id}</div><div style="font-size:12px;font-weight:700;color:${cor};margin-top:2px;">Vendedor: ${p.vendorName || p.vendor_name || '—'}</div><div style="font-size:11px;color:var(--color-text-muted);">${p.clientName||'—'} · ${p.convenio||'—'}</div>${propValHtml(p)}<div style="font-size:10px;background:${cor}18;color:${cor};padding:2px 6px;border-radius:99px;display:inline-block;margin-top:3px;">${p.statusOp||p.status||'—'}</div></div>`).join('')}
-                      ${d.props.length > 20 ? `<div style="font-size:12px;color:var(--color-text-muted);align-self:center;">+${d.props.length-20} mais...</div>` : ''}
-                    </div>`}
-              </td></tr>`;
-          }).join('')}
-        </tbody><tfoot><tr style="border-top:2px solid var(--color-border);font-weight:800;"><td colspan="3" style="padding:10px 12px;">TOTAL GERAL</td><td style="padding:10px 12px;">${grandCount}</td><td style="padding:10px 12px;color:var(--color-success);">${fmtR(grandTotal)}</td>${isPagas ? `<td style="padding:10px 12px;color:var(--color-text-muted);">${fmtR(grandTotalBruto)}</td>` : ''}<td colspan="2" style="padding:10px 12px;">100%</td></tr></tfoot></table></div>`;
+  // ── Tabela analítica (P&B) ───────────────────────────────────────────
+  const fmtPlain = (v) => parseFloat(v || 0).toFixed(2).replace('.', ',');
+  window._teamBillingExportData = {
+    rows: teamData,
+    fmtPlain,
+    isPagas,
+    grandTotal,
+    grandCount,
+  };
+  const tableEl = document.getElementById('teamBillingTable');
+  if (tableEl) {
+    tableEl.innerHTML = _buildTeamBillingTableHtml(teamData, {
+      fmtR,
+      grandTotal,
+      grandCount,
+      grandTotalBruto,
+      isPagas,
+      propAmt,
+      propBruto,
+      colors,
+    });
+  }
 
   _syncTeamBillingFilterUI(periodHint ? 'all' : f);
   _wireTeamBillingDatePickers();
@@ -3228,10 +3458,14 @@ function _wireTeamBillingDatePickers() {
 function _toggleTeamDetail(id) {
   const el = document.getElementById(id);
   if (!el) return;
-  el.style.display = el.style.display === 'none' ? '' : 'none';
+  const open = el.style.display === 'none';
+  el.style.display = open ? '' : 'none';
   const rowId = id.replace('tdetail_', 'trow_');
-  const btn   = document.querySelector(`#${rowId} button`);
-  if (btn) btn.textContent = el.style.display === 'none' ? '▼ Ver' : '▲ Fechar';
+  const btn = document.querySelector(`#${rowId} .tb-detail-toggle`);
+  if (btn) {
+    btn.textContent = open ? '▲ Fechar detalhes' : '▼ Ver detalhes';
+    btn.classList.toggle('tb-detail-toggle--open', open);
+  }
 }
 
 function setTeamFilter(f) {
@@ -6694,7 +6928,17 @@ async function editClientAdmin(cpf) {
   if (modal) {
     modal.dataset.editCpf = digits;
     delete modal.dataset.cpfDupBlocked;
+  }
+  if (window.Clients && typeof Clients._showClientModal === 'function') {
+    Clients._showClientModal();
+  } else if (typeof openModal === 'function') {
+    openModal('clientModal');
+  } else if (modal) {
     modal.classList.add('open');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
   }
   if (window.Clients) {
     if (typeof Clients._bindCpfLookup === 'function') Clients._bindCpfLookup();

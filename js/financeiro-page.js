@@ -252,6 +252,8 @@
 
         updateSidebarUser(session, user);
 
+        if (typeof initSidebarToggle === 'function') initSidebarToggle();
+
         const urlSec = new URLSearchParams(window.location.search).get('section');
         const urlTab = new URLSearchParams(window.location.search).get('tab');
         if (urlSec) {
