@@ -1217,8 +1217,8 @@
   }
 
   function closeModalRH(id) {
-    const el = document.getElementById(id);
-    if (el) el.classList.remove('open');
+    if (typeof closeModal === 'function') closeModal(id);
+    else document.getElementById(id)?.classList.remove('open');
   }
 
   /* ══ NAVEGAÇÃO ══ */

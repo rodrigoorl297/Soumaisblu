@@ -781,7 +781,7 @@
             <div class="form-row" style="margin-bottom: 20px;align-items:flex-end;">
               <div class="form-group" style="flex:1;margin-bottom:0;">
                 <label for="propCpf">CPF do cliente</label>
-                <div class="prop-cpf-search"><span class="search-icon"></span><input type="text" id="propCpf" class="form-control" placeholder="Digite o CPF do cliente já cadastrado" autocomplete="off" oninput="Proposals.onCpfInput()">
+                <div class="prop-cpf-search"><span class="search-icon"></span><input type="text" id="propCpf" class="form-control" placeholder="Somente números, sem pontos, traços ou *" data-mask="cpf" maxlength="14" autocomplete="off" oninput="Proposals.onCpfInput()">
                   <div id="propCpfPopup" class="prop-cpf-popup" style="display:none;"></div>
                 </div>
               </div><button class="btn btn-primary" style="height: 44px;" onclick="Proposals.searchCpf()">Buscar Cliente</button>
@@ -1657,11 +1657,11 @@
       </div>
       <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-          <div class="form-group"><label>CPF *</label><input type="text" id="clientCpf" class="form-control" placeholder="000.000.000-00"></div>
+          <div class="form-group"><label>CPF *</label><input type="text" id="clientCpf" class="form-control" placeholder="Somente números, sem pontos, traços ou *" data-mask="cpf" maxlength="14"></div>
           <div class="form-group"><label>Nome Completo *</label><input type="text" id="clientName" class="form-control" placeholder="Nome do cliente"></div>
           <div class="form-group"><label>Telefone 1</label><input type="text" id="clientPhone1" class="form-control" placeholder="(00) 00000-0000"></div>
           <div class="form-group"><label>Telefone 2</label><input type="text" id="clientPhone2" class="form-control" placeholder="(00) 00000-0000"></div>
-          <div class="form-group"><label>RG</label><input type="text" id="clientRg" class="form-control" placeholder="Número do RG"></div>
+          <div class="form-group"><label>RG</label><input type="text" id="clientRg" class="form-control" placeholder="Somente números, sem pontos, traços ou *" data-mask="rg" maxlength="12"></div>
           <div class="form-group"><label>Estado Civil</label><input type="text" id="clientCivil" class="form-control" placeholder="Solteiro, Casado..."></div>
           <div class="form-group" style="grid-column: 1 / -1;"><label>Endereço Completo</label><input type="text" id="clientAddress" class="form-control" placeholder="Rua, Número, Bairro, Cidade"></div>
           <div class="form-group"><label>Email</label><input type="text" id="clientEmail" class="form-control" placeholder="email@exemplo.com"></div>
@@ -1693,7 +1693,7 @@
         <div class="form-row" style="margin-bottom: 20px;align-items:flex-end;">
           <div class="form-group" style="flex:1;margin-bottom:0;">
             <label for="masterPropCpf">CPF do cliente</label>
-            <div class="prop-cpf-search"><span class="search-icon"></span><input type="text" id="masterPropCpf" class="form-control" placeholder="Digite o CPF do cliente já cadastrado" autocomplete="off" oninput="window.masterProposalManager.onCpfInput()">
+            <div class="prop-cpf-search"><span class="search-icon"></span><input type="text" id="masterPropCpf" class="form-control" placeholder="Somente números, sem pontos, traços ou *" data-mask="cpf" maxlength="14" autocomplete="off" oninput="window.masterProposalManager.onCpfInput()">
               <div id="masterPropCpfPopup" class="prop-cpf-popup" style="display:none;"></div>
             </div>
           </div><button class="btn btn-primary" style="height: 44px;" onclick="window.masterProposalManager.searchCpf()">Buscar Cliente</button>

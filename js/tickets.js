@@ -1,13 +1,15 @@
 window.Tickets = {
-  departments: ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento'],
+  // Departamentos e assuntos sempre em ordem alfabética.
+  departments: ['Desenvolvimento', 'Financeiro', 'Gerência', 'Operacional', 'Ouvidoria', 'RH', 'Supervisão', 'T.I.'],
   subjects: {
-    'Financeiro': ['Alteração dados bancários', 'Representação de pagamentos', 'Contestação pontuação', 'Outros assuntos'],
-    'RH': ['Contra cheque', 'Atestado médico', 'Alteração de dados', 'Pedido de demissão', 'Outros assuntos'],
-    'Operacional': ['Dúvidas', 'Status proposta', 'Atuação proposta', 'Cancelamento proposta', 'Representação pagamento', 'Solicitação Boleto', 'Averbação proposta', 'Solicitação novo link', 'Solicitação de novo contato', 'Solicitação link chamada vídeo'],
-    'Supervisão': ['Solicitação Treinamento', 'Justificativa de Falta', 'Parcial 12:00', 'Fechamento'],
-    'Gerência': ['Solicitação', 'Escalonamento', 'Outros assuntos'],
-    'Ouvidoria': ['Sugestão', 'Reclamação'],
-    'Desenvolvimento': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Outros']
+    'Desenvolvimento': ['Acesso e permissões', 'Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Outros'],
+    'Financeiro': ['Alteração dados bancários', 'Contestação pontuação', 'Representação de pagamentos'],
+    'Gerência': ['Escalonamento', 'Outros assuntos', 'Solicitação'],
+    'Operacional': ['Atuação proposta', 'Averbação proposta', 'Cancelamento proposta', 'Dúvidas', 'Representação pagamento', 'Solicitação Boleto', 'Solicitação de novo contato', 'Solicitação link chamada vídeo', 'Solicitação novo link', 'Status proposta'],
+    'Ouvidoria': ['Sugestão'], //somente sugestões agora
+    'RH': ['Alteração de dados', 'Atestado médico', 'Pedido de demissão'], //sem contracheque e outros assuntos
+    'Supervisão': ['Fechamento', 'Justificativa de Falta', 'Parcial 12:00', 'Solicitação Treinamento'],
+    'T.I.': ['Outros', 'Problema de conexão', 'Reparo em máquinas', 'Solicitação de periféricos'],
   },
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,

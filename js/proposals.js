@@ -3250,11 +3250,11 @@ window.Proposals = {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
           <div class="form-group" style="margin:0;">
             <label style="font-size:11px;">CPF</label>
-            <input type="text" id="${p}ClientCpf" class="form-control prop-client-field" placeholder="000.000.000-00" value="${this._escAttr(cpf)}"${dis}/>
+            <input type="text" id="${p}ClientCpf" class="form-control prop-client-field" placeholder="Somente números, sem pontos, traços ou *" data-mask="cpf" maxlength="14" value="${this._escAttr(formatCPF(cpf))}"${dis}/>
           </div>
           <div class="form-group" style="margin:0;">
             <label style="font-size:11px;">RG</label>
-            <input type="text" id="${p}ClientRg" class="form-control prop-client-field" value="${this._escAttr(client.rg || '')}"${dis}/>
+            <input type="text" id="${p}ClientRg" class="form-control prop-client-field" placeholder="Somente números, sem pontos, traços ou *" data-mask="rg" maxlength="12" value="${this._escAttr(formatRG(client.rg || ''))}"${dis}/>
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">

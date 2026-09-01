@@ -390,12 +390,15 @@ const Auth = {
     const s = this.getSession();
     if (!s) return false;
     const role = String(s.role || '').toLowerCase();
-    // Baseado na tabela de "quem abre"
-    if (['vendedor','backoffice','portaria'].includes(role)) {
-      return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Ouvidoria', 'Desenvolvimento'].includes(department);
+    // Baseado na tabela de "quem abre" (listas sempre em ordem alfabética).
+    // Desenvolvimento agora é exclusivo da equipe de vendas (backoffice/portaria/vendedor).
+    // T.I. pode ser aberto por qualquer cargo.
+    if (department === 'T.I.') return true;
+    if (['backoffice','portaria','vendedor'].includes(role)) {
+      return ['Desenvolvimento', 'Financeiro', 'Operacional', 'Ouvidoria', 'RH', 'Supervisão'].includes(department);
     }
     if (role === 'supervisor') {
-      return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento'].includes(department);
+      return ['Financeiro', 'Gerência', 'Operacional', 'Ouvidoria', 'RH', 'Supervisão'].includes(department);
     }
     if (role === 'parceiro') {
       try {
@@ -406,8 +409,8 @@ const Auth = {
       } catch (_) { /* noop */ }
       return department === 'Operacional';
     }
-    // Gerência / Master / Fundador / Financeiro / RH / Jurídico / Diretoria / Desenvolvimento podem direcionar para estes deptos.
-    return ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Jurídico', 'Diretoria', 'Ouvidoria', 'Desenvolvimento'].includes(department);
+    // Diretoria / Financeiro / Fundador / Gerência / Jurídico / Master / RH podem direcionar para estes deptos.
+    return ['Diretoria', 'Financeiro', 'Gerência', 'Jurídico', 'Operacional', 'Ouvidoria', 'RH', 'Supervisão'].includes(department);
   },
 
   /** Visão global da esteira de chamados (Painel Master). */
@@ -428,18 +431,18 @@ const Auth = {
     if (this.canSeeAllTickets()) return true;
     const role = String(s.role || '').toLowerCase();
 
-    // "quem trata (responde)"
+    // "quem trata (responde)" — cases e listas de cargos sempre em ordem alfabética.
     switch (department) {
-      case 'RH': return ['rh', 'gerencia', 'juridico'].includes(role);
-      case 'Financeiro': return role === 'financeiro';
-      case 'Operacional': return role === 'sup_backoffice';
-      case 'Supervisão': return ['supervisor', 'gerente', 'gerencia'].includes(role);
-      case 'Ouvidoria': return ['rh', 'ouvidoria', 'gerente', 'gerencia'].includes(role);
-      case 'Gerência': return ['gerente', 'gerencia'].includes(role);
-      case 'Jurídico': return role === 'juridico';
+      case 'Desenvolvimento': return ['desenvolvedor', 'diretoria', 'fundador', 'master'].includes(role);
       case 'Diretoria': return role === 'diretoria';
-      case 'Desenvolvimento':
-        return ['desenvolvedor', 'fundador', 'master', 'diretoria'].includes(role);
+      case 'Financeiro': return role === 'financeiro';
+      case 'Gerência': return ['gerencia', 'gerente'].includes(role);
+      case 'Jurídico': return role === 'juridico';
+      case 'Operacional': return role === 'sup_backoffice';
+      case 'Ouvidoria': return ['gerencia', 'gerente', 'ouvidoria', 'rh'].includes(role);
+      case 'RH': return ['gerencia', 'juridico', 'rh'].includes(role);
+      case 'Supervisão': return ['gerencia', 'gerente', 'supervisor'].includes(role);
+      case 'T.I.': return ['desenvolvedor', 'diretoria', 'fundador', 'master'].includes(role);
       default: return false;
     }
   },

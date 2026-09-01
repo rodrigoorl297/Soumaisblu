@@ -1092,3 +1092,32 @@ function formatPixKey(type, value) {
   if(type==='phone') return value.replace(/\D/g,'').replace(/(\d{2})(\d{5})(\d{4})/,'($1) $2-$3');
   return value;
 }
+
+/* Máscaras de CPF e RG — formatam progressivamente enquanto a pessoa digita
+   (em vez de só aplicar pontos/traço quando o campo estiver completo). */
+function formatCPF(value) {
+  const d = String(value || '').replace(/\D/g, '').slice(0, 11);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
+  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
+  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+}
+function formatRG(value) {
+  // RG aceita dígito verificador "X" no final (regra comum a vários estados).
+  const v = String(value || '').toUpperCase().replace(/[^0-9X]/g, '').slice(0, 9);
+  if (v.length <= 2) return v;
+  if (v.length <= 5) return `${v.slice(0, 2)}.${v.slice(2)}`;
+  if (v.length <= 8) return `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5)}`;
+  return `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5, 8)}-${v.slice(8)}`;
+}
+window.formatCPF = formatCPF;
+window.formatRG = formatRG;
+
+// Aplica a máscara certa a qualquer campo marcado com data-mask="cpf"/"rg",
+// inclusive campos criados dinamicamente (delegação no document).
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  const mask = t?.dataset?.mask;
+  if (mask === 'cpf') t.value = formatCPF(t.value);
+  else if (mask === 'rg') t.value = formatRG(t.value);
+});

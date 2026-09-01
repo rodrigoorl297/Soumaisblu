@@ -160,10 +160,8 @@ window.Clients = {
     };
 
     cpfEl.addEventListener('input', () => {
+      // Máscara em si já é aplicada pela delegação data-mask="cpf" (ui.js).
       const digits = cpfEl.value.replace(/\D/g, '');
-      if (typeof formatPixKey === 'function' && digits.length <= 11) {
-        cpfEl.value = formatPixKey('cpf', digits);
-      }
       if (digits.length < 11) {
         this._setCpfDupBlocked(false);
         this._setCpfStatus(digits.length ? 'Digite os 11 dígitos do CPF para buscar os dados.' : '', 'muted');
@@ -193,8 +191,8 @@ window.Clients = {
       const val = map[id];
       if (!el || val == null || String(val).trim() === '') return;
       if (onlyEmpty && String(el.value || '').trim() !== '') return;
-      if (id === 'clientCpf' && typeof formatPixKey === 'function') {
-        el.value = formatPixKey('cpf', String(val).replace(/\D/g, ''));
+      if (id === 'clientCpf' && typeof formatCPF === 'function') {
+        el.value = formatCPF(val);
       } else {
         el.value = val;
       }
@@ -232,7 +230,9 @@ window.Clients = {
         }, onlyEmpty);
         if (!onlyEmpty) {
           const rgEl = document.getElementById('clientRg');
-          if (rgEl && local.rg) rgEl.value = local.rg;
+          if (rgEl && local.rg) {
+            rgEl.value = typeof formatRG === 'function' ? formatRG(local.rg) : local.rg;
+          }
         }
         // Cadastro novo + CPF já no sistema → trava (anti má-fé / mesmo vendedor).
         if (!isEdit) {
