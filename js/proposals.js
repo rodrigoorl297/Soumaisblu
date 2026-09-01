@@ -18,7 +18,7 @@ window.Proposals = {
     { v: 'CNC', l: 'CNC' },
   ],
 
-  _CONVENIOS: ['FEDERAL', 'ESTADUAL', 'MUNICIPAL', 'INSS', 'CLT'],
+  _CONVENIOS: ['ESTADUAL', 'FEDERAL', 'MUNICIPAL', 'INSS', 'CLT'],
 
   /** Pastas de anexo da proposta (vendedor + gestão). Chaves gravadas em proposals.attachments (JSON). */
   _ANEXO_CATEGORIES: [
@@ -1602,7 +1602,23 @@ window.Proposals = {
   },
 
   _adminListColspan: function() {
-    return this._isFinanceiroGestao() ? 12 : 11;
+    return this._isFinanceiroGestao() ? 13 : 12;
+  },
+
+  /** Último registro do histórico da proposta (quem mexeu por último e quando). */
+  _lastEditInfo: function(p) {
+    const hist = Array.isArray(p?.history) ? p.history : [];
+    if (!hist.length) return null;
+    const last = hist[hist.length - 1];
+    if (!last?.actorName) return null;
+    return { name: last.actorName, date: last.date };
+  },
+
+  _lastEditCellHtml: function(p) {
+    const info = this._lastEditInfo(p);
+    if (!info) return '—';
+    const when = typeof formatDateTime === 'function' ? formatDateTime(info.date) : new Date(info.date).toLocaleString('pt-BR');
+    return `${this._escHtml(info.name)}<div style="font-size:11px;color:var(--color-text-muted);">${this._escHtml(when)}</div>`;
   },
 
   _finGestaoActionBtns: function(id) {
@@ -2786,6 +2802,9 @@ window.Proposals = {
       product: this._normalizeProductValue(p.product || ''),
       convenio: this._fixMojibake(p.convenio || ''),
       entidade: this._fixMojibake(p.entidade || ''),
+      servidor: p.servidor || '',
+      situacaoServidor: p.situacaoServidor || p.situacao_servidor || '',
+      horarioVideochamada: p.horarioVideochamada || p.horario_videochamada || '',
       valor: p.valor != null ? p.valor : null,
       valorFinal: p.valorFinal ?? p.valor_final ?? p.valor ?? null,
       createdAt: p.createdAt || p.created_at || null,
@@ -3503,12 +3522,13 @@ window.Proposals = {
       this._initProposalCatalogSelects();
       const ids = ['propCpf','propNumero','propValor','propDesconto','propValorFinalDisplay','propObs',
                    'propMatricula','propSenhaContracheque','propSenhaConsignacao',
-                   'propBancoComprado','propProtocolo','propProtocoloBacen','propFases','propHistoryNote'];
+                   'propBancoComprado','propProtocolo','propProtocoloBacen','propFases','propHistoryNote',
+                   'propHorarioVideochamada'];
       ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
       const tabEl = document.getElementById('propTabela'); if (tabEl) tabEl.value = '';
       this._setFolderContext('propAnexosFolders', 'prop');
       this.resetAnexoFolders();
-      ['propProduct','propConvenio','propEntidade','propCompraDivida','propBancoComprado','propBancoDigitado',
+      ['propProduct','propConvenio','propEntidade','propServidor','propSituacaoServidor','propCompraDivida','propBancoComprado','propBancoDigitado',
        'propSolicitouBoleto','propBacen','propAssinouTermo','propStatusOp','propPosVenda','propNuvidio','propEtapaVendedor'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
       });
@@ -3757,6 +3777,9 @@ window.Proposals = {
         product: this._normalizeProductValue(gv('propProduct')),
         convenio: this._normalizeConvenioKey(gv('propConvenio')),
         entidade: gv('propEntidade'),
+        servidor: gv('propServidor'),
+        situacaoServidor: gv('propSituacaoServidor'),
+        horarioVideochamada: gv('propHorarioVideochamada'),
         obs: gv('propObs'),
         tabela: tabela,
         valor: valor,
@@ -4206,6 +4229,7 @@ window.Proposals = {
             <td data-col="valorFinal"><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></td>
             <td>${this._propDateStr(p)}</td>
             <td data-col="status"><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
+            <td data-col="lastEdit">${this._lastEditCellHtml(p)}</td>
             ${comissaoCell}
             <td class="td-proposal-actions" onclick="event.stopPropagation()">${finAction}${this.actionsRowHtml(p.id, {
               canEdit: canEditRow,
@@ -4436,6 +4460,8 @@ window.Proposals = {
       this._fillProductSelect('empPropProduct', proposal.product);
       this._fillConvenioSelect('empPropConvenio', 'empPropEntidade', proposal.convenio);
       this._fillEntidadeSelect('empPropEntidade', proposal.convenio, proposal.entidade);
+      sv('empPropServidor', proposal.servidor);
+      sv('empPropSituacaoServidor', proposal.situacaoServidor);
       const etapaSel = document.getElementById('empPropEtapa');
       if (etapaSel) {
         etapaSel.innerHTML = this._vendorSituacaoOptionsHtml(this._vendorStage(proposal));
@@ -4520,6 +4546,8 @@ window.Proposals = {
     proposal.product = this._normalizeProductValue(gv('empPropProduct'));
     proposal.convenio = this._normalizeConvenioKey(gv('empPropConvenio'));
     proposal.entidade = gv('empPropEntidade');
+    proposal.servidor = gv('empPropServidor');
+    proposal.situacaoServidor = gv('empPropSituacaoServidor');
     proposal.protocolo = gv('empPropProtocolo');
     proposal.obs = gv('empPropObs');
     const oldStatus = proposal.status;

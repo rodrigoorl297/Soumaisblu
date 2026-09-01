@@ -1336,18 +1336,44 @@ select.header-filter.filter-active + .header-filter-chevron {
 
 /* Gestão de Propostas — cabeçalhos e coluna produto legíveis */
 #secManageProposals table.data-table thead th:nth-child(2) {
-  min-width: 118px;
+  min-width: 90px;
 }
 #secManageProposals table.data-table thead th:nth-child(4) {
-  min-width: 148px;
+  min-width: 112px;
 }
 #secManageProposals select.header-filter {
   text-overflow: clip;
   overflow: visible;
 }
 #secManageProposals table.data-table tbody td:nth-child(4) {
-  min-width: 148px;
+  min-width: 112px;
   white-space: normal;
+}
+
+/* Compacta a tabela de propostas (mais colunas hoje) pra caber sem rolagem lateral */
+#secManageProposals table.data-table {
+  font-size: 12.5px;
+}
+#secManageProposals table.data-table thead th {
+  padding: 8px 6px;
+  white-space: normal;
+  line-height: 1.25;
+}
+#secManageProposals table.data-table tbody td {
+  padding: 7px 6px;
+}
+#secManageProposals .badge {
+  padding: 2px 8px;
+  font-size: 11px;
+  white-space: normal;
+  text-align: center;
+}
+#secManageProposals .client-actions {
+  gap: 4px;
+}
+#secManageProposals .client-actions__btn {
+  width: 26px;
+  height: 26px;
 }
 
 /* Ações em tabela — ícones compactos (clientes, propostas, etc.) */

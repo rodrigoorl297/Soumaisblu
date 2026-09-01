@@ -769,7 +769,7 @@
               <p id="manageProposalsSubtitle" style="display:none" hidden></p>
             </div>
             <div style="display:flex; gap: 8px; align-items:center; flex-wrap:wrap;">
-              <div class="search-bar" style="width:260px;"><span class="search-icon"></span><input type="search" id="proposalSearch" name="sb_proposal_list_q" placeholder="Buscar proposta..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" readonly onfocus="this.removeAttribute('readonly');if(window.Proposals&amp;&amp;Proposals._onProposalSearchFocus)Proposals._onProposalSearchFocus(this)" onkeydown="if(window.Proposals)Proposals._markProposalSearchTyped()" onpaste="if(window.Proposals)Proposals._markProposalSearchTyped()" oninput="Proposals._onProposalSearchInput()" /></div><span class="proposal-date-filter" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">De<input type="date" id="proposalDateFrom" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data início" /></label><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">Até<input type="date" id="proposalDateTo" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data fim" /></label></span><button type="button" class="btn btn-outline btn-sm" onclick="Proposals.exportAdminCsv()" title="Exportar propostas visíveis (CSV) com os filtros atuais">Baixar CSV</button><button class="btn btn-primary" onclick="openClientModalAdmin()">+ Novo Cliente</button><button class="btn btn-primary" onclick="openProposalModalAdmin()">+ Nova Proposta</button>
+              <div class="search-bar" style="width:260px;"><span class="search-icon"></span><input type="search" id="proposalSearch" name="sb_proposal_list_q" placeholder="Buscar proposta..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" readonly onfocus="this.removeAttribute('readonly');if(window.Proposals&&Proposals._onProposalSearchFocus)Proposals._onProposalSearchFocus(this)" onkeydown="if(window.Proposals)Proposals._markProposalSearchTyped()" onpaste="if(window.Proposals)Proposals._markProposalSearchTyped()" oninput="Proposals._onProposalSearchInput()" /></div><span class="proposal-date-filter" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;"><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">De<input type="date" id="proposalDateFrom" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data início" /></label><label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">Até<input type="date" id="proposalDateTo" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data fim" /></label></span><button type="button" class="btn btn-outline btn-sm" onclick="Proposals.exportAdminCsv()" title="Exportar propostas visíveis (CSV) com os filtros atuais">Baixar CSV</button><button class="btn btn-primary" onclick="openClientModalAdmin()">+ Novo Cliente</button><button class="btn btn-primary" onclick="openProposalModalAdmin()">+ Nova Proposta</button>
             </div>
           </div>
           <div class="modal-overlay" id="propFormModal">
@@ -809,15 +809,36 @@
                       <option value="COMPRA DE DÍVIDA">COMPRA DE DÍVIDA</option>
                       <option value="CARTÃO">CARTÃO</option>
                     </select></div>
+                  <!-- TODO: Convênio — revisar/alterar (pendente, marcado em 01/09/2026) -->
                   <div class="form-group"><label>Convênio</label><select id="propConvenio" class="form-control" onchange="Proposals.updateEntidades()">
                       <option value="">Selecione o Convênio</option>
-                      <option value="FEDERAL">FEDERAL</option>
                       <option value="ESTADUAL">ESTADUAL</option>
+                      <option value="FEDERAL">FEDERAL</option>
                       <option value="MUNICIPAL">MUNICIPAL</option>
                     </select></div>
                   <div class="form-group"><label>Entidade / Órgão</label><select id="propEntidade" class="form-control">
                       <option value="">Selecione a Entidade</option>
                     </select></div>
+                </div>
+                <div class="form-row" style="margin-top:12px;">
+                  <div class="form-group"><label>Servidor</label><select id="propServidor" class="form-control">
+                      <option value="">Selecione</option>
+                      <option value="ESTADUAL">Estadual</option>
+                      <option value="FEDERAL">Federal</option>
+                      <option value="MUNICIPAL">Municipal</option>
+                    </select></div>
+                  <div class="form-group"><label>Situação do Servidor</label><select id="propSituacaoServidor" class="form-control">
+                      <option value="">Selecione</option>
+                      <option value="APOSENTADO">Aposentado</option>
+                      <option value="CEDIDO">Cedido</option>
+                      <option value="COMISSIONADO">Comissionado</option>
+                      <option value="EFETIVO">Efetivo</option>
+                      <option value="PENSIONISTA">Pensionista</option>
+                      <option value="TEMPORARIO">Temporário</option>
+                    </select></div>
+                </div>
+                <div class="form-row" style="margin-top:12px;">
+                  <div class="form-group"><label>Em caso de vídeo chamada, qual melhor horário para contato com cliente?</label><input type="time" id="propHorarioVideochamada" class="form-control"></div>
                 </div>
                 <div class="form-row" id="propEtapaVendedorRow" style="margin-top:12px;">
                   <div class="form-group" style="flex:1;"><label>Situação da Proposta</label><select id="propEtapaVendedor" class="form-control">
@@ -948,6 +969,7 @@
                           <option value="Cancelado">CANCELADO</option>
                         </select><span class="header-filter-chevron" aria-hidden="true">▾</span></div>
                     </th>
+                    <th>Última alteração</th>
                     <th>Ações</th>
                   </tr>
                 </thead>
@@ -2031,12 +2053,31 @@
               </select></div>
             <div class="form-group"><label>Convênio</label><select id="empPropConvenio" class="form-control" onchange="Proposals.updateEmployeeEntidades()">
                 <option value="">Selecione</option>
-                <option value="FEDERAL">FEDERAL</option>
                 <option value="ESTADUAL">ESTADUAL</option>
+                <option value="FEDERAL">FEDERAL</option>
                 <option value="MUNICIPAL">MUNICIPAL</option>
               </select></div>
             <div class="form-group"><label>Entidade</label><select id="empPropEntidade" class="form-control">
                 <option value="">Selecione</option>
+              </select></div>
+          </div>
+          <div class="emp-prop-form__grid emp-prop-form__grid--2">
+            <div class="form-group"><label>Servidor</label><select id="empPropServidor" class="form-control">
+                <option value="">Selecione</option>
+                <option value="ESTADUAL">Estadual</option>
+                <option value="FEDERAL">Federal</option>
+                <option value="MUNICIPAL">Municipal</option>
+              </select></div>
+            <div class="form-group"><label>Situação do Servidor</label><select id="empPropSituacaoServidor" class="form-control">
+                <option value="">Selecione</option>
+
+                <option value="APOSENTADO">Aposentado</option>
+                <option value="CEDIDO">Cedido</option>
+                 <option value="COMISSIONADO">Comissionado</option>
+                <option value="EFETIVO">Efetivo</option>
+                <option value="PENSIONISTA">Pensionista</option>
+                 <option value="TEMPORARIO">Temporário</option>
+               
               </select></div>
           </div>
           <div class="emp-prop-form__grid emp-prop-form__grid--2">

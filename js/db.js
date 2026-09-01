@@ -2765,6 +2765,8 @@ if (!allowed) return null;
         ['lastUpdatedBy', 'last_updated_by'],
         ['creditoRetorno', 'credito_retorno'],
         ['creditoEsteira', 'credito_esteira'],
+        ['situacaoServidor', 'situacao_servidor'],
+        ['horarioVideochamada', 'horario_videochamada'],
       ],
     },
 
@@ -3618,7 +3620,8 @@ if (!allowed) return null;
       return new Set([
         'id', 'numero', 'clientName', 'client_name', 'clientCpf', 'client_cpf',
         'vendorId', 'vendor_id', 'vendorName', 'vendor_name', 'employee_id',
-        'product', 'convenio', 'entidade', 'matricula', 'protocolo', 'obs', 'tabela',
+        'product', 'convenio', 'entidade', 'servidor', 'situacaoServidor', 'situacao_servidor',
+        'horarioVideochamada', 'horario_videochamada', 'matricula', 'protocolo', 'obs', 'tabela',
         'valor', 'valorFinal', 'valor_final', 'valorSolicitado', 'desconto',
         'status', 'statusOp', 'status_op',
         'senhaContracheque', 'senha_consignacao', 'senhaConsignacao', 'senha_contracheque',
