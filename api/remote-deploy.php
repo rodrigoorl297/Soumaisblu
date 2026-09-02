@@ -190,6 +190,7 @@ $allowed = [
     'js/financeiro-boot.js',
     'js/financeiro-page.js',
     'js/financeiro-reembolso.js',
+    'js/prestador-servicos.js',
     'js/fornecedor-financeiro.js',
     'js/conta-corrente.js',
     'js/fiscal-parceiro.js',

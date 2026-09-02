@@ -85,8 +85,40 @@ const Auth = {
   canAccessJuridicoHub() {
     const s = this.getSession();
     if (!s || window.PARTNER_ROOT_ID) return false;
+    const p = (s.permissions && typeof s.permissions === 'object') ? s.permissions : {};
+    if (p.canJuridicoHub === true) return true;
     const r = String(s.role || '').toLowerCase();
-    return ['juridico', 'master', 'fundador', 'rh', 'gerencia'].includes(r);
+    return ['juridico', 'master', 'fundador', 'rh', 'gerencia', 'desenvolvedor', 'diretoria'].includes(r);
+  },
+
+  /**
+   * hasFinanceiroInternoAccess — hub Financeiro SOU+BLU (fornecedor, fiscal, conta, parceiros…).
+   * Não inclui aprovação de saque PIX — use canPixSaques para isso.
+   */
+  hasFinanceiroInternoAccess(session) {
+    const s = session || this.getSession();
+    if (!s || window.PARTNER_ROOT_ID) return false;
+    const r = String(s.role || '').toLowerCase();
+    if (['master', 'fundador', 'financeiro', 'financial', 'rh', 'gerente', 'diretoria'].includes(r)) {
+      return true;
+    }
+    const p = (s.permissions && typeof s.permissions === 'object') ? s.permissions : {};
+    return !!(p.canFinanceiroHub || p.canFornecedorFinanceiro || p.canFiscalParceiro || p.canContaCorrente);
+  },
+
+  /**
+   * canPixSaques — aprovar/operar saques PIX. canSaques=false bloqueia mesmo com financeiro interno.
+   */
+  canPixSaques(session, user) {
+    const s = session || this.getSession();
+    if (!s || window.PARTNER_ROOT_ID) return false;
+    const perms = {
+      ...(user?.permissions && typeof user.permissions === 'object' ? user.permissions : {}),
+      ...(s.permissions && typeof s.permissions === 'object' ? s.permissions : {}),
+    };
+    if (perms.canSaques !== undefined) return !!perms.canSaques;
+    const r = String(s.role || '').toLowerCase();
+    return ['master', 'fundador', 'financeiro', 'financial', 'rh'].includes(r);
   },
   folhaPagamentoPageHref() { return this.pageHref('folha-pagamento.html'); },
   folhaPagamentoPageHrefFresh() { return this.pageHrefFresh('folha-pagamento.html'); },

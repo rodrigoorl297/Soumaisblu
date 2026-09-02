@@ -39,6 +39,7 @@
   function canView() {
     const sess = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (!sess || window.PARTNER_ROOT_ID) return false;
+    if (typeof Auth.hasFinanceiroInternoAccess === 'function') return Auth.hasFinanceiroInternoAccess(sess);
     return ['master', 'fundador', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria'].includes(String(sess.role || '').toLowerCase());
   }
 

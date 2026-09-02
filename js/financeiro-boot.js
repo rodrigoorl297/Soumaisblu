@@ -24,6 +24,29 @@
     debitar: 'Emitir prejuízo parceiro',
   };
 
+  /**
+   * canPixSaquesFromSession — espelha Auth.canPixSaques (só aprovação/envio PIX).
+   */
+  function canPixSaquesFromSession(session) {
+    if (typeof Auth !== 'undefined' && typeof Auth.canPixSaques === 'function') {
+      return Auth.canPixSaques(session);
+    }
+    const perms = (session?.permissions && typeof session.permissions === 'object')
+      ? session.permissions
+      : {};
+    if (perms.canSaques !== undefined) return !!perms.canSaques;
+    const role = String(session?.role || '').toLowerCase();
+    return ['master', 'fundador', 'financeiro', 'financial', 'rh'].includes(role);
+  }
+
+  /** Oculta menu e deep-link de Saque PIX quando canSaques=false. */
+  function applyPixWithdrawalNavVisibility() {
+    const canSaques = canPixSaquesFromSession(typeof Auth !== 'undefined' ? Auth.getSession() : null);
+    document.querySelectorAll('#navFinPix, [data-section="secWithdrawals"]').forEach((el) => {
+      el.style.display = canSaques ? '' : 'none';
+    });
+  }
+
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
       ? 'financeiro-sections.html?v=prop-date2'
@@ -71,6 +94,9 @@
     window.IS_DIRETORIA = s.role === 'diretoria';
     window.IS_DESENVOLVEDOR = s.role === 'desenvolvedor';
     window.IS_PARCEIRO = s.role === 'parceiro' || (typeof Auth.isPartner === 'function' && Auth.isPartner());
+    window.CAN_FINANCEIRO_INTERNO = typeof Auth.hasFinanceiroInternoAccess === 'function'
+      ? Auth.hasFinanceiroInternoAccess(s)
+      : (window.IS_MASTER || window.IS_FUNDA || window.IS_FINANCIAL || window.IS_RH);
     let partnerRoot = null;
     if (typeof DB !== 'undefined' && typeof DB.getPartnerRootForUser === 'function') {
       try {
@@ -89,7 +115,7 @@
   function applyFinanceiroPartnerNavVisibility() {
     const show = typeof canViewFinanceiroPartnerNav === 'function'
       ? canViewFinanceiroPartnerNav()
-      : (window.IS_MASTER || window.IS_FUNDA || window.IS_FINANCIAL)
+      : (window.CAN_FINANCEIRO_INTERNO || window.IS_MASTER || window.IS_FUNDA || window.IS_FINANCIAL)
         && !window.PARTNER_ROOT_ID && !window.IS_PARCEIRO;
     document.querySelectorAll('.fin-partner-nav-label, #navFinPartners, #navFinPartnerOps').forEach((el) => {
       el.style.display = show ? '' : 'none';
@@ -122,7 +148,10 @@
         showToast('Rede parceira usa saldo em R$.', 'warning');
         return;
       }
-      if (!IS_MASTER && !IS_FINANCIAL && !IS_GERENTE && !IS_RH && emp.admin_id !== ADMIN_ID) {
+      const finInterno = typeof Auth.hasFinanceiroInternoAccess === 'function'
+        ? Auth.hasFinanceiroInternoAccess()
+        : (IS_MASTER || IS_FINANCIAL || IS_GERENTE || IS_RH);
+      if (!finInterno && emp.admin_id !== ADMIN_ID) {
         showToast('Acesso negado.', 'error');
         return;
       }
@@ -472,6 +501,7 @@ if (!window.PartnerOps?.renderPanel) {
       }
       ensureFinanceiroSidebarVisible();
       applyFinanceiroPartnerNavVisibility();
+      applyPixWithdrawalNavVisibility();
       applyInicioNavVisibility();
       wireBalanceForm();
       if (typeof wirePartnerBalanceForm === 'function') wirePartnerBalanceForm();
@@ -502,6 +532,11 @@ if (!window.PartnerOps?.renderPanel) {
         sectionId = defaultFinanceiroSection();
         tab = '';
         window._finLastTab = '';
+      }
+      if (sectionId === 'secWithdrawals' && !canPixSaquesFromSession(Auth.getSession())) {
+        if (typeof showToast === 'function') showToast('Saque PIX não liberado para seu perfil.', 'warning');
+        showInicioPanel();
+        return;
       }
       showModulePanel(sectionId);
       await renderSection(sectionId, tab);

@@ -1,6 +1,39 @@
 /* SOU+BLU — Página Financeiro (boot DOMContentLoaded) */
 (function () {
   let _sessionRole = '';
+  let _canPixSaques = false;
+
+  /**
+   * canPixSaquesFromSession — lê permissions.canSaques da sessão/DB.
+   * Desenvolvedor com acesso financeiro total costuma ter canSaques=false (sem aprovar PIX).
+   */
+  function canPixSaquesFromSession(session, user) {
+    if (typeof Auth !== 'undefined' && typeof Auth.canPixSaques === 'function') {
+      return Auth.canPixSaques(session, user);
+    }
+    const perms = {
+      ...(user?.permissions && typeof user.permissions === 'object' ? user.permissions : {}),
+      ...(session?.permissions && typeof session.permissions === 'object' ? session.permissions : {}),
+    };
+    if (perms.canSaques !== undefined) return !!perms.canSaques;
+    const role = String(session?.role || '').toLowerCase();
+    return ['master', 'fundador', 'financeiro', 'financial', 'rh'].includes(role);
+  }
+
+  /**
+   * canAccessFinanceiroHub — quem entra em financeiro.html (papel interno ou canFinanceiroHub).
+   */
+  function canAccessFinanceiroHub(session, user) {
+    if (typeof Auth !== 'undefined' && typeof Auth.hasFinanceiroInternoAccess === 'function') {
+      return Auth.hasFinanceiroInternoAccess(session || Auth.getSession());
+    }
+    const role = String(session?.role || '').toLowerCase();
+    if (['master', 'fundador', 'financeiro', 'financial', 'desenvolvedor', 'diretoria', 'rh', 'gerente'].includes(role)) {
+      return true;
+    }
+    const perms = user?.permissions || session?.permissions || {};
+    return perms.canFinanceiroHub === true;
+  }
 
   function esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -106,7 +139,7 @@
 
     const badge = document.getElementById('finPixBadge');
     if (badge) {
-      if (pixPending.length > 0) {
+      if (_canPixSaques && pixPending.length > 0) {
         badge.textContent = pixPending.length;
         badge.classList.remove('hidden');
       } else {
@@ -115,20 +148,27 @@
     }
 
     if (subtitle) {
-      const pixLine = pixPending.length
-        ? `${pixPending.length} saque(s) PIX aguardando`
-        : 'Nenhum saque PIX pendente';
-      subtitle.textContent = `${pixLine}. ${pixRoleHint()}`;
+      if (_canPixSaques) {
+        const pixLine = pixPending.length
+          ? `${pixPending.length} saque(s) PIX aguardando`
+          : 'Nenhum saque PIX pendente';
+        subtitle.textContent = `${pixLine}. ${pixRoleHint()}`;
+      } else {
+        subtitle.textContent = 'Resumo financeiro — saques PIX não liberados para seu perfil.';
+      }
     }
 
-    kpiRoot.innerHTML = [
-      statCard({
+    const kpiCards = [];
+    if (_canPixSaques) {
+      kpiCards.push(statCard({
         icon: 'withdrawals',
         color: pixPending.length ? 'orange' : 'green',
         label: 'Saques PIX pendentes',
         value: pixPending.length,
         sub: pixPending.length ? `${fmtMoney(pixValue)} aguardando` : 'Nenhum pendente',
-      }),
+      }));
+    }
+    kpiCards.push(
       statCard({
         icon: 'billing',
         color: 'yellow',
@@ -143,9 +183,15 @@
         value: fiscalPending.length,
         sub: fiscalPending.length ? 'Aguardando NF / fechamento' : 'Em dia',
       }),
-    ].join('');
+    );
+    kpiRoot.innerHTML = kpiCards.join('');
 
     if (!alerts) return;
+
+    if (!_canPixSaques) {
+      alerts.innerHTML = '';
+      return;
+    }
 
     if (pixPending.length) {
       const rows = pixPending.slice(0, 6);
@@ -232,13 +278,13 @@
         }
 
         _sessionRole = String(session.role || '').toLowerCase();
-        const allowed = ['master', 'fundador', 'financeiro', 'financial'].includes(_sessionRole);
         const user = await DB.getUser(session.id).catch(() => null);
-        if (!allowed || user?.partner_root_id) {
+        if (!canAccessFinanceiroHub(session, user) || user?.partner_root_id) {
           redirected = true;
           window.location.replace(Auth.adminPageHref());
           return;
         }
+        _canPixSaques = canPixSaquesFromSession(session, user);
 
         const loader = document.getElementById('globalLoader');
         const app = document.getElementById('appLayout');
@@ -256,9 +302,13 @@
 
         const urlSec = new URLSearchParams(window.location.search).get('section');
         const urlTab = new URLSearchParams(window.location.search).get('tab');
-        if (urlSec) {
+        const blockedPix = urlSec === 'secWithdrawals' && !_canPixSaques;
+        if (urlSec && !blockedPix) {
           await FinanceiroPage.openSection(urlSec, urlTab || '');
         } else {
+          if (blockedPix && typeof showToast === 'function') {
+            showToast('Saque PIX não liberado para seu perfil.', 'warning');
+          }
           await FinanceiroPage.openSection('');
         }
       } catch (e) {

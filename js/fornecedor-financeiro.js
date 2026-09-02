@@ -48,6 +48,7 @@
   function canManage() {
     const s = Auth.getSession();
     if (!s || window.PARTNER_ROOT_ID) return false;
+    if (typeof Auth.hasFinanceiroInternoAccess === 'function') return Auth.hasFinanceiroInternoAccess(s);
     return ['master', 'fundador', 'gerente', 'financeiro', 'financial'].includes(s.role);
   }
 

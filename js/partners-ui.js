@@ -19,12 +19,18 @@
   /** RH / gestão interna (não rede parceira). */
   function canManagePartners() {
     if (_inPartnerOrgContext()) return false;
+    if (typeof Auth !== 'undefined' && typeof Auth.hasFinanceiroInternoAccess === 'function') {
+      return Auth.hasFinanceiroInternoAccess();
+    }
     return ['master', 'fundador', 'rh', 'gerencia', 'gerente', 'diretoria', 'financeiro', 'financial'].includes(_role());
   }
 
-  /** Hub Financeiro SOU+BLU: só Master/Fundador/Financeiro internos — nunca parceiros. */
+  /** Hub Financeiro SOU+BLU: papéis internos ou permissions.canFinanceiroHub — nunca parceiros. */
   function canViewFinanceiroPartnerNav() {
     if (_inPartnerOrgContext()) return false;
+    if (typeof Auth !== 'undefined' && typeof Auth.hasFinanceiroInternoAccess === 'function') {
+      return Auth.hasFinanceiroInternoAccess();
+    }
     return ['master', 'fundador', 'financeiro', 'financial'].includes(_role());
   }
 

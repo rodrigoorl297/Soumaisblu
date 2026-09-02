@@ -123,6 +123,7 @@
   function canView() {
     const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (!s || window.PARTNER_ROOT_ID) return false;
+    if (typeof Auth.hasFinanceiroInternoAccess === 'function') return Auth.hasFinanceiroInternoAccess(s);
     return ['master', 'fundador', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria'].includes(String(s.role || '').toLowerCase());
   }
 

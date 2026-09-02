@@ -3329,6 +3329,20 @@ window.Proposals = {
   },
 
   /**
+   * _canEditTabelaComissao — define/altera tabela de comissão (bloco Financeiro).
+   * Financeiro interno ou permissões canFinanceiroHub no perfil.
+   */
+  _canEditTabelaComissao: function(role) {
+    const r = this._normProposalManageRole(role);
+    if (['master', 'fundador', 'financeiro', 'financial', 'gerente', 'gerencia'].includes(r)) return true;
+    const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    if (s && typeof Auth.hasFinanceiroInternoAccess === 'function' && Auth.hasFinanceiroInternoAccess(s)) {
+      return true;
+    }
+    return false;
+  },
+
+  /**
    * _readManageValorInput — lê valor bruto do modal (campo verde ou azul).
    * Prioriza managePropValorEdit; se vazio, usa managePropValorBruto.
    */
@@ -5334,13 +5348,18 @@ window.Proposals = {
 
     const canEditValor = opts.canEditValor !== false;
     const valorOnlyMode = !!opts.valorOnlyMode;
+    const role = this._normProposalManageRole(typeof Auth !== 'undefined' && Auth.getSession()?.role);
+    const canEditTabela = this._canEditTabelaComissao(role);
     const valorFieldIds = new Set(['managePropValorBruto', 'managePropValorEdit', 'managePropNumeroEdit']);
+    const tabelaFieldIds = new Set(['managePropTabela']);
     if (modal.dataset) modal.dataset.valorOnlySave = valorOnlyMode ? '1' : '';
 
     const title = document.getElementById('manageProposalTitle');
     if (title) {
       title.textContent = valorOnlyMode
-        ? 'Corrigir Nº e Valor (proposta paga)'
+        ? (canEditTabela
+          ? 'Corrigir Nº, Valor e Tabela (proposta paga)'
+          : 'Corrigir Nº e Valor (proposta paga)')
         : (viewOnly ? 'Visualizar Proposta' : 'Atualizar Proposta');
     }
 
@@ -5350,6 +5369,11 @@ window.Proposals = {
       readonlyIds.add('managePropValorEdit');
       readonlyIds.add('managePropNumeroEdit');
     }
+    if (viewOnly && !valorOnlyMode) {
+      readonlyIds.add('managePropTabela');
+    } else if (!canEditTabela && !valorOnlyMode) {
+      readonlyIds.add('managePropTabela');
+    }
 
     const body = modal.querySelector('.modal-body');
     if (body) {
@@ -5357,7 +5381,8 @@ window.Proposals = {
         if (el.type === 'hidden') return;
         const id = el.id || '';
         if (valorOnlyMode) {
-          const canEditField = valorFieldIds.has(id);
+          const canEditField = valorFieldIds.has(id)
+            || (canEditTabela && tabelaFieldIds.has(id));
           if (el.tagName === 'SELECT') el.disabled = !canEditField;
           else el.readOnly = !canEditField;
           return;
@@ -5366,6 +5391,11 @@ window.Proposals = {
           if (el.tagName === 'SELECT') el.disabled = true;
           else el.readOnly = true;
         } else {
+          if (id === 'managePropTabela' && el.tagName === 'SELECT') {
+            el.disabled = !canEditTabela;
+            el.readOnly = false;
+            return;
+          }
           el.disabled = false;
           el.readOnly = readonlyIds.has(id);
         }
@@ -5415,8 +5445,15 @@ window.Proposals = {
       if (canFixPaidValor) {
         valorOnlyMode = true;
         viewOnly = false;
+        const canFixTabela = this._canEditTabelaComissao(roleEarly);
         if (typeof showToast === 'function') {
-          showToast('Proposta paga: corrija número e valor no bloco verde e salve.', 'info', 7000);
+          showToast(
+            canFixTabela
+              ? 'Proposta paga: corrija número, valor e tabela nos blocos verde/azul e salve.'
+              : 'Proposta paga: corrija número e valor no bloco verde e salve.',
+            'info',
+            7000
+          );
         }
       } else {
         viewOnly = true;
@@ -5556,7 +5593,7 @@ window.Proposals = {
       this._setFolderContext('managePropAnexosFolders', 'manageProp');
       this.resetAnexoFolders(proposal.attachments);
     }
-    this._applyManageModalMode(viewOnly, { canEditValor: canEditProp, valorOnlyMode });
+    this._applyManageModalMode(viewOnly, { canEditValor: canEditProp, valorOnlyMode, canEditTabela: this._canEditTabelaComissao(role) });
     this._ensureSupBackofficeDateUi('manageProp');
     this._resetSupBackofficeDateUi('manageProp', proposal);
     if (typeof openModal === 'function') openModal('manageProposalModal');
@@ -5619,8 +5656,10 @@ window.Proposals = {
       proposal.history.push({
         date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
         actorName: user?.name || 'Sistema',
-        action: 'Correção de valor/nº (proposta paga)',
-        note: `Valor: ${orig.valor} → ${proposal.valor}${orig.numero !== proposal.numero ? ` · Nº: ${orig.numero || '—'} → ${proposal.numero}` : ''}`,
+        action: orig.tabela !== proposal.tabela
+          ? 'Correção de valor/nº/tabela (proposta paga)'
+          : 'Correção de valor/nº (proposta paga)',
+        note: `Valor: ${orig.valor} → ${proposal.valor}${orig.numero !== proposal.numero ? ` · Nº: ${orig.numero || '—'} → ${proposal.numero}` : ''}${orig.tabela !== proposal.tabela ? ` · Tabela: ${orig.tabela || '—'} → ${proposal.tabela}` : ''}`,
         kind: 'valor_fix_paid',
       });
       const saved = await DB.saveProposal(proposal, { skipHydrate: true, preserveUpdatedAt: true });
@@ -5727,7 +5766,7 @@ window.Proposals = {
     // ── Tabela / Valor Final (definido pelo Financeiro) ──────────────
     const tabelaEl = document.getElementById('managePropTabela');
     let novaTabela = '';
-    if (tabelaEl) {
+    if (tabelaEl && this._canEditTabelaComissao(role)) {
       novaTabela = tabelaEl.value;
       if (novaTabela) {
         const pct = this._tabelaPct[novaTabela] ?? 1;

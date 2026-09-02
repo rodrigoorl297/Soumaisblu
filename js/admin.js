@@ -138,6 +138,7 @@ let IS_PARCEIRO      = false; // parceiro externo — supervisor limitado + equi
 let PARTNER_ROOT_ID  = null; // id do usuário parceiro dono da equipe
 let IS_PARTNER_STAFF = false; // vendedor/rh/financeiro/operacional sob um parceiro
 let CAN_EMPLOYEES_PANEL = false; // master, dev, RH, financeiro (+ sup. backoffice)
+let CAN_FINANCEIRO_INTERNO = false; // hub financeiro sem saque PIX
 /** Master edita equipe de um parceiro específico (cadastro via Parceiros). */
 let _empPartnerRootOverride = null;
 
@@ -159,6 +160,7 @@ function syncFinanceiroRoleGlobals() {
   IS_DIRETORIA = !!window.IS_DIRETORIA;
   IS_DESENVOLVEDOR = !!window.IS_DESENVOLVEDOR;
   IS_PARCEIRO = !!window.IS_PARCEIRO;
+  CAN_FINANCEIRO_INTERNO = !!window.CAN_FINANCEIRO_INTERNO;
   PARTNER_ROOT_ID = window.PARTNER_ROOT_ID ?? null;
   IS_PARTNER_STAFF = !!window.IS_PARTNER_STAFF;
   CAN_EMPLOYEES_PANEL = !!window.CAN_EMPLOYEES_PANEL;
@@ -1799,7 +1801,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
       }
       if (IS_SUPERVISOR || PARTNER_ROOT_ID) { showToast('Sem permissão para alterar saldo.', 'error'); return; }
-      if (!IS_MASTER && !IS_FINANCIAL && !IS_GERENTE && !IS_RH && emp.admin_id !== ADMIN_ID) {
+      const finInterno = typeof Auth.hasFinanceiroInternoAccess === 'function'
+        ? Auth.hasFinanceiroInternoAccess()
+        : (IS_MASTER || IS_FINANCIAL || IS_GERENTE || IS_RH);
+      if (!finInterno && emp.admin_id !== ADMIN_ID) {
         showToast('Acesso negado.', 'error');
         return;
       }
