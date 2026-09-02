@@ -1,0 +1,34 @@
+---
+description: Todo código novo deve ter comentário de manutenção (o que é e o que faz).
+alwaysApply: true
+---
+
+# Comentários de manutenção
+
+Sempre que criar ou alterar função, método, bloco de regra ou constante importante, escreva comentário **no próprio código**, em português, para quem for manter depois.
+
+O comentário precisa responder:
+
+1. **O que é** (nome/papel)
+2. **O que faz** (efeito, entrada/saída)
+3. **Por que existe** se a regra não for óbvia (ex.: não apagar 2 produtos no mesmo CPF)
+
+## Formato
+
+- Função/método: JSDoc `/** ... */` imediatamente acima.
+- Trecho crítico no meio da função: `//` de 1–3 linhas, não um ensaio.
+- Não comentar o óbvio (`i++`, `return true`).
+- Não apagar comentários de manutenção ao refatorar; atualize-os.
+
+```javascript
+// ❌ BAD
+function pick(a, b) { return a > b ? a : b; }
+
+// ✅ GOOD
+/**
+ * pickProposalToKeep — escolhe 1 ficha num grupo de clones.
+ * Prioridade: paga > com número > maior valor > mais recente.
+ * Usado só depois de proposalCloneKey (mesmo CPF+produto+banco).
+ */
+function pickProposalToKeep(list) { /* ... */ }
+```

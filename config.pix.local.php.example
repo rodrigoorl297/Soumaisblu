@@ -1,0 +1,23 @@
+<?php
+/**
+ * Exemplo — copie para config.pix.local.php na raiz do site (mesma pasta que api/).
+ * Não commitar o arquivo real (contém senhas).
+ */
+
+/** Token interno do painel → api/pix_api.php, fontedata.php, novati.php */
+define('PIX_INTERNAL_TOKEN', 'troque_pelo_token_interno');
+
+/** FonteData — CNPJ, certidão TJ, score Quod (consultas sem equivalente na Nova Vida) */
+define('FONTE_DATA_API_KEY', 'SUA-CHAVE-FONTEDATA');
+define('FONTE_DATA_API_BASE', 'https://app.fontedata.com/api/v1/consulta');
+define('FONTE_DATA_INTERNAL_TOKEN', PIX_INTERNAL_TOKEN);
+
+/**
+ * Nova Vida TI — NVCHECK (CPF cadastral — substitui FonteData no lookup de CPF).
+ * Credenciais do portal Congonhas/Ipê (usuário, senha, cliente).
+ */
+define('NOVA_TI_USUARIO', 'seu@email.com.br');
+define('NOVA_TI_SENHA', 'sua_senha');
+define('NOVA_TI_CLIENTE', 'SAKPROMOTORA');
+define('NOVA_TI_API_BASE', 'https://wsnv.novavidati.com.br/WSLocalizador.asmx');
+define('NOVA_TI_INTERNAL_TOKEN', PIX_INTERNAL_TOKEN);
