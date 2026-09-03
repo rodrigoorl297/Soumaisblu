@@ -38,6 +38,11 @@
       document.body.appendChild(modal);
     }
     wireJustificativaEvents();
+    /* CboLookup.initRhCboFields() já rodou no DOMContentLoaded, antes desta seção existir no DOM —
+       o campo de busca CBO daqui (carregado via fetch) nunca ficava ligado. Liga direto agora. */
+    if (window.CboLookup && typeof CboLookup.bind === 'function') {
+      CboLookup.bind('justif_cbo_search', 'justif_cbo_dropdown', 'justif_cbo_cod', 'justif_cbo_descricao');
+    }
   }
 
   function wireJustificativaEvents() {

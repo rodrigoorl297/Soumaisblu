@@ -734,7 +734,7 @@ function _applyAdminNavVisibility(cfg) {
   (function _injectRHNav() {
     const roleLower = String(currentUser?.role || '').toLowerCase();
     const isSup = roleLower === 'supervisor' || roleLower === 'sup_backoffice';
-    const canRH = (IS_RH && !window.PARTNER_ROOT_ID) || IS_MASTER || IS_FUNDA || isSup;
+    const canRH = (IS_RH && !window.PARTNER_ROOT_ID) || IS_MASTER || IS_FUNDA || isSup || IS_DESENVOLVEDOR;
     let btn = document.getElementById('navRHManager');
     if (!btn) {
       btn = document.createElement('button');
@@ -1443,7 +1443,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         || partnerOrgCan('conta_adiantamento_motivo') || IS_PARCEIRO
         || ['vendedor', 'backoffice', 'operacional', 'sup_backoffice'].includes(s.role)));
     const canFinanceiroHub = p.canFinanceiroHub !== undefined ? !!p.canFinanceiroHub
-      : (!_inPartnerOrg && (IS_MASTER || IS_FUNDA || IS_FINANCIAL));
+      : (!_inPartnerOrg && (IS_MASTER || IS_FUNDA || IS_FINANCIAL || IS_DESENVOLVEDOR));
     const canMonitoriaAtendimento = p.canMonitoriaAtendimento !== undefined ? !!p.canMonitoriaAtendimento
       : (!_inPartnerOrg && typeof Auth.canAccessMonitoriaAtendimento === 'function' && Auth.canAccessMonitoriaAtendimento());
     const canJuridicoHub = p.canJuridicoHub !== undefined ? !!p.canJuridicoHub

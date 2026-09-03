@@ -232,7 +232,7 @@
         }
 
         _sessionRole = String(session.role || '').toLowerCase();
-        const allowed = ['master', 'fundador', 'financeiro', 'financial'].includes(_sessionRole);
+        const allowed = ['master', 'fundador', 'financeiro', 'financial', 'desenvolvedor'].includes(_sessionRole);
         const user = await DB.getUser(session.id).catch(() => null);
         if (!allowed || user?.partner_root_id) {
           redirected = true;

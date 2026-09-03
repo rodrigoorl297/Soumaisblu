@@ -1537,6 +1537,19 @@
 
   <!-- Modal Justificativa: pages/rh-justificativa-section.html (rh-justificativa-boot.js) -->
 
+  <!-- MODAL: Todos os Contratados (esteira seletiva — cartões com +4 dias em "Contratado") -->
+  <div class="modal-overlay" id="contratadosListModal">
+    <div class="modal" style="max-width:640px;">
+      <div class="modal-header">
+        <h3>Todos os Contratados</h3>
+        <button type="button" class="modal-close" onclick="closeModalRH('contratadosListModal')" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+        <div id="contratadosListBody"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: Registro Punição -->
   <div class="modal-overlay" id="punicaoModal">
     <div class="modal" style="max-width:780px;">

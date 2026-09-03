@@ -51,7 +51,7 @@
         </div>
         <div class="trn-topbar-actions">
           <button type="button" class="trn-nav-btn" id="trnNavCatalogo" onclick="trnGoTab('tab-catalog')" title="Catálogo de cursos">Catálogo</button>
-          <button type="button" class="trn-nav-btn" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado">Trilhas</button>
+          <button type="button" class="trn-nav-btn" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado" style="display:none;">Trilhas</button>
           <button type="button" class="trn-gestao-btn trainings-manage-nav" id="trnNavGestao" onclick="trnGoTab('tab-gestao')" style="display:none;">
             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             Gestão
@@ -736,7 +736,14 @@
 
         const cat = this._currentCategory === 'mural' ? 'all' : this._currentCategory;
         this._currentCategory = cat;
-        const filtered = cat === 'all' ? all : all.filter(t => t.category === cat);
+        const isPassed = tr => !!this._getAttempt(tr.id)?.passed;
+        let filtered;
+        if (cat === 'concluidos') {
+          filtered = all.filter(isPassed);
+        } else {
+          const active = all.filter(t => !isPassed(t));
+          filtered = cat === 'all' ? active : active.filter(t => t.category === cat);
+        }
 
         let totalCourses = all.length, completed = 0, inProgress = 0, pending = 0;
         for (const tr of all) {
@@ -763,7 +770,7 @@
                 <div class="trn-metric-label">Em andamento</div>
                 <div class="trn-metric-value">${inProgress}</div>
               </div>
-              <div class="trn-metric is-ok">
+              <div class="trn-metric is-ok" role="button" tabindex="0" style="cursor:pointer;" onclick="LMS.filterCategory('concluidos')">
                 <div class="trn-metric-label">Concluídos</div>
                 <div class="trn-metric-value">${completed}</div>
               </div>
@@ -779,10 +786,13 @@
               <button type="button" class="trn-filter ${cat === 'video_vendas' ? 'active' : ''}" onclick="LMS.filterCategory('video_vendas')">Vendas</button>
               <button type="button" class="trn-filter ${cat === 'curso_institucional' ? 'active' : ''}" onclick="LMS.filterCategory('curso_institucional')">Institucionais</button>
               <button type="button" class="trn-filter ${cat === 'regimento' ? 'active' : ''}" onclick="LMS.filterCategory('regimento')">Regimento</button>
+              <button type="button" class="trn-filter ${cat === 'concluidos' ? 'active' : ''}" onclick="LMS.filterCategory('concluidos')">Concluídos${completed ? ` (${completed})` : ''}</button>
             </div>`;
 
         if (!filtered.length) {
-          html += '<div class="trn-empty"><p>Nenhum curso nesta categoria</p></div>';
+          html += cat === 'concluidos'
+            ? '<div class="trn-empty"><p>Você ainda não concluiu nenhum curso</p></div>'
+            : '<div class="trn-empty"><p>Nenhum curso nesta categoria</p></div>';
         } else {
           html += '<div class="trn-hub" aria-label="Catálogo de cursos">';
           for (const tr of filtered) {
