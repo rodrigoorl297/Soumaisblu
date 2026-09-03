@@ -220,8 +220,29 @@
   window.imprimirRecibo = function () { window.print(); };
 
   /* ══ NAVIGATE BACK ══ */
+  // Não usa history.back(): a página de origem (RH/Financeiro) pode voltar do
+  // bfcache "congelada" (conexão com o banco parada), então sempre navegamos
+  // explicitamente com recarga forçada (?_r=), como as demais telas do painel.
   window.navigateBack = function () {
-    try { history.back(); } catch (_) { window.location.href = 'admin.html'; }
+    const KNOWN_PAGES = ['financeiro.html', 'rh-manager.html', 'admin.html'];
+    try {
+      let filename = '';
+      try {
+        const refUrl = new URL(document.referrer);
+        if (refUrl.origin === window.location.origin) {
+          filename = refUrl.pathname.split('/').pop() || '';
+        }
+      } catch (_) { /* sem referrer (acesso direto/nova aba) */ }
+      if (!KNOWN_PAGES.includes(filename)) filename = 'admin.html';
+      const target = (typeof Auth !== 'undefined' && typeof Auth.pageHrefFresh === 'function')
+        ? Auth.pageHrefFresh(filename)
+        : filename;
+      window.location.replace(target);
+    } catch (_) {
+      window.location.href = (typeof Auth !== 'undefined' && typeof Auth.adminPageHref === 'function')
+        ? Auth.adminPageHref()
+        : 'admin.html';
+    }
   };
 
   /* ══ INIT ══ */
