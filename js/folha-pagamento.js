@@ -112,6 +112,19 @@
     if (sol) sol.value = (session && (session.name || session.email)) || '—';
     const loginEl = document.getElementById('fpLoginFuncionario');
     if (loginEl) loginEl.value = '';
+    updateSidebarUser(session);
+  }
+
+  /* ══ SIDEBAR (esteira) — usuário logado no rodapé ══ */
+  function updateSidebarUser(session) {
+    const nameEl = document.getElementById('userName');
+    const roleEl = document.getElementById('userRole');
+    const avEl   = document.getElementById('userAvatar');
+    if (!nameEl && !roleEl && !avEl) return;
+    const name = (session && (session.name || session.email)) || '—';
+    if (nameEl) nameEl.textContent = name;
+    if (roleEl) roleEl.textContent = roleLabel(session && session.role);
+    if (avEl) avEl.textContent = getInitials(name);
   }
 
   /* ══ HELPERS ══ */
@@ -220,24 +233,33 @@
   window.imprimirRecibo = function () { window.print(); };
 
   /* ══ NAVIGATE BACK ══ */
-  // Não usa history.back(): a página de origem (RH/Financeiro) pode voltar do
-  // bfcache "congelada" (conexão com o banco parada), então sempre navegamos
-  // explicitamente com recarga forçada (?_r=), como as demais telas do painel.
-  window.navigateBack = function () {
-    const KNOWN_PAGES = ['financeiro.html', 'rh-manager.html', 'admin.html'];
+  // Não usa history.back(): pode voltar do bfcache "congelada" (conexão com o
+  // banco parada). Quando a página que abriu a Folha manda um "?back=" (ex.:
+  // o Financeiro manda a URL dele já com ?section=&tab= da tela que estava
+  // aberta, como a Esteira de Crédito), voltamos exatamente pra lá com
+  // recarga forçada — assim a seção continua aberta em vez de resetar.
+  // Sem "back" (acesso direto, ou vindo do RH), cai no admin.html com
+  // recarga forçada, igual a todas as outras telas do painel (RH Manager,
+  // Jurídico, Monitoramento, Leads etc. — todas usam Auth.adminPageHrefFresh()).
+  function backHrefFromQuery() {
     try {
-      let filename = '';
-      try {
-        const refUrl = new URL(document.referrer);
-        if (refUrl.origin === window.location.origin) {
-          filename = refUrl.pathname.split('/').pop() || '';
-        }
-      } catch (_) { /* sem referrer (acesso direto/nova aba) */ }
-      if (!KNOWN_PAGES.includes(filename)) filename = 'admin.html';
-      const target = (typeof Auth !== 'undefined' && typeof Auth.pageHrefFresh === 'function')
-        ? Auth.pageHrefFresh(filename)
-        : filename;
-      window.location.replace(target);
+      const raw = new URLSearchParams(window.location.search).get('back');
+      if (!raw) return '';
+      const u = new URL(raw, window.location.href);
+      return (u.origin === window.location.origin) ? u.href : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  window.navigateBack = function () {
+    try {
+      window.location.replace(
+        backHrefFromQuery() ||
+        ((typeof Auth !== 'undefined' && typeof Auth.adminPageHrefFresh === 'function')
+          ? Auth.adminPageHrefFresh()
+          : 'admin.html')
+      );
     } catch (_) {
       window.location.href = (typeof Auth !== 'undefined' && typeof Auth.adminPageHref === 'function')
         ? Auth.adminPageHref()

@@ -1253,3 +1253,9 @@ html.fp-embed-mode body.fp-app { min-height: auto; }
     html.fp-embed-mode .fp-topbar { display: none !important; }
     html.fp-embed-mode .fp-page { padding-top: 8px; padding-bottom: 100px; max-width: none; }
     html.fp-embed-mode body.fp-app { min-height: auto; }
+
+/* Sidebar (esteira) — navegação lateral igual às demais telas do painel.
+   Some no modo embutido (embed=1): quando a Folha abre dentro de um iframe
+   (ex.: RH > Relatórios), a esteira de quem já a embutiu é a que aparece. */
+html.fp-embed-mode #fpSidebar { display: none !important; }
+html.fp-embed-mode #fpMainArea { margin-left: 0 !important; }

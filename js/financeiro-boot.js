@@ -222,38 +222,75 @@
   }
 
 
+  /** Seção/aba atualmente aberta no Financeiro (ex.: Esteira de Crédito + aba). */
+  function currentFinNavState() {
+    if (window._finNavIntent) {
+      return { section: window._finNavIntent.section || '', tab: window._finNavIntent.tab || '' };
+    }
+    const active = document.querySelector('#finPageContent .section.active');
+    return { section: active?.id || '', tab: window._finLastTab || '' };
+  }
+
+  /** URL de volta ao Financeiro reabrindo a mesma seção/aba (usa o ?section=&tab= já suportado por FinanceiroPage.boot()). */
+  function financeiroReturnHref() {
+    const base = (typeof Auth !== 'undefined' && typeof Auth.financeiroPageHrefFresh === 'function')
+      ? Auth.financeiroPageHrefFresh()
+      : 'financeiro.html';
+    try {
+      const u = new URL(base, window.location.href);
+      const { section, tab } = currentFinNavState();
+      if (section) u.searchParams.set('section', section);
+      if (tab) u.searchParams.set('tab', tab);
+      return u.href;
+    } catch (_) {
+      return base;
+    }
+  }
+
   /** Absolute Folha URL — never bare relative against <base href=".../pages/"> (avoids /pages/pages/...). */
   function folhaPagamentoHref() {
+    let base = '';
     try {
       if (typeof window.soubluPage === 'function') {
         const u = new URL(window.soubluPage('folha-pagamento.html'));
         u.searchParams.set('_r', Date.now().toString(36));
-        return u.href;
+        base = u.href;
       }
     } catch (_) { /* fall through */ }
-    if (typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHrefFresh === 'function') {
-      return Auth.folhaPagamentoPageHrefFresh();
+    if (!base && typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHrefFresh === 'function') {
+      base = Auth.folhaPagamentoPageHrefFresh();
     }
-    if (typeof Auth !== 'undefined' && typeof Auth.pageHrefFresh === 'function') {
-      return Auth.pageHrefFresh('folha-pagamento.html');
+    if (!base && typeof Auth !== 'undefined' && typeof Auth.pageHrefFresh === 'function') {
+      base = Auth.pageHrefFresh('folha-pagamento.html');
     }
-    if (typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHref === 'function') {
+    if (!base && typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHref === 'function') {
       try {
         const u = new URL(Auth.folhaPagamentoPageHref());
         u.searchParams.set('_r', Date.now().toString(36));
-        return u.href;
+        base = u.href;
       } catch (_) {
-        return Auth.folhaPagamentoPageHref();
+        base = Auth.folhaPagamentoPageHref();
       }
     }
-    const inPages = /\/pages(\/|$)/i.test(String(location.pathname || '').replace(/\\/g, '/'));
-    const rel = inPages ? 'folha-pagamento.html' : 'pages/folha-pagamento.html';
+    if (!base) {
+      const inPages = /\/pages(\/|$)/i.test(String(location.pathname || '').replace(/\\/g, '/'));
+      const rel = inPages ? 'folha-pagamento.html' : 'pages/folha-pagamento.html';
+      try {
+        const u = new URL(rel, window.location.href);
+        u.searchParams.set('_r', Date.now().toString(36));
+        base = u.href;
+      } catch (_) {
+        base = rel;
+      }
+    }
+    // Leva a seção/aba atual do Financeiro para o botão Voltar da Folha
+    // reabrir exatamente a mesma tela (ex.: Esteira de Crédito continua aberta).
     try {
-      const u = new URL(rel, window.location.href);
-      u.searchParams.set('_r', Date.now().toString(36));
+      const u = new URL(base, window.location.href);
+      u.searchParams.set('back', financeiroReturnHref());
       return u.href;
     } catch (_) {
-      return rel;
+      return base;
     }
   }
 
