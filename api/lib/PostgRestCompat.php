@@ -24,6 +24,8 @@ final class PostgRestCompat
         'rh_employees' => 1000,
         'internal_chat_messages' => 500,
         'internal_chat_threads' => 300,
+        'wa_number_requests' => 500,
+        'wa_numbers' => 500,
     ];
 
     private const ALLOWED = [
@@ -44,6 +46,7 @@ final class PostgRestCompat
         'bolao_copa_picks', 'bolao_copa_results',
         'beneficios_limites', 'beneficios_prestadores', 'beneficios_produtos', 'beneficios_vouchers', 'beneficios_fechamentos',
         'internal_chat_threads', 'internal_chat_messages',
+        'wa_number_requests', 'wa_numbers',
     ];
 
     /** Nome na API (snake_case) → coluna física no MySQL. */

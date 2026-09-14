@@ -874,8 +874,6 @@
       align-items: center;
     }
     .kanban-col-cards {
-      flex: 1;
-      min-height: 420px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -887,6 +885,10 @@
       outline: 2px dashed var(--color-accent);
       outline-offset: -2px;
     }
+    @keyframes kanbanCardIn {
+      from { opacity: 0; transform: translateY(-10px) scale(0.96); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
     .kanban-card {
       background: var(--color-card-bg, #fff);
       border-radius: 8px;
@@ -895,6 +897,7 @@
       box-shadow: 0 4px 6px rgba(0,0,0,0.05);
       cursor: grab;
       transition: transform 0.2s, box-shadow 0.2s;
+      animation: kanbanCardIn 0.22s ease;
     }
     .kanban-card:hover {
       transform: translateY(-2px);
@@ -1206,6 +1209,46 @@
       margin-bottom: 12px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
+    }
+    .rh-perm-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 10px;
+      background: var(--color-surface-2, #f9fafb);
+      padding: 16px;
+      border-radius: 10px;
+      border: 1px solid var(--color-border);
+    }
+    .rh-perm-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--color-text);
+      cursor: pointer;
+      background: var(--color-card-bg, #fff);
+      border: 1px solid var(--color-border);
+      border-radius: 8px;
+      padding: 9px 10px;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .rh-perm-item:hover {
+      border-color: var(--color-accent);
+    }
+    .rh-perm-item:has(input:checked) {
+      border-color: var(--color-accent);
+      box-shadow: 0 0 0 1px var(--color-accent);
+    }
+    .rh-perm-item input[type="checkbox"] {
+      accent-color: var(--color-accent);
+      width: 16px;
+      height: 16px;
+      flex-shrink: 0;
+      cursor: pointer;
+    }
+    .rh-perm-item.is-hidden {
+      display: none;
     }
 
     .btn-api-lookup {

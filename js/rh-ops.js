@@ -614,14 +614,22 @@ function _bindKanbanDnD() {
       const id = _dragResumeId || e.dataTransfer.getData('text/plain');
       if (!id) return;
       const resume = (window._allResumes || []).find(r => String(r.id) === String(id));
-      if (!resume || _resumeStage(resume) === stage) return;
+      if (!resume) return;
+      const prevStage = _resumeStage(resume);
+      if (prevStage === stage) return;
+
+      /* Move otimista: o card já pula de coluna na hora do drop, sem esperar o servidor. */
       _applyResumeStageChange(resume, stage);
+      renderKanban();
+
       try {
         await DB.saveRhResume(resume);
         if (typeof showToast === 'function') showToast('Estágio atualizado.', 'success');
-        renderKanban();
       } catch (err) {
         console.error('[kanban]', err);
+        /* Falhou no servidor: desfaz a troca visual e volta o card pra coluna original. */
+        _applyResumeStageChange(resume, prevStage);
+        renderKanban();
         alert('Não foi possível salvar o estágio do candidato.');
       }
     });

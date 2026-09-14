@@ -4869,6 +4869,63 @@ function _renderMasterSoloBody(user, allOrders, allWds) {
     </div>`;
 }
 
+/** Master/fundador e desenvolvedor podem trocar a foto de outros membros pelo Painel Master. */
+function _canEditMemberPhotosMaster() {
+  return IS_MASTER || IS_FUNDA || IS_DESENVOLVEDOR;
+}
+
+/** Avatar clicável (Painel Master): mostra um selo de câmera sobre o avatar pra deixar claro que dá pra clicar. */
+function _masterAvatarCellHtml(user, size) {
+  const canEdit = _canEditMemberPhotosMaster() && !!user?.id;
+  if (!canEdit) return avatarHtml(user?.name, size, user?.photo_url || '');
+  const targetId = String(user.id).replace(/'/g, '');
+  const onClickJs = `_masterTriggerPhotoUpload('${targetId}')`;
+  const src = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(user?.photo_url) : String(user?.photo_url || '').trim();
+  const ini = getInitials(user?.name);
+  const bg = avatarColor(user?.name);
+  const inner = src
+    ? `<img src="${typeof _escAttr === 'function' ? _escAttr(src) : src}" class="avatar ${size}" style="object-fit:cover;border-radius:50%;" onerror="this.outerHTML='<div class=&quot;avatar ${size}&quot; style=&quot;background:${bg}&quot;>${ini}</div>'">`
+    : `<div class="avatar ${size}" style="background:${bg};">${ini}</div>`;
+  const badge = size === 'avatar-lg' ? 20 : 15;
+  const icon = Math.round(badge * 0.6);
+  return `<span class="master-avatar-edit" onclick="${onClickJs}" title="Trocar foto" style="position:relative;display:inline-flex;cursor:pointer;flex-shrink:0;">
+    ${inner}
+    <span style="position:absolute;right:-2px;bottom:-2px;width:${badge}px;height:${badge}px;background:var(--color-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--color-surface);">
+      <svg xmlns="http://www.w3.org/2000/svg" width="${icon}" height="${icon}" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </span>
+  </span>`;
+}
+
+let _masterPhotoUploadTargetId = null;
+
+function _masterTriggerPhotoUpload(userId) {
+  if (!userId || !_canEditMemberPhotosMaster()) return;
+  _masterPhotoUploadTargetId = userId;
+  document.getElementById('masterMemberPhotoInput')?.click();
+}
+
+async function _masterUploadMemberPhoto(input) {
+  const file = input.files[0];
+  const targetId = _masterPhotoUploadTargetId;
+  input.value = '';
+  if (!file || !targetId || !_canEditMemberPhotosMaster()) return;
+  if (file.size > 3 * 1024 * 1024) { showToast('Imagem muito grande. Máx: 3MB.', 'warning'); return; }
+  showLoading('Salvando foto...');
+  try {
+    const url = await uploadImage(file, 'profile-photos', targetId);
+    await DB.updateUser(targetId, { photo_url: url });
+    _cacheDel?.('users');
+    await renderMasterPanel();
+    showToast('Foto atualizada.', 'success');
+  } catch (e) {
+    console.error(e);
+    showToast('Erro ao salvar foto.', 'error');
+  } finally {
+    hideLoading();
+    _masterPhotoUploadTargetId = null;
+  }
+}
+
 function _masterUserActionsHtml(user) {
   const escName = String(user.name || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
   const uid = String(user.id || '').replace(/'/g, '');
@@ -4904,7 +4961,7 @@ function _renderUserCard(user, team, allOrders, allWds, roleLabels) {
           : '';
         return `
         <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-surface-2);border-radius:var(--radius-md);border:1px solid var(--color-border);">
-          ${avatarHtml(e.name, 'avatar-sm', e.photo_url || '')}
+          ${_masterAvatarCellHtml(e, 'avatar-sm')}
           <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:11px;color:var(--color-text-muted);">${e.department} · ${formatCurrency(userPts(e), e)}</div></div>
           ${ptsBtn}
           <button type="button" class="btn btn-ghost btn-sm" data-master-act="edit" data-user-id="${e.id}">Editar</button>
@@ -4928,7 +4985,7 @@ function _renderUserCard(user, team, allOrders, allWds, roleLabels) {
   return `
   <div class="card card-padded master-user-card">
     <div class="master-user-card__head">
-      ${avatarHtml(user.name, 'avatar-lg', user.photo_url || '')}
+      ${_masterAvatarCellHtml(user, 'avatar-lg')}
       <div class="master-user-card__identity">
         <div class="master-user-card__name">
           <span>${user.name}</span>
@@ -4954,7 +5011,7 @@ function _renderMasterUserSection(title, users, allOrders, allWds, roleLabels) {
     const rl = roleLabels[u.role] || { label: u.role, cls: 'badge-muted' };
     return `
     <div class="master-user-row">
-      ${avatarHtml(u.name, 'avatar-sm', u.photo_url || '')}
+      ${_masterAvatarCellHtml(u, 'avatar-sm')}
       <div class="master-user-row__main">
         <div class="master-user-row__name">
           <span>${u.name}</span>

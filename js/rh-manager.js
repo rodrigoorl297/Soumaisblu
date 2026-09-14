@@ -20,6 +20,130 @@
     );
   }
 
+  /* ══ Ordenação da tabela de Funcionários (setinhas no cabeçalho) ══ */
+  let _empSortField = 'nome';
+  let _empSortDir = 'asc';
+
+  const _EMP_SORT_VALUE = {
+    nome: (e) => _rhEmpSortKey(e),
+    cargo: (e) => String(_jobLabel(e.cargo_id || e.cargo) || '').toLocaleLowerCase('pt-BR'),
+    departamento: (e) => String(e.departamento || '').toLocaleLowerCase('pt-BR'),
+    supervisor: (e) => String(_rhSupervisorLabel(e) || '').toLocaleLowerCase('pt-BR'),
+    data_admissao: (e) => {
+      const d = e.data_admissao ? new Date(e.data_admissao) : null;
+      return d && !Number.isNaN(d.getTime()) ? d.getTime() : -Infinity;
+    },
+    status: (e) => {
+      const st = String(e.status || (e.demitido ? 'demitido' : 'ativo')).toLowerCase();
+      return st === 'demitido' ? 2 : (st === 'inativo' ? 1 : 0);
+    },
+  };
+
+  function _sortRhEmployees(rows, field, dir) {
+    const getVal = _EMP_SORT_VALUE[field] || _EMP_SORT_VALUE.nome;
+    const mult = dir === 'desc' ? -1 : 1;
+    return (rows || []).slice().sort((a, b) => {
+      const va = getVal(a);
+      const vb = getVal(b);
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * mult;
+      return String(va).localeCompare(String(vb), 'pt-BR', { sensitivity: 'base' }) * mult;
+    });
+  }
+
+  function sortEmployeeList(field) {
+    if (_empSortField === field) {
+      _empSortDir = _empSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _empSortField = field;
+      _empSortDir = 'asc';
+    }
+    renderEmployeeList();
+  }
+
+  function _updateEmpSortHeaders() {
+    document.querySelectorAll('#employee_list_thead .sortable-th').forEach((th) => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sortField === _empSortField) th.classList.add(_empSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+    });
+  }
+
+  /* ══ Ordenação da tabela de Cargos (setinhas no cabeçalho) ══ */
+  let _jobSortField = 'cargo';
+  let _jobSortDir = 'asc';
+
+  const _JOB_SORT_VALUE = {
+    protocolo: (j) => String(j.protocolo || '').toLocaleLowerCase('pt-BR'),
+    cargo: (j) => String(j.cargo || '').toLocaleLowerCase('pt-BR'),
+    cbo: (j) => String(j.cbo_cod || j.cbo_codigo || '').toLocaleLowerCase('pt-BR'),
+    cbo_descricao: (j) => String(j.cbo_descricao || '').toLocaleLowerCase('pt-BR'),
+    departamento: (j) => String(j.departamento || '').toLocaleLowerCase('pt-BR'),
+    insalubre: (j) => (String(j.trabalho_insalubre || 'NÃO').toUpperCase() === 'SIM' ? 1 : 0),
+  };
+
+  function _sortRhJobs(rows, field, dir) {
+    const getVal = _JOB_SORT_VALUE[field] || _JOB_SORT_VALUE.cargo;
+    const mult = dir === 'desc' ? -1 : 1;
+    return (rows || []).slice().sort((a, b) => {
+      const va = getVal(a);
+      const vb = getVal(b);
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * mult;
+      return String(va).localeCompare(String(vb), 'pt-BR', { sensitivity: 'base' }) * mult;
+    });
+  }
+
+  function sortJobList(field) {
+    if (_jobSortField === field) {
+      _jobSortDir = _jobSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _jobSortField = field;
+      _jobSortDir = 'asc';
+    }
+    renderJobList();
+  }
+
+  function _updateJobSortHeaders() {
+    document.querySelectorAll('#job_list_thead .sortable-th').forEach((th) => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sortField === _jobSortField) th.classList.add(_jobSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+    });
+  }
+
+  /* ══ Ordenação da tabela de Currículos (setinhas no cabeçalho) ══ */
+  let _resumeSortField = 'nome';
+  let _resumeSortDir = 'asc';
+
+  const _RESUME_SORT_VALUE = {
+    protocolo: (r) => String(r.protocolo || '').toLocaleLowerCase('pt-BR'),
+    nome: (r) => String(r.nome || '').toLocaleLowerCase('pt-BR'),
+    cpf: (r) => _digits(r.cpf || ''),
+    vaga: (r) => String(_jobLabel(r.vaga_id || r.vaga) || '').toLocaleLowerCase('pt-BR'),
+  };
+
+  function _sortRhResumes(rows, field, dir) {
+    const getVal = _RESUME_SORT_VALUE[field] || _RESUME_SORT_VALUE.nome;
+    const mult = dir === 'desc' ? -1 : 1;
+    return (rows || []).slice().sort((a, b) =>
+      String(getVal(a)).localeCompare(String(getVal(b)), 'pt-BR', { sensitivity: 'base' }) * mult
+    );
+  }
+
+  function sortResumeList(field) {
+    if (_resumeSortField === field) {
+      _resumeSortDir = _resumeSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      _resumeSortField = field;
+      _resumeSortDir = 'asc';
+    }
+    renderResumeList();
+  }
+
+  function _updateResumeSortHeaders() {
+    document.querySelectorAll('#resume_list_thead .sortable-th').forEach((th) => {
+      th.classList.remove('sort-asc', 'sort-desc');
+      if (th.dataset.sortField === _resumeSortField) th.classList.add(_resumeSortDir === 'desc' ? 'sort-desc' : 'sort-asc');
+    });
+  }
+
   function _normRhDept(v) {
     return String(v || '').trim().toLowerCase()
       .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -356,6 +480,7 @@
     curriculo: 'Currículos / Candidatos',
     cargo: 'Cargos',
     funcionario: 'Cadastrar Funcionário',
+    fotos_equipe: 'Fotos da Equipe',
     feedback: 'Feedbacks',
     vagas: 'Vagas',
     justificativa: 'Justificativa de Falta',
@@ -773,6 +898,11 @@
         el.style.display = '';
       });
     }
+
+    /* Sup. Backoffice: sem acesso à ficha completa de RH, mas pode trocar foto dos membros da equipe. */
+    document.querySelectorAll('.rh-photos-nav').forEach((el) => {
+      el.style.display = r === 'sup_backoffice' ? '' : 'none';
+    });
 
     document.querySelectorAll('.nav-item[data-tab="sonhos"]').forEach((el) => {
       el.style.display = showSonhos ? '' : 'none';
@@ -1250,6 +1380,7 @@
       _updateRhFuncionarioGreeting();
       renderEmployeeList();
     }
+    if (tabId === 'fotos_equipe') renderTeamPhotosList();
     if (tabId === 'justificativa' && typeof renderJustificativaList === 'function') {
       renderJustificativaList();
     }
@@ -1699,11 +1830,13 @@
   function renderResumeList() {
     const tbody = document.getElementById('resume_list_body');
     if (!tbody) return;
+    _updateResumeSortHeaders();
     if (!_allResumes.length) {
       tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
       return;
     }
-    tbody.innerHTML = _allResumes.map((r) => `<tr>
+    const list = _sortRhResumes(_allResumes, _resumeSortField, _resumeSortDir);
+    tbody.innerHTML = list.map((r) => `<tr>
       <td><code>${_esc(r.protocolo || '—')}</code></td>
       <td><strong>${_esc(r.nome)}</strong></td>
       <td>${_esc(_fmtCpf(r.cpf))}</td>
@@ -1718,11 +1851,13 @@
   function renderJobList() {
     const tbody = document.getElementById('job_list_body');
     if (!tbody) return;
+    _updateJobSortHeaders();
     if (!_allJobs.length) {
       tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
       return;
     }
-    tbody.innerHTML = _allJobs.map((j) => {
+    const list = _sortRhJobs(_allJobs, _jobSortField, _jobSortDir);
+    tbody.innerHTML = list.map((j) => {
       const insalubre = String(j.trabalho_insalubre || 'NÃO').toUpperCase() === 'SIM' ? 'SIM' : 'NÃO';
       const insBadge = insalubre === 'SIM' ? 'badge-warning' : 'badge-muted';
       return `<tr>
@@ -1745,9 +1880,10 @@
     if (!tbody) return;
     const raw = window._allEmployees || [];
     const company = _rhCompanyEmployees(raw);
-    const list = _sortRhEmpByName(company);
+    const list = _sortRhEmployees(company, _empSortField, _empSortDir);
+    _updateEmpSortHeaders();
   if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
       return;
     }
     tbody.innerHTML = list.map((e) => {
@@ -1767,6 +1903,7 @@
           ? `<button type="button" class="btn btn-xs btn-success" onclick="reativarFuncionario('${_esc(e.id)}')">Reativar</button>`
           : `<button type="button" class="btn btn-xs btn-outline" onclick="inativarFuncionario('${_esc(e.id)}')">Inativar</button>`);
       return `<tr${isInactive ? ' style="opacity:.72;"' : ''}>
+        <td>${_rhMemberPhotoCellHtml(e.nome, e.user_id)}</td>
         <td><strong>${_esc(e.nome)}</strong><div style="font-size:12px;color:var(--color-text-muted);">${_esc(_fmtCpf(e.cpf))}</div></td>
         <td>${_esc(_jobLabel(e.cargo_id || e.cargo))}</td>
         <td>${_esc(e.departamento || '—')}</td>
@@ -1782,6 +1919,97 @@
       </tr>`;
     }).join('');
   }
+
+  /** Fundador/Master (topo da hierarquia), Desenvolvedor e Sup. Backoffice podem trocar a foto de outros membros da equipe. */
+  function _canEditMemberPhotos() {
+    const role = String(currentUser?.role || Auth.getSession()?.role || '').toLowerCase();
+    return role === 'master' || role === 'fundador' || role === 'desenvolvedor' || role === 'sup_backoffice';
+  }
+  window._canEditMemberPhotos = _canEditMemberPhotos;
+
+  function _rhFindSystemUser(userId) {
+    if (!userId) return null;
+    return (window._allSystemUsersCache || []).find((x) => String(x.id) === String(userId)) || null;
+  }
+
+  /** Avatar (com fallback de iniciais); clicável para trocar foto quando `onClickJs` é passado.
+   *  Mostra um selo de câmera sobre o avatar pra deixar claro que dá pra clicar. */
+  function _rhAvatarCellHtml(name, photo, onClickJs) {
+    const src = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(photo) : String(photo || '').trim();
+    const ini = typeof getInitials === 'function' ? getInitials(name) : '?';
+    const bg = typeof avatarColor === 'function' ? avatarColor(name) : '#94a3b8';
+    const inner = src
+      ? `<img src="${typeof _escAttr === 'function' ? _escAttr(src) : src}" class="avatar avatar-sm" style="object-fit:cover;border-radius:50%;" onerror="this.outerHTML='<div class=&quot;avatar avatar-sm&quot; style=&quot;background:${bg}&quot;>${ini}</div>'">`
+      : `<div class="avatar avatar-sm" style="background:${bg};">${ini}</div>`;
+    if (!onClickJs) return inner;
+    return `<span onclick="${onClickJs}" title="Trocar foto" style="position:relative;display:inline-flex;cursor:pointer;flex-shrink:0;">
+      ${inner}
+      <span style="position:absolute;right:-2px;bottom:-2px;width:15px;height:15px;background:var(--color-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--color-surface);">
+        <svg xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      </span>
+    </span>`;
+  }
+
+  /** Célula de foto de um funcionário na lista; some com botão de trocar quando o usuário tem permissão. */
+  function _rhMemberPhotoCellHtml(name, userId) {
+    const su = _rhFindSystemUser(userId);
+    const canEdit = _canEditMemberPhotos() && !!su;
+    const targetId = String(userId || '').replace(/'/g, '');
+    const onClickJs = canEdit ? `_rhTriggerMemberPhotoUpload('${targetId}')` : '';
+    return _rhAvatarCellHtml(name, su?.photo_url || '', onClickJs);
+  }
+  window._rhMemberPhotoCellHtml = _rhMemberPhotoCellHtml;
+
+  let _rhPhotoUploadTargetId = null;
+
+  function _rhTriggerMemberPhotoUpload(userId) {
+    if (!userId || !_canEditMemberPhotos()) return;
+    _rhPhotoUploadTargetId = userId;
+    document.getElementById('rhMemberPhotoInput')?.click();
+  }
+  window._rhTriggerMemberPhotoUpload = _rhTriggerMemberPhotoUpload;
+
+  async function _rhUploadMemberPhoto(input) {
+    const file = input.files[0];
+    const targetId = _rhPhotoUploadTargetId;
+    input.value = '';
+    if (!file || !targetId || !_canEditMemberPhotos()) return;
+    if (file.size > 3 * 1024 * 1024) { showToast('Imagem muito grande. Máx: 3MB.', 'warning'); return; }
+    showLoading('Salvando foto...');
+    try {
+      const url = await uploadImage(file, 'profile-photos', targetId);
+      await DB.updateUser(targetId, { photo_url: url });
+      await _loadRhSystemUsers(true);
+      renderEmployeeList();
+      renderTeamPhotosList();
+      showToast('Foto atualizada.', 'success');
+    } catch (e) {
+      console.error(e);
+      showToast('Erro ao salvar foto.', 'error');
+    } finally {
+      hideLoading();
+      _rhPhotoUploadTargetId = null;
+    }
+  }
+  window._rhUploadMemberPhoto = _rhUploadMemberPhoto;
+
+  /** Aba enxuta "Fotos da Equipe" — só nome + avatar, sem dados sensíveis (CPF, admissão, etc.). */
+  function renderTeamPhotosList() {
+    const tbody = document.getElementById('team_photos_list_body');
+    if (!tbody) return;
+    const raw = window._allEmployees || [];
+    const list = _sortRhEmpByName(_rhCompanyEmployees(raw));
+    if (!list.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Nenhum registro encontrado.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = list.map((e) => `<tr>
+      <td>${_rhMemberPhotoCellHtml(e.nome, e.user_id)}</td>
+      <td><strong>${_esc(e.nome)}</strong></td>
+      <td>${_esc(e.departamento || '—')}</td>
+    </tr>`).join('');
+  }
+  window.renderTeamPhotosList = renderTeamPhotosList;
 
   function _onEmpCargoChange() {
     const jobId = _val('emp_cargo');
@@ -3054,6 +3282,7 @@
   window.salvarCurriculo = salvarCurriculo;
   window.buscarCpfCurriculo = buscarCpfCurriculo;
   window.gerarProtocoloCurriculo = gerarProtocoloCurriculo;
+  window.sortResumeList = sortResumeList;
   window.editCurriculo = editCurriculo;
   window.excluirCurriculo = excluirCurriculo;
 
@@ -3062,6 +3291,7 @@
   window.editCargo = editCargo;
   window.excluirCargo = excluirCargo;
   window.gerarProtocoloCargo = gerarProtocoloCargo;
+  window.sortJobList = sortJobList;
 
   window.openFuncionarioModal = openFuncionarioModal;
   window.openFuncionarioFromRef = openFuncionarioFromRef;
@@ -3074,6 +3304,8 @@
   window.inativarFuncionario = inativarFuncionario;
   window.reativarFuncionario = reativarFuncionario;
   window.onEmpRoleChange = onEmpRoleChange;
+  window.sortEmployeeList = sortEmployeeList;
+  window.renderTeamPhotosList = renderTeamPhotosList;
 
   document.addEventListener('DOMContentLoaded', () => {
     try {

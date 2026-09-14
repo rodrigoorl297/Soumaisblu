@@ -218,6 +218,31 @@ table.data-table thead th {
   border-bottom: 2px solid var(--color-border);
   white-space: nowrap;
 }
+table.data-table thead th.sortable-th {
+  cursor: pointer;
+  user-select: none;
+}
+table.data-table thead th.sortable-th:hover {
+  color: var(--color-text);
+}
+table.data-table thead th.sortable-th .sort-arrow {
+  display: inline-flex;
+  vertical-align: -1px;
+  margin-left: 4px;
+  opacity: 0.35;
+  transition: opacity 0.15s, transform 0.15s;
+}
+table.data-table thead th.sortable-th:hover .sort-arrow {
+  opacity: 0.7;
+}
+table.data-table thead th.sortable-th.sort-asc .sort-arrow,
+table.data-table thead th.sortable-th.sort-desc .sort-arrow {
+  opacity: 1;
+  color: var(--color-accent);
+}
+table.data-table thead th.sortable-th.sort-desc .sort-arrow {
+  transform: rotate(180deg);
+}
 table.data-table tbody td {
   padding: 13px 16px;
   border-bottom: 1px solid var(--color-border);

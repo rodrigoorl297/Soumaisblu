@@ -371,9 +371,13 @@ async function renderProfile() {
     const roleLabel = _profileRoleLabel(currentUser.role) || currentUser.department || '';
     const metaLine = [roleLabel || currentUser.department, currentUser.matricula ? `Matrícula ${currentUser.matricula}` : ''].filter(Boolean).join(' · ');
 
+    const photoBadgeHtml = `<span onclick="${photoClick}" title="Alterar foto" style="position:absolute;right:-2px;bottom:-2px;width:24px;height:24px;background:var(--color-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;border:2px solid var(--color-surface);cursor:pointer;">
+      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+    </span>`;
+
     profileHeader.innerHTML = `
     ${_profileMenuHtml()}
-    <div style="position:relative;flex-shrink:0;">${photoHtml}</div>
+    <div style="position:relative;flex-shrink:0;">${photoHtml}${photoBadgeHtml}</div>
     <div style="flex:1;min-width:0;">
       <div class="profile-name">${currentUser.name}</div>
       <div class="profile-meta">${metaLine}</div>

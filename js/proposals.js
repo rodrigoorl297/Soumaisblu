@@ -433,7 +433,7 @@ window.Proposals = {
     }
   },
 
-  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '', dateFrom: '', dateTo: '' },
+  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '', dateFrom: '', dateTo: '', sortField: '', sortDir: 'asc' },
   _employeeList: { page: 1, pageSize: 20, total: 0 },
   _employeeEditCache: {},
   _adminEditCache: {},
@@ -1430,10 +1430,48 @@ window.Proposals = {
     const val = this._getAdminVendorFilter();
     this._adminList.vendorId = val;
     this._adminList.page = 1;
-    
+
     const headerSel = document.getElementById('proposalVendorFilterHeader');
     if (headerSel) headerSel.value = val === '' ? '' : val;
     this.renderAdminList();
+  },
+
+  /** Alterna ordenação por nome de funcionário (vendedor): nenhuma → A-Z → Z-A → nenhuma. */
+  toggleAdminVendorSort: function() {
+    if (this._adminList.sortField !== 'vendedor') {
+      this._adminList.sortField = 'vendedor';
+      this._adminList.sortDir = 'asc';
+    } else if (this._adminList.sortDir === 'asc') {
+      this._adminList.sortDir = 'desc';
+    } else {
+      this._adminList.sortField = '';
+      this._adminList.sortDir = 'asc';
+    }
+    this._adminList.page = 1;
+    this._updateAdminVendorSortHeader();
+    this.renderAdminList();
+  },
+
+  _updateAdminVendorSortHeader: function() {
+    const btn = document.getElementById('proposalVendorSortBtn');
+    if (!btn) return;
+    const active = this._adminList.sortField === 'vendedor';
+    const dir = this._adminList.sortDir;
+    btn.classList.toggle('btn-primary', active);
+    btn.classList.toggle('btn-outline', !active);
+    btn.textContent = active && dir === 'desc' ? 'Vendedor ↓ Z-A' : (active ? 'Vendedor ↑ A-Z' : 'Vendedor A-Z');
+    btn.title = active
+      ? (dir === 'desc' ? 'Ordenado Z-A por funcionário — clique para remover a ordenação' : 'Ordenado A-Z por funcionário — clique para inverter')
+      : 'Ordenar propostas por nome de funcionário (vendedor), A-Z';
+  },
+
+  _sortProposalsByVendorName: function(list, dir) {
+    const mult = dir === 'desc' ? -1 : 1;
+    return (list || []).slice().sort((a, b) => {
+      const va = String(a.vendorName || '').trim().toLocaleLowerCase('pt-BR');
+      const vb = String(b.vendorName || '').trim().toLocaleLowerCase('pt-BR');
+      return va.localeCompare(vb, 'pt-BR', { sensitivity: 'base' }) * mult;
+    });
   },
 
   _getAdminStatusFilter: function() {
@@ -1578,6 +1616,8 @@ window.Proposals = {
       const vendors = await DB.getVendorsForSelect(scopeAdmin);
       const opts = (vendors || [])
         .filter(v => v && v.id)
+        .slice()
+        .sort((a, b) => String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''), 'pt-BR', { sensitivity: 'base' }))
         .map(v => {
           const label = String(v.name || v.email || v.id || '').toUpperCase();
           return `<option value="${this._escAttr(v.id)}">${this._escHtml(label)}</option>`;
@@ -4038,11 +4078,14 @@ window.Proposals = {
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
     proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
     proposals = proposals.filter(p => this._matchesDateFilter(p, dateFrom, dateTo));
-    if (this._isDigitacaoStatus(statusFilter)) {
+    if (this._adminList.sortField === 'vendedor') {
+      proposals = this._sortProposalsByVendorName(proposals, this._adminList.sortDir);
+    } else if (this._isDigitacaoStatus(statusFilter)) {
       proposals = this._sortProposalsDigitacaoFifo(proposals);
     } else {
       proposals = this._sortProposalsNewestFirst(proposals);
     }
+    this._updateAdminVendorSortHeader();
 
     this._propPerfLog('proposals.js:_fetchAdminProposalsFiltered', 'list fetched', {
       ms: Date.now() - t0, count: proposals.length, partnerRoot: !!window.PARTNER_ROOT_ID, fromCache: !!canUseCache,

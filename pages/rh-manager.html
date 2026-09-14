@@ -217,6 +217,24 @@
             ></span>
             Cadastrar Funcionário
           </a>
+          <a class="nav-item rh-photos-nav" data-tab="fotos_equipe" onclick="switchTab('fotos_equipe')" style="display: none">
+            <span class="nav-icon"
+              ><svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                <circle cx="12" cy="13" r="4"></circle></svg
+            ></span>
+            Fotos da Equipe
+          </a>
           <a class="nav-item rh-mgmt-only" data-tab="justificativa" onclick="switchTab('justificativa')">
             <span class="nav-icon"
               ><svg
@@ -618,8 +636,18 @@
             <div class="card">
               <div class="table-wrap">
                 <table class="data-table">
-                  <thead>
-                    <tr> <th>Protocolo</th><th>Nome</th><th>CPF</th><th>Vaga</th><th>Ações</th> </tr>
+                  <thead id="resume_list_thead">
+                    <tr>
+                      <th class="sortable-th" data-sort-field="protocolo" onclick="sortResumeList('protocolo')"
+                        >Protocolo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th sort-asc" data-sort-field="nome" onclick="sortResumeList('nome')"
+                        >Nome<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="cpf" onclick="sortResumeList('cpf')"
+                        >CPF<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="vaga" onclick="sortResumeList('vaga')"
+                        >Vaga<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th>Ações</th>
+                    </tr>
                   </thead>
                   <tbody id="resume_list_body">
                     <tr><td colspan="5" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
@@ -643,8 +671,22 @@
             <div class="card">
               <div class="table-wrap">
                 <table class="data-table">
-                  <thead>
-                    <tr> <th>Protocolo</th><th>Cargo</th><th>CBO</th><th>Descrição CBO</th><th>Departamento</th><th>Insalubre</th><th>Ações</th> </tr>
+                  <thead id="job_list_thead">
+                    <tr>
+                      <th class="sortable-th" data-sort-field="protocolo" onclick="sortJobList('protocolo')"
+                        >Protocolo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th sort-asc" data-sort-field="cargo" onclick="sortJobList('cargo')"
+                        >Cargo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="cbo" onclick="sortJobList('cbo')"
+                        >CBO<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="cbo_descricao" onclick="sortJobList('cbo_descricao')"
+                        >Descrição CBO<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="departamento" onclick="sortJobList('departamento')"
+                        >Departamento<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="insalubre" onclick="sortJobList('insalubre')"
+                        >Insalubre<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th>Ações</th>
+                    </tr>
                   </thead>
                   <tbody id="job_list_body">
                     <tr><td colspan="7" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
@@ -668,20 +710,57 @@
             <div class="card">
               <div class="table-wrap">
                 <table class="data-table">
-                  <thead>
+                  <thead id="employee_list_thead">
                     <tr>
-                      <th>Funcionário / CPF</th><th>Cargo</th><th>Departamento</th><th>Supervisor</th><th>Admissão</th><th>Status</th
+                      <th>Foto</th>
+                      <th class="sortable-th sort-asc" data-sort-field="nome" onclick="sortEmployeeList('nome')"
+                        >Funcionário / CPF<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="cargo" onclick="sortEmployeeList('cargo')"
+                        >Cargo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="departamento" onclick="sortEmployeeList('departamento')"
+                        >Departamento<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="supervisor" onclick="sortEmployeeList('supervisor')"
+                        >Supervisor<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="data_admissao" onclick="sortEmployeeList('data_admissao')"
+                        >Admissão<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
+                      ><th class="sortable-th" data-sort-field="status" onclick="sortEmployeeList('status')"
+                        >Status<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th
                       ><th>Medidas Disciplinares</th><th>Ações</th>
                     </tr>
                   </thead>
                   <tbody id="employee_list_body">
-                    <tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+                    <tr><td colspan="9" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
                   </tbody>
                 </table>
               </div>
             </div>
           </div>
         </div>
+
+        <!-- ═══ ABA: Fotos da Equipe (Sup. Backoffice) ═══ -->
+        <div class="tab-content" id="tab-fotos_equipe" style="display: none">
+          <div class="page-content">
+            <div class="page-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px">
+              <div class="page-header-text">
+                <h2 style="font-weight: 800; font-size: 24px; margin-bottom: 4px">Fotos da Equipe</h2>
+                <p class="text-muted" style="font-size: 14px">Clique na foto de um colaborador para trocá-la.</p>
+              </div>
+            </div>
+            <div class="card">
+              <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr><th>Foto</th><th>Nome</th><th>Departamento</th></tr>
+                  </thead>
+                  <tbody id="team_photos_list_body">
+                    <tr><td colspan="3" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+        <input type="file" id="rhMemberPhotoInput" accept="image/*" style="display: none" onchange="_rhUploadMemberPhoto(this)" />
 
         <!-- ═══ ABA: Feedbacks ═══ -->
         <div class="tab-content" id="tab-feedback" style="display: none">
@@ -1602,6 +1681,7 @@
             <input type="hidden" id="emp_id" />
             <input type="hidden" id="emp_user_id" />
 
+            <div class="section-title-bar">Identificação e Dados Pessoais</div>
             <div class="form-grid">
               <div class="form-group">
                 <label for="emp_cpf">CPF</label>
@@ -1639,7 +1719,8 @@
               <input type="text" class="form-control" id="emp_nome" placeholder="Nome Completo do Colaborador" required />
             </div>
 
-            <div class="form-grid mt-md">
+            <div class="section-title-bar">Vínculo Empresarial</div>
+            <div class="form-grid">
               <div class="form-group">
                 <label for="emp_cnpj_registro">Empresa Vinculada (CNPJ)</label>
                 <select class="form-control" id="emp_cnpj_registro">
@@ -1696,7 +1777,8 @@
               </div>
             </div>
 
-            <div class="form-grid mt-md">
+            <div class="section-title-bar">Cargo e Remuneração</div>
+            <div class="form-grid">
               <div class="form-group">
                 <label for="emp_chave_pix">Chave PIX</label>
                 <input type="text" class="form-control" id="emp_chave_pix" placeholder="CPF, Celular, E-mail ou Aleatória" />
@@ -1843,83 +1925,29 @@
               </div>
             </div>
 
-            <div style="margin-top: 15px">
-              <label style="font-weight: 700; font-size: 13px; display: block; margin-bottom: 10px">Atribuir Permissões Específicas:</label>
-              <div
-                style="
-                  display: grid;
-                  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-                  gap: 10px;
-                  background: #f9fafb;
-                  padding: 16px;
-                  border-radius: 8px;
-                  border: 1px solid #e5e7eb;
-                "
-              >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canMasterPanel" /> Painel Master</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canSaques" /> Aprovar Saques PIX</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canCadFunc" /> Cadastrar Funcionários</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canProposta" /> Acessar Propostas</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canClientes" /> Acessar Clientes</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canPartnerOpsHub" /> Gestão de Parceiros</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canRanking" /> Ranking de Vendas</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canLoja" /> Loja de Prêmios</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canSimulacao" /> Simulação de Troco</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canChamados" /> Gerenciar Chamados</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canSupervisorPanel" /> Painel Supervisor</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canPartnerDashboard" /> Dashboard de Parceiro</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canLeadsManager" /> Gerenciador de Leads</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canTreinamentos" /> Plataforma de Treinamentos</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer; display: none"
-                  ><input type="checkbox" id="perm_canTimIndicacao" /> Indicação TIM</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer; display: none"
-                  ><input type="checkbox" id="perm_canTimEsteira" /> Esteira TIM</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canContestacao" /> Contestações</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canFiscalParceiro" /> Fechamento Fiscal</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canMarketplaceBlu" /> Marketplace BLU</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canFornecedorFinanceiro" /> Fornecedores Financeiros</label
-                >
-                <label class="flex items-center" style="gap: 8px; font-size: 13px; cursor: pointer"
-                  ><input type="checkbox" id="perm_canContaCorrente" /> Conta Corrente</label
-                >
-              </div>
+            <div class="section-title-bar">Atribuir Permissões Específicas</div>
+            <div class="rh-perm-grid">
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canMasterPanel" /> Painel Master</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canSaques" /> Aprovar Saques PIX</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canCadFunc" /> Cadastrar Funcionários</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canProposta" /> Acessar Propostas</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canClientes" /> Acessar Clientes</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canPartnerOpsHub" /> Gestão de Parceiros</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canRanking" /> Ranking de Vendas</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canLoja" /> Loja de Prêmios</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canSimulacao" /> Simulação de Troco</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canChamados" /> Gerenciar Chamados</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canSupervisorPanel" /> Painel Supervisor</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canPartnerDashboard" /> Dashboard de Parceiro</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canLeadsManager" /> Gerenciador de Leads</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canTreinamentos" /> Plataforma de Treinamentos</label>
+              <label class="rh-perm-item is-hidden"><input type="checkbox" id="perm_canTimIndicacao" /> Indicação TIM</label>
+              <label class="rh-perm-item is-hidden"><input type="checkbox" id="perm_canTimEsteira" /> Esteira TIM</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canContestacao" /> Contestações</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canFiscalParceiro" /> Fechamento Fiscal</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canMarketplaceBlu" /> Marketplace BLU</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canFornecedorFinanceiro" /> Fornecedores Financeiros</label>
+              <label class="rh-perm-item"><input type="checkbox" id="perm_canContaCorrente" /> Conta Corrente</label>
             </div>
 
             <div class="section-title-bar">Anexos e Contrato (Opcionais)</div>
@@ -2683,11 +2711,11 @@
     <script charset="UTF-8" src="../js/painel-sonhos.js?v=user-photo1"></script>
     <script charset="UTF-8" src="../js/withdrawal-rules.js?v=irpf189-2"></script>
     <script charset="UTF-8" src="../js/withdrawal-flow.js?v=wd-modal1"></script>
-    <script charset="UTF-8" src="../js/profile.js?v=bill-upd1"></script>
+    <script charset="UTF-8" src="../js/profile.js?v=member-photo1"></script>
     <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
     <script charset="UTF-8" src="../js/rh-vagas.js?v=vagas1"></script>
     <script charset="UTF-8" src="../js/rh-ui.js?v=neg-bal1"></script>
-    <script charset="UTF-8" src="../js/rh-manager.js?v=parceiro-fix1"></script>
+    <script charset="UTF-8" src="../js/rh-manager.js?v=member-photo2"></script>
     <script charset="UTF-8" src="../js/rh-ops.js?v=justif-bs1"></script>
     <script charset="UTF-8" src="../js/rh-justificativa-boot.js?v=justif-bs1"></script>
     <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script
