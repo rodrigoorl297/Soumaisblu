@@ -1642,7 +1642,7 @@ window.Proposals = {
   },
 
   _adminListColspan: function() {
-    return this._isFinanceiroGestao() ? 13 : 12;
+    return this._isFinanceiroGestao() ? 14 : 13;
   },
 
   /** Último registro do histórico da proposta (quem mexeu por último e quando). */
@@ -4114,43 +4114,36 @@ window.Proposals = {
   },
 
   _proposalExportRow: function(p) {
-    const etapa = this._vendorStage(p);
-    const situacao = etapa ? this._labelEtapaVendedor(etapa) : '';
     const num = (v) => (v != null && v !== '' && Number.isFinite(parseFloat(v)) ? parseFloat(v) : '');
     const dt = this._proposalCreatedAt(p);
     let dataCriacao = '';
     if (dt) {
       try { dataCriacao = new Date(dt).toLocaleString('pt-BR'); } catch (_) { dataCriacao = String(dt); }
     }
+    let dataPagamento = '';
+    if (typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function') {
+      const paidAt = DB.proposalPaidAt(p);
+      if (paidAt) {
+        try { dataPagamento = paidAt.toLocaleString('pt-BR'); } catch (_) { dataPagamento = String(paidAt); }
+      }
+    }
     return {
       'Nº Proposta': p.numero || p.id || '',
-      'ID Sistema': p.id || '',
       Vendedor: p.vendorName || '',
       Cliente: p.clientName || '',
       CPF: p.clientCpf || '',
       Produto: p.product || '',
-      Convênio: p.convenio || '',
-      Entidade: p.entidade || '',
-      Matrícula: p.matricula || '',
-      Protocolo: p.protocolo || '',
-      'Banco comprado': p.bancoComprado || '',
-      'Banco digitado': p.bancoDigitado || '',
-      'Valor Proposta (R$)': num(p.valor),
-      'Desconto (R$)': num(p.desconto),
       'Valor Final (R$)': num(p.valorFinal),
-      Tabela: p.tabela || '',
       Status: p.status || p.statusOp || '',
-      'Situação vendedor': situacao,
-      Observações: (p.obs || '').replace(/\s+/g, ' ').trim(),
-      Fases: (p.fases || '').replace(/\s+/g, ' ').trim(),
       'Data criação': dataCriacao,
+      'Data pagamento': dataPagamento,
     };
   },
 
   _downloadProposalCsv: function(rows, filenameBase) {
     const headers = rows.length
       ? Object.keys(rows[0])
-      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Status', 'Data criação'];
+      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
     const stamp = new Date().toISOString().slice(0, 10);
     const fname = `${filenameBase}_${stamp}.csv`;
     const bom = '\uFEFF';
@@ -4165,8 +4158,71 @@ window.Proposals = {
     URL.revokeObjectURL(url);
   },
 
+  /** Gera .xlsx de verdade (cabeçalho fixo, filtro, larguras e moeda formatada) em vez de texto CSV cru. */
+  _downloadProposalXlsx: async function(rows, filenameBase) {
+    if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+    if (typeof XLSX === 'undefined') throw new Error('Biblioteca de planilha indisponível.');
+
+    const headers = rows.length
+      ? Object.keys(rows[0])
+      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+    const moneyCols = new Set(['Valor Final (R$)']);
+    const moneyColIdx = headers.reduce((acc, h, i) => { if (moneyCols.has(h)) acc.push(i); return acc; }, []);
+
+    const aoa = [headers, ...rows.map(r => headers.map(h => r[h]))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    for (let R = 1; R < aoa.length; R++) {
+      moneyColIdx.forEach((C) => {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell && typeof cell.v === 'number') cell.z = '"R$" #,##0.00';
+      });
+    }
+
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = aoa.reduce((m, row) => Math.max(m, String(row[i] ?? '').length), h.length);
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 42) };
+    });
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: aoa.length - 1, c: headers.length - 1 } }) };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Propostas');
+    const stamp = new Date().toISOString().slice(0, 10);
+    XLSX.writeFile(wb, `${filenameBase}_${stamp}.xlsx`);
+  },
+
   exportAdminExcel: async function() {
-    return this.exportAdminCsv();
+    if (!document.getElementById('manageProposalsTbody')) return;
+    if (typeof showLoading === 'function') showLoading('Gerando planilha...');
+    try {
+      const { proposals, q } = await this._fetchAdminProposalsFiltered();
+      if (!proposals.length) {
+        if (typeof showToast === 'function') {
+          showToast(q ? 'Nenhuma proposta encontrada com os filtros atuais.' : 'Não há propostas para exportar.', 'warning');
+        } else alert('Nenhuma proposta para exportar.');
+        return;
+      }
+      const rows = proposals.map(p => this._proposalExportRow(p));
+      try {
+        await this._downloadProposalXlsx(rows, 'propostas_soublu');
+        if (typeof showToast === 'function') {
+          showToast(`${proposals.length} proposta(s) exportada(s) em Excel.`, 'success', 4500);
+        }
+      } catch (xlsxErr) {
+        console.error('[Proposals] exportAdminExcel xlsx fallback:', xlsxErr);
+        this._downloadProposalCsv(rows, 'propostas_soublu');
+        if (typeof showToast === 'function') {
+          showToast(`${proposals.length} proposta(s) exportada(s) em CSV (Excel indisponível).`, 'warning', 5500);
+        }
+      }
+    } catch (e) {
+      console.error('[Proposals] exportAdminExcel:', e);
+      if (typeof showToast === 'function') showToast('Erro ao gerar planilha. Tente novamente.', 'error');
+      else alert('Erro ao gerar planilha.');
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
   },
 
   exportAdminCsv: async function() {
@@ -4273,6 +4329,7 @@ window.Proposals = {
             <td>${this._propDateStr(p)}</td>
             <td data-col="status"><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
             <td data-col="lastEdit">${this._lastEditCellHtml(p)}</td>
+            <td data-col="paidAt">${(typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function' && DB.proposalPaidAt(p)) ? this._fmtDateTime(DB.proposalPaidAt(p)) : '—'}</td>
             ${comissaoCell}
             <td class="td-proposal-actions" onclick="event.stopPropagation()">${finAction}${this.actionsRowHtml(p.id, {
               canEdit: canEditRow,

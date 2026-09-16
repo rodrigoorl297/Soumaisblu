@@ -1021,7 +1021,7 @@
                   </label>
                 </span>
                 <button type="button" class="btn btn-outline btn-sm" id="proposalVendorSortBtn" onclick="Proposals.toggleAdminVendorSort()" title="Ordenar propostas por nome de funcionário (vendedor), A-Z">Vendedor A-Z</button>
-                <button type="button" class="btn btn-outline btn-sm" onclick="Proposals.exportAdminCsv()" title="Exportar propostas visíveis (CSV) com os filtros atuais">Baixar CSV</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="Proposals.exportAdminExcel()" title="Exportar propostas visíveis (Excel) com os filtros atuais, incluindo a data em que cada uma foi paga">Baixar Planilha</button>
                 <button class="btn btn-primary" onclick="openClientModalAdmin()">+ Novo Cliente</button>
                 <button class="btn btn-primary" onclick="openProposalModalAdmin()">+ Nova Proposta</button>
               </div>
@@ -1332,6 +1332,7 @@
                         </div>
                       </th>
                       <th>Última alteração</th>
+                      <th>Data pagamento</th>
                       <th>Ações</th>
                     </tr>
                   </thead>
