@@ -42,7 +42,11 @@
     const wrap = document.createElement('div');
     wrap.innerHTML = html;
     wrap.querySelectorAll('.section, section.section').forEach(el => host.appendChild(el));
-    wrap.querySelectorAll('.modal-overlay').forEach(el => document.body.appendChild(el));
+    // Evita ids duplicados: alguns modais (ex.: manageProposalModal) já existem no shell (admin.html).
+    wrap.querySelectorAll('.modal-overlay').forEach(el => {
+      if (el.id && document.getElementById(el.id)) return;
+      document.body.appendChild(el);
+    });
     host.dataset.loaded = '1';
     tagFinSections();
   }
