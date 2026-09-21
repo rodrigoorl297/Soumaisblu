@@ -5,6 +5,18 @@
 
 const LeadsDB = {
 
+  /** phone2 não é coluna de `leads`: o import grava em extra_data.phone2. Expõe no topo para as telas. */
+  _withPhones(rows) {
+    if (!Array.isArray(rows)) return rows;
+    for (const l of rows) {
+      if (!l || l.phone2) continue;
+      let ed = l.extra_data;
+      if (typeof ed === 'string') { try { ed = JSON.parse(ed); } catch (_) { ed = null; } }
+      if (ed && ed.phone2) l.phone2 = String(ed.phone2).trim();
+    }
+    return rows;
+  },
+
   /* ── BATCHES ── */
   async getBatches(managerId = null) {
     let params = '?select=*&order=created_at.desc';
@@ -118,19 +130,19 @@ const LeadsDB = {
     if (filters.assigned_to) params += `&assigned_to=eq.${encodeURIComponent(filters.assigned_to)}`;
     if (filters.assigned_date) params += `&assigned_date=eq.${encodeURIComponent(filters.assigned_date)}`;
     if (filters.offset) params += `&offset=${filters.offset}`;
-    return await supaReq('GET', 'leads', null, params);
+    return this._withPhones(await supaReq('GET', 'leads', null, params));
   },
 
   async getLeadsByUser(userId, date = null) {
-    let params = `?assigned_to=eq.${encodeURIComponent(userId)}&select=*&order=assigned_date.desc&limit=500`;
+    let params = `?assigned_to=eq.${encodeURIComponent(userId)}&select=*&order=assigned_date.desc&limit=${this._DESK_LIMIT}`;
     if (date) params += `&assigned_date=eq.${encodeURIComponent(date)}`;
-    return await supaReq('GET', 'leads', null, params);
+    return this._withPhones(await supaReq('GET', 'leads', null, params));
   },
 
   async getLeadsByUserAndWeek(userId, weekNumber, year) {
-    return await supaReq('GET', 'leads', null,
-      `?assigned_to=eq.${encodeURIComponent(userId)}&assigned_week=eq.${weekNumber}&assigned_year=eq.${year}&select=*&order=assigned_date.asc&limit=500`
-    );
+    return this._withPhones(await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${encodeURIComponent(userId)}&assigned_week=eq.${weekNumber}&assigned_year=eq.${year}&select=*&order=assigned_date.asc&limit=${this._DESK_LIMIT}`
+    ));
   },
 
   /**
@@ -138,6 +150,9 @@ const LeadsDB = {
    * A API limita leads a 200–500; buscar “todos” por created_at.asc escondia os pendentes novos.
    */
   // Lotes com atribuição fantasma (distribuição incompleta) — não mostrar na mesa
+  // Teto por consulta da mesa (API aceita até 50000 em `leads`); 500 cortava vendedores com fila maior
+  _DESK_LIMIT: 900,
+
   _GHOST_BATCH_IDS: new Set(['lbmpwlwzf2meozi', 'lbmpwm1by2w2lyy']),
 
   async getEmployeeTodayLeads(userId, todayStr) {
@@ -155,9 +170,9 @@ const LeadsDB = {
     };
 
     // 1) Pendentes do vendedor (mesa real)
-    merge(await supaReq('GET', 'leads', null,
-      `?assigned_to=eq.${uid}&status=eq.pending&select=*&order=assigned_date.asc&limit=500`
-    ).catch(() => []));
+    merge(this._withPhones(await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${uid}&status=eq.pending&select=*&order=assigned_date.asc&limit=${this._DESK_LIMIT}`
+    ).catch(() => [])));
 
     // 2) Designados para hoje (qualquer status)
     merge(await this.getLeadsByUser(userId, today).catch(() => []));
@@ -301,9 +316,9 @@ const LeadsDB = {
   },
 
   async getUnassignedLeads(batchId) {
-    return await supaReq('GET', 'leads', null,
+    return this._withPhones(await supaReq('GET', 'leads', null,
       `?batch_id=eq.${encodeURIComponent(batchId)}&assigned_to=is.null&select=*&order=created_at.asc&limit=50000`
-    );
+    ));
   },
 
   /* ── GESTÃO / APAGAR / TROCAR LEADS ── */
@@ -469,7 +484,8 @@ const LeadsDB = {
             date.setDate(date.getDate() + 1);
           }
           const dateStr = this._toLocalDateStr(date);
-          const dailyCount = Math.ceil(weekLeadCount / 5);
+          // Divide exato: a soma dos 5 dias = weekLeadCount (ceil por dia estourava a semana)
+          const dailyCount = Math.floor(weekLeadCount / 5) + (dayOffset < weekLeadCount % 5 ? 1 : 0);
 
           for (let d = 0; d < dailyCount && leadIndex < unassigned.length; d++) {
             const empTotalAssigned = leadIndex - (empIdx > 0 ? (leadsPerEmployee * empIdx + Math.min(empIdx, remainder)) : 0);

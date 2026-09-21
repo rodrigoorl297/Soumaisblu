@@ -219,7 +219,7 @@ function nb_fetch_lead(PDO $pdo, string $leadId): ?array
         $cols = ['id' => true, 'name' => true, 'phone' => true, 'assigned_to' => true, 'status' => true];
     }
     $select = ['`id`'];
-    foreach (['name', 'phone', 'phone2', 'assigned_to', 'status'] as $c) {
+    foreach (['name', 'phone', 'phone2', 'assigned_to', 'status', 'extra_data'] as $c) {
         if (isset($cols[$c])) {
             $select[] = '`' . $c . '`';
         }
@@ -230,6 +230,13 @@ function nb_fetch_lead(PDO $pdo, string $leadId): ?array
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
     if ($row && !isset($row['phone2'])) {
         $row['phone2'] = '';
+    }
+    // phone2 é gravado em extra_data.phone2 pelo import (não existe coluna própria)
+    if ($row && trim((string) $row['phone2']) === '' && !empty($row['extra_data'])) {
+        $extra = is_array($row['extra_data']) ? $row['extra_data'] : json_decode((string) $row['extra_data'], true);
+        if (is_array($extra) && !empty($extra['phone2'])) {
+            $row['phone2'] = (string) $extra['phone2'];
+        }
     }
     return $row ?: null;
 }
