@@ -497,7 +497,16 @@ function _wireBeneficiosNav() {
       el.setAttribute('hidden', 'hidden');
     });
   }
-  if (clubeBtn && canClube) wire(clubeBtn, clubeHref, 'clube');
+  if (clubeBtn && canClube && clubeBtn.dataset.benefNavWired !== '1') {
+    // Clube abre dentro do painel (iframe) para manter a sidebar e a aba atual.
+    clubeBtn.dataset.benefNavWired = '1';
+    clubeBtn.type = 'button';
+    clubeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      _openClubeEmbedded(_absBenefHref('clube-beneficios.html?embed=1&v=' + Date.now()));
+    }, true);
+  }
   if (adminBtn) {
     adminBtn.style.display = canAdmin ? 'flex' : 'none';
     if (canAdmin) wire(adminBtn, adminHref, 'gestao');
@@ -1158,6 +1167,27 @@ function _stopAdminLiveRefresh() {
 }
 
 /** Sai do admin para outro módulo sem deixar polling/API travando o servidor PHP. */
+/** Mostra o Clube Benefícios embutido na seção secClubeBeneficios (sem sair do painel). */
+function _openClubeEmbedded(href) {
+  const sec = document.getElementById('secClubeBeneficios');
+  if (!sec) { _navigateToHub(href); return; }
+  let frame = document.getElementById('clubeBeneficiosFrame');
+  if (!frame) {
+    sec.innerHTML = '';
+    frame = document.createElement('iframe');
+    frame.id = 'clubeBeneficiosFrame';
+    frame.title = 'Clube Benefícios';
+    frame.src = href;
+    frame.style.cssText = 'display:block;width:100%;height:calc(100vh - var(--topbar-height) - 48px);min-height:520px;border:0;border-radius:16px;background:var(--color-bg);';
+    sec.appendChild(frame);
+  }
+  if (typeof navigateTo === 'function') navigateTo('secClubeBeneficios');
+  else {
+    document.querySelectorAll('.section').forEach((s) => s.classList.remove('active'));
+    sec.classList.add('active');
+  }
+}
+
 function _navigateToHub(href) {
   _stopAdminLiveRefresh();
   if (typeof invalidateSouBluCaches === 'function') invalidateSouBluCaches();
@@ -4954,18 +4984,23 @@ function _renderUserCard(user, team, allOrders, allWds, roleLabels) {
       statCardHtml({ icon: 'orders', color: 'yellow', label: 'Pedidos', value: teamOrds.length }),
       statCardHtml({ icon: 'withdrawals', color: 'orange', label: 'Saques', value: wdPend }),
     ].join('')}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+    <div class="master-team-grid">
       ${team.map(e => {
         const ptsBtn = (typeof canSouBluManagePoints === 'function' && canSouBluManagePoints(e))
           ? `<button class="btn btn-primary btn-sm" onclick="quickAddPoints('${e.id}','${e.name.replace(/'/g, "\\'")}')">Pontos</button>`
           : '';
         return `
-        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--color-surface-2);border-radius:var(--radius-md);border:1px solid var(--color-border);">
+        <div class="master-team-member">
           ${_masterAvatarCellHtml(e, 'avatar-sm')}
-          <div style="flex:1;min-width:0;"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:11px;color:var(--color-text-muted);">${e.department} · ${formatCurrency(userPts(e), e)}</div></div>
-          ${ptsBtn}
-          <button type="button" class="btn btn-ghost btn-sm" data-master-act="edit" data-user-id="${e.id}">Editar</button>
-          <button type="button" class="btn btn-ghost btn-sm" style="color:var(--color-danger);" data-master-act="delete" data-user-id="${e.id}" data-user-name="${e.name.replace(/'/g, "\\'")}" title="Excluir">Excluir</button>
+          <div class="master-team-member__info">
+            <div class="master-team-member__name" title="${String(e.name || '').replace(/"/g, '&quot;')}">${e.name}</div>
+            <div class="master-team-member__sub">${e.department || '—'} · ${formatCurrency(userPts(e), e)}</div>
+          </div>
+          <div class="master-team-member__actions">
+            ${ptsBtn}
+            <button type="button" class="btn btn-ghost btn-sm" data-master-act="edit" data-user-id="${e.id}">Editar</button>
+            <button type="button" class="btn btn-ghost btn-sm master-team-member__del" data-master-act="delete" data-user-id="${e.id}" data-user-name="${e.name.replace(/'/g, "\\'")}" title="Excluir">Excluir</button>
+          </div>
         </div>`;
       }).join('')}
     </div>`;

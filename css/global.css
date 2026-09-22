@@ -1393,6 +1393,35 @@ select.header-filter.filter-active + .header-filter-chevron {
   white-space: normal;
   text-align: center;
 }
+/* Gestão de Propostas — larguras mínimas para não quebrar nomes letra a letra */
+#secManageProposals table.data-table tbody td {
+  word-break: normal;
+  overflow-wrap: normal;
+  hyphens: none;
+  line-height: 1.35;
+}
+#secManageProposals table.data-table tbody tr:nth-child(even) td {
+  background: rgba(15, 23, 42, 0.015);
+}
+#secManageProposals table.data-table tbody td:nth-child(1) { white-space: nowrap; }
+#secManageProposals table.data-table tbody td:nth-child(1) strong { font-weight: 800; letter-spacing: -0.01em; }
+#secManageProposals table.data-table tbody td:nth-child(2) { min-width: 140px; }
+#secManageProposals table.data-table tbody td:nth-child(3) { min-width: 190px; font-weight: 600; }
+#secManageProposals table.data-table tbody td:nth-child(3) div {
+  font-weight: 400;
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+#secManageProposals table.data-table tbody td:nth-child(5) { min-width: 150px; }
+#secManageProposals table.data-table tbody td:nth-child(5) div { margin-top: 2px; line-height: 1.3; }
+#secManageProposals table.data-table tbody td:nth-child(6),
+#secManageProposals table.data-table tbody td:nth-child(7),
+#secManageProposals table.data-table tbody td:nth-child(8),
+#secManageProposals table.data-table tbody td:nth-child(9) {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+#secManageProposals table.data-table tbody td[data-col="status"] .badge { white-space: nowrap; }
 #secManageProposals .client-actions {
   gap: 4px;
 }
