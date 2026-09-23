@@ -901,11 +901,11 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
 <div class="sales-ranking-toolbar">
   <div class="sales-ranking-filter-group">
     <span class="sales-ranking-filter-label">PERÍODO</span>
-    <select id="salesRankPeriod${prefix}" class="form-control sales-ranking-select">
-      <option value="month"${period === 'month' ? ' selected' : ''}>Este mês</option>
-      <option value="last_month"${period === 'last_month' ? ' selected' : ''}>Mês anterior</option>
-      <option value="all"${period === 'all' ? ' selected' : ''}>Todo o período</option>
-    </select>
+    <input type="hidden" id="salesRankPeriod${prefix}" value="${period}">
+    <div class="rk-seg" role="group" aria-label="Período">
+      ${[['month', 'Este mês'], ['last_month', 'Mês anterior'], ['all', 'Tudo']].map(([v, l]) =>
+        `<button type="button" class="rk-seg__btn${period === v ? ' is-active' : ''}" data-period="${v}" aria-pressed="${period === v}">${l}</button>`).join('')}
+    </div>
   </div>
   <div class="sales-ranking-filter-group">
     <span class="sales-ranking-filter-label">FATURAMENTO</span>
@@ -944,7 +944,21 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       }
     };
 
-    [`salesRankPeriod${prefix}`, `salesRankBilling${prefix}`, `salesRankStatus${prefix}`, `salesRankFase${prefix}`].forEach(id => {
+    box.querySelectorAll('.rk-seg__btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const input = document.getElementById(`salesRankPeriod${prefix}`);
+        if (!input || input.value === btn.dataset.period) return;
+        input.value = btn.dataset.period;
+        box.querySelectorAll('.rk-seg__btn').forEach(b => {
+          const on = b === btn;
+          b.classList.toggle('is-active', on);
+          b.setAttribute('aria-pressed', String(on));
+        });
+        rerender();
+      });
+    });
+
+    [`salesRankBilling${prefix}`, `salesRankStatus${prefix}`, `salesRankFase${prefix}`].forEach(id => {
       document.getElementById(id)?.addEventListener('change', rerender);
     });
 
@@ -1004,60 +1018,162 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     el.textContent = parts.join(' · ');
   },
 
+  _esc(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  },
+
+  /** Ajusta o subtítulo da seção conforme o modo (público = pagas/propostas). */
+  _setRankingSubtitle(listId, publicRank) {
+    const p = document.getElementById(listId)?.closest('.section')?.querySelector('.page-header p');
+    if (!p) return;
+    if (!p.dataset.defaultText) p.dataset.defaultText = p.textContent;
+    p.textContent = publicRank
+      ? 'Classificação por propostas pagas — desempate pelo total de propostas'
+      : p.dataset.defaultText;
+  },
+
   _renderList(listId, rows, opts = {}) {
     const box = document.getElementById(listId);
     if (!box) return;
-    const medals = ['#1', '#2', '#3'];
-    const cls = ['gold', 'silver', 'bronze'];
     const viewerId = opts.viewerId || '';
     const publicRank = opts.rankMode === 'public';
     const showSales = !publicRank && opts.showSalesAmount !== false && this._canViewSalesAmount(opts.viewer);
-    const showMasterDetails = showSales;
     const billing = this._filters.billing || 'total';
     const isPagasBilling = billing === 'pagas';
+    const esc = (s) => this._esc(s);
+    this._setRankingSubtitle(listId, publicRank);
+    box.classList.add('rk');
+    this._rankAnimated = this._rankAnimated || {};
+    box.classList.toggle('rk--anim', !this._rankAnimated[listId] && rows.length > 0);
+    if (rows.length) this._rankAnimated[listId] = true;
 
     if (!rows.length) {
       box.innerHTML = publicRank
-        ? `<div class="text-muted text-center" style="padding:28px 16px;">Nenhum vendedor com propostas registradas.</div>`
-        : `<div class="text-muted text-center" style="padding:28px 16px;">
+        ? `<div class="rk-empty">Nenhum vendedor com propostas registradas.</div>`
+        : `<div class="rk-empty">
         Nenhum vendedor com propostas neste filtro.<br>
         <span style="font-size:12px;">Tente <strong>Todo o período</strong> ou limpe Status/Fase.</span>
       </div>`;
       return;
     }
 
-    box.innerHTML = rows.map((row, i) => {
-      const e = row.user;
-      const isMe = viewerId && e.id === viewerId;
-      const tier = row.tier;
-      const pos = i + 1;
-      const tierBadge = tier
-        ? `<span class="badge badge-primary sales-ranking-tier" title="Classificação por faturamento no período">${tier.label}</span>`
-        : `<span class="badge badge-muted sales-ranking-tier">Abaixo FAIXA1</span>`;
-      const showAdd = !publicRank && opts.allowAddPoints
-        && (typeof canSouBluManagePoints !== 'function' || canSouBluManagePoints(e));
-      const addBtn = showAdd
-        ? `<button type="button" class="btn btn-outline btn-sm" onclick="navigateTo('secBalance');setTimeout(function(){var el=document.getElementById('balanceEmployee');if(el)el.value='${e.id}'},100)">+ Pontos</button>`
-        : '';
-      const statsHtml = publicRank
-        ? `<span class="ranking-item__count"><strong>${row.paidCount || 0}</strong> paga(s) · <strong>${row.count || 0}</strong> proposta(s)</span>`
-        : `${showMasterDetails ? `<span class="ranking-item__classif-label">Classificação</span>${tierBadge}` : ''}
-            ${showSales ? `<span class="ranking-item__sales">${isPagasBilling && row.bruto > 0 && Math.abs(row.bruto - row.total) > 0.01
-              ? `${this._fmtSales(row.total)} <span style="font-size:11px;color:var(--color-text-muted);">(bruto ${this._fmtSales(row.bruto)})</span>`
-              : this._fmtSales(row.total)}</span>` : ''}
-            <span class="ranking-item__count">${row.count} proposta(s)</span>`;
+    const metric = (r) => (showSales ? (r.total || 0) : publicRank ? (r.paidCount || 0) : (r.count || 0));
+    const leader = Math.max(...rows.map(metric), 0) || 1;
+    const totalPaid = rows.reduce((s, r) => s + (r.paidCount || 0), 0);
+    const totalCount = rows.reduce((s, r) => s + (r.count || 0), 0);
+    const totalSales = rows.reduce((s, r) => s + (r.total || 0), 0);
+    const conv = (r) => (r.count ? Math.round(((r.paidCount || 0) / r.count) * 100) : 0);
+    const avatar = (e, size) => (typeof avatarHtml === 'function' ? avatarHtml(e.name, size, e.photo_url || '') : '');
+    const dept = (e) => `${esc(e.department || '—')} · ${esc(e.matricula || '—')}`;
+    const meBadge = '<span class="rk-me-badge">Você</span>';
 
-      return `<div class="ranking-item${isMe ? ' ranking-item--me' : ''}">
-        <div class="ranking-pos ${cls[i] || ''}">${i < 3 ? medals[i] : '#' + pos}</div>
-        ${typeof avatarHtml === 'function' ? avatarHtml(e.name, 'avatar-sm', e.photo_url || '') : ''}
-        <div class="ranking-item__body">
-          <div class="ranking-name">${e.name}${isMe ? ' <span class="badge badge-primary">Você</span>' : ''}</div>
-          <div class="ranking-dept">${e.department || '—'} · ${e.matricula || '—'}</div>
-          <div class="ranking-item__stats">${statsHtml}</div>
+    const tierBadge = (r) => (r.tier
+      ? `<span class="badge badge-primary sales-ranking-tier" title="Classificação por faturamento no período">${esc(r.tier.label)}</span>`
+      : `<span class="badge badge-muted sales-ranking-tier">Abaixo FAIXA1</span>`);
+
+    const salesText = (r) => (isPagasBilling && r.bruto > 0 && Math.abs(r.bruto - r.total) > 0.01
+      ? `${this._fmtSales(r.total)} <small>(bruto ${this._fmtSales(r.bruto)})</small>`
+      : this._fmtSales(r.total));
+
+    const addBtn = (e) => {
+      const show = !publicRank && opts.allowAddPoints
+        && (typeof canSouBluManagePoints !== 'function' || canSouBluManagePoints(e));
+      return show
+        ? `<button type="button" class="btn btn-outline btn-sm rk-add" onclick="navigateTo('secBalance');setTimeout(function(){var el=document.getElementById('balanceEmployee');if(el)el.value='${esc(e.id)}'},100)">+ Pontos</button>`
+        : '';
+    };
+
+    // Valor principal + legenda de cada vendedor
+    const main = (r) => {
+      if (showSales) return { value: salesText(r), label: `${r.count} proposta(s)` };
+      if (publicRank) return { value: String(r.paidCount || 0), label: `paga(s) de ${r.count || 0} proposta(s)` };
+      return { value: String(r.count || 0), label: 'proposta(s)' };
+    };
+
+    // Quanto falta para passar quem está logo acima (ou vantagem do líder)
+    const fmtGap = (v) => {
+      if (showSales) return this._fmtSales(v);
+      const n = Math.max(1, Math.ceil(v));
+      return publicRank ? `${n} paga${n === 1 ? '' : 's'}` : `${n} proposta${n === 1 ? '' : 's'}`;
+    };
+    const gapHint = (i) => {
+      const r = rows[i];
+      if (i === 0) {
+        if (rows.length < 2) return '';
+        const lead = metric(r) - metric(rows[1]);
+        return lead > 0
+          ? `<div class="rk-gap rk-gap--lead">Você lidera com ${fmtGap(lead)} de vantagem</div>`
+          : `<div class="rk-gap">Empatado com o 2º lugar — não deixe passar!</div>`;
+      }
+      const diff = metric(rows[i - 1]) - metric(r);
+      const need = showSales ? Math.max(diff, 0.01) : diff + 1;
+      return `<div class="rk-gap">Faltam <strong>${fmtGap(need)}</strong> para passar o ${i}º lugar</div>`;
+    };
+
+    const kpi = (label, value) => `<div class="rk-kpi"><span>${label}</span><strong>${value}</strong></div>`;
+    const summaryHtml = publicRank
+      ? `<div class="rk-kpis">
+          ${kpi('Vendedores', rows.length)}
+          ${kpi('Propostas pagas', totalPaid)}
+          ${kpi('Total de propostas', totalCount)}
+          ${kpi('Conversão geral', `${totalCount ? Math.round((totalPaid / totalCount) * 100) : 0}%`)}
+        </div>`
+      : showSales
+        ? `<div class="rk-kpis">
+          ${kpi('Vendedores', rows.length)}
+          ${kpi('Faturamento', this._fmtSales(totalSales))}
+          ${kpi('Propostas', totalCount)}
+          ${kpi('Média por vendedor', this._fmtSales(rows.length ? totalSales / rows.length : 0))}
+        </div>`
+        : '';
+
+    // Pódio (top 3)
+    const podiumCount = rows.length >= 3 ? 3 : 0;
+    const podiumHtml = podiumCount
+      ? `<div class="rk-podium">${rows.slice(0, 3).map((r, i) => {
+        const e = r.user;
+        const isMe = viewerId && e.id === viewerId;
+        const m = main(r);
+        return `<div class="rk-podium__card rk-podium__card--${i + 1}${isMe ? ' is-me' : ''}">
+          <div class="rk-podium__medal">${i + 1}º</div>
+          <div class="rk-podium__avatar">${i === 0 ? '<svg class="rk-crown" viewBox="0 0 24 16" aria-hidden="true"><path d="M2 14 L0.5 3 L7 8 L12 0.5 L17 8 L23.5 3 L22 14 Z"/><circle cx="0.9" cy="3" r="1.3"/><circle cx="12" cy="0.9" r="1.3"/><circle cx="23.1" cy="3" r="1.3"/></svg>' : ''}${avatar(e, 'avatar-lg')}</div>
+          <div class="rk-podium__name" title="${esc(e.name)}">${esc(e.name)}</div>
+          <div class="rk-podium__dept">${dept(e)}${isMe ? ' ' + meBadge : ''}</div>
+          <div class="rk-podium__value">${m.value}</div>
+          <div class="rk-podium__label">${m.label}</div>
+          ${publicRank ? `<div class="rk-podium__conv">${conv(r)}% de conversão</div>` : ''}
+          ${showSales ? `<div class="rk-podium__tier">${tierBadge(r)}</div>` : ''}
+          ${isMe ? gapHint(i) : ''}
+          ${addBtn(e)}
+        </div>`;
+      }).join('')}</div>`
+      : '';
+
+    // Demais posições
+    const restHtml = rows.slice(podiumCount).map((r, idx) => {
+      const i = idx + podiumCount;
+      const e = r.user;
+      const isMe = viewerId && e.id === viewerId;
+      const m = main(r);
+      const pct = Math.max(2, Math.round((metric(r) / leader) * 100));
+      const posCls = i < 3 ? ` rk-row__pos--${i + 1}` : '';
+      return `<div class="rk-row${isMe ? ' is-me' : ''}">
+        <div class="rk-row__pos${posCls}">${i + 1}</div>
+        ${avatar(e, 'avatar-sm')}
+        <div class="rk-row__who">
+          <div class="rk-row__name" title="${esc(e.name)}">${esc(e.name)}${isMe ? ' ' + meBadge : ''}</div>
+          <div class="rk-row__dept">${dept(e)}</div>
+          ${isMe ? gapHint(i) : ''}
         </div>
-        ${addBtn}
+        <div class="rk-row__bar" title="${pct}% do líder"><span style="width:${pct}%;animation-delay:${Math.min(idx, 12) * 40 + 350}ms"></span></div>
+        ${publicRank ? `<div class="rk-row__conv" title="Conversão (pagas / propostas)">${conv(r)}%<small>conv.</small></div>` : ''}
+        ${showSales ? `<div class="rk-row__tier">${tierBadge(r)}</div>` : ''}
+        <div class="rk-row__metric"><strong>${m.value}</strong><span>${m.label}</span></div>
+        ${addBtn(e)}
       </div>`;
     }).join('');
+
+    box.innerHTML = `${summaryHtml}${podiumHtml}${restHtml ? `<div class="rk-rows">${restHtml}</div>` : ''}`;
   },
 
   async renderAdmin() {
