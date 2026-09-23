@@ -23,6 +23,18 @@ if ($bucket === '') {
 }
 $rawPath = (string) ($_GET['path'] ?? '');
 
+/** Rejeita só navegação de diretório ("." / ".." como segmento); o resto é sanitizado. */
+function soublu_upload_has_traversal(array $segments): bool
+{
+    foreach ($segments as $seg) {
+        $seg = trim((string) $seg);
+        if ($seg === '.' || $seg === '..' || preg_match('/[\x00-\x1F]/', $seg)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 /** Normaliza path de subpasta: \ → /, remove .., tira nome de arquivo no final. */
 function soublu_upload_normalize_subpath(string $rawPath): string
 {
@@ -30,10 +42,10 @@ function soublu_upload_normalize_subpath(string $rawPath): string
     if ($sub === '') {
         return '';
     }
-    if (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub)) {
+    $parts = array_values(array_filter(explode('/', $sub), static fn ($s) => $s !== ''));
+    if (soublu_upload_has_traversal($parts)) {
         soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
     }
-    $parts = array_values(array_filter(explode('/', $sub), static fn ($s) => $s !== ''));
     if ($parts === []) {
         return '';
     }
@@ -52,8 +64,9 @@ function soublu_upload_normalize_subpath(string $rawPath): string
 }
 
 if ($bucket === 'proposal-attachments') {
+    /* Nome do arquivo pode ter espaço, (), + etc. — é sanitizado mais abaixo. */
     $sub = trim(str_replace('\\', '/', $rawPath), '/');
-    if ($sub !== '' && (str_contains($sub, '..') || !preg_match('#^[a-zA-Z0-9_./-]+$#', $sub))) {
+    if ($sub !== '' && soublu_upload_has_traversal(explode('/', $sub))) {
         soublu_json(['ok' => false, 'error' => 'Caminho inválido.'], 400);
     }
 } else {
@@ -127,7 +140,7 @@ if ($bucket === 'proposal-attachments') {
 
 if ($bucket === 'proposal-attachments') {
     $object = trim(str_replace('\\', '/', $rawPath), '/');
-    if ($object === '' || str_contains($object, '..')) {
+    if ($object === '' || soublu_upload_has_traversal(explode('/', $object))) {
         soublu_json(['ok' => false, 'error' => 'Caminho inválido para anexo de proposta.'], 400);
     }
     $segments = array_values(array_filter(explode('/', $object), static fn ($s) => $s !== ''));
