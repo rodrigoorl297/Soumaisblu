@@ -25,7 +25,7 @@
    
    const CACHE_TTL = 300000; // 5 min — leitura fresca
    const CACHE_STALE_MAX = 86400000; // 24h — dados antigos ainda servem na tela
-   const API_RETRY_MAX = 3;
+   const API_RETRY_MAX = 4;
    const API_RETRY_BASE_MS = 500;
    /** GET listagens leves; escritas (PATCH/POST com anexos) usam timeout maior. */
    const API_FETCH_TIMEOUT_MS = 35000;
@@ -68,6 +68,31 @@
      if (code === 429 || code === 502 || code === 503 || code === 504) return true;
      const msg = String(err?.message || err || '');
      return /Sem conexão|Failed to fetch|NetworkError|network|timeout|temporariamente indisponível|aborted/i.test(msg);
+   }
+    
+   /** Retry-After (segundos ou data HTTP) → ms; null se ausente/inválido. */
+   function _parseRetryAfterMs(v) {
+     if (!v) return null;
+     const secs = Number(v);
+     if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+     const at = Date.parse(v);
+     return Number.isFinite(at) ? Math.max(0, at - Date.now()) : null;
+   }
+
+   /** Espera antes do retry: 429 (limite da hospedagem) precisa de pausa maior que 5xx. */
+   function _retryDelayMs(err, attempt) {
+     if (Number(err?.status) === 429) {
+       const hinted = err?.retryAfterMs;
+       if (hinted != null) return Math.min(hinted, 15000);
+       return 2000 * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500);
+     }
+     return API_RETRY_BASE_MS * attempt;
+   }
+
+   if (typeof window !== 'undefined') {
+     window._isTransientApiFailure = _isTransientApiFailure;
+     window._retryDelayMs = _retryDelayMs;
+     window._parseRetryAfterMs = _parseRetryAfterMs;
    }
     
     function _cacheGet(key) {
@@ -229,6 +254,7 @@
           return 'Acesso negado pelo servidor. Pode ser bloqueio de segurança, sessão expirada ou anexos muito grandes — tente arquivos menores ou contate o suporte.';
         }
         if (code === 401) return 'Sessão expirada ou sem permissão. Faça login novamente.';
+        if (code === 429) return 'Muitas requisições ao servidor em pouco tempo. Aguarde alguns segundos e tente novamente.';
         if (code === 413) return 'Dados muito grandes para enviar. Use anexos menores (até 25 MB por arquivo).';
         if (code === 502 || code === 504) return 'Servidor temporariamente indisponível. Tente novamente em alguns minutos.';
         if (code >= 500) return `Erro interno do servidor (${code}). Tente novamente ou contate o suporte.`;
@@ -304,6 +330,7 @@
        console.error(`ERRO ${method} ${table} (${res.status}):`, e);
        const err = new Error(friendlyApiError(res.status, e));
        err.status = res.status;
+       err.retryAfterMs = _parseRetryAfterMs(res.headers.get('Retry-After'));
        throw err;
      }
 
@@ -355,7 +382,7 @@
          /* Abort/timeout: no máximo 1 retry — evitar 3×25s travando o painel. */
          const maxAttempts = e?.aborted ? 2 : API_RETRY_MAX;
          if (attempt < maxAttempts && _isTransientApiFailure(e.status, e)) {
-           await new Promise(r => setTimeout(r, API_RETRY_BASE_MS * attempt));
+           await new Promise(r => setTimeout(r, _retryDelayMs(e, attempt)));
            continue;
          }
          throw e;

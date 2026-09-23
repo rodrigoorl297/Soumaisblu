@@ -3343,6 +3343,34 @@ if (!allowed) return null;
       return this._lget(this.LK.proposals);
     },
   
+    /**
+     * Propostas de um CPF (checagem de duplicata no envio).
+     * Consulta filtrada — evita baixar todas as páginas de propostas (gerava 429 na hospedagem).
+     */
+    async listProposalsByCpf(cpf) {
+      const digits = String(cpf || '').replace(/\D/g, '');
+      if (digits.length !== 11) return [];
+      if (!this.online) {
+        return (this._lget(this.LK.proposals) || [])
+          .filter((p) => String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '') === digits);
+      }
+      const cols = 'id,numero,clientCpf,client_cpf,status,statusOp,status_op';
+      const enc = encodeURIComponent(digits);
+      const seen = new Map();
+      let okCount = 0;
+      for (const col of ['clientCpf', 'client_cpf']) {
+        try {
+          const rows = await supaReq('GET', 'proposals', null, `?select=${cols}&${col}=eq.${enc}&limit=50`);
+          okCount++;
+          (rows || []).forEach((p) => { if (p?.id && !seen.has(p.id)) seen.set(p.id, p); });
+        } catch (e) {
+          console.warn(`[DB] listProposalsByCpf (${col}):`, e.message);
+        }
+      }
+      if (!okCount) throw new Error('Não foi possível verificar propostas existentes deste CPF.');
+      return [...seen.values()];
+    },
+
     _proposalsCache: { key: '', at: 0, rows: null },
     _proposalsCacheTtlMs: 90000,
 
@@ -4069,17 +4097,36 @@ if (!allowed) return null;
       const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
       const phpUp = _cfg.UPLOAD_URL && _cfg.API_KEY;
 if (phpUp) {
-        const fd = new FormData();
-        fd.append('file', file, origName);
         const q = new URLSearchParams({ bucket, path });
-        const res = await fetch(`${_cfg.UPLOAD_URL}?${q}`, {
-          method: 'POST',
-          headers: { 'X-API-Key': _cfg.API_KEY },
-          body: fd,
-        });
-        const data = await res.json().catch(() => ({}));
+        /* 429/5xx da hospedagem: repetir com espera (upload não foi processado). */
+        const maxAttempts = 4;
+        let res, data;
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+          const fd = new FormData();
+          fd.append('file', file, origName);
+          res = await fetch(`${_cfg.UPLOAD_URL}?${q}`, {
+            method: 'POST',
+            headers: { 'X-API-Key': _cfg.API_KEY },
+            body: fd,
+          });
+          data = await res.json().catch(() => ({}));
+          const transient = typeof window._isTransientApiFailure === 'function'
+            ? window._isTransientApiFailure(res.status)
+            : [429, 502, 503, 504].includes(res.status);
+          if (res.ok || !transient || attempt === maxAttempts) break;
+          const err = {
+            status: res.status,
+            retryAfterMs: typeof window._parseRetryAfterMs === 'function'
+              ? window._parseRetryAfterMs(res.headers.get('Retry-After'))
+              : null,
+          };
+          const wait = typeof window._retryDelayMs === 'function' ? window._retryDelayMs(err, attempt) : 2000 * attempt;
+          await new Promise(r => setTimeout(r, wait));
+        }
         if (!res.ok || !data.ok || !data.caminho) {
-          const errMsg = data.error || `HTTP ${res.status}`;
+          const errMsg = data.error || (res.status === 429
+            ? 'servidor recebeu muitas requisições (429). Aguarde alguns segundos e tente novamente'
+            : `HTTP ${res.status}`);
 throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         }
         return {

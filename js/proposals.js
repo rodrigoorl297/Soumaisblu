@@ -3746,7 +3746,9 @@ window.Proposals = {
 
       // Não permitir segunda proposta ativa para o mesmo CPF.
       try {
-        const existingList = typeof DB.listProposals === 'function' ? await DB.listProposals() : [];
+        const existingList = typeof DB.listProposalsByCpf === 'function'
+          ? await DB.listProposalsByCpf(cpf)
+          : (typeof DB.listProposals === 'function' ? await DB.listProposals() : []);
         const dup = typeof DB.findOtherActiveProposalForClient === 'function'
           ? DB.findOtherActiveProposalForClient(existingList, { clientCpf: cpf }, null)
           : (existingList || []).find((p) => {
