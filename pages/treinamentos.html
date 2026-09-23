@@ -22,10 +22,28 @@
   <link rel="stylesheet" href="../css/global.css?v=ui-refresh1"/>
   <link rel="stylesheet" href="../css/layout.css?v=ui-refresh1"/>
   <link rel="stylesheet" href="../css/colors-orange.css"/>
-  <link rel="stylesheet" href="../css/trainings.css?v=trn-quiz4"/>
+  <link rel="stylesheet" href="../css/trainings.css?v=trn-sidebar1"/>
   <link rel="stylesheet" href="../css/training-tracks.css?v=trn-quiz4"/>
 </head>
-<body class="treinamentos-app trn-no-sidebar">
+<body class="treinamentos-app">
+  <script>
+    if (/[?&]embed=1/.test(location.search) && window.top !== window.self) {
+      document.body.classList.add('trn-embedded');
+    }
+  </script>
+  <style>
+    body.trn-embedded { background: transparent; }
+    body.trn-embedded #sidebar,
+    body.trn-embedded .topbar { display: none !important; }
+    body.trn-embedded .main-area { margin-left: 0 !important; background: transparent; }
+    .trn-embed-tabs { display: none; }
+    body.trn-embedded .trn-embed-tabs { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 24px 0; }
+    .trn-embed-tab {
+      border: 1px solid var(--color-border, #e2e8f0); background: #fff; color: var(--color-text, #14233a);
+      border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
+    }
+    .trn-embed-tab.active { background: var(--sidebar-bg, #0B2545); border-color: transparent; color: #fff; }
+  </style>
   <!-- Loader -->
   <div id="globalLoader" class="loader-overlay">
     <div class="loader-spinner"></div>
@@ -37,37 +55,60 @@
   <button id="menuToggle" style="display:none;"></button>
 
   <div class="app-layout" id="appLayout" style="display:none;">
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-brand">
+        <div class="sidebar-logo"><img src="../images/logo.png" width="32" height="32" alt="SOU+BLU"/></div>
+        <span class="sidebar-title">SOU <span>+ BLU</span></span>
+      </div>
+      <div class="sidebar-nav">
+        <span class="sidebar-section-label">Treinamentos</span>
+        <button type="button" class="nav-item" id="trnNavCatalogo" onclick="trnGoTab('tab-catalog')" title="Catálogo de cursos">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span><span class="nav-label">Catálogo</span>
+        </button>
+        <button type="button" class="nav-item" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado" style="display:none;">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span><span class="nav-label">Trilhas</span>
+        </button>
+        <button type="button" class="nav-item trainings-manage-nav" id="trnNavGestao" onclick="trnGoTab('tab-gestao')" style="display:none;">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="nav-label">Gestão</span>
+        </button>
+        <button type="button" class="nav-item trainings-rh-nav" id="trnNavNotas" onclick="trnGoTab('tab-notas')" style="display:none;">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span><span class="nav-label">Notas RH</span>
+        </button>
+        <div class="sidebar-divider"></div>
+        <span class="sidebar-section-label">Sistema</span>
+        <button type="button" class="nav-item" onclick="navigateBack()" title="Voltar ao painel">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span><span class="nav-label">Voltar ao Painel</span>
+        </button>
+      </div>
+      <div class="sidebar-footer">
+        <div class="sidebar-user">
+          <div class="avatar avatar-sm" id="userAvatar" style="flex-shrink:0;font-size:13px;font-weight:800;">?</div>
+          <div class="sidebar-user-info">
+            <div class="sidebar-user-name" id="userName">–</div>
+            <div class="sidebar-user-role" style="color:var(--color-primary);" id="userRole">Colaborador</div>
+          </div>
+        </div>
+        <button type="button" class="btn-logout" onclick="Auth.logout()"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span><span class="nav-label">Sair</span></button>
+        <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Recolher menu">⇄</button>
+      </div>
+    </nav>
+
     <div class="main-area" id="mainArea">
 
-      <!-- ── Topbar (Clube-style) ── -->
-      <header class="topbar trn-topbar">
-        <div class="trn-topbar-left">
-          <button type="button" class="trn-back-btn" onclick="navigateBack()" title="Voltar ao painel">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-            <span>Voltar</span>
-          </button>
-          <span class="trn-topbar-brand">SOU+BLU Treinamentos</span>
-          <span class="trn-topbar-section" id="trnTopbarSection"></span>
-        </div>
-        <div class="trn-topbar-actions">
-          <button type="button" class="trn-nav-btn" id="trnNavCatalogo" onclick="trnGoTab('tab-catalog')" title="Catálogo de cursos">Catálogo</button>
-          <button type="button" class="trn-nav-btn" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado" style="display:none;">Trilhas</button>
-          <button type="button" class="trn-gestao-btn trainings-manage-nav" id="trnNavGestao" onclick="trnGoTab('tab-gestao')" style="display:none;">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-            Gestão
-          </button>
-          <button type="button" class="trn-nav-btn trainings-rh-nav" id="trnNavNotas" onclick="trnGoTab('tab-notas')" style="display:none;">Notas RH</button>
-          <div class="trn-topbar-user">
-            <div class="trn-topbar-avatar" id="userAvatar">?</div>
-            <div>
-              <div class="trn-topbar-user-name" id="userName">–</div>
-              <div class="trn-topbar-user-role" id="userRole">Colaborador</div>
-            </div>
-          </div>
+      <header class="topbar">
+        <span class="topbar-title" id="trnTopbarSection">Treinamentos</span>
+        <div class="topbar-actions">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="Auth.logout()">Sair</button>
         </div>
       </header>
 
       <!-- ── Page content ── -->
+      <nav class="trn-embed-tabs" aria-label="Seções de treinamentos">
+        <button type="button" class="trn-embed-tab" data-trn-tab="tab-catalog" onclick="trnGoTab('tab-catalog')">Catálogo</button>
+        <button type="button" class="trn-embed-tab trainings-manage-nav" data-trn-tab="tab-gestao" onclick="trnGoTab('tab-gestao')" style="display:none;">Gestão</button>
+        <button type="button" class="trn-embed-tab trainings-rh-nav" data-trn-tab="tab-notas" onclick="trnGoTab('tab-notas')" style="display:none;">Notas RH</button>
+      </nav>
+
       <main class="page-content" id="trnPageContent">
 
         <!-- ═══ TAB: Catálogo de Cursos ═══ -->
@@ -116,8 +157,8 @@
   <script>
     /* ── Tab labels for topbar section ── */
     const _TAB_LABELS = {
-      'tab-catalog': '',
-      'tab-meus':    '',
+      'tab-catalog': 'Treinamentos',
+      'tab-meus':    'Treinamentos',
       'tab-trilhas': 'Trilhas',
       'tab-gestao':  'Gestão',
       'tab-notas':   'Notas RH',
@@ -154,13 +195,16 @@
       // Update nav button active state
       Object.values(_TAB_NAV_IDS).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.classList.remove('is-active');
+        if (el) el.classList.remove('active');
       });
       const activeNavId = _TAB_NAV_IDS[tabId];
       if (activeNavId) {
         const activeNav = document.getElementById(activeNavId);
-        if (activeNav) activeNav.classList.add('is-active');
+        if (activeNav) activeNav.classList.add('active');
       }
+      document.querySelectorAll('[data-trn-tab]').forEach(el => {
+        el.classList.toggle('active', el.dataset.trnTab === tabId);
+      });
 
       if (tabId === 'tab-catalog') LMS.renderCatalog();
       if (tabId === 'tab-trilhas' && window.TrainingTracks) TrainingTracks.renderTracks('tracksRoot');
@@ -1515,6 +1559,7 @@
 
       if (loader) loader.style.display = 'none';
       if (layout) layout.style.display = '';
+      if (typeof initSidebarToggle === 'function') initSidebarToggle();
 
       // Fill topbar user info
       try {
@@ -1550,7 +1595,8 @@
         await LMS.renderCatalog();
         // Highlight catalog nav
         const catNav = document.getElementById('trnNavCatalogo');
-        if (catNav) catNav.classList.add('is-active');
+        if (catNav) catNav.classList.add('active');
+        document.querySelector('[data-trn-tab="tab-catalog"]')?.classList.add('active');
       } catch (e) {
         console.error('[Treinamentos] catalog:', e);
         const root = document.getElementById('catalogRoot');

@@ -714,13 +714,16 @@ function _applyAdminNavVisibility(cfg) {
       btn.type = 'button';
       btn.className = 'nav-item';
       btn.innerHTML = `<span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span><span class="nav-label">Treinamentos</span><span class="nav-badge trainings-badge" id="trainingsBadge" style="display:none;">0</span>`;
+      btn.dataset.section = 'secTreinamentosHub';
+      btn.dataset.navWiredUi = '1';
       btn.onclick = () => {
-        const href = typeof Auth !== 'undefined' && Auth.treinamentosPageHrefFresh
+        let href = typeof Auth !== 'undefined' && Auth.treinamentosPageHrefFresh
           ? Auth.treinamentosPageHrefFresh()
           : (typeof Auth !== 'undefined' && Auth.treinamentosPageHref
             ? Auth.treinamentosPageHref()
             : 'pages/treinamentos.html');
-        _navigateToHub(href);
+        href += (href.includes('?') ? '&' : '?') + 'embed=1';
+        _openTreinamentosEmbedded(href);
       };
       const sidebarNav = document.querySelector('.sidebar-nav');
       const refBtn = document.getElementById('navFinanceiroHub');
@@ -1182,6 +1185,33 @@ function _openClubeEmbedded(href) {
     sec.appendChild(frame);
   }
   if (typeof navigateTo === 'function') navigateTo('secClubeBeneficios');
+  else {
+    document.querySelectorAll('.section').forEach((s) => s.classList.remove('active'));
+    sec.classList.add('active');
+  }
+}
+
+/** Mostra Treinamentos embutido no painel (iframe), mantendo a sidebar do admin. */
+function _openTreinamentosEmbedded(href) {
+  let sec = document.getElementById('secTreinamentosHub');
+  if (!sec) {
+    const main = document.querySelector('.main-area .page-content');
+    if (!main) { _navigateToHub(href); return; }
+    sec = document.createElement('section');
+    sec.className = 'section';
+    sec.id = 'secTreinamentosHub';
+    main.appendChild(sec);
+  }
+  let frame = document.getElementById('treinamentosFrame');
+  if (!frame) {
+    frame = document.createElement('iframe');
+    frame.id = 'treinamentosFrame';
+    frame.title = 'Treinamentos';
+    frame.src = href;
+    frame.style.cssText = 'display:block;width:100%;height:calc(100vh - var(--topbar-height) - 48px);min-height:520px;border:0;border-radius:16px;background:var(--color-bg);';
+    sec.appendChild(frame);
+  }
+  if (typeof navigateTo === 'function') navigateTo('secTreinamentosHub');
   else {
     document.querySelectorAll('.section').forEach((s) => s.classList.remove('active'));
     sec.classList.add('active');
