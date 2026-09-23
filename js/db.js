@@ -4079,6 +4079,30 @@ if (!allowed) return null;
       return safeObj ? `${bucket}/${safeObj}` : bucket;
     },
 
+    /** Reduz fotos grandes (celular) para JPEG ≤ 2400px — evita estourar limite de upload do PHP. */
+    async _shrinkImageForUpload(file) {
+      const type = String(file.type || '').toLowerCase();
+      if (!/^image\/(jpeg|jpg|png|webp)$/.test(type) || file.size <= 1.5 * 1024 * 1024) return file;
+      try {
+        const bmp = await createImageBitmap(file);
+        const scale = Math.min(1, 2400 / Math.max(bmp.width, bmp.height));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(bmp.width * scale);
+        canvas.height = Math.round(bmp.height * scale);
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        bmp.close?.();
+        const blob = await new Promise((r) => canvas.toBlob(r, 'image/jpeg', 0.85));
+        if (!blob || blob.size >= file.size) return file;
+        const name = String(file.name || 'imagem').replace(/\.[^.]+$/, '') + '.jpg';
+        return new File([blob], name, { type: 'image/jpeg', lastModified: Date.now() });
+      } catch {
+        return file;
+      }
+    },
+
     /**
      * Upload de anexo da proposta — servidor PHP → Supabase (nunca disco Locaweb).
      */
@@ -4086,6 +4110,7 @@ if (!allowed) return null;
       if (!file || !(file instanceof Blob)) {
         throw new Error('Arquivo inválido.');
       }
+      file = await this._shrinkImageForUpload(file);
       const bucket = 'proposal-attachments';
       const safePid = String(proposalId || 'new').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
       const safeGrp = String(grupo || 'doc').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 60);

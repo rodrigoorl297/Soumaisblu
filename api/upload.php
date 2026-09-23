@@ -61,8 +61,19 @@ if ($bucket === 'proposal-attachments') {
     $sub = soublu_upload_normalize_subpath($rawPath);
 }
 
-if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'])) {
-    soublu_json(['ok' => false, 'error' => 'Arquivo ausente.'], 400);
+if (!isset($_FILES['file']) || !is_uploaded_file($_FILES['file']['tmp_name'] ?? '')) {
+    $upErr = (int) ($_FILES['file']['error'] ?? UPLOAD_ERR_NO_FILE);
+    $postTooBig = !isset($_FILES['file']) && (int) ($_SERVER['CONTENT_LENGTH'] ?? 0) > 0;
+    $limit = ini_get('upload_max_filesize') ?: '?';
+    $msg = match (true) {
+        $postTooBig, $upErr === UPLOAD_ERR_INI_SIZE, $upErr === UPLOAD_ERR_FORM_SIZE
+            => "Arquivo maior que o limite do servidor ({$limit}).",
+        $upErr === UPLOAD_ERR_PARTIAL => 'Envio interrompido. Tente novamente.',
+        $upErr === UPLOAD_ERR_NO_TMP_DIR, $upErr === UPLOAD_ERR_CANT_WRITE
+            => 'Servidor não conseguiu gravar o arquivo temporário.',
+        default => 'Arquivo ausente.',
+    };
+    soublu_json(['ok' => false, 'error' => $msg], $postTooBig || $upErr === UPLOAD_ERR_INI_SIZE ? 413 : 400);
 }
 
 $file = $_FILES['file'];
