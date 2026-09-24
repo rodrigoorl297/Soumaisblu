@@ -675,7 +675,7 @@ function renderKanban() {
     }
 
     const oldLinkHtml = oldCount > 0
-      ? `<button type="button" class="kanban-card" style="width:100%;text-align:center;cursor:pointer;background:var(--color-surface-2);border:1px dashed var(--color-border);font-weight:700;font-size:13px;color:var(--color-accent);" onclick="abrirTodosContratados()">Ver todos os contratados (${oldCount})</button>`
+      ? `<button type="button" class="kanban-card" style="width:100%;text-align:center;cursor:pointer;background:var(--color-accent-light,#F7FFE0);border:1px dashed var(--color-accent-dark,#4F6B00);font-weight:700;font-size:13px;color:var(--color-accent-dark,#4F6B00);" onclick="abrirTodosContratados()">Ver todos os contratados (${oldCount})</button>`
       : '';
 
     col.innerHTML = (visibleItems.length
