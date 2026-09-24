@@ -47,12 +47,12 @@
   --color-text-muted:     #94A3B8;
 
   /* Sidebar */
-  --sidebar-bg:           #0B2545;
-  --sidebar-text:         rgba(255, 255, 255, 0.85);
-  --sidebar-text-muted:   rgba(255, 255, 255, 0.5);
-  --sidebar-hover:        rgba(255, 255, 255, 0.06);
-  --sidebar-active:       rgba(255, 255, 255, 0.08);
-  --sidebar-active-text:  #FFFFFF;
+  --sidebar-bg:           #FFFFFF;
+  --sidebar-text:         #000000;
+  --sidebar-text-muted:   rgba(0, 0, 0, 0.5);
+  --sidebar-hover:        rgba(0, 0, 0, 0.05);
+  --sidebar-active:       rgba(0, 0, 0, 0.07);
+  --sidebar-active-text:  #000000;
   --sidebar-width:        248px;
   --sidebar-collapsed:    68px;
 
