@@ -11,8 +11,9 @@ const LeadsImport = {
     cpf:         { label: 'CPF',          aliases: ['cpf', 'cpf/cnpj', 'documento', 'doc', 'cpf_cnpj'] },
     score:       { label: 'Score',        aliases: ['score', 'pontuação', 'pontuacao', 'score_lead', 'score lead', 'classificação', 'classificacao', 'rank', 'score_credito'] },
     mother_name: { label: 'Nome da Mãe',  aliases: ['nome da mãe', 'nome_da_mae', 'mae', 'mãe', 'mother', 'filiação', 'filiacao', 'nome mae'] },
-    phone:       { label: 'Telefone 1',   aliases: ['telefone 1', 'telefone', 'tel', 'celular', 'fone', 'phone', 'whatsapp', 'contato', 'número', 'numero'] },
-    phone2:      { label: 'Telefone 2',   aliases: ['telefone 2', 'tel 2', 'celular 2', 'fone 2', 'whatsapp 2', 'contato 2', 'número 2'] },
+    // Inclui "CEL 1" / "CEL1" — planilhas de compra usam esse cabeçalho e o includes('celular') não pega.
+    phone:       { label: 'Telefone 1',   aliases: ['telefone 1', 'telefone1', 'tel 1', 'tel1', 'celular 1', 'celular1', 'cel 1', 'cel1', 'fone 1', 'fone1', 'telefone', 'tel', 'celular', 'cel', 'fone', 'phone', 'whatsapp', 'contato', 'número', 'numero'] },
+    phone2:      { label: 'Telefone 2',   aliases: ['telefone 2', 'telefone2', 'tel 2', 'tel2', 'celular 2', 'celular2', 'cel 2', 'cel2', 'fone 2', 'fone2', 'whatsapp 2', 'contato 2', 'número 2', 'phone2'] },
   },
 
   /**
@@ -49,10 +50,7 @@ const LeadsImport = {
         }
       }
     }
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-xlsx',hypothesisId:'F1',location:'leads-import.js:parseFile',message:'XLSX ready',data:{hasXLSX:typeof XLSX!=='undefined',fileName:file?.name||null,fileSize:file?.size||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return new Promise((resolve, reject) => {
+return new Promise((resolve, reject) => {
       const reader = new FileReader();
 
       reader.onload = (e) => {
@@ -62,14 +60,14 @@ const LeadsImport = {
           }
 
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const workbook = XLSX.read(data, { type: 'array', cellDates: false, raw: false, cellText: true });
 
           // Use first sheet
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
 
           // Convert to JSON with headers
-          const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+          const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
 
           if (!rawRows.length) {
             throw new Error('Planilha vazia ou sem dados.');
@@ -104,10 +102,13 @@ const LeadsImport = {
       for (const header of headers) {
         const normalized = header.toLowerCase().trim()
           .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        // Alias curto (≤3) só com igualdade — evita "cel" bater em "excelencia".
         const match = fieldDef.aliases.some(alias => {
           const normalizedAlias = alias.toLowerCase()
             .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-          return normalized === normalizedAlias || normalized.includes(normalizedAlias);
+          if (normalized === normalizedAlias) return true;
+          if (normalizedAlias.length <= 3) return false;
+          return normalized.includes(normalizedAlias);
         });
         if (match && !mapping[fieldKey]) {
           mapping[fieldKey] = header;
@@ -117,6 +118,31 @@ const LeadsImport = {
     }
 
     return mapping;
+  },
+
+  /**
+   * pickPhoneFromExtra — resgata celular de colunas não mapeadas (ex.: "CEL 1").
+   * Usado no transform e como rede de segurança se o autoMap falhar.
+   */
+  pickPhoneFromExtra(extra, which = 1) {
+    if (!extra || typeof extra !== 'object') return '';
+    const want = which === 2 ? 2 : 1;
+    const normKey = (k) => String(k || '').toLowerCase().trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[_\-\s]+/g, '');
+    const rank = (k) => {
+      const n = normKey(k);
+      if (want === 1 && /^(cel|celular|tel|telefone|fone|whatsapp|phone|contato)1?$/.test(n)) return 1;
+      if (want === 2 && /^(cel|celular|tel|telefone|fone|whatsapp|phone|contato)2$/.test(n)) return 1;
+      return 0;
+    };
+    let best = '';
+    for (const [k, v] of Object.entries(extra)) {
+      if (!rank(k)) continue;
+      const digits = String(v || '').replace(/\D/g, '');
+      if (digits.length >= 8) { best = String(v).trim(); break; }
+    }
+    return best;
   },
 
   /**
@@ -146,7 +172,15 @@ const LeadsImport = {
         lead.cpf = lead.cpf.replace(/[^\d]/g, '');
       }
 
-      // Clean phone
+      // Clean phone + resgate de "CEL 1" etc. no extra_data
+      if (!lead.phone) {
+        const fromExtra = this.pickPhoneFromExtra(lead.extra_data, 1);
+        if (fromExtra) lead.phone = fromExtra;
+      }
+      if (!lead.phone2) {
+        const fromExtra2 = this.pickPhoneFromExtra(lead.extra_data, 2);
+        if (fromExtra2) lead.phone2 = fromExtra2;
+      }
       if (lead.phone) {
         lead.phone = lead.phone.replace(/[^\d+() -]/g, '');
       }
@@ -175,9 +209,7 @@ const LeadsImport = {
       }
 
       // CPF validation (if present)
-      if (lead.cpf && lead.cpf.length > 0 && !this.isValidCPF(lead.cpf)) {
-        errors.push('CPF inválido');
-      }
+      /* CPF: não barrar lote por dígito verificador — zeros da planilha. */
 
       if (errors.length) {
         invalid.push({ row: idx + 2, lead, errors }); // +2 = header + 0-index
@@ -241,3 +273,5 @@ const LeadsImport = {
     return duplicates;
   },
 };
+
+try { window.LeadsImport = LeadsImport; } catch (_) {}

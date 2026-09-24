@@ -202,7 +202,7 @@
 }
 .sidebar-user .avatar,
 .sidebar-user .user-avatar {
-  box-shadow: 0 0 0 2px rgba(249,115,22,0.55);
+  box-shadow: 0 0 0 2px rgba(197, 255, 0,0.55);
 }
 .sidebar-user:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.1); }
 
@@ -451,9 +451,9 @@
   color: #047857;
 }
 .master-chip--warn {
-  background: #fff7ed;
-  border-color: rgba(234, 88, 12, 0.25);
-  color: #c2410c;
+  background: #F7FFE0;
+  border-color: rgba(79, 107, 0, 0.25);
+  color: #4F6B00;
 }
 .master-user-card__body {
   padding-top: 14px;
@@ -543,14 +543,15 @@
   line-height: 1.45;
 }
 .master-user-detail__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 28px;
   margin: 0;
   flex: 1 1 280px;
 }
 .master-user-detail__grid > div {
-  min-width: 0;
+  min-width: 90px;
+  max-width: 100%;
 }
 .master-user-detail__grid dt {
   font-size: 10px;
@@ -566,6 +567,13 @@
   font-weight: 700;
   color: var(--color-text);
   word-break: break-word;
+}
+/* E-mail numa linha só; se não couber (celular), corta com reticências */
+.master-user-detail__grid dd.master-user-detail__email {
+  white-space: nowrap;
+  word-break: normal;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .master-user-group {
   margin-bottom: var(--space-lg);
@@ -1169,7 +1177,7 @@
     .rh-relatorio-card:hover { transform: translateY(-1px); border-color: var(--color-accent); }
     .rh-relatorio-card.active {
       border-color: var(--color-accent);
-      background: rgba(249, 115, 22, 0.08);
+      background: rgba(197, 255, 0, 0.14);
     }
     .rh-relatorio-card strong { display: block; font-size: 14px; margin-bottom: 4px; }
     .rh-relatorio-card span { font-size: 12px; color: var(--color-text-muted); line-height: 1.4; }
@@ -1296,7 +1304,7 @@
       grid-template-columns: 1fr;
     }
     .section-title-bar {
-      background: var(--color-accent-subtle, rgba(249, 115, 22, 0.1));
+      background: var(--color-accent-subtle, rgba(197, 255, 0, 0.16));
       color: var(--color-accent);
       padding: 8px 16px;
       font-weight: 800;
@@ -1429,7 +1437,7 @@
     .fin-dash-grid .stat-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
     .fin-dash-grid .stat-icon svg { width: 22px; height: 22px; }
     .fin-dash-grid .stat-icon.blue { background: rgba(59,130,246,.12); color: #2563eb; }
-    .fin-dash-grid .stat-icon.orange { background: rgba(249,115,22,.12); color: #ea580c; }
+    .fin-dash-grid .stat-icon.orange { background: rgba(197, 255, 0,.12); color: #4F6B00; }
     .fin-dash-grid .stat-icon.green { background: rgba(16,185,129,.12); color: #059669; }
     .fin-dash-grid .stat-icon.purple { background: rgba(139,92,246,.12); color: #7c3aed; }
     .fin-dash-grid .stat-icon.yellow { background: rgba(234,179,8,.15); color: #ca8a04; }
@@ -1725,3 +1733,106 @@
     /* Contestação vive no hub Jurídico/RH — não forçar hide em #navManageTickets
        (admin.js controla Esteira Chamados via canChamados; !important quebrava o menu). */
     #navContestacao { display: none !important; }
+
+/* Filtros da tela Clientes (admin) */
+.client-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+.client-filters .form-control {
+  width: auto;
+  min-width: 150px;
+  font-size: 13px;
+}
+.client-filters__date {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.client-filters__date .form-control {
+  min-width: 0;
+}
+.client-filters__count {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+@media (max-width: 640px) {
+  .client-filters .form-control,
+  .client-filters__date { flex: 1 1 100%; }
+  .client-filters__date .form-control { flex: 1; }
+  .client-filters__count { margin-left: 0; }
+}
+
+/* ── Faturamento por equipe: detalhe expandido (vendedores + propostas) ── */
+.tb-detail__block { margin-bottom: 16px; }
+.tb-detail__title {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+.tb-detail__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+.tb-detail__grid--vendors { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.tb-detail__empty { font-size: 12px; color: var(--color-text-muted); }
+.tb-detail__more { align-self: center; font-size: 12px; color: var(--color-text-muted); }
+
+.tb-card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+.tb-card--idle { opacity: .6; }
+.tb-card__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 2px; }
+.tb-card__num { font-size: 11px; font-weight: 700; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.tb-card__name,
+.tb-card__meta {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tb-card__name { font-size: 12px; font-weight: 800; color: var(--color-text); }
+.tb-card__meta { font-size: 11px; color: var(--color-text-muted); }
+.tb-card__meta strong { color: var(--color-text); font-weight: 800; }
+.tb-card__value {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.tb-card__value small { font-size: 10px; font-weight: 600; color: var(--color-text-muted); }
+.tb-card__value--zero { color: var(--color-text-muted); font-weight: 600; }
+
+.tb-status {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+.tb-status--ok   { background: rgba(16, 185, 129, .14); color: #047857; }
+.tb-status--bad  { background: rgba(239, 68, 68, .12);  color: #b91c1c; }
+.tb-status--warn { background: rgba(245, 158, 11, .16); color: #b45309; }
+.tb-status--info { background: var(--color-surface-2);  color: var(--color-text-secondary, #475569); }

@@ -3164,9 +3164,10 @@ async function renderTeamBillingChart() {
               const finalV = propAmt(p);
               const brutoV = propBruto(p);
               if (isPagas && brutoV > 0 && Math.abs(brutoV - finalV) > 0.01) {
-                return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV)}</div><div style="font-size:10px;color:var(--color-text-muted);">bruto ${fmtR(brutoV)}</div>`;
+                return `<div class="tb-card__value">${fmtR(finalV)} <small>bruto ${fmtR(brutoV)}</small></div>`;
               }
-              return `<div style="font-size:12px;font-weight:800;color:${cor};margin-top:4px;">${fmtR(finalV || brutoV)}</div>`;
+              const v = finalV || brutoV;
+              return `<div class="tb-card__value${v ? '' : ' tb-card__value--zero'}">${fmtR(v)}</div>`;
             };
             /* Resumo por vendedor — controle de quem produziu no período. */
             const vendorStats = (() => {
@@ -3188,13 +3189,13 @@ async function renderTeamBillingChart() {
               return [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
             })();
             const vendorsHtml = vendorStats.length
-              ? `<div style="margin-bottom:12px;">
-                  <div style="font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--color-text-muted);margin-bottom:6px;">VENDEDORES DA EQUIPE (${vendorStats.length})</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ? `<div class="tb-detail__block">
+                  <div class="tb-detail__title">Vendedores da equipe (${vendorStats.length})</div>
+                  <div class="tb-detail__grid tb-detail__grid--vendors">
                     ${vendorStats.map((v) => `
-                      <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:6px 10px;min-width:140px;">
-                        <div style="font-weight:700;font-size:12px;">${v.name}</div>
-                        <div style="font-size:11px;color:var(--color-text-muted);">${v.count} prop. · ${fmtR(v.total)}${v.idle && !v.count ? ' · sem proposta no período' : ''}</div>
+                      <div class="tb-card${v.count ? '' : ' tb-card--idle'}">
+                        <div class="tb-card__name" title="${_tbUpper(v.name)}">${_tbUpper(v.name)}</div>
+                        <div class="tb-card__meta">${v.count ? `${v.count} proposta${v.count === 1 ? '' : 's'} · <strong>${fmtR(v.total)}</strong>` : 'Sem proposta no período'}</div>
                       </div>`).join('')}
                   </div>
                 </div>`
@@ -3203,12 +3204,20 @@ async function renderTeamBillingChart() {
             <tr style="border-bottom:1px solid var(--color-border);" id="trow_${i}"><td style="padding:8px 12px;"><span style="font-weight:800;color:${cor};">#${i+1}</span></td><td style="padding:8px 12px;"><span style="font-weight:700;">${d.sup.name}</span><div style="font-size:11px;color:var(--color-text-muted);">${supSub}</div></td><td style="padding:8px 12px;">${d.team.length}</td><td style="padding:8px 12px;font-weight:700;">${d.count}</td><td style="padding:8px 12px;font-weight:800;color:${cor};">${fmtR(d.total)}</td>${isPagas ? `<td style="padding:8px 12px;font-weight:700;color:var(--color-text-muted);">${fmtR(d.totalBruto || 0)}</td>` : ''}<td style="padding:8px 12px;"><div style="display:flex;align-items:center;gap:8px;"><div style="background:var(--color-surface-2);border-radius:4px;height:6px;width:80px;overflow:hidden;"><div style="height:6px;width:${share}%;background:${cor};border-radius:4px;"></div></div><span style="font-size:12px;">${share}%</span></div></td><td style="padding:8px 12px;"><button class="btn btn-ghost btn-sm" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver</button></td></tr><tr id="tdetail_${i}" style="display:none;background:var(--color-surface-2);"><td colspan="${isPagas ? 8 : 7}" style="padding:12px 20px;">
                 ${vendorsHtml}
                 ${!d.props.length
-                  ? '<span style="color:var(--color-text-muted);font-size:12px;">Nenhuma proposta neste período.</span>'
-                  : `<div style="font-size:11px;font-weight:800;letter-spacing:.02em;color:var(--color-text-muted);margin-bottom:6px;">PROPOSTAS</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
-                      ${d.props.slice(0,20).map(p => `
-                        <div style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:8px;padding:8px 12px;min-width:200px;"><div style="font-weight:700;font-size:12px;">${p.numero || p.id}</div><div style="font-size:12px;font-weight:700;color:${cor};margin-top:2px;">Vendedor: ${p.vendorName || p.vendor_name || '—'}</div><div style="font-size:11px;color:var(--color-text-muted);">${p.clientName||'—'} · ${p.convenio||'—'}</div>${propValHtml(p)}<div style="font-size:10px;background:${cor}18;color:${cor};padding:2px 6px;border-radius:99px;display:inline-block;margin-top:3px;">${p.statusOp||p.status||'—'}</div></div>`).join('')}
-                      ${d.props.length > 20 ? `<div style="font-size:12px;color:var(--color-text-muted);align-self:center;">+${d.props.length-20} mais...</div>` : ''}
+                  ? '<span class="tb-detail__empty">Nenhuma proposta neste período.</span>'
+                  : `<div class="tb-detail__title">Propostas (${d.props.length})</div>
+                    <div class="tb-detail__grid">
+                      ${d.props.slice(0,20).map(p => {
+                        const st = p.statusOp || p.status || '—';
+                        return `
+                        <div class="tb-card">
+                          <div class="tb-card__head"><span class="tb-card__num">${p.numero || p.id}</span><span class="tb-status tb-status--${_tbStatusKind(st)}">${_tbUpper(st)}</span></div>
+                          <div class="tb-card__name" title="${_tbUpper(p.vendorName || p.vendor_name || '—')}">${_tbUpper(p.vendorName || p.vendor_name || '—')}</div>
+                          <div class="tb-card__meta" title="${_tbUpper(p.clientName || '—')}">${_tbUpper(p.clientName || '—')} · ${_tbUpper(p.convenio || '—')}</div>
+                          ${propValHtml(p)}
+                        </div>`;
+                      }).join('')}
+                      ${d.props.length > 20 ? `<div class="tb-detail__more">+${d.props.length-20} mais…</div>` : ''}
                     </div>`}
               </td></tr>`;
           }).join('')}
@@ -3216,6 +3225,18 @@ async function renderTeamBillingChart() {
 
   _syncTeamBillingFilterUI(periodHint ? 'all' : f);
   _wireTeamBillingDatePickers();
+}
+
+/** Detalhe por equipe: texto em caixa alta (padrão da empresa) e cor do status pelo significado. */
+function _tbUpper(v) {
+  return String(v ?? '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('pt-BR');
+}
+function _tbStatusKind(status) {
+  const s = String(status || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  if (/pago|efetivad|finalizad|concluid/.test(s)) return 'ok';
+  if (/cancel|reprov|recusad|negad/.test(s)) return 'bad';
+  if (/pend|ag\.|aguard|liberac/.test(s)) return 'warn';
+  return 'info';
 }
 
 function _syncTeamBillingFilterUI(activeKey) {
@@ -4923,7 +4944,7 @@ function _renderMasterSoloBody(user, allOrders, allWds) {
       <dl class="master-user-detail__grid">
         <div><dt>Departamento</dt><dd>${user.department || '—'}</dd></div>
         <div><dt>Matrícula</dt><dd>${user.matricula || '—'}</dd></div>
-        <div><dt>E-mail</dt><dd>${user.email || '—'}</dd></div>
+        <div><dt>E-mail</dt><dd class="master-user-detail__email" title="${user.email || ''}">${user.email || '—'}</dd></div>
         <div><dt>Perfil</dt><dd>${user.role || '—'}</dd></div>
       </dl>
     </div>`;
@@ -6748,22 +6769,90 @@ function _repaintClientsTableFromCache() {
 }
 window._repaintClientsTableFromCache = _repaintClientsTableFromCache;
 
+/** Data de cadastro do cliente como 'AAAA-MM-DD' (compara direto com input type=date). */
+function _clientCreatedDay(client) {
+  const raw = client.created_at || client.createdAt || '';
+  const d = raw ? new Date(raw) : null;
+  if (!d || isNaN(d)) return '';
+  const pad = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+/** Preenche o select "Cadastrado por" com quem aparece na lista carregada (mantém a escolha). */
+function _fillClientRegistrantFilter(clients, nameMap) {
+  const sel = document.getElementById('clientFilterRegistrant');
+  if (!sel) return;
+  const current = sel.value;
+  const ids = [...new Set(clients.map(c => String(c.supervisorId || c.supervisor_id || '')))];
+  const opts = ids
+    .map(id => ({ id, name: id ? (nameMap.get(id) || 'Sem nome') : 'Sem cadastrante' }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
+  const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  sel.innerHTML = '<option value="">Cadastrado por: todos</option>'
+    + opts.map(o => `<option value="${esc(o.id || '__none__')}">${esc(o.name)}</option>`).join('');
+  if ([...sel.options].some(o => o.value === current)) sel.value = current;
+}
+
+function _applyClientFilters(clients) {
+  const registrant = document.getElementById('clientFilterRegistrant')?.value || '';
+  const from = document.getElementById('clientFilterFrom')?.value || '';
+  const to = document.getElementById('clientFilterTo')?.value || '';
+  const missing = document.getElementById('clientFilterMissing')?.value || '';
+  if (!registrant && !from && !to && !missing) return clients;
+  const blank = v => !String(v ?? '').replace(/[-\s]/g, '');
+  return clients.filter(c => {
+    if (registrant) {
+      const sid = String(c.supervisorId || c.supervisor_id || '');
+      if ((registrant === '__none__' ? '' : registrant) !== sid) return false;
+    }
+    if (from || to) {
+      const day = _clientCreatedDay(c);
+      if (!day) return false;
+      if (from && day < from) return false;
+      if (to && day > to) return false;
+    }
+    const noPhone = blank(c.phone1) && blank(c.phone2);
+    if (missing === 'phone' && !noPhone) return false;
+    if (missing === 'email' && !blank(c.email)) return false;
+    if (missing === 'rg' && !blank(c.rg)) return false;
+    if (missing === 'complete' && (noPhone || blank(c.email) || blank(c.rg))) return false;
+    return true;
+  });
+}
+
+function clearClientFilters() {
+  ['clientFilterRegistrant', 'clientFilterFrom', 'clientFilterTo', 'clientFilterMissing', 'clientSearch'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  _repaintClientsTableFromCache();
+}
+window.clearClientFilters = clearClientFilters;
+
 function _paintClientsTable(tbody, clients, nameMap) {
+  _fillClientRegistrantFilter(clients, nameMap);
   const q = (window.Clients && typeof Clients._getSearchQuery === 'function')
     ? Clients._getSearchQuery('clientSearch')
     : (document.getElementById('clientSearch')?.value || '').trim();
-  let rows = clients;
+  let rows = _applyClientFilters(clients);
   if (q && window.Clients && typeof Clients.matchesClientSearch === 'function') {
-    rows = clients.filter(client => {
+    rows = rows.filter(client => {
       const sid = String(client.supervisorId || client.supervisor_id || '');
       const supervisorName = nameMap.get(sid) || '';
       return Clients.matchesClientSearch(client, q, { supervisorName });
     });
   }
 
+  const countEl = document.getElementById('clientFilterCount');
+  if (countEl) {
+    countEl.textContent = rows.length === clients.length
+      ? `${clients.length.toLocaleString('pt-BR')} clientes`
+      : `${rows.length.toLocaleString('pt-BR')} de ${clients.length.toLocaleString('pt-BR')} clientes`;
+  }
+
   if (!rows.length) {
     const msg = clients.length
-      ? 'Nenhum cliente encontrado para a busca'
+      ? 'Nenhum cliente encontrado para a busca/filtros'
       : 'Nenhum cliente cadastrado';
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:20px;">${msg}</td></tr>`;
     return;

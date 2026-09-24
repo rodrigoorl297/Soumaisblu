@@ -694,7 +694,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     };
   },
 
-  /** Ranking dos funcionários (employee.html) — sem filtros master nem valores em R$. */
+  /** Ranking dos funcionários (employee.html) — sem filtros master; valor = soma das pagas. */
   async _renderPublicRanking(listId, opts = {}) {
     const users = await this._loadAllRankingVendors();
     const vendorIndex = this._buildVendorIndex(users);
@@ -839,30 +839,33 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
       .sort((a, b) => b.total - a.total || b.count - a.count);
   },
 
-  /** Ranking público: pagas + total de propostas (sem R$, pontos ou faixas). */
+  /** Ranking público: ordenado pelo valor das pagas (R$), com pagas + total de propostas (sem pontos ou faixas). */
   _aggregateByPaidAndProposals(users, proposals, vendorIndex, usersByName, masterMode = false) {
     const byVendor = {};
     (proposals || []).forEach(p => {
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, masterMode);
       if (!vid) return;
-      if (!byVendor[vid]) byVendor[vid] = { paidCount: 0, count: 0 };
+      if (!byVendor[vid]) byVendor[vid] = { paidCount: 0, count: 0, total: 0 };
       byVendor[vid].count += 1;
-      if (this._isPaidProposal(p)) byVendor[vid].paidCount += 1;
+      if (this._isPaidProposal(p)) {
+        byVendor[vid].paidCount += 1;
+        byVendor[vid].total += this._proposalChartAmount(p, 'pagas');
+      }
     });
 
     return (users || [])
       .map(u => {
-        const agg = byVendor[u.id] || { paidCount: 0, count: 0 };
+        const agg = byVendor[u.id] || { paidCount: 0, count: 0, total: 0 };
         return {
           user: u,
-          total: 0,
+          total: agg.total,
           count: agg.count,
           paidCount: agg.paidCount,
           tier: null,
         };
       })
       .filter(r => r.count > 0)
-      .sort((a, b) => b.paidCount - a.paidCount || b.count - a.count);
+      .sort((a, b) => b.total - a.total || b.paidCount - a.paidCount || b.count - a.count);
   },
 
   _prefixForList(listId) {
@@ -1028,7 +1031,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     if (!p) return;
     if (!p.dataset.defaultText) p.dataset.defaultText = p.textContent;
     p.textContent = publicRank
-      ? 'Classificação por propostas pagas — desempate pelo total de propostas'
+      ? 'Classificação pelo valor das propostas pagas — desempate por pagas e total de propostas'
       : p.dataset.defaultText;
   },
 
@@ -1057,8 +1060,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       return;
     }
 
-    const metric = (r) => (showSales ? (r.total || 0) : publicRank ? (r.paidCount || 0) : (r.count || 0));
-    const leader = Math.max(...rows.map(metric), 0) || 1;
+    const metric = (r) => ((showSales || publicRank) ? (r.total || 0) : (r.count || 0));
     const totalPaid = rows.reduce((s, r) => s + (r.paidCount || 0), 0);
     const totalCount = rows.reduce((s, r) => s + (r.count || 0), 0);
     const totalSales = rows.reduce((s, r) => s + (r.total || 0), 0);
@@ -1086,15 +1088,15 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     // Valor principal + legenda de cada vendedor
     const main = (r) => {
       if (showSales) return { value: salesText(r), label: `${r.count} proposta(s)` };
-      if (publicRank) return { value: String(r.paidCount || 0), label: `paga(s) de ${r.count || 0} proposta(s)` };
+      if (publicRank) return { value: this._fmtSales(r.total || 0), label: `${r.paidCount || 0} paga(s) de ${r.count || 0} proposta(s)` };
       return { value: String(r.count || 0), label: 'proposta(s)' };
     };
 
     // Quanto falta para passar quem está logo acima (ou vantagem do líder)
     const fmtGap = (v) => {
-      if (showSales) return this._fmtSales(v);
+      if (showSales || publicRank) return this._fmtSales(v);
       const n = Math.max(1, Math.ceil(v));
-      return publicRank ? `${n} paga${n === 1 ? '' : 's'}` : `${n} proposta${n === 1 ? '' : 's'}`;
+      return `${n} proposta${n === 1 ? '' : 's'}`;
     };
     const gapHint = (i) => {
       const r = rows[i];
@@ -1106,16 +1108,26 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
           : `<div class="rk-gap">Empatado com o 2º lugar — não deixe passar!</div>`;
       }
       const diff = metric(rows[i - 1]) - metric(r);
-      const need = showSales ? Math.max(diff, 0.01) : diff + 1;
+      const need = (showSales || publicRank) ? Math.max(diff, 0.01) : diff + 1;
       return `<div class="rk-gap">Faltam <strong>${fmtGap(need)}</strong> para passar o ${i}º lugar</div>`;
+    };
+
+    // Linhas 4º+: "Faltam X para o Nº lugar" (mesma métrica que ordena o ranking)
+    const aheadHint = (i) => {
+      const r = rows[i];
+      const up = rows[i - 1];
+      if (!up) return '';
+      const diff = metric(up) - metric(r);
+      const need = (showSales || publicRank) ? Math.max(diff, 0.01) : diff + 1;
+      return `<div class="rk-row__ahead">Faltam <strong>${fmtGap(need)}</strong> para o ${i}º lugar</div>`;
     };
 
     const kpi = (label, value) => `<div class="rk-kpi"><span>${label}</span><strong>${value}</strong></div>`;
     const summaryHtml = publicRank
       ? `<div class="rk-kpis">
           ${kpi('Vendedores', rows.length)}
-          ${kpi('Propostas pagas', totalPaid)}
-          ${kpi('Total de propostas', totalCount)}
+          ${kpi('Valor pago', this._fmtSales(totalSales))}
+          ${kpi('Propostas pagas', `${totalPaid} de ${totalCount}`)}
           ${kpi('Conversão geral', `${totalCount ? Math.round((totalPaid / totalCount) * 100) : 0}%`)}
         </div>`
       : showSales
@@ -1155,7 +1167,6 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       const e = r.user;
       const isMe = viewerId && e.id === viewerId;
       const m = main(r);
-      const pct = Math.max(2, Math.round((metric(r) / leader) * 100));
       const posCls = i < 3 ? ` rk-row__pos--${i + 1}` : '';
       return `<div class="rk-row${isMe ? ' is-me' : ''}">
         <div class="rk-row__pos${posCls}">${i + 1}</div>
@@ -1163,9 +1174,8 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
         <div class="rk-row__who">
           <div class="rk-row__name" title="${esc(e.name)}">${esc(e.name)}${isMe ? ' ' + meBadge : ''}</div>
           <div class="rk-row__dept">${dept(e)}</div>
-          ${isMe ? gapHint(i) : ''}
         </div>
-        <div class="rk-row__bar" title="${pct}% do líder"><span style="width:${pct}%;animation-delay:${Math.min(idx, 12) * 40 + 350}ms"></span></div>
+        ${aheadHint(i)}
         ${publicRank ? `<div class="rk-row__conv" title="Conversão (pagas / propostas)">${conv(r)}%<small>conv.</small></div>` : ''}
         ${showSales ? `<div class="rk-row__tier">${tierBadge(r)}</div>` : ''}
         <div class="rk-row__metric"><strong>${m.value}</strong><span>${m.label}</span></div>

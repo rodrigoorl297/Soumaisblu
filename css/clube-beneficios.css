@@ -12,8 +12,8 @@ body.clube-beneficios-app {
   --clube-line: rgba(11, 37, 69, 0.08);
   --clube-surface: rgba(255, 255, 255, 0.92);
   --clube-warm: #fff8f2;
-  --clube-accent: var(--color-accent, #F97316);
-  --clube-accent-deep: var(--color-accent-dark, #EA580C);
+  --clube-accent: var(--color-accent, #C5FF00);
+  --clube-accent-deep: var(--color-accent-dark, #4F6B00);
   --clube-radius: 18px;
   --clube-shadow: 0 18px 40px rgba(6, 24, 51, 0.08);
   font-family: 'Barlow', 'Nunito', system-ui, sans-serif;
@@ -22,7 +22,7 @@ body.clube-beneficios-app {
 body.clube-beneficios-app .main-area,
 body:has(#tab-meus-limites) .main-area {
   background:
-    radial-gradient(1100px 480px at 12% -10%, rgba(249, 115, 22, 0.14), transparent 55%),
+    radial-gradient(1100px 480px at 12% -10%, rgba(197, 255, 0, 0.14), transparent 55%),
     radial-gradient(900px 420px at 100% 0%, rgba(11, 37, 69, 0.10), transparent 50%),
     linear-gradient(180deg, #f7f4ef 0%, #eef2f7 48%, #f8fafc 100%);
 }
@@ -74,8 +74,8 @@ body.clube-no-sidebar .main-area {
 
 .clube-back-btn:hover {
   background: var(--clube-warm, #fff8f2);
-  border-color: var(--clube-accent, #F97316);
-  color: var(--clube-accent-deep, #EA580C);
+  border-color: var(--clube-accent, #C5FF00);
+  color: var(--clube-accent-deep, #4F6B00);
 }
 
 .clube-topbar-logo {
@@ -111,7 +111,7 @@ body.clube-no-sidebar .main-area {
 }
 
 .clube-gestao-btn:hover {
-  background: var(--clube-accent-deep, #EA580C);
+  background: var(--clube-accent-deep, #4F6B00);
 }
 
 .clube-topbar-user {
@@ -188,7 +188,7 @@ body.clube-no-sidebar .main-area {
   margin-bottom: 22px;
   color: #fff;
   background:
-    linear-gradient(125deg, rgba(249, 115, 22, 0.22), transparent 42%),
+    linear-gradient(125deg, rgba(197, 255, 0, 0.22), transparent 42%),
     linear-gradient(160deg, var(--clube-navy-deep) 0%, var(--clube-navy) 55%, #1a446e 100%);
   box-shadow: var(--clube-shadow);
   animation: clubeFadeUp 0.5s ease both;
@@ -202,7 +202,7 @@ body.clube-no-sidebar .main-area {
   width: 220px;
   height: 220px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.35), transparent 70%);
+  background: radial-gradient(circle, rgba(197, 255, 0, 0.35), transparent 70%);
   pointer-events: none;
 }
 
@@ -307,7 +307,7 @@ body.clube-no-sidebar .main-area {
   line-height: 1.1;
 }
 
-.clube-metric.is-used .limit-value { color: #c2410c; }
+.clube-metric.is-used .limit-value { color: #4F6B00; }
 .clube-metric.is-ok .limit-value { color: #047857; }
 
 /* ── Hub de benefícios (atalhos) ── */
@@ -342,7 +342,7 @@ body.clube-no-sidebar .main-area {
 .clube-hub-tile:hover {
   transform: translateY(-3px);
   box-shadow: 0 18px 36px rgba(6, 24, 51, 0.1);
-  border-color: rgba(249, 115, 22, 0.35);
+  border-color: rgba(197, 255, 0, 0.35);
 }
 
 .clube-hub-tile:focus-visible {
@@ -367,7 +367,7 @@ body.clube-no-sidebar .main-area {
   background: linear-gradient(135deg, #047857, #10b981);
 }
 .clube-hub-loja .clube-hub-icon {
-  background: linear-gradient(135deg, #ea580c, #f97316);
+  background: linear-gradient(135deg, #4F6B00, #C5FF00);
 }
 
 .clube-hub-copy {
@@ -602,7 +602,7 @@ body.clube-no-sidebar .main-area {
 .benefit-card .form-control:focus,
 .clube-panel .form-control:focus {
   border-color: var(--clube-accent);
-  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+  box-shadow: 0 0 0 3px rgba(197, 255, 0, 0.18);
 }
 
 .benefit-card .form-control[readonly] {
@@ -717,7 +717,7 @@ body.clube-no-sidebar .main-area {
   border-radius: var(--clube-radius);
   padding: 22px;
   background:
-    linear-gradient(160deg, rgba(249, 115, 22, 0.12), transparent 40%),
+    linear-gradient(160deg, rgba(197, 255, 0, 0.12), transparent 40%),
     linear-gradient(180deg, #0b2545 0%, #163a63 100%);
   color: #fff;
   display: flex;

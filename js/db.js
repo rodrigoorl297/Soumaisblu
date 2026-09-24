@@ -883,7 +883,13 @@
       return user;
     },
 
+    /** Nome de usuário sempre em CAIXA ALTA (padrão da empresa). */
+    normalizeUserName(name) {
+      return String(name || '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('pt-BR');
+    },
+
     async addUser(data) {
+      if (data && data.name != null) data = { ...data, name: this.normalizeUserName(data.name) };
       const email = this.normalizeEmail(data.email);
       if (!email) throw new Error('E-mail obrigatório.');
 
@@ -950,6 +956,7 @@
   
     async updateUser(id, updates) {
       const patch = { ...updates };
+      if (patch.name != null) patch.name = this.normalizeUserName(patch.name);
       const activating = patch.active === true || patch.active === 1 || patch.active === '1';
       if (patch.email != null) {
         patch.email = this.normalizeEmail(patch.email);

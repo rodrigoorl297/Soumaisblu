@@ -1,6 +1,6 @@
 /* Monitoria de Atendimento — Administrativo */
 .mon-app .mon-hero {
-  background: linear-gradient(135deg, #0a2d8f 0%, #f97316 100%);
+  background: linear-gradient(135deg, #0a2d8f 0%, #C5FF00 100%);
   color: #fff;
   border: none;
   margin-bottom: 16px;
@@ -95,7 +95,7 @@
 }
 
 .mon-modal-header {
-  background: linear-gradient(135deg, #0a2d8f, #f97316);
+  background: linear-gradient(135deg, #0a2d8f, #C5FF00);
   color: #fff;
 }
 

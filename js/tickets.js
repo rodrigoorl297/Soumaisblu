@@ -648,7 +648,7 @@ try {
     if (ticket.thread?.length) {
       ticket.thread.forEach(msg => {
         const attHtml = this._attachmentsHtml(msg);
-        const isSelf = (msg.senderName === user.name);
+        const isSelf = String(msg.senderName || '').trim().toUpperCase() === String(user.name || '').trim().toUpperCase();
         const align = isSelf 
           ? 'align-self: flex-end; background: #d9fdd3; border-radius: 8px 0 8px 8px; margin-left: 20%;' 
           : 'align-self: flex-start; background: #ffffff; border-radius: 0 8px 8px 8px; margin-right: 20%;';

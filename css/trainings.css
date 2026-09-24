@@ -158,7 +158,7 @@
   transform: scale(1.02);
 }
 .lms-card-btn.btn-continue {
-  background: linear-gradient(135deg, #f59e0b, #f97316);
+  background: linear-gradient(135deg, #f59e0b, #C5FF00);
 }
 .lms-card-btn.btn-review {
   background: var(--color-surface-2, #f0f0f0);
@@ -727,15 +727,15 @@ body.treinamentos-app {
   --trn-muted: #5b6b7f;
   --trn-line: rgba(11, 37, 69, 0.08);
   --trn-surface: rgba(255, 255, 255, 0.96);
-  --trn-accent: var(--color-accent, #F97316);
-  --trn-accent-deep: var(--color-accent-dark, #EA580C);
+  --trn-accent: var(--color-accent, #C5FF00);
+  --trn-accent-deep: var(--color-accent-dark, #4F6B00);
   --trn-radius: 18px;
   --trn-shadow: 0 18px 40px rgba(6, 24, 51, 0.08);
 }
 
 body.treinamentos-app .main-area {
   background:
-    radial-gradient(1100px 480px at 12% -10%, rgba(249, 115, 22, 0.12), transparent 55%),
+    radial-gradient(1100px 480px at 12% -10%, rgba(197, 255, 0, 0.12), transparent 55%),
     radial-gradient(900px 420px at 100% 0%, rgba(11, 37, 69, 0.08), transparent 50%),
     linear-gradient(180deg, #f7f4ef 0%, #eef2f7 48%, #f8fafc 100%);
 }
@@ -764,7 +764,7 @@ body.treinamentos-app #tab-catalog .page-content {
   margin-bottom: 22px;
   color: #fff;
   background:
-    linear-gradient(125deg, rgba(249, 115, 22, 0.22), transparent 42%),
+    linear-gradient(125deg, rgba(197, 255, 0, 0.22), transparent 42%),
     linear-gradient(160deg, var(--trn-navy-deep) 0%, var(--trn-navy) 55%, #1a446e 100%);
   box-shadow: var(--trn-shadow);
   animation: trnFadeUp 0.5s ease both;
@@ -778,7 +778,7 @@ body.treinamentos-app #tab-catalog .page-content {
   width: 220px;
   height: 220px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(249, 115, 22, 0.35), transparent 70%);
+  background: radial-gradient(circle, rgba(197, 255, 0, 0.35), transparent 70%);
   pointer-events: none;
 }
 
@@ -885,7 +885,7 @@ body.treinamentos-app #tab-catalog .page-content {
   line-height: 1.1;
 }
 
-.trn-metric.is-progress .trn-metric-value { color: #c2410c; }
+.trn-metric.is-progress .trn-metric-value { color: #4F6B00; }
 .trn-metric.is-ok .trn-metric-value { color: #047857; }
 .trn-metric.is-pending .trn-metric-value { color: #475569; }
 
@@ -911,7 +911,7 @@ body.treinamentos-app #tab-catalog .page-content {
 }
 
 .trn-filter:hover {
-  border-color: rgba(249, 115, 22, 0.45);
+  border-color: rgba(197, 255, 0, 0.45);
   color: var(--trn-accent-deep);
 }
 
@@ -953,7 +953,7 @@ body.treinamentos-app #tab-catalog .page-content {
 .trn-hub-tile:hover {
   transform: translateY(-3px);
   box-shadow: 0 18px 36px rgba(6, 24, 51, 0.1);
-  border-color: rgba(249, 115, 22, 0.35);
+  border-color: rgba(197, 255, 0, 0.35);
 }
 
 .trn-hub-tile:focus-visible {
@@ -981,7 +981,7 @@ body.treinamentos-app #tab-catalog .page-content {
 }
 
 .trn-hub-obrigatorio .trn-hub-icon {
-  background: linear-gradient(135deg, #c2410c, #f97316);
+  background: linear-gradient(135deg, #4F6B00, #C5FF00);
 }
 .trn-hub-vendas .trn-hub-icon {
   background: linear-gradient(135deg, #0b2545, #1a446e);
@@ -1024,8 +1024,8 @@ body.treinamentos-app #tab-catalog .page-content {
   color: #047857;
 }
 .trn-hub-status.is-progress {
-  background: rgba(249, 115, 22, 0.14);
-  color: #c2410c;
+  background: rgba(197, 255, 0, 0.14);
+  color: #4F6B00;
 }
 .trn-hub-status.is-pending {
   background: rgba(100, 116, 139, 0.12);
@@ -1127,7 +1127,7 @@ body.treinamentos-app #tab-catalog .page-content {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, var(--trn-accent-deep, #c2410c), var(--trn-accent, #f97316));
+  background: var(--trn-accent, #C5FF00);
   transition: width 0.35s ease;
 }
 
@@ -1151,8 +1151,8 @@ body.treinamentos-app #tab-catalog .page-content {
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #fff;
-  background: linear-gradient(135deg, var(--trn-accent-deep, #c2410c), var(--trn-accent, #f97316));
+  color: #1a1a1a; /* texto escuro: branco some no amarelo-limão */
+  background: var(--trn-accent, #C5FF00);
   transition: filter 0.15s ease, transform 0.15s ease;
 }
 

@@ -1,0 +1,112 @@
+/* =============================================
+   Dashboard (admin) — animações e suavizações
+   Arquivo isolado: só afeta #secDashboard. Remover a tag <link> desfaz tudo.
+   ============================================= */
+
+#secDashboard {
+  --dm-ease: cubic-bezier(.22, 1, .36, 1);      /* ease-out suave (sem “quique”) */
+  --dm-fast: 180ms;
+  --dm-med: 420ms;
+}
+
+/* ── Entrada: fade + leve subida. Roda ao abrir a aba e a cada re-render dos cards ── */
+@keyframes dmFadeUp {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dmFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+#secDashboard.active #dashStats > .stat-card,
+#secDashboard.active #teamBillingKpis > .stat-card,
+#secDashboard.active #teamBillingCard,
+#secDashboard.active > div > .card {
+  animation: dmFadeUp var(--dm-med) var(--dm-ease) both;
+}
+#secDashboard.active #teamBillingChart,
+#secDashboard.active #teamBillingTable {
+  animation: dmFade 520ms var(--dm-ease) both;
+  animation-delay: 120ms;
+}
+
+/* Escalonado (cascata) — até 8 cards; o resto entra junto com o 8º */
+#secDashboard.active #dashStats > .stat-card:nth-child(2),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(2) { animation-delay: 40ms; }
+#secDashboard.active #dashStats > .stat-card:nth-child(3),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(3) { animation-delay: 80ms; }
+#secDashboard.active #dashStats > .stat-card:nth-child(4),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(4) { animation-delay: 120ms; }
+#secDashboard.active #dashStats > .stat-card:nth-child(5),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(5) { animation-delay: 160ms; }
+#secDashboard.active #dashStats > .stat-card:nth-child(6),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(6) { animation-delay: 200ms; }
+#secDashboard.active #dashStats > .stat-card:nth-child(7),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(7) { animation-delay: 240ms; }
+#secDashboard.active #dashStats > .stat-card:nth-child(n+8),
+#secDashboard.active #teamBillingKpis > .stat-card:nth-child(n+8) { animation-delay: 280ms; }
+#secDashboard.active #teamBillingCard { animation-delay: 140ms; }
+#secDashboard.active > div > .card:nth-child(2) { animation-delay: 60ms; }
+
+/* ── Hover dos cards: sobe 2px com sombra, sem tremer o layout ── */
+#secDashboard .stat-card,
+#secDashboard .card {
+  transition:
+    transform var(--dm-fast) var(--dm-ease),
+    box-shadow var(--dm-fast) var(--dm-ease),
+    border-color var(--dm-fast) var(--dm-ease);
+  will-change: transform;
+}
+@media (hover: hover) {
+  #secDashboard .stat-card:hover {
+    transform: translate3d(0, -2px, 0);
+    box-shadow: var(--shadow-md, 0 8px 24px rgba(15, 23, 42, .10));
+  }
+}
+#secDashboard .stat-card .stat-icon {
+  transition: transform var(--dm-fast) var(--dm-ease);
+}
+@media (hover: hover) {
+  #secDashboard .stat-card:hover .stat-icon { transform: scale(1.06); }
+}
+
+/* ── Filtros (pílulas, datas, select): transição de cor/fundo e clique com “afundar” ── */
+#secDashboard .team-billing-pill,
+#secDashboard .team-billing-date-input,
+#secDashboard .team-billing-status-select {
+  transition:
+    background-color var(--dm-fast) var(--dm-ease),
+    color var(--dm-fast) var(--dm-ease),
+    border-color var(--dm-fast) var(--dm-ease),
+    box-shadow var(--dm-fast) var(--dm-ease),
+    transform 120ms var(--dm-ease);
+}
+#secDashboard .team-billing-pill:active { transform: scale(.96); }
+#secDashboard .team-billing-pill:focus-visible,
+#secDashboard .team-billing-date-input:focus-visible,
+#secDashboard .team-billing-status-select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, .28);
+}
+
+/* Enquanto o JS troca os números (count-up), mantém a largura estável */
+#secDashboard .dm-counting { font-variant-numeric: tabular-nums; }
+
+/* Linhas das tabelas do dashboard: realce suave no hover */
+#secDashboard #teamBillingTable tr,
+#secDashboard #dashRanking > *,
+#secDashboard #dashOrders > * {
+  transition: background-color var(--dm-fast) var(--dm-ease);
+}
+
+/* ── Acessibilidade: quem pede menos movimento no sistema não vê animação ── */
+@media (prefers-reduced-motion: reduce) {
+  #secDashboard *,
+  #secDashboard *::before,
+  #secDashboard *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+  #secDashboard .stat-card:hover { transform: none; }
+}

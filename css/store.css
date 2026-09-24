@@ -37,7 +37,7 @@
   display: block;
   stroke-width: 2;
 }
-.stat-icon.orange { background: #fff7ed; color: #ea580c; }
+.stat-icon.orange { background: #F7FFE0; color: #4F6B00; }
 .stat-icon.yellow { background: #fefce8; color: #ca8a04; }
 .stat-icon.green  { background: var(--color-success-light); color: #059669; }
 .stat-icon.blue   { background: var(--color-info-light); color: #2563eb; }
@@ -835,7 +835,7 @@
 }
 .rk-row {
   display: grid;
-  grid-template-columns: 32px 42px minmax(0, 1.6fr) minmax(80px, 1fr) auto auto auto;
+  grid-template-columns: 32px 42px minmax(0, 1fr) minmax(0, 1.2fr) auto auto auto;
   align-items: center;
   gap: 14px;
   padding: 10px 16px;
@@ -868,18 +868,13 @@
   text-overflow: ellipsis;
 }
 .rk-row__dept { font-size: 11px; color: var(--color-text-muted); }
-.rk-row__bar {
-  height: 6px;
-  border-radius: 999px;
-  background: var(--color-surface-2);
-  overflow: hidden;
+.rk-row__ahead {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.35;
+  min-width: 0;
 }
-.rk-row__bar span {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--color-primary), var(--color-accent));
-}
+.rk-row__ahead strong { font-weight: 900; color: var(--color-text); }
 .rk-row__conv {
   min-width: 48px;
   text-align: right;
@@ -907,7 +902,7 @@
   padding: 1px 7px;
   border-radius: 999px;
   background: var(--color-accent);
-  color: #fff;
+  color: #1a1a1a;
   font-size: 10px;
   font-weight: 800;
   vertical-align: middle;
@@ -924,7 +919,8 @@
     gap: 10px;
     padding: 10px 12px;
   }
-  .rk-row__bar, .rk-row__conv, .rk-row__tier { display: none; }
+  .rk-row__conv, .rk-row__tier { display: none; }
+  .rk-row__ahead { grid-column: 3 / -1; grid-row: 2; }
   .rk-row .rk-add { grid-column: 3 / -1; justify-self: start; }
 }
 
@@ -958,7 +954,7 @@
   padding: 3px 10px;
   border-radius: 999px;
   background: rgba(74, 127, 255, 0.12);
-  color: var(--color-accent);
+  color: var(--color-accent-dark);
   font-size: 11px;
   font-weight: 700;
   white-space: normal;
@@ -975,10 +971,8 @@
 .rk--anim .rk-podium__card--1 { animation-delay: 0.28s; }
 .rk--anim .rk-podium__card--1 .rk-crown { animation: rkCrown 0.5s 0.75s cubic-bezier(.3, 1.6, .5, 1) backwards; }
 .rk--anim .rk-rows { animation: rkFade 0.4s 0.3s ease both; }
-.rk--anim .rk-row__bar span { transform-origin: left center; animation: rkBar 0.8s cubic-bezier(.2, .8, .2, 1) backwards; }
 @keyframes rkFade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rkRise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
-@keyframes rkBar  { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 @keyframes rkCrown {
   from { opacity: 0; transform: translateX(-50%) translateY(-10px) rotate(-30deg) scale(0.4); }
   to   { opacity: 1; transform: translateX(-50%) rotate(-8deg) scale(1); }
