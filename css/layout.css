@@ -1321,8 +1321,11 @@ body.leads-app .sidebar .sidebar-header .logo-text span { color: var(--sb-green)
       grid-template-columns: 1fr;
     }
     .section-title-bar {
-      background: var(--color-accent-subtle, rgba(197, 255, 0, 0.16));
-      color: var(--color-accent);
+      /* Limão puro some no fundo claro — texto em verde escuro + borda para contraste */
+      background: #F3FBDC;
+      color: #3D5A00;
+      border: 1px solid rgba(95, 138, 0, 0.35);
+      border-left: 4px solid #5F8A00;
       padding: 8px 16px;
       font-weight: 800;
       font-size: 14px;

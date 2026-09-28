@@ -99,7 +99,7 @@ async function ensureSectionScripts(sec) {
     secContaCorrenteGestao: ['../js/conta-corrente.js?v=cc-money1'],
     secWithdrawals: ['../js/withdrawal-flow.js'],
     secRanking: ['../js/sales-ranking.js?v=rank-podium2', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
-    secCreateProposal: ['../js/masterProposal.js?v=prop-modal2', '../js/fontedata.js'],
+    secCreateProposal: ['../js/masterProposal.js?v=prop-modal3', '../js/fontedata.js'],
     secPartnersForm: ['../js/fontedata.js'],
   };
   const list = map[sec] || [];
@@ -250,9 +250,6 @@ async function _getMergedTeamScopeIds() {
   const parts = await Promise.all(adminIds.map((id) => DB.getTeamMemberIds(id).catch(() => [])));
   const ids = new Set([ADMIN_ID, window.USER_ADMIN_ID, ...adminIds].filter(Boolean));
   parts.flat().forEach((id) => ids.add(id));
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'sup-team-fix',hypothesisId:'H1-H3',location:'admin.js:merged-team-scope',message:'merged team scope ids',data:{adminIds,scopeSize:ids.size,userId:session?.id,userName:session?.name},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return [...ids];
 }
 
@@ -1534,9 +1531,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
     window.__ADMIN_NAV_CFG__ = _adminNavCfg;
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H1-H5',location:'admin.js:boot-perms',message:'admin boot permissions',data:{role:s.role,userId:s.id,rawCanMasterPanel:!!(p.canMasterPanel),computedCanMasterPanel:!!canMasterPanel,companyWide:!!_hasCompanyWideDashboard(),IS_SUP_BACKOFFICE:!!IS_SUP_BACKOFFICE,IS_SUPERVISOR:!!IS_SUPERVISOR,landingSection},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     _applyAdminNavVisibility(_adminNavCfg);
     if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
     if (IS_PORTARIA) _applyPortariaNavExtras();
@@ -2064,10 +2058,27 @@ async function _employeesForRole() {
 }
 
 let _dashRenderInflight = null;
+let _dashRenderQueued = null;
 
-async function renderDashboard() {
-  if (_dashRenderInflight) return _dashRenderInflight;
-  _dashRenderInflight = _renderDashboardBody();
+/**
+ * Chamada durante uma renderização em andamento não é descartada: agenda
+ * mais uma passada ao final, para refletir filtros/dados alterados no meio.
+ * @param {{reuseProposals?: boolean}} [opts] reuseProposals: usa o cache de propostas (troca de filtro).
+ */
+async function renderDashboard(opts = {}) {
+  if (_dashRenderInflight) {
+    const reuse = !!opts.reuseProposals && (_dashRenderQueued ? _dashRenderQueued.reuseProposals : true);
+    _dashRenderQueued = { reuseProposals: reuse };
+    return _dashRenderInflight;
+  }
+  _dashRenderInflight = (async () => {
+    let next = opts;
+    while (next) {
+      _dashRenderQueued = null;
+      await _renderDashboardBody(next);
+      next = _dashRenderQueued;
+    }
+  })();
   try {
     return await _dashRenderInflight;
   } finally {
@@ -2075,7 +2086,7 @@ async function renderDashboard() {
   }
 }
 
-async function _renderDashboardBody() {
+async function _renderDashboardBody(opts = {}) {
   const _fillDashErr = (msg) => {
     const html = _dashRetryHtml(msg);
     const _ds = document.getElementById('dashStats');
@@ -2090,9 +2101,6 @@ async function _renderDashboardBody() {
   const _fullOrg = _hasCompanyWideDashboard()
     || (IS_MASTER || IS_GERENTE || IS_FINANCIAL || IS_RH || IS_DIRETORIA || IS_FUNDA);
   const _isMasterLike = _fullOrg || IS_DESENVOLVEDOR;
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H2-H3',location:'admin.js:dash-start',message:'renderDashboard scope flags',data:{_fullOrg:!!_fullOrg,companyWide:!!_hasCompanyWideDashboard(),IS_SUP_BACKOFFICE:!!IS_SUP_BACKOFFICE,canMasterPanel:!!window.__ADMIN_NAV_CFG__?.canMasterPanel},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   const _globalCatalog =
     _isMasterLike ||
@@ -2125,7 +2133,7 @@ async function _renderDashboardBody() {
       _ordersForRole(),
       _transactionsForRole(),
       prodProm,
-      _loadBillingProposals(true),
+      _loadBillingProposals(!opts.reuseProposals),
     ]);
     emps = rEmps.status === 'fulfilled' ? (rEmps.value || []) : [];
     orders = rOrders.status === 'fulfilled' ? (rOrders.value || []) : [];
@@ -2172,12 +2180,22 @@ async function _renderDashboardBody() {
       _allProposalsCache = allProps;
     }
   } else {
-    [emps, orders, txs, prods] = await Promise.all([
+    /* Backoffice / operacional / vendedor ADM: cards de propostas e faturamento com as próprias propostas. */
+    const ownProps = (IS_BACKOFFICE || IS_OPERACIONAL || IS_VENDEDOR_ADM) && ADMIN_ID
+      ? DB.getProposals(ADMIN_ID, { id: ADMIN_ID, name: Auth.getSession()?.name || '' }).catch((e) => {
+        console.warn('[dashboard] propostas próprias:', e);
+        return [];
+      })
+      : Promise.resolve([]);
+    let rawOwn;
+    [emps, orders, txs, prods, rawOwn] = await Promise.all([
       _employeesForRole(),
       _ordersForRole(),
       _transactionsForRole(),
       prodProm,
+      ownProps,
     ]);
+    allProps = Array.isArray(rawOwn) ? rawOwn : [];
   }
 
   orders = (orders || []).filter(o => scopedIds.has(o.employee_id));
@@ -2187,9 +2205,6 @@ async function _renderDashboardBody() {
   orders = orders || [];
   txs = txs || [];
   prods = prods || [];
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H2-H3',location:'admin.js:dash-data',message:'renderDashboard loaded counts',data:{scopedIdsSize:scopedIds?.size||0,empsLen:emps.length,allPropsLen:(allProps||[]).length,ordersLen:orders.length,prodsLen:prods.length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   const totalD = txs.filter(t => t.type === 'credit').reduce((s, t) => s + (parseFloat(t.amount) || 0), 0);
   const ptsPool = (_fullOrg ? (allUsersPts || []) : emps)
@@ -2275,9 +2290,15 @@ async function _renderDashboardBody() {
     : (typeof DB.proposalAmount === 'function' ? DB.proposalAmount(p) : 0));
   const propBrutoDash = (p) => (typeof DB.proposalGrossAmount === 'function' ? DB.proposalGrossAmount(p) : propAmtDash(p));
   const alignWithBillingChart = _canViewTeamBillingChart();
-  const dashBillingProps = alignWithBillingChart
+  const _ownPropsView = !alignWithBillingChart && (IS_BACKOFFICE || IS_OPERACIONAL || IS_VENDEDOR_ADM);
+  let dashBillingProps = alignWithBillingChart
     ? _filterPropsForTeamBilling(allProps || [], _teamBillingFilter, _teamBillingStatusFilter)
     : (allProps || []).filter((p) => (typeof DB.isPaidProposal === 'function' ? DB.isPaidProposal(p) : false));
+  /* Mesmo fallback do gráfico: período vazio (hoje/mês) → todo o histórico, para os números baterem. */
+  if (alignWithBillingChart && !dashBillingProps.length && (allProps || []).length
+    && (_teamBillingFilter === 'month' || _teamBillingFilter === 'day')) {
+    dashBillingProps = _filterPropsForTeamBilling(allProps, 'all', _teamBillingStatusFilter);
+  }
   const dashPropCount = alignWithBillingChart ? dashBillingProps.length : (allProps || []).length;
   const dashBillingTotal = dashBillingProps.reduce((s, p) => s + propAmtDash(p), 0);
   const dashBillingTotalBruto = dashBillingProps.reduce((s, p) => s + propBrutoDash(p), 0);
@@ -2293,12 +2314,12 @@ async function _renderDashboardBody() {
     ? (dashStatusKey === 'pagas'
       ? 'Faturamento Pago (final)'
       : (_TEAM_BILLING_STATUS_LABELS[dashStatusKey] || 'Faturamento Bruto'))
-    : 'Faturamento (Pagas)';
+    : (_ownPropsView ? 'Meu Faturamento (Pagas)' : 'Faturamento (Pagas)');
 
   _ds.innerHTML = [
     statCardHtml({ icon: 'users', color: 'blue', label: empStatLabel, value: emps.filter(e => e.active !== false).length, sub: `${emps.length} cadastrados` }),
     statCardHtml({ icon: 'balance', color: 'green', label: 'Saldos Ativos', value: formatCurrency(totalB), sub: `${formatCurrency(totalD)} distribuídos`, valueStyle: 'font-size:20px;' }),
-    statCardHtml({ icon: 'proposals', color: 'purple', label: 'Propostas', value: dashPropCount, sub: alignWithBillingChart ? 'período do gráfico' : `${dashBillingProps.filter((p) => propAmtDash(p) > 0).length} pagas com valor` }),
+    statCardHtml({ icon: 'proposals', color: 'purple', label: _ownPropsView ? 'Minhas Propostas' : 'Propostas', value: dashPropCount, sub: alignWithBillingChart ? 'período do gráfico' : `${dashBillingProps.length} pagas` }),
     statCardHtml({ icon: 'billing', color: 'teal', label: dashBillingLabel, value: fmtR(dashBillingTotal), sub: dashBillingSub, valueStyle: 'font-size:18px;' }),
     statCardHtml({ icon: 'products', color: 'orange', label: 'Produtos', value: prods.filter(p => p.active !== false).length, sub: `${prods.filter(p => p.stock === 0).length} sem estoque` }),
     statCardHtml({ icon: 'orders', color: 'yellow', label: 'Pedidos', value: orders.length, sub: `${orders.filter(o => o.status === 'pendente').length} pendentes` }),
@@ -2307,23 +2328,44 @@ async function _renderDashboardBody() {
   const userNameById = new Map();
   [...(allUsersPts || []), ...emps].forEach(u => { if (u?.id) userNameById.set(u.id, u); });
 
-  const top5 = [...ptsPool].filter(isRankingParticipant).sort((a, b) => userPts(b) - userPts(a)).slice(0, 5);
+  const topRank = [...ptsPool].filter(isRankingParticipant).sort((a, b) => userPts(b) - userPts(a)).slice(0, 10);
   const _dr=document.getElementById('dashRanking');
   if (_dr) {
-    _dr.innerHTML = !top5.length
+    /* Nome próprio (Maria de Jesus) — caixa alta pesa demais no pódio. */
+    const nomeProprio = (v) => String(v || '').trim().toLocaleLowerCase('pt-BR')
+      .replace(/(^|\s)(\S)/g, (m, sp, c) => sp + c.toLocaleUpperCase('pt-BR'))
+      .replace(/\s(D[aeo]s?|E)(?=\s)/g, (m) => m.toLocaleLowerCase('pt-BR'));
+    const setor = (e) => String(e.department || '').trim() || 'Sem setor';
+    const podium = topRank.slice(0, 3);
+    const rest = topRank.slice(3);
+    const podiumHtml = [1, 0, 2].filter((i) => podium[i]).map((i) => {
+      const e = podium[i];
+      return `<div class="rk-podium__item rk-podium__item--${i + 1}">
+        <span class="rk-podium__medal">${['🥇', '🥈', '🥉'][i]}</span>
+        ${avatarHtml(e.name, 'avatar-lg', e.photo_url || '')}
+        <div class="rk-podium__name" title="${nomeProprio(e.name)}">${nomeProprio(e.name)}</div>
+        <span class="rk-podium__dept">${setor(e)}</span>
+      </div>`;
+    }).join('');
+    const restHtml = rest.map((e, k) => `<div class="rk-list__row">
+        <span class="rk-list__pos">${k + 4}</span>
+        ${avatarHtml(e.name, 'avatar-sm', e.photo_url || '')}
+        <div class="rk-list__info">
+          <div class="rk-list__name" title="${nomeProprio(e.name)}">${nomeProprio(e.name)}</div>
+          <div class="rk-list__dept">${setor(e)}</div>
+        </div>
+      </div>`).join('');
+    _dr.innerHTML = !topRank.length
       ? '<div class="text-muted text-center" style="padding:20px;">Nenhum funcionário.</div>'
-      : top5.map((e,i)=>`
-      <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--color-border);"><span style="font-size:17px;font-weight:900;min-width:26px;color:${['#FFB800','#8c9aa8','#c17f5a'][i]||'var(--color-text-muted)'};">#${i+1}</span>
-        ${avatarHtml(e.name,'avatar-sm',e.photo_url||'')}
-        <div style="flex:1;"><div style="font-weight:700;font-size:13px;">${e.name}</div><div style="font-size:11px;color:var(--color-text-muted);">${e.department}</div></div></div>`).join('');
+      : `<div class="rk-podium">${podiumHtml}</div>${rest.length ? `<div class="rk-list">${restHtml}</div>` : ''}`;
   }
 
   const _do = document.getElementById('dashOrders');
   if (_do) {
     const card = _do.closest('.card');
     const h3o = card?.querySelector('h3');
-    if (_fullOrg && (allProps || []).length) {
-      if (h3o) h3o.textContent = ' Últimas Propostas';
+    if ((_fullOrg || _ownPropsView) && (allProps || []).length) {
+      if (h3o) { h3o.textContent = 'Últimas Propostas'; h3o.style.textAlign = 'center'; }
       const recentProps = (allProps || []).slice().sort((a, b) => {
         const da = typeof DB.proposalSortTime === 'function' ? DB.proposalSortTime(a)
           : (typeof DB.proposalDate === 'function' ? DB.proposalDate(a).getTime() : new Date(a.created_at || 0).getTime());
@@ -2334,24 +2376,28 @@ async function _renderDashboardBody() {
       _do.innerHTML = !recentProps.length
         ? '<div class="text-muted text-center" style="padding:20px;">Nenhuma proposta.</div>'
         : recentProps.map(p => {
-          const st = p.statusOp || p.status || '—';
-          const badge = st === 'Pago' ? 'badge-success' : st === 'Cancelado' ? 'badge-danger' : 'badge-warning';
+          const st = String(p.statusOp || p.status || '—').trim();
+          const stKey = st.toLocaleLowerCase('pt-BR');
+          const badge = /^pag/.test(stKey) ? 'badge-success' : /cancel/.test(stKey) ? 'badge-danger' : 'badge-warning';
           const val = propAmtDash(p);
           const bruto = propBrutoDash(p);
+          const shown = val > 0 ? val : bruto;
           const valLabel = alignWithBillingChart && dashStatusKey === 'pagas' && bruto > 0 && Math.abs(bruto - val) > 0.01
             ? `${fmtR(val)} <span style="font-size:10px;color:var(--color-text-muted);">(bruto ${fmtR(bruto)})</span>`
-            : fmtR(val > 0 ? val : bruto);
-          return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--color-border);">
-            <div style="flex:1;">
-              <div style="font-weight:700;font-size:13px;">${p.numero || p.id} · ${p.clientName || p.client_name || '—'}</div>
-              <div style="font-size:11px;color:var(--color-text-muted);">${p.vendorName || p.vendor_name || '—'}</div>
+            : (shown > 0 ? fmtR(shown) : '—');
+          const up = (v) => String(v || '').trim().toLocaleUpperCase('pt-BR') || '—';
+          const numero = String(p.numero || p.id || '').trim();
+          return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px 0;border-bottom:1px solid var(--color-border);text-align:center;">
+            <div style="font-weight:700;font-size:13px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${up(p.clientName || p.client_name)}">${up(p.clientName || p.client_name)}</div>
+            <div style="font-size:11px;color:var(--color-text-muted);max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${numero ? `Nº ${numero} · ` : ''}${up(p.vendorName || p.vendor_name)}</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-top:2px;">
+              <span style="font-weight:800;font-size:13px;white-space:nowrap;color:${shown > 0 ? 'var(--color-success)' : 'var(--color-text-muted)'};">${valLabel}</span>
+              <span class="badge ${badge}">${up(st)}</span>
             </div>
-            <span style="font-weight:800;font-size:13px;color:var(--color-success);">${valLabel}</span>
-            <span class="badge ${badge}">${st}</span>
           </div>`;
         }).join('');
     } else {
-      if (h3o) h3o.textContent = ' Últimos Pedidos';
+      if (h3o) { h3o.textContent = ' Últimos Pedidos'; h3o.style.textAlign = ''; }
       const recent = orders.slice(0, 5);
       _do.innerHTML = !recent.length
         ? '<div class="text-muted text-center" style="padding:20px;">Nenhum pedido.</div>'
@@ -2680,9 +2726,14 @@ function _teamBillingDateRange(filterKey) {
   if (f === 'custom') {
     const fromVal = document.getElementById('filterDateFrom')?.value;
     const toVal = document.getElementById('filterDateTo')?.value;
+    /* "YYYY-MM-DD" via new Date() vira meia-noite UTC (21h do dia anterior no Brasil) — usa horário local. */
+    const localDay = (v, addDays = 0) => {
+      const [y, m, d] = String(v).split('-').map(Number);
+      return new Date(y, (m || 1) - 1, (d || 1) + addDays);
+    };
     return {
-      dateFrom: fromVal ? new Date(fromVal) : new Date(0),
-      dateTo: toVal ? new Date(new Date(toVal).getTime() + 86400000) : new Date(9999, 0),
+      dateFrom: fromVal ? localDay(fromVal) : new Date(0),
+      dateTo: toVal ? localDay(toVal, 1) : new Date(9999, 0),
     };
   }
   return { dateFrom: new Date(0), dateTo: new Date(9999, 0) };
@@ -2813,11 +2864,6 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
   }
 
   const withUnassigned = _attachUnassignedTeamBillingProps(rows, inRange, sk);
-  const poolTotal = (inRange || []).reduce((s, p) => s + propAmt(p), 0);
-  const teamTotal = withUnassigned.reduce((s, r) => s + (r.total || 0), 0);
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'dash-total-fix',hypothesisId:'H1-H2',location:'admin.js:build-team-billing',message:'team billing totals',data:{rowCount:withUnassigned.length,inRangeLen:inRange.length,poolTotal,teamTotal,poolCount:inRange.length,teamCount:withUnassigned.reduce((s,r)=>s+r.count,0)},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   return withUnassigned;
 }
 
@@ -3002,12 +3048,13 @@ function _startAdminLiveRefresh() {
 
 window.addEventListener('pagehide', () => { _stopAdminLiveRefresh(); });
 
+let _teamBillingRenderGen = 0;
+
 async function renderTeamBillingChart() {
+  /* Cliques rápidos nos filtros: só a renderização mais recente pinta a tela. */
+  const gen = ++_teamBillingRenderGen;
   const card = document.getElementById('teamBillingCard');
   const canBilling = _canViewTeamBillingChart();
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H4',location:'admin.js:team-billing',message:'renderTeamBillingChart gate',data:{canBilling:!!canBilling,companyWide:!!_hasCompanyWideDashboard(),IS_SUP_BACKOFFICE:!!IS_SUP_BACKOFFICE,cardFound:!!card,propsCacheLen:(_allProposalsCache||[]).length},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
   if (!card) return;
   if (!canBilling) { card.style.display = 'none'; return; }
   card.style.display = '';
@@ -3025,16 +3072,12 @@ async function renderTeamBillingChart() {
   if (_isCommercialSupervisor()) {
     const teamIds = await _getMergedTeamScopeIds();
     const teamSet = new Set(teamIds.map(String));
-    const teamUsers = users.filter((u) => teamSet.has(String(u.id)));
-    const mariliaHits = teamUsers.filter((u) => /maril/i.test(String(u.name || '')));
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'laryssa-marilia',hypothesisId:'H1-H3',location:'admin.js:team-billing-scope',message:'supervisor team scope',data:{viewerId:Auth.getSession()?.id,viewerName:Auth.getSession()?.name,teamIdsCount:teamIds.length,teamUsers:teamUsers.map(u=>({id:u.id,name:u.name,role:u.role,admin_id:u.admin_id,active:u.active})),mariliaInScope:mariliaHits.map(u=>({id:u.id,name:u.name,admin_id:u.admin_id}))},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     proposals = proposals.filter((p) => {
       const vid = _resolveProposalVendorId(p, usersByVendorName);
       return vid && teamSet.has(String(vid));
     });
   }
+  if (gen !== _teamBillingRenderGen) return;
   const supervisors = users.filter(u => u.role === 'supervisor');
   const periodLabels = {
     day: 'Hoje', month: 'Este Mês', year: 'Este Ano', all: 'Todo o período', custom: 'Período customizado'
@@ -3076,9 +3119,6 @@ async function renderTeamBillingChart() {
   window._dashBillingTotal = grandTotal;
   window._dashBillingTotalBruto = grandTotalBruto;
   window._dashPropCount = grandCount;
-  // #region agent log
-  fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'dash-total-fix',hypothesisId:'H1',location:'admin.js:team-billing-kpi',message:'chart KPI vs pool',data:{filter:f,status:statusKey,poolTotal,poolCount,teamTotal:teamData.reduce((s,d)=>s+d.total,0),teamCount:teamData.reduce((s,d)=>s+d.count,0)},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   // ── KPIs ────────────────────────────────────────────────────────────
   const periodLabel = periodHint ? 'Todo o período' : (periodLabels[f] || f);
@@ -3118,17 +3158,6 @@ async function renderTeamBillingChart() {
   const kpisEl = document.getElementById('teamBillingKpis');
   if (kpisEl) {
     kpisEl.innerHTML = (periodHint || '') + propsLoadedHint + kpiCards.join('');
-    // #region agent log
-    try {
-      const cs = getComputedStyle(kpisEl);
-      const kids = Array.from(kpisEl.children).map((c) => ({
-        cls: c.className || c.tagName,
-        display: getComputedStyle(c).display,
-        flexDir: getComputedStyle(c).flexDirection,
-      }));
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'kpi-revert1',hypothesisId:'H1',location:'admin.js:teamBillingKpis',message:'KPI revert applied',data:{build:'kpi-revert1',kpiCount:kpiCards.length,rootDisplay:cs.display,rootCols:cs.gridTemplateColumns,children:kids},timestamp:Date.now()})}).catch(()=>{});
-    } catch (_) { /* noop */ }
-    // #endregion
   }
 
   const statusSel = document.getElementById('teamBillingStatusFilter');
@@ -3143,6 +3172,7 @@ async function renderTeamBillingChart() {
   }
   try {
     await _ensureChartJs();
+    if (gen !== _teamBillingRenderGen) return;
     _paintTeamBillingChart(teamData, colors, fmtR, statusKey);
   } catch (chartErr) {
     console.warn('[teamBillingChart]', chartErr);
@@ -3284,7 +3314,7 @@ function _wireTeamBillingDatePickers() {
     });
     renderTeamBillingChart();
     if (_hasCompanyWideDashboard() || _isCommercialSupervisor()) {
-      renderDashboard().catch((e) => console.warn('[dashboard date sync]', e));
+      renderDashboard({ reuseProposals: true }).catch((e) => console.warn('[dashboard date sync]', e));
     }
   };
   ['filterDateFrom', 'filterDateTo'].forEach((id) => {
@@ -3326,7 +3356,7 @@ function setTeamFilter(f) {
   }
   renderTeamBillingChart();
   if (_hasCompanyWideDashboard() || _isCommercialSupervisor()) {
-    renderDashboard().catch((e) => console.warn('[dashboard filter sync]', e));
+    renderDashboard({ reuseProposals: true }).catch((e) => console.warn('[dashboard filter sync]', e));
   }
 }
 
@@ -3334,7 +3364,7 @@ function setTeamBillingStatus(v) {
   _teamBillingStatusFilter = v || 'total';
   renderTeamBillingChart();
   if (_hasCompanyWideDashboard() || _isCommercialSupervisor()) {
-    renderDashboard().catch((e) => console.warn('[dashboard status sync]', e));
+    renderDashboard({ reuseProposals: true }).catch((e) => console.warn('[dashboard status sync]', e));
   }
 }
 window.setTeamBillingStatus = setTeamBillingStatus;

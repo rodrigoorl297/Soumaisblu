@@ -30,6 +30,12 @@ body.leads-app .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-dark);
   border-color: var(--color-primary-dark);
 }
+/* Card de estatística com destaque: limão puro some no branco — ícone em tom escuro */
+.stats-grid .stat-card.accent .stat-icon {
+  background: rgba(197, 255, 0, 0.28);
+  color: var(--color-accent-dark);
+}
+
 body.leads-app .btn-outline:hover:not(:disabled) {
   border-color: var(--color-accent);
   color: var(--color-accent-dark);

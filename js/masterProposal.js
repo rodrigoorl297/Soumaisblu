@@ -34,6 +34,8 @@ window.masterProposalManager = {
       if (el) el.value = '';
     });
 
+    this._initCatalogSelects();
+
     const summary = document.getElementById('masterPropClientSummary');
     if (summary) {
       summary.style.color = 'var(--color-text-muted)';
@@ -42,6 +44,19 @@ window.masterProposalManager = {
 
     const popup = document.getElementById('masterPropCpfPopup');
     if (popup) popup.style.display = 'none';
+  },
+
+  // Produto / Convênio / Entidade usam o mesmo catálogo do formulário do vendedor (Proposals em proposals.js)
+  _initCatalogSelects() {
+    const P = window.Proposals;
+    if (!P || typeof P._fillConvenioSelect !== 'function') return;
+    P._fillProductSelect('masterPropProduct', '');
+    P._fillConvenioSelect('masterPropConvenio', 'masterPropEntidade', '');
+    const conv = document.getElementById('masterPropConvenio');
+    if (conv && !conv.dataset.catalogBound) {
+      conv.dataset.catalogBound = '1';
+      conv.addEventListener('change', () => P._fillEntidadeSelect('masterPropEntidade', conv.value, ''));
+    }
   },
 
   // Abre o pop-up (modal) de "Nova Proposta", igual ao de "Novo Cliente"

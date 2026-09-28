@@ -110,3 +110,118 @@
   }
   #secDashboard .stat-card:hover { transform: none; }
 }
+
+/* ── Top Funcionários: pódio (1º–3º) + lista compacta (4º–10º) ── */
+#dashRanking .rk-podium {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 12px;
+  margin: 4px 0 16px;
+}
+#dashRanking .rk-podium__item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 22px 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  text-align: center;
+  min-width: 0;
+}
+#dashRanking .rk-podium__item--1 {
+  padding-top: 30px;
+  padding-bottom: 22px;
+  background: linear-gradient(180deg, #FFF8E1 0%, var(--color-surface) 100%);
+  border-color: #F5D66B;
+  box-shadow: 0 6px 18px rgba(245, 180, 0, .15);
+}
+#dashRanking .rk-podium__item--2 { background: linear-gradient(180deg, #F1F5F9 0%, var(--color-surface) 100%); }
+#dashRanking .rk-podium__item--3 { background: linear-gradient(180deg, #FBEFE6 0%, var(--color-surface) 100%); }
+#dashRanking .rk-podium__medal {
+  position: absolute;
+  top: -14px;
+  font-size: 26px;
+  line-height: 1;
+}
+#dashRanking .rk-podium__item--1 .avatar { width: 64px; height: 64px; font-size: 22px; }
+#dashRanking .rk-podium__item .avatar { box-shadow: 0 0 0 3px var(--color-surface), 0 2px 8px rgba(15, 23, 42, .12); }
+#dashRanking .rk-podium__name {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.3;
+  color: var(--color-text);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 34px;
+}
+#dashRanking .rk-podium__item--1 .rk-podium__name { font-size: 14px; font-weight: 800; }
+#dashRanking .rk-podium__dept,
+#dashRanking .rk-list__dept {
+  font-size: 11px;
+  color: var(--color-text-secondary);
+}
+#dashRanking .rk-podium__dept {
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--color-primary-light);
+}
+#dashRanking .rk-list {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 1fr;           /* linhas crescem por igual e ocupam o espaço livre */
+  column-gap: 20px;
+}
+#dashRanking .rk-list__row {
+  display: flex;
+  align-items: center;
+  min-height: 52px;
+  gap: 12px;
+  padding: 9px 6px;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+#dashRanking .rk-list__row:hover { background: var(--color-bg); }
+#dashRanking .rk-list__pos {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-primary-light);
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+}
+#dashRanking .rk-list__info { flex: 1; min-width: 0; }
+#dashRanking .rk-list__name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Card do ranking estica até a altura do card vizinho (Últimas Propostas)
+   e o conteúdo preenche essa altura — sem faixa branca embaixo. */
+.card:has(> #dashRanking) {
+  display: flex;
+  flex-direction: column;
+}
+#dashRanking {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+@media (max-width: 560px) {
+  #dashRanking .rk-list { grid-template-columns: 1fr; }
+  #dashRanking .rk-podium { grid-template-columns: 1fr; }
+  #dashRanking .rk-podium__item--1 { order: -1; }
+}
