@@ -61,6 +61,7 @@ $allowed = [
     'api/remote-deploy.php',
     'api/migrate-wa-number-requests.php',
     'api/migrate-wa-numbers.php',
+    'api/chipeira_numbers.php',
     'api/lib/PostgRestCompat.php',
     'js/wa-number-requests.js',
     'js/proposals.js',

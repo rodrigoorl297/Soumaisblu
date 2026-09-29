@@ -179,7 +179,7 @@
     <script src="../js/proposals.js?v=rl429fix1" defer></script>
     <script src="../js/clients.js?v=client-search1" defer></script>
     <script src="../js/tickets.js?v=nomes-caps1" defer></script>
-    <script src="../js/wa-number-requests.js?v=wanr1" defer></script>
+    <script src="../js/wa-number-requests.js?v=wanr5" defer></script>
   </head>
 
   <body>
@@ -1450,18 +1450,23 @@
               </div>
             </div>
             <div class="card card-padded" style="margin-bottom: 20px;">
-              <h3 style="margin-bottom: 15px;">Adicionar Número</h3>
+              <h3 style="margin-bottom: 6px;">Vincular Número</h3>
+              <p style="font-size:12px; color:var(--color-text-muted); margin-bottom:15px;">O número fica "Em uso" no nome do vendedor escolhido e aparece na Chipeira. Se o vendedor já tinha outro número, o antigo volta pra disponível.</p>
               <div class="form-row">
                 <div class="form-group">
                   <label>Número</label>
-                  <input type="text" id="waNewNumberInput" class="form-control" placeholder="(62) 99999-9999" />
+                  <input type="tel" id="waNewNumberInput" class="form-control" inputmode="tel" placeholder="(11) 96273-0069" />
+                </div>
+                <div class="form-group">
+                  <label>Vendedor</label>
+                  <input type="text" id="waLinkUserName" class="form-control" autocomplete="off" placeholder="Ex: Plínio" />
                 </div>
                 <div class="form-group">
                   <label>Observação (opcional)</label>
                   <input type="text" id="waNewNumberNote" class="form-control" placeholder="Ex: operadora, chip físico nº..." />
                 </div>
               </div>
-              <button type="button" class="btn btn-primary" style="margin-top:4px;" onclick="WaNumberRequests.addNumber()">Adicionar</button>
+              <button type="button" class="btn btn-primary" style="margin-top:4px;" onclick="WaNumberRequests.linkFromAdmin()">Vincular</button>
             </div>
             <div class="card">
               <div style="display:flex; gap:8px; padding:15px 15px 0; flex-wrap:wrap; align-items:center; justify-content:space-between;">
