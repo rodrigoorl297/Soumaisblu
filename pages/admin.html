@@ -179,7 +179,7 @@
     <script src="../js/proposals.js?v=rl429fix1" defer></script>
     <script src="../js/clients.js?v=client-search1" defer></script>
     <script src="../js/tickets.js?v=nomes-caps1" defer></script>
-    <script src="../js/wa-number-requests.js?v=wanr5" defer></script>
+    <script src="../js/wa-number-requests.js?v=wanr7" defer></script>
   </head>
 
   <body>
@@ -1459,7 +1459,7 @@
                 </div>
                 <div class="form-group">
                   <label>Vendedor</label>
-                  <input type="text" id="waLinkUserName" class="form-control" autocomplete="off" placeholder="Ex: Plínio" />
+                  <input type="text" id="waLinkUserName" class="form-control" autocomplete="off" placeholder="Ex: Maria" />
                 </div>
                 <div class="form-group">
                   <label>Observação (opcional)</label>
@@ -1479,13 +1479,15 @@
                 <input type="search" id="waNumberSearch" class="form-control" placeholder="Buscar por vendedor ou número..." style="max-width:260px;" />
               </div>
               <div id="waNumberSummary" style="padding:10px 15px 0; font-size:12px; color:var(--color-text-muted);"></div>
+              <div style="padding:4px 15px 0; font-size:12px; color:var(--color-text-muted);">⇅ Clique nos títulos <b>Número</b>, <b>Vendedor</b> ou <b>Último código</b> para ordenar.</div>
               <div class="table-wrap">
                 <table class="data-table">
                   <thead>
                     <tr>
-                      <th>Número</th>
+                      <th data-wanr-sort="number" style="cursor:pointer; user-select:none;" title="Ordenar">Número <span data-wanr-sort-icon="number" style="opacity:0.5;">⇅</span></th>
                       <th>Status</th>
-                      <th>Vendedor</th>
+                      <th data-wanr-sort="name" style="cursor:pointer; user-select:none;" title="Ordenar">Vendedor <span data-wanr-sort-icon="name" style="opacity:0.5;">⇅</span></th>
+                      <th data-wanr-sort="code" style="cursor:pointer; user-select:none;" title="Ordenar">Último código <span data-wanr-sort-icon="code" style="opacity:0.5;">⇅</span></th>
                       <th>Observação</th>
                       <th>Ações</th>
                     </tr>

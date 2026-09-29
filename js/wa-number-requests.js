@@ -57,13 +57,118 @@ window.WaNumberRequests = {
       assignedAt: r.assignedAt || r.assigned_at || '',
       blockedReason: r.blockedReason || r.blocked_reason || '',
       note: r.note || '',
+      // Ultimo SMS/codigo que caiu nesse numero, empurrado pela Chipeira
+      // (api/chipeira_numbers.php, branch `sms`). Mostrado no box "Meu Numero"
+      // pro vendedor ler o codigo de login do WhatsApp sem ir ate a chipeira.
+      lastSms: r.lastSms || r.last_sms || '',
+      lastSmsCode: r.lastSmsCode || r.last_sms_code || '',
+      lastSmsAt: r.lastSmsAt || r.last_sms_at || '',
       createdAt: r.createdAt || r.created_at,
       updatedAt: r.updatedAt || r.updated_at,
     };
   },
 
+  /**
+   * Mesmo criterio do backend (isVerificationSms): so' trata como codigo o
+   * formato NNN-NNN (ex. WhatsApp) ou 4-8 digitos JUNTO de contexto de
+   * verificacao. Blinda a exibicao contra propaganda ja gravada no estoque
+   * ("TIM Ultrafibra ... 79,99/mes ... clique aqui") que nao deve aparecer.
+   */
+  _looksLikeCode: function(r) {
+    const t = String((r && (r.lastSms || r.lastSmsCode)) || '');
+    if (!t) return false;
+    if (/\b\d{3}[-\s]\d{3}\b/.test(t)) return true;
+    return /\b\d{4,8}\b/.test(t) && /whatsapp|c[oó]digo|verif|confirma|autentic|\bcode\b|\botp\b|token|acesso/i.test(t);
+  },
+
+  /** Bloco destacado com o ultimo codigo/SMS recebido no numero do vendedor. */
+  _codeBlockHtml: function(r, isNew) {
+    if (!r || !r.lastSms || !this._looksLikeCode(r)) return '';
+    const when = r.lastSmsAt && typeof formatDateTime === 'function' ? formatDateTime(r.lastSmsAt) : '';
+    const codeLine = r.lastSmsCode
+      ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;">
+          <span style="font-size:28px;font-weight:800;letter-spacing:3px;font-family:monospace;">${this._escAttr(r.lastSmsCode)}</span>
+          <button type="button" class="btn btn-outline btn-sm" data-wanr-copy="${this._escAttr(r.lastSmsCode)}">Copiar</button>
+        </div>`
+      : '';
+    const newBadge = isNew
+      ? '<span style="background:#10b981;color:#fff;font-size:11px;font-weight:700;padding:2px 8px;border-radius:12px;margin-left:6px;">Novo código!</span>'
+      : '';
+    const border = isNew ? '2px solid #10b981' : '1px solid var(--color-border)';
+    return `
+      <div style="margin-top:14px;padding:12px 14px;border:${border};border-radius:var(--radius-md);background:var(--color-bg-subtle,#f8fafc);">
+        <div style="font-size:12px;color:var(--color-text-muted);">Último código recebido${when ? ' • ' + this._escAttr(when) : ''}${newBadge}</div>
+        ${codeLine}
+        <div style="font-size:13px;color:var(--color-text-muted);white-space:pre-wrap;word-break:break-word;margin-top:${codeLine ? '4' : '2'}px;">${this._escAttr(r.lastSms)}</div>
+      </div>`;
+  },
+
+  /** Copia o código pra área de transferência e dá um retorno rápido no próprio botão. */
+  _copyCode: async function(code, btn) {
+    const text = String(code || '');
+    if (!text) return;
+    let ok = false;
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        ok = true;
+      }
+    } catch (e) { /* cai no fallback */ }
+    if (!ok) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+      document.body.removeChild(ta);
+    }
+    if (btn) {
+      const original = btn.textContent;
+      btn.textContent = ok ? 'Copiado!' : 'Falhou';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+    }
+  },
+
+  /** Bipe curto quando chega código novo (silencioso se o navegador bloquear áudio). */
+  _beep: function() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 880;
+      gain.gain.value = 0.08;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.25);
+      osc.onended = () => ctx.close();
+    } catch (e) { /* sem áudio, segue só o destaque visual */ }
+  },
+
   init: function() {
     this._applyNavVisibility();
+  },
+
+  /**
+   * Recarrega o box "Meu Número" a cada 15s pra o último código aparecer
+   * sozinho conforme cai na chipeira, sem depender de F5. Pula a atualização
+   * quando a aba está em segundo plano ou quando o vendedor está digitando um
+   * número (senão o re-render apagaria o que ele digitou). Um único timer.
+   */
+  _startEmployeePolling: function() {
+    if (this._pollTimer) return;
+    this._pollTimer = setInterval(() => {
+      if (document.hidden) return;
+      if (!document.getElementById('waMyNumberBox') && !document.getElementById('waAvailableNumbersList')) return;
+      const input = document.getElementById('waMyNumberInput');
+      if (input && (document.activeElement === input || String(input.value || '').trim())) return;
+      this.renderEmployeeList();
+    }, 15000);
   },
 
   _applyNavVisibility: function() {
@@ -89,6 +194,8 @@ window.WaNumberRequests = {
       if (delBtn) { ev.preventDefault(); this.remove(delBtn.getAttribute('data-wanr-delete')); return; }
       const filterBtn = ev.target.closest('[data-wanr-filter]');
       if (filterBtn) { ev.preventDefault(); this._setFilter(filterBtn.getAttribute('data-wanr-filter')); return; }
+      const sortTh = ev.target.closest('[data-wanr-sort]');
+      if (sortTh) { ev.preventDefault(); this._setSort(sortTh.getAttribute('data-wanr-sort')); return; }
     }, true);
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Enter' && ev.target && ev.target.id === 'waMyNumberInput') {
@@ -112,6 +219,44 @@ window.WaNumberRequests = {
       b.classList.toggle('btn-outline', !active);
     });
     this._renderAdminTable(this._lastRows);
+  },
+
+  /** Clique no cabeçalho: 1º asc, 2º desc, 3º volta à ordem padrão (por número). */
+  _setSort: function(key) {
+    if (this._sortKey !== key) {
+      this._sortKey = key;
+      this._sortDir = 'asc';
+    } else if (this._sortDir === 'asc') {
+      this._sortDir = 'desc';
+    } else {
+      this._sortKey = null;
+      this._sortDir = 'asc';
+    }
+    this._renderAdminTable(this._lastRows);
+  },
+
+  _sortRows: function(rows) {
+    const key = this._sortKey;
+    document.querySelectorAll('[data-wanr-sort-icon]').forEach((el) => {
+      const active = el.getAttribute('data-wanr-sort-icon') === key;
+      el.textContent = active ? (this._sortDir === 'desc' ? '▼' : '▲') : '⇅';
+      el.style.opacity = active ? '1' : '0.5';
+    });
+    if (!key) return rows;
+    const val = (r) => {
+      if (key === 'number') return r.number || '';
+      if (key === 'name') return r.status === 'em_uso' ? String(r.assignedToName || '') : '';
+      return r.lastSms && this._looksLikeCode(r) ? String(r.lastSmsCode || r.lastSms) : '';
+    };
+    const dir = this._sortDir === 'desc' ? -1 : 1;
+    // Vazios ("—") sempre no fim, independente da direção.
+    return rows.slice().sort((a, b) => {
+      const va = val(a), vb = val(b);
+      if (!va && !vb) return 0;
+      if (!va) return 1;
+      if (!vb) return -1;
+      return dir * va.localeCompare(vb, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    });
   },
 
   async _fetchAll() {
@@ -162,9 +307,10 @@ window.WaNumberRequests = {
             <div>
               <div style="font-size:20px; font-weight:800;">${this._escAttr(mine.number)} - ${this._escAttr(mine.assignedToName || user.name || '')}</div>
               <div style="font-size:12px;color:var(--color-text-muted);">Em uso desde ${mine.assignedAt ? formatDateTime(mine.assignedAt) : '—'}</div>
+              <div style="font-size:13px;font-weight:700;color:#d97706;margin-top:4px;">⚠️ Ao sair, clique em "Liberar Número".</div>
             </div>
             <button type="button" class="btn btn-outline btn-sm" data-wanr-release="${this._escAttr(mine.id)}">Liberar Número</button>
-          </div>${form}`;
+          </div>${this._codeBlockHtml(mine)}${form}`;
       } else {
         box.innerHTML = `<p>Você ainda não tem um número. Informe o que você já usa ou escolha um abaixo.</p>${form}`;
       }
@@ -432,7 +578,7 @@ window.WaNumberRequests = {
     try {
       rows = await this._fetchAll();
     } catch (e) {
-      tbody.innerHTML = '<tr><td colspan="5">Erro ao carregar números.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6">Erro ao carregar números.</td></tr>';
       return;
     }
     rows.sort((a, b) => a.number.localeCompare(b.number));
@@ -463,8 +609,10 @@ window.WaNumberRequests = {
       );
     }
 
+    filtered = this._sortRows(filtered);
+
     if (!filtered.length) {
-      tbody.innerHTML = '<tr><td colspan="5">Nenhum número encontrado.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6">Nenhum número encontrado.</td></tr>';
       return;
     }
 
@@ -478,11 +626,18 @@ window.WaNumberRequests = {
       } else if (r.status === 'bloqueado') {
         actions = `<button type="button" class="btn btn-outline btn-sm" data-wanr-unblock="${this._escAttr(r.id)}">Desbloquear</button>`;
       }
+      // Último código/SMS que caiu nesse número (empurrado pela Chipeira).
+      const when = r.lastSmsAt && typeof formatDateTime === 'function' ? formatDateTime(r.lastSmsAt) : (r.lastSmsAt || '');
+      const codeCell = r.lastSms && this._looksLikeCode(r)
+        ? `<span style="font-weight:700; font-family:monospace; font-size:15px;">${this._escAttr(r.lastSmsCode || r.lastSms)}</span>`
+          + (when ? `<div style="font-size:11px; color:var(--color-text-muted);">${this._escAttr(when)}</div>` : '')
+        : '<span style="color:var(--color-text-muted);">—</span>';
       html += `
         <tr>
           <td>${this._escAttr(r.number)}</td>
           <td><span style="background:${meta.color}; color:white; padding: 2px 8px; border-radius: 12px; font-size: 12px;">${meta.text}</span></td>
           <td>${r.status === 'em_uso' ? this._escAttr(r.assignedToName || '—') : '—'}</td>
+          <td>${codeCell}</td>
           <td>${this._escAttr(r.status === 'bloqueado' ? (r.blockedReason || r.note || '—') : (r.note || '—'))}</td>
           <td>${actions}</td>
         </tr>`;
@@ -496,6 +651,7 @@ window.addEventListener('DOMContentLoaded', () => {
   WaNumberRequests._bindActions();
   if (document.getElementById('waMyNumberBox') || document.getElementById('waAvailableNumbersList')) {
     WaNumberRequests.renderEmployeeList();
+    WaNumberRequests._startEmployeePolling();
   }
   if (document.getElementById('waNumberRequestsTbody')) {
     WaNumberRequests.renderAdminList();
