@@ -1259,3 +1259,6 @@ html.fp-embed-mode body.fp-app { min-height: auto; }
    (ex.: RH > Relatórios), a esteira de quem já a embutiu é a que aparece. */
 html.fp-embed-mode #fpSidebar { display: none !important; }
 html.fp-embed-mode #fpMainArea { margin-left: 0 !important; }
+
+/* Logo horizontal (blu-logo-new) na barra superior. */
+.fp-topbar-logo { display: block; height: 26px; width: auto; }

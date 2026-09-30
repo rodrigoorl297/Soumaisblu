@@ -134,6 +134,17 @@ body.leads-app .app-layout .nav-item.active {
   color: var(--brand-accent-blu);
 }
 
+/* Logo horizontal (blu-logo-new) no lugar do ícone + texto "SOU + BLU". */
+.sidebar-header:has(.sidebar-wordmark) { justify-content: center; }
+.sidebar-header:has(.sidebar-wordmark) .logo-icon { display: none; }
+.sidebar .sidebar-header .sidebar-wordmark {
+  display: block;
+  height: auto;
+  max-height: 34px;
+  width: auto;
+  max-width: 100%;
+}
+
 .sidebar-nav {
   flex: 1;
   padding: 12px 10px;

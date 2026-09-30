@@ -31,6 +31,16 @@
   flex-shrink: 0;
   box-shadow: 0 4px 20px rgba(10, 45, 143, 0.4);
 }
+/* Logo horizontal (azul) num cartão branco pra ter contraste com o fundo escuro. */
+.brand-logo img.brand-wordmark {
+  width: auto;
+  height: 44px;
+  object-fit: contain;
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px 18px;
+  box-sizing: content-box;
+}
 
 .login-left {
   flex: 1.1;

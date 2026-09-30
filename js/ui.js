@@ -835,9 +835,20 @@ function participatesInVendorRanking(role) {
 }
 
 /** Colaboradores que aparecem no ranking (vendedor + employee de campo). Parceiros e rede ficam de fora. */
+/** Usuários fora do time de vendas (T.I./dono) — nunca aparecem no ranking. */
+const RANKING_EXCLUDED_NAMES = ['plinio'];
+
+function isRankingExcludedUser(user) {
+  const first = String(user && user.name || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .trim().toLowerCase().split(/\s+/)[0];
+  return !!first && RANKING_EXCLUDED_NAMES.includes(first);
+}
+
 function isRankingParticipant(userOrRole) {
   if (userOrRole && typeof userOrRole === 'object') {
     if (userOrRole.active === false) return false;
+    if (isRankingExcludedUser(userOrRole)) return false;
     if (isUserInPartnerNetworkSync(userOrRole)) return false;
     return isRankingParticipant(userOrRole.role);
   }

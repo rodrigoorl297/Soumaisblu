@@ -75,6 +75,23 @@ body.leads-app .sidebar .sidebar-header .logo-text span { color: var(--sb-green)
 .sidebar-title span {color: var(--brand-accent-blu);}
 .sidebar.collapsed .sidebar-title { display: none; }
 
+/* Logo horizontal (blu-logo-new) com o menu aberto; recolhido volta o ícone quadrado. */
+.sidebar-wordmark {
+  display: block;
+  height: 34px;
+  width: auto;
+  max-width: 100%;
+}
+.sidebar-brand:has(.sidebar-wordmark) { justify-content: center; }
+.sidebar-brand:has(.sidebar-wordmark) .sidebar-logo,
+.sidebar-brand:has(.sidebar-wordmark) .sidebar-title { display: none; }
+.sidebar.collapsed .sidebar-wordmark { display: none; }
+.sidebar.collapsed .sidebar-brand .sidebar-logo { display: flex; }
+@media (max-width: 900px) {
+  .sidebar .sidebar-wordmark { display: none; }
+  .sidebar .sidebar-brand .sidebar-logo { display: flex; }
+}
+
 /* Nav */
 .sidebar-nav {
   flex: 1;
