@@ -22,6 +22,12 @@ window.WaNumberRequests = {
     ].includes(role);
   },
 
+  /** Só o T.I. (cargo desenvolvedor) pode bloquear números. */
+  canBlock: function() {
+    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+    return !!s && String(s.role || '').toLowerCase() === 'desenvolvedor';
+  },
+
   _escAttr: function(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   },
@@ -242,7 +248,9 @@ window.WaNumberRequests = {
       el.textContent = active ? (this._sortDir === 'desc' ? '▼' : '▲') : '⇅';
       el.style.opacity = active ? '1' : '0.5';
     });
-    if (!key) return rows;
+    // Status sempre primeiro: os que não estão em uso no topo.
+    const rank = (r) => ({ disponivel: 0, bloqueado: 1, em_uso: 2 })[r.status] ?? 0;
+    if (!key) return rows.slice().sort((a, b) => rank(a) - rank(b));
     const val = (r) => {
       if (key === 'number') return r.number || '';
       if (key === 'name') return r.status === 'em_uso' ? String(r.assignedToName || '') : '';
@@ -251,6 +259,8 @@ window.WaNumberRequests = {
     const dir = this._sortDir === 'desc' ? -1 : 1;
     // Vazios ("—") sempre no fim, independente da direção.
     return rows.slice().sort((a, b) => {
+      const byStatus = rank(a) - rank(b);
+      if (byStatus) return byStatus;
       const va = val(a), vb = val(b);
       if (!va && !vb) return 0;
       if (!va) return 1;
@@ -523,6 +533,10 @@ window.WaNumberRequests = {
   },
 
   block: async function(id) {
+    if (!this.canBlock()) {
+      alert('Só o T.I. pode bloquear números.');
+      return;
+    }
     const reason = window.prompt('Motivo do bloqueio (opcional):', '') || '';
     try {
       const raw = await DB.get('wa_numbers', id);
@@ -616,16 +630,21 @@ window.WaNumberRequests = {
       return;
     }
 
+    const canBlock = this.canBlock();
     let html = '';
     filtered.forEach((r) => {
       const meta = this._statusMeta(r.status);
-      // Sem Bloquear/Remover no painel. "Desbloquear" só aparece em números que já estavam bloqueados.
-      let actions = '—';
+      // Sem Remover no painel. "Bloquear" só aparece para o T.I.
+      const btns = [];
       if (r.status === 'em_uso') {
-        actions = `<button type="button" class="btn btn-outline btn-sm" data-wanr-release="${this._escAttr(r.id)}">Liberar</button>`;
-      } else if (r.status === 'bloqueado') {
-        actions = `<button type="button" class="btn btn-outline btn-sm" data-wanr-unblock="${this._escAttr(r.id)}">Desbloquear</button>`;
+        btns.push(`<button type="button" class="btn btn-outline btn-sm" data-wanr-release="${this._escAttr(r.id)}">Liberar</button>`);
       }
+      if (r.status === 'bloqueado') {
+        btns.push(`<button type="button" class="btn btn-outline btn-sm" data-wanr-unblock="${this._escAttr(r.id)}">Desbloquear</button>`);
+      } else if (canBlock) {
+        btns.push(`<button type="button" class="btn btn-outline btn-sm" style="color:#ef4444; border-color:#ef4444;" data-wanr-block="${this._escAttr(r.id)}">Bloquear</button>`);
+      }
+      const actions = btns.length ? btns.join(' ') : '—';
       // Último código/SMS que caiu nesse número (empurrado pela Chipeira).
       const when = r.lastSmsAt && typeof formatDateTime === 'function' ? formatDateTime(r.lastSmsAt) : (r.lastSmsAt || '');
       const codeCell = r.lastSms && this._looksLikeCode(r)
