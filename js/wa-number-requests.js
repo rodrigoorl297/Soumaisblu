@@ -87,9 +87,62 @@ window.WaNumberRequests = {
     return /\b\d{4,8}\b/.test(t) && /whatsapp|c[oó]digo|verif|confirma|autentic|\bcode\b|\botp\b|token|acesso/i.test(t);
   },
 
+  /** Código some da tela depois disso (já expirou no WhatsApp). */
+  CODE_TTL_MS: 10 * 60 * 1000,
+
+  /**
+   * last_sms_at vem do NOW() do MySQL (horário de Brasília, sem fuso).
+   * Lê como -03:00 pra não depender do fuso do computador de quem abre o painel.
+   */
+  _smsAtMs: function(v) {
+    const s = String(v || '').trim();
+    if (!s) return NaN;
+    const hasTz = /(Z|[+-]\d{2}:?\d{2})$/i.test(s);
+    return Date.parse(hasTz ? s : s.replace(' ', 'T') + '-03:00');
+  },
+
+  /** Só mostra o código se parece código E chegou há menos de 10 minutos. */
+  _showCode: function(r) {
+    if (!r || !r.lastSms || !this._looksLikeCode(r)) return false;
+    const at = this._smsAtMs(r.lastSmsAt);
+    return Number.isFinite(at) && Date.now() - at < this.CODE_TTL_MS;
+  },
+
+  _fmtLeft: function(ms) {
+    const s = Math.max(0, Math.ceil(ms / 1000));
+    return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+  },
+
+  /** "expira em m:ss" ao lado do código; o tick de 1s atualiza o texto e some com ele no fim. */
+  _countdownHtml: function(r) {
+    const expires = this._smsAtMs(r.lastSmsAt) + this.CODE_TTL_MS;
+    if (!Number.isFinite(expires)) return '';
+    this._startCountdownTick();
+    return `<span data-wanr-expires="${expires}" style="font-size:11px;font-weight:700;color:#d97706;">expira em ${this._fmtLeft(expires - Date.now())}</span>`;
+  },
+
+  _startCountdownTick: function() {
+    if (this._countdownTimer) return;
+    this._countdownTimer = setInterval(() => {
+      let expired = false;
+      document.querySelectorAll('[data-wanr-expires]').forEach((el) => {
+        const left = Number(el.getAttribute('data-wanr-expires')) - Date.now();
+        if (left <= 0) expired = true;
+        else el.textContent = 'expira em ' + this._fmtLeft(left);
+      });
+      // Zerou: re-renderiza com os dados já carregados pra o código virar "—" na hora.
+      if (expired) {
+        if (this._lastRows && document.getElementById('waNumberRequestsTbody')) this._renderAdminTable(this._lastRows);
+        const input = document.getElementById('waMyNumberInput');
+        const typing = input && (document.activeElement === input || String(input.value || '').trim());
+        if (document.getElementById('waMyNumberBox') && !typing) this.renderEmployeeList();
+      }
+    }, 1000);
+  },
+
   /** Bloco destacado com o ultimo codigo/SMS recebido no numero do vendedor. */
   _codeBlockHtml: function(r, isNew) {
-    if (!r || !r.lastSms || !this._looksLikeCode(r)) return '';
+    if (!this._showCode(r)) return '';
     const when = r.lastSmsAt && typeof formatDateTime === 'function' ? formatDateTime(r.lastSmsAt) : '';
     const codeLine = r.lastSmsCode
       ? `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;">
@@ -103,7 +156,7 @@ window.WaNumberRequests = {
     const border = isNew ? '2px solid #10b981' : '1px solid var(--color-border)';
     return `
       <div style="margin-top:14px;padding:12px 14px;border:${border};border-radius:var(--radius-md);background:var(--color-bg-subtle,#f8fafc);">
-        <div style="font-size:12px;color:var(--color-text-muted);">Último código recebido${when ? ' • ' + this._escAttr(when) : ''}${newBadge}</div>
+        <div style="font-size:12px;color:var(--color-text-muted);">Último código recebido${when ? ' • ' + this._escAttr(when) : ''}${newBadge} ${this._countdownHtml(r)}</div>
         ${codeLine}
         <div style="font-size:13px;color:var(--color-text-muted);white-space:pre-wrap;word-break:break-word;margin-top:${codeLine ? '4' : '2'}px;">${this._escAttr(r.lastSms)}</div>
       </div>`;
@@ -174,6 +227,22 @@ window.WaNumberRequests = {
       const input = document.getElementById('waMyNumberInput');
       if (input && (document.activeElement === input || String(input.value || '').trim())) return;
       this.renderEmployeeList();
+    }, 15000);
+  },
+
+  /**
+   * Mesma ideia no admin: a tabela recarrega a cada 15s enquanto a seção
+   * estiver visível, pra código que cai depois de abrir a página aparecer
+   * sem F5. Filtro/busca/ordenação ficam no estado do objeto, então o
+   * re-render não perde o que o gestor escolheu.
+   */
+  _startAdminPolling: function() {
+    if (this._adminPollTimer) return;
+    this._adminPollTimer = setInterval(() => {
+      if (document.hidden) return;
+      const tbody = document.getElementById('waNumberRequestsTbody');
+      if (!tbody || !tbody.offsetParent) return;
+      this.renderAdminList();
     }, 15000);
   },
 
@@ -254,7 +323,7 @@ window.WaNumberRequests = {
     const val = (r) => {
       if (key === 'number') return r.number || '';
       if (key === 'name') return r.status === 'em_uso' ? String(r.assignedToName || '') : '';
-      return r.lastSms && this._looksLikeCode(r) ? String(r.lastSmsCode || r.lastSms) : '';
+      return this._showCode(r) ? String(r.lastSmsCode || r.lastSms) : '';
     };
     const dir = this._sortDir === 'desc' ? -1 : 1;
     // Vazios ("—") sempre no fim, independente da direção.
@@ -432,7 +501,8 @@ window.WaNumberRequests = {
       // Atribui o novo antes de soltar o antigo — se falhar, o vendedor não fica sem número.
       if (existing) {
         const raw = await DB.get('wa_numbers', existing.id);
-        const note = opts.note ? { note: opts.note } : {};
+        // Porta da Chipeira mantém a descrição dela (Slot/operadora); a observação não sobrescreve.
+        const note = opts.note && !this._isChipeira(raw) ? { note: opts.note } : {};
         await DB.save('wa_numbers', { ...raw, ...assignment, ...note });
       } else {
         await DB.save('wa_numbers', {
@@ -448,16 +518,7 @@ window.WaNumberRequests = {
 
       if (current) {
         const oldRaw = await DB.get('wa_numbers', current.id);
-        if (oldRaw) {
-          await DB.save('wa_numbers', {
-            ...oldRaw,
-            status: 'disponivel',
-            assigned_to: '',
-            assigned_to_name: '',
-            assigned_at: null,
-            updated_at: now,
-          });
-        }
+        if (oldRaw) await DB.save('wa_numbers', this._releasedRow(oldRaw));
       }
 
       alert(self
@@ -484,19 +545,34 @@ window.WaNumberRequests = {
     try {
       const raw = await DB.get('wa_numbers', id);
       if (!raw) return;
-      const updated = {
-        ...raw,
-        status: 'disponivel',
-        assigned_to: '',
-        assigned_to_name: '',
-        assigned_at: null,
-        updated_at: new Date().toISOString(),
-      };
-      await DB.save('wa_numbers', updated);
+      await DB.save('wa_numbers', this._releasedRow(raw));
       await this._refreshAll();
     } catch (e) {
       alert('Erro ao liberar número: ' + e.message);
     }
+  },
+
+  _isChipeira: function(raw) {
+    return String((raw && (raw.created_by || raw.createdBy)) || '') === 'chipeira';
+  },
+
+  /**
+   * Linha de volta ao estado original: disponível, sem vendedor e, se for
+   * porta da Chipeira, sem observação digitada no painel (ex. "Teste").
+   * O próximo envio da Chipeira completa "Slot N · operadora" (chipeira_numbers.php).
+   */
+  _releasedRow: function(raw) {
+    const row = {
+      ...raw,
+      status: 'disponivel',
+      assigned_to: '',
+      assigned_to_name: '',
+      assigned_at: null,
+      blocked_reason: '',
+      updated_at: new Date().toISOString(),
+    };
+    if (this._isChipeira(raw) && !/^Chipeira\b/.test(String(raw.note || ''))) row.note = 'Chipeira';
+    return row;
   },
 
   /* ── Admin (Supervisão / T.I. / Gerência) ── */
@@ -561,8 +637,7 @@ window.WaNumberRequests = {
     try {
       const raw = await DB.get('wa_numbers', id);
       if (!raw) return;
-      const updated = { ...raw, status: 'disponivel', blocked_reason: '', updated_at: new Date().toISOString() };
-      await DB.save('wa_numbers', updated);
+      await DB.save('wa_numbers', this._releasedRow(raw));
       await this.renderAdminList();
     } catch (e) {
       alert('Erro ao desbloquear: ' + e.message);
@@ -647,9 +722,10 @@ window.WaNumberRequests = {
       const actions = btns.length ? btns.join(' ') : '—';
       // Último código/SMS que caiu nesse número (empurrado pela Chipeira).
       const when = r.lastSmsAt && typeof formatDateTime === 'function' ? formatDateTime(r.lastSmsAt) : (r.lastSmsAt || '');
-      const codeCell = r.lastSms && this._looksLikeCode(r)
+      const codeCell = this._showCode(r)
         ? `<span style="font-weight:700; font-family:monospace; font-size:15px;">${this._escAttr(r.lastSmsCode || r.lastSms)}</span>`
           + (when ? `<div style="font-size:11px; color:var(--color-text-muted);">${this._escAttr(when)}</div>` : '')
+          + `<div>${this._countdownHtml(r)}</div>`
         : '<span style="color:var(--color-text-muted);">—</span>';
       html += `
         <tr>
@@ -674,5 +750,10 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   if (document.getElementById('waNumberRequestsTbody')) {
     WaNumberRequests.renderAdminList();
+    WaNumberRequests._startAdminPolling();
+    // Ao abrir a seção pelo menu, recarrega na hora (sem esperar o timer).
+    document.addEventListener('click', (ev) => {
+      if (ev.target.closest('[data-section="secWaNumberRequests"]')) WaNumberRequests.renderAdminList();
+    });
   }
 });
