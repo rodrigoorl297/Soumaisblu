@@ -179,7 +179,7 @@
     <script src="../js/proposals.js?v=rl429fix1" defer></script>
     <script src="../js/clients.js?v=client-search1" defer></script>
     <script src="../js/tickets.js?v=nomes-caps1" defer></script>
-    <script src="../js/wa-number-requests.js?v=wanr10" defer></script>
+    <script src="../js/wa-number-requests.js?v=wanr12" defer></script>
   </head>
 
   <body>
@@ -1483,7 +1483,10 @@
                   <button type="button" class="btn btn-outline btn-sm" data-wanr-filter="em_uso">Em uso</button>
                   <button type="button" class="btn btn-outline btn-sm" data-wanr-filter="bloqueado">Bloqueados</button>
                 </div>
-                <input type="search" id="waNumberSearch" class="form-control" placeholder="Buscar por vendedor ou número..." style="max-width:260px;" />
+                <div class="search-bar" style="flex:0 1 300px;">
+                  <span class="search-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
+                  <input type="search" id="waNumberSearch" autocomplete="off" placeholder="Pesquisar número, vendedor ou slot..." />
+                </div>
               </div>
               <div id="waNumberSummary" style="padding:10px 15px 0; font-size:12px; color:var(--color-text-muted);"></div>
               <div style="padding:4px 15px 0; font-size:12px; color:var(--color-text-muted);">⇅ Clique nos títulos <b>Número</b>, <b>Vendedor</b> ou <b>Último código</b> para ordenar.</div>

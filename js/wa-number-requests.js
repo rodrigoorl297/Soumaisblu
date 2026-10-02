@@ -1,7 +1,7 @@
 /**
  * "Solicite um Número" — estoque de chips de WhatsApp da empresa.
  * Vendedor pega um número disponível direto da lista (sem aprovação);
- * Supervisão / T.I. / Gerência cadastram, bloqueiam e liberam números.
+ * Todos os usuários veem o estoque, pegam e liberam números; só o T.I. bloqueia.
  */
 window.WaNumberRequests = {
   _actionsWired: false,
@@ -9,20 +9,7 @@ window.WaNumberRequests = {
   _adminSearch: '',
   _lastRows: [],
 
-  /** Supervisão, T.I./Desenvolvimento e Gerência/Master administram o estoque. */
-  canManage: function() {
-    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
-    if (!s) return false;
-    if (typeof Auth.isMaster === 'function' && Auth.isMaster()) return true;
-    if (typeof Auth.hasMasterPanel === 'function' && Auth.hasMasterPanel()) return true;
-    const role = String(s.role || '').toLowerCase();
-    return [
-      'supervisor', 'sup_backoffice', 'desenvolvedor',
-      'gerencia', 'gerente', 'master', 'fundador', 'diretoria',
-    ].includes(role);
-  },
-
-  /** Só o T.I. (cargo desenvolvedor) pode bloquear números. */
+  /** Só o T.I. (cargo desenvolvedor) pode bloquear/desbloquear números. */
   canBlock: function() {
     const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
     return !!s && String(s.role || '').toLowerCase() === 'desenvolvedor';
@@ -248,7 +235,9 @@ window.WaNumberRequests = {
 
   _applyNavVisibility: function() {
     const nav = document.getElementById('navWaNumberRequests');
-    if (nav) nav.style.display = this.canManage() ? '' : 'none';
+    // Tela aberta para todos os usuários logados; só Bloquear/Desbloquear é do T.I.
+    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+    if (nav) nav.style.display = s ? '' : 'none';
   },
 
   _bindActions: function() {
@@ -259,6 +248,8 @@ window.WaNumberRequests = {
       if (registerBtn) { ev.preventDefault(); this.registerMine(); return; }
       const claimBtn = ev.target.closest('[data-wanr-claim]');
       if (claimBtn) { ev.preventDefault(); this.claim(claimBtn.getAttribute('data-wanr-claim')); return; }
+      const pickBtn = ev.target.closest('[data-wanr-pick]');
+      if (pickBtn) { ev.preventDefault(); this.pickForLink(pickBtn.getAttribute('data-wanr-pick')); return; }
       const releaseBtn = ev.target.closest('[data-wanr-release]');
       if (releaseBtn) { ev.preventDefault(); this.release(releaseBtn.getAttribute('data-wanr-release')); return; }
       const blockBtn = ev.target.closest('[data-wanr-block]');
@@ -276,6 +267,10 @@ window.WaNumberRequests = {
       if (ev.key === 'Enter' && ev.target && ev.target.id === 'waMyNumberInput') {
         ev.preventDefault();
         this.registerMine();
+      }
+      if (ev.key === 'Enter' && ev.target && ev.target.id === 'waLinkUserName') {
+        ev.preventDefault();
+        this.linkFromAdmin();
       }
     });
     document.addEventListener('input', (ev) => {
@@ -436,6 +431,7 @@ window.WaNumberRequests = {
         await this._refreshAll();
         return;
       }
+      if (!window.confirm('Pegar o número ' + r.number + ' no seu nome (' + user.name + ')?')) return;
 
       const updated = {
         ...raw,
@@ -541,10 +537,22 @@ window.WaNumberRequests = {
     await this._linkNumber(input ? input.value : '', { id: user.id, name: user.name }, { self: true });
   },
 
+  /** Número em uso por quem está logado. Só o dono libera o próprio número. */
+  _isMine: function(r) {
+    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
+    const owner = r && (r.assignedTo || r.assigned_to);
+    return !!s && !!owner && String(owner) === String(s.id);
+  },
+
   release: async function(id) {
     try {
       const raw = await DB.get('wa_numbers', id);
       if (!raw) return;
+      if (String(raw.status) === 'em_uso' && !this._isMine(raw)) {
+        alert('Só o vendedor que está usando este número pode liberá-lo.');
+        await this._refreshAll();
+        return;
+      }
       await DB.save('wa_numbers', this._releasedRow(raw));
       await this._refreshAll();
     } catch (e) {
@@ -603,6 +611,19 @@ window.WaNumberRequests = {
     }
   },
 
+  /**
+   * "Pegar número" (linha da tabela, admin): joga o número no formulário
+   * "Vincular Número" e foca o nome do vendedor — só falta digitar o nome.
+   */
+  pickForLink: function(number) {
+    const input = document.getElementById('waNewNumberInput');
+    const nameInput = document.getElementById('waLinkUserName');
+    if (!input) return;
+    input.value = number;
+    (nameInput || input).scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (nameInput) nameInput.focus({ preventScroll: true });
+  },
+
   _sameName: function(a, b) {
     const n = (v) => String(v || '').trim().toLowerCase().replace(/\s+/g, ' ');
     return !!n(a) && n(a) === n(b);
@@ -634,6 +655,10 @@ window.WaNumberRequests = {
   },
 
   unblock: async function(id) {
+    if (!this.canBlock()) {
+      alert('Só o T.I. pode desbloquear números.');
+      return;
+    }
     try {
       const raw = await DB.get('wa_numbers', id);
       if (!raw) return;
@@ -661,7 +686,7 @@ window.WaNumberRequests = {
   renderAdminList: async function() {
     this._applyNavVisibility();
     const tbody = document.getElementById('waNumberRequestsTbody');
-    if (!tbody || !this.canManage()) return;
+    if (!tbody) return;
 
     let rows = [];
     try {
@@ -693,8 +718,13 @@ window.WaNumberRequests = {
 
     const q = String(this._adminSearch || '').trim().toLowerCase();
     if (q) {
+      // Só dígitos ("2730287", "0287") também acha o número, ignorando máscara.
+      const qDigits = q.replace(/\D+/g, '');
       filtered = filtered.filter((r) =>
-        r.number.toLowerCase().includes(q) || String(r.assignedToName || '').toLowerCase().includes(q)
+        r.number.toLowerCase().includes(q)
+        || (qDigits && qDigits === q.replace(/[\s()+-]+/g, '') && this._nationalDigits(r.number).includes(qDigits))
+        || String(r.assignedToName || '').toLowerCase().includes(q)
+        || String(r.note || '').toLowerCase().includes(q)
       );
     }
 
@@ -706,16 +736,24 @@ window.WaNumberRequests = {
     }
 
     const canBlock = this.canBlock();
+    // Admin tem o formulário "Vincular Número" (Pegar preenche o form);
+    // no painel do vendedor, Pegar reserva direto no nome de quem está logado.
+    const hasLinkForm = !!document.getElementById('waNewNumberInput');
     let html = '';
     filtered.forEach((r) => {
       const meta = this._statusMeta(r.status);
       // Sem Remover no painel. "Bloquear" só aparece para o T.I.
       const btns = [];
-      if (r.status === 'em_uso') {
+      if (r.status === 'disponivel') {
+        btns.push(hasLinkForm
+          ? `<button type="button" class="btn btn-primary btn-sm" data-wanr-pick="${this._escAttr(r.number)}">Pegar número</button>`
+          : `<button type="button" class="btn btn-primary btn-sm" data-wanr-claim="${this._escAttr(r.id)}">Pegar número</button>`);
+      }
+      if (r.status === 'em_uso' && this._isMine(r)) {
         btns.push(`<button type="button" class="btn btn-outline btn-sm" data-wanr-release="${this._escAttr(r.id)}">Liberar</button>`);
       }
       if (r.status === 'bloqueado') {
-        btns.push(`<button type="button" class="btn btn-outline btn-sm" data-wanr-unblock="${this._escAttr(r.id)}">Desbloquear</button>`);
+        if (canBlock) btns.push(`<button type="button" class="btn btn-outline btn-sm" data-wanr-unblock="${this._escAttr(r.id)}">Desbloquear</button>`);
       } else if (canBlock) {
         btns.push(`<button type="button" class="btn btn-outline btn-sm" style="color:#ef4444; border-color:#ef4444;" data-wanr-block="${this._escAttr(r.id)}">Bloquear</button>`);
       }
@@ -753,7 +791,7 @@ window.addEventListener('DOMContentLoaded', () => {
     WaNumberRequests._startAdminPolling();
     // Ao abrir a seção pelo menu, recarrega na hora (sem esperar o timer).
     document.addEventListener('click', (ev) => {
-      if (ev.target.closest('[data-section="secWaNumberRequests"]')) WaNumberRequests.renderAdminList();
+      if (ev.target.closest('[data-section="secWaNumberRequests"], [data-section="secWaNumberRequest"]')) WaNumberRequests._refreshAll();
     });
   }
 });
