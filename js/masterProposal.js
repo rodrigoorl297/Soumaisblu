@@ -61,6 +61,7 @@ window.masterProposalManager = {
 
   // Abre o pop-up (modal) de "Nova Proposta", igual ao de "Novo Cliente"
   openModal() {
+    if (window.ProposalWorkflow) return ProposalWorkflow.create();
     this.init();
     if (typeof openModal === 'function') openModal('masterProposalModal');
     else document.getElementById('masterProposalModal')?.classList.add('open');

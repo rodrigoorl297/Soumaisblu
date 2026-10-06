@@ -244,6 +244,15 @@ const WithdrawalRules = {
 
     const money = this._moneyUser(emp);
     const partnerWallet = this._partnerWalletUser(emp);
+    let irpfRate = this.IRPF_RATE;
+    if (!partnerWallet) {
+      const settings = await DB.get('finance_workbook', 'settings');
+      const data = typeof settings?.data === 'string' ? JSON.parse(settings.data) : settings?.data;
+      if (data?.irpf !== undefined) {
+        irpfRate = Number(data.irpf);
+        if (!Number.isFinite(irpfRate) || irpfRate < 0 || irpfRate > 1) throw new Error('Parâmetro IRPF inválido.');
+      }
+    }
     const partnerFee = partnerWallet ? await this._partnerSacFee(emp) : 0;
     const irpjRate = partnerWallet ? await this._partnerIrpjRate(emp) : 0;
     const irpjTax = partnerWallet && irpjRate > 0 ? this._round(amt * irpjRate / 100) : 0;
@@ -257,10 +266,10 @@ const WithdrawalRules = {
       if (monthListPts.length >= this.MAX_PER_MONTH) {
         return { ok: false, msg: `Limite de ${this.MAX_PER_MONTH} saques por mês atingido.` };
       }
-      const irpfPts = this._round(amt * this.IRPF_RATE);
+      const irpfPts = this._round(amt * irpfRate);
       const netPts = this._round(Math.max(0, amt - irpfPts));
       if (!(netPts > 0)) {
-        return { ok: false, msg: 'Valor muito baixo após retenção IRPF (1,89%).' };
+        return { ok: false, msg: 'Valor muito baixo após retenção IRPF.' };
       }
       const balPts = typeof userWalletBalance === 'function' ? userWalletBalance(emp) : Number(emp?.points ?? emp?.balance ?? 0);
       if (amt > balPts + 0.001) {
@@ -305,7 +314,7 @@ const WithdrawalRules = {
     let irpfReason = '';
 
     if (!partnerWallet) {
-      irpfTax = this._round(amt * this.IRPF_RATE);
+      irpfTax = this._round(amt * irpfRate);
       irpfReason = 'irpf_colaborador';
     }
 
@@ -313,7 +322,7 @@ const WithdrawalRules = {
       ? this._round(Math.max(0, amt - partnerFee - irpjTax))
       : this._round(Math.max(0, amt - irpfTax));
     if (!partnerWallet && !(netAmount > 0)) {
-      return { ok: false, msg: 'Valor muito baixo após retenção IRPF (1,89%).' };
+      return { ok: false, msg: 'Valor muito baixo após retenção IRPF.' };
     }
     const totalDebit = amt;
     const bal = typeof userWalletBalance === 'function' ? userWalletBalance(emp) : Number(emp?.points ?? emp?.balance ?? 0);

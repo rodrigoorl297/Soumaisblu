@@ -6,8 +6,8 @@
     inativo: { label: 'Inativo', cls: 'badge-muted' },
   };
 
-  let _anexoPending = { contrato: null, compliance: null, rg_cpf: null };
-  let _anexoUrls = { contrato: '', compliance: '', rg_cpf: '' };
+  let _anexoPending = { contrato: null, compliance: null, rg_cpf: null, nota_fiscal: null };
+  let _anexoUrls = { contrato: '', compliance: '', rg_cpf: '', nota_fiscal: '' };
 
   function esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -48,13 +48,14 @@
   }
 
   function _resetAnexos(urls = {}) {
-    _anexoPending = { contrato: null, compliance: null, rg_cpf: null };
+    _anexoPending = { contrato: null, compliance: null, rg_cpf: null, nota_fiscal: null };
     _anexoUrls = {
       contrato: urls.contrato || '',
       compliance: urls.compliance || '',
       rg_cpf: urls.rg_cpf || '',
+      nota_fiscal: urls.nota_fiscal || '',
     };
-    ['contrato', 'compliance', 'rg_cpf'].forEach((k) => {
+    ['contrato', 'compliance', 'rg_cpf', 'nota_fiscal'].forEach((k) => {
       const input = document.getElementById(`prestador_anexo_${k}`);
       if (input) input.value = '';
       _setAnexoStatus(k, _anexoUrls[k] ? 'Arquivo anexado' : 'Nenhum arquivo');
@@ -133,9 +134,10 @@
   async function _uploadPrestadorAnexos(protocolo) {
     const out = { ..._anexoUrls };
     const sub = String(protocolo || 'ps').replace(/[^a-zA-Z0-9_-]/g, '_');
-    for (const kind of ['contrato', 'compliance', 'rg_cpf']) {
+    for (const kind of ['contrato', 'compliance', 'rg_cpf', 'nota_fiscal']) {
       const file = _anexoPending[kind];
       if (!file) continue;
+      out[kind] = "";
       if (typeof uploadImage === 'function') {
         try {
           const url = await uploadImage(file, 'rh-demissao', `prestadores/${sub}/${kind}`);
@@ -147,6 +149,7 @@
       if (!out[kind] && typeof fileToBase64 === 'function') {
         try { out[kind] = await fileToBase64(file); } catch (_) { /* noop */ }
       }
+      if (!out[kind]) throw new Error("Não foi possível anexar o arquivo: " + file.name);
     }
     return out;
   }
@@ -320,6 +323,7 @@
             <input type="file" id="prestador_anexo_rg_cpf" accept=".pdf,.jpg,.jpeg,.png,.webp" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onPrestadorAnexoPick('rg_cpf', this)"/>
           </div>
         </div>
+        <div class="form-group"><label>Nota fiscal</label><span id="prestador_anexo_nota_fiscal_status">Nenhum arquivo</span><input type="file" id="prestador_anexo_nota_fiscal" accept=".pdf,.jpg,.jpeg,.png" onchange="onPrestadorAnexoPick('nota_fiscal', this)"></div>
         <div class="flex gap-md mt-lg">
           <button type="button" class="btn btn-ghost" onclick="closeModal('prestadorServicosModal')">Cancelar</button>
           <button type="submit" class="btn btn-primary btn-lg" style="flex:1;">Salvar</button>
@@ -435,6 +439,7 @@
     },
 
     async save(event) {
+      if (!canManage()) throw new Error("Sem permissão para cadastrar prestadores.");
       event?.preventDefault();
       const id = document.getElementById('prestador_id').value;
       const isNew = !id;
@@ -497,6 +502,7 @@
   };
 
   PrestadorServicos.processAutomations = async function() {
+    if (!canManage()) return;
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       const list = await DB.getFinanceSuppliers().catch(() => []);
@@ -551,7 +557,7 @@
           };
 
           const wd = {
-            id: DB._genId('wd'),
+            id: 'ps-' + row.id + '-' + row.data_pagamento,
             employee_id: creatorId,
             notes: JSON.stringify(wdMeta),
             amount: (typeof DB !== 'undefined' && DB._moneyAmt) ? DB._moneyAmt(row.valor_pago) : parseFloat(row.valor_pago),

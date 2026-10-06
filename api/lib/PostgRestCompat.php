@@ -39,7 +39,7 @@ final class PostgRestCompat
         'lead_batches', 'leads', 'lead_weekly_assignments', 'lead_daily_progress', 'lead_unlock_requests',
         'tim_referrals', 'contestations', 'partner_fiscal',
         'marketplace_services', 'marketplace_orders',
-        'finance_suppliers', 'finance_expenses',
+        'finance_suppliers', 'finance_expenses', 'finance_workbook',
         'finance_adiantamento', 'finance_reembolso', 'finance_proposta_ops',
         'rh_companies', 'rh_resumes', 'rh_jobs', 'rh_employees',
         'rh_absence_justifications', 'rh_punishments', 'rh_dismissals',
@@ -83,6 +83,8 @@ final class PostgRestCompat
     ];
 
     private const JSON_COLUMNS = [
+        'finance_workbook' => ['data'],
+        'finance_suppliers' => ['anexos'],
         'users' => ['attendance_data', 'login_days', 'payment_saved', 'vendor_tier_data', 'permissions', 'sonhos_data'],
         'finance_proposta_ops' => ['data'],
         'transactions' => ['meta'],

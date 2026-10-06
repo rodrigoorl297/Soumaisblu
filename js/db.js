@@ -3668,7 +3668,7 @@ if (!allowed) return null;
         'posVenda', 'pos_venda', 'nuvidio', 'fases',
         'comissaoElegivel', 'comissao_elegivel', 'comissaoRecebida', 'comissao_recebida',
         'valorComissaoRecebida', 'valor_comissao_recebida',
-        'attachments', 'history', 'email_contato',
+        'attachments', 'history', 'meta', 'email_contato',
         'creditoRetorno', 'credito_retorno', 'creditoEsteira', 'credito_esteira',
         'createdAt', 'created_at', 'updatedAt', 'updated_at',
         'lastUpdatedBy', 'last_updated_by',
@@ -3686,9 +3686,6 @@ if (!allowed) return null;
     _compactProposalPayloadForApi(payload) {
       if (!payload || typeof payload !== 'object') return payload;
       const p = { ...payload };
-      if (Array.isArray(p.history) && p.history.length > 100) {
-        p.history = p.history.slice(-100);
-      }
       const maxBytes = 4000000;
       if (p.attachments && typeof p.attachments === 'object' && !Array.isArray(p.attachments)) {
         const att = { ...p.attachments };
@@ -5553,10 +5550,14 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     /* ══ FORNECEDOR FINANCEIRO + CONTA CORRENTE ══ */
     _normFinanceSupplier(row) {
       if (!row || typeof row !== 'object') return row;
+      let anexos = row.anexos;
+      if (typeof anexos === "string") { try { anexos = JSON.parse(anexos); } catch { anexos = {}; } }
       return {
         ...row,
-        active: row.active !== false && row.active !== 0,
-        amount: undefined,
+        active: row.active !== false && row.active !== 0 && row.active !== "0",
+        anexos: anexos || {},
+        valor_pago: Number(row.valor_pago || 0),
+        recorrencia_mensal: row.recorrencia_mensal === true || row.recorrencia_mensal === 1 || row.recorrencia_mensal === "1",
       };
     },
 
@@ -5609,6 +5610,13 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         email: String(data.email || '').trim(),
         phone: String(data.phone || '').trim(),
         category: String(data.category || 'Geral').trim(),
+        protocolo: data.protocolo || '',
+        valor_pago: this._moneyAmt(data.valor_pago || 0),
+        data_pagamento: data.data_pagamento || null,
+        vigencia: data.vigencia || null,
+        recorrencia_mensal: !!data.recorrencia_mensal,
+        situacao: data.situacao || 'ativo',
+        anexos: data.anexos || {},
         notes: String(data.notes || '').trim(),
         active: data.active !== false,
         created_by: data.created_by || 'admin',
@@ -6385,6 +6393,24 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
   
     /* ══ GENERIC METHODS FOR NEW COLLECTIONS (CLIENTS, PROPOSALS) ══ */
+    async createFinanceWorkbook(data) {
+      if (await this.get('finance_workbook', data.id)) throw new Error('Registro já existente.');
+      if (this.online) {
+        const rows = await supaReq('POST', 'finance_workbook', data);
+        return rows[0] || data;
+      }
+      return this.save('finance_workbook', data);
+    },
+    async listFinanceWorkbook() {
+      if (!this.online) return this._lget('soublu_finance_workbook') || [];
+      const all=[];
+      for(let offset=0; ;offset+=500) {
+        const page=await supaReq('GET','finance_workbook',null,`?select=*&order=id.asc&limit=500&offset=${offset}`);
+        all.push(...page);
+        if(page.length<500) return all;
+        if(offset>=49500) throw new Error('Muitos registros: refine a consulta financeira.');
+      }
+    },
     async list(collection) {
       if (this.online) {
         if (collection === 'proposals') {
@@ -8225,5 +8251,3 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
   if (typeof window !== 'undefined') {
     window.DB = DB;
   }
-
-  

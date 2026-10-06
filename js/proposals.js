@@ -16,6 +16,11 @@ window.Proposals = {
     { v: 'COMPRA DE DÍVIDA', l: 'COMPRA DE DÍVIDA' },
     { v: 'CARTÃO', l: 'CARTÃO' },
     { v: 'CNC', l: 'CNC' },
+    { v: 'SAQUE COMPL', l: 'SAQUE COMPLEMENTAR' },
+    { v: 'REFIN', l: 'REFINANCIAMENTO' },
+    { v: 'TIM', l: 'TIM' },
+    { v: 'OSJ', l: 'OSJ' },
+    { v: 'C6 PJ', l: 'C6 PJ' },
   ],
 
   _CONVENIOS: ['ESTADUAL', 'FEDERAL', 'MUNICIPAL', 'INSS', 'CLT'],
@@ -83,6 +88,34 @@ window.Proposals = {
   _CONVENIO_ENTIDADES: {
     FEDERAL: ['SIAPE'],
     ESTADUAL: [
+      'GOV AC',
+      'GOV AL',
+      'GOV AP',
+      'GOV AM',
+      'GOV BA',
+      'GOV CE',
+      'GOV DF',
+      'GOV ES',
+      'GOV GO',
+      'GOV MA',
+      'GOV MT',
+      'GOV MS',
+      'GOV MG',
+      'GOV PA',
+      'GOV PB',
+      'GOV PR',
+      'GOV PE',
+      'GOV PI',
+      'GOV RJ',
+      'GOV RN',
+      'GOV RS',
+      'GOV RO',
+      'GOV RR',
+      'GOV SC',
+      'GOV SP',
+      'GOV SE',
+      'GOV TO',
+
       'GOVERNO DE ALAGOAS - AL',
       'TRIBUNAL DE JUSTIÇA DE ALAGOAS - AL',
       'PREFEITURA DE ALAGOINHAS - BA',
@@ -156,6 +189,34 @@ window.Proposals = {
       'PREFEITURA DE TAUBATÉ - SP',
     ],
     MUNICIPAL: [
+      'Rio Branco - AC',
+      'Maceió - AL',
+      'Macapá - AP',
+      'Manaus - AM',
+      'Salvador - BA',
+      'Fortaleza - CE',
+      'GDF - DF',
+      'Vitória - ES',
+      'Goiânia - GO',
+      'São Luís - MA',
+      'Cuiabá - MT',
+      'Campo Grande - MS',
+      'Belo Horizonte - MG',
+      'Belém - PA',
+      'João Pessoa - PB',
+      'Curitiba - PR',
+      'Recife - PE',
+      'Teresina - PI',
+      'Rio de Janeiro - RJ',
+      'Natal - RN',
+      'Porto Alegre - RS',
+      'Porto Velho - RO',
+      'Boa Vista - RR',
+      'Florianópolis - SC',
+      'São Paulo - SP',
+      'Aracaju - SE',
+      'Palmas - TO',
+
       'PREF SP', 'PREF RJ', 'PREF BH', 'PREF SÃO LUIS', 'PREF CAMPO GRANDE',
     ],
     INSS: ['INSS', 'APOSENTADO', 'PENSIONISTA', 'BPC LOAS'],
@@ -2225,8 +2286,9 @@ window.Proposals = {
   },
 
   _loadProposalAttachments: async function(id, proposal, attEl, cacheObj) {
+    const active = () => attEl?.id !== 'managePropAttachments' || attEl.dataset.proposalId === String(id);
     const render = (p) => {
-      if (!attEl) return;
+      if (!attEl || !active()) return;
       if (!this._hasProposalAttachments(p?.attachments)) {
         attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Nenhum anexo.</p>';
         return;
@@ -2245,6 +2307,7 @@ window.Proposals = {
 
       try {
         const attRow = await DB.getProposalAttachments(id);
+        if (!active()) return;
         if (attRow?.attachments != null) {
           proposal.attachments = this._parseAttachments(attRow.attachments);
           if (cacheObj) cacheObj.attachments = proposal.attachments;
@@ -2253,7 +2316,7 @@ window.Proposals = {
         this._syncAnexoUploadFormFromAttachments(proposal.attachments);
       } catch (err) {
         console.warn('[Proposals] anexos:', err);
-        if (!this._hasProposalAttachments(proposal?.attachments) && attEl) {
+        if (active() && !this._hasProposalAttachments(proposal?.attachments) && attEl) {
           attEl.innerHTML = '<p style="color:var(--color-danger);font-size:13px;">Erro ao carregar anexos.</p>';
         }
       }
@@ -3004,10 +3067,15 @@ window.Proposals = {
   },
 
   _canPickVendor: function(role) {
+    if (window.ProposalWorkflow) return ProposalWorkflow.permissions(Auth.getSession()).assign;
     return this._isSupervisorOrAbove(role);
   },
 
   _canEditNumeroValor: function(role) {
+    if (window.ProposalWorkflow) {
+      const rights = ProposalWorkflow.permissions(Auth.getSession());
+      return rights.vendor || rights.operational || rights.financial;
+    }
     return this._isSupervisorOrAbove(role);
   },
 
@@ -3552,6 +3620,7 @@ window.Proposals = {
   },
 
   openModal: function() {
+    if (window.PARTNER_ROOT_ID && window.ProposalWorkflow) return ProposalWorkflow.create();
     try {
       const container = document.getElementById('propFormContainer');
       if (!container) {
@@ -4491,6 +4560,7 @@ window.Proposals = {
   },
 
   openEmployeeModal: async function(id, viewOnly) {
+    if (window.PARTNER_ROOT_ID && window.ProposalWorkflow) return ProposalWorkflow.openPartnerEmployee(id, viewOnly);
     viewOnly = !!viewOnly;
     const user = Auth.getSession();
     if (!user?.id) return;
@@ -4766,14 +4836,17 @@ window.Proposals = {
   },
 
     openAdminModal: async function(id, viewOnly) {
+    const openToken = this._adminOpenToken = (this._adminOpenToken || 0) + 1;
     viewOnly = !!viewOnly;
     const modal = document.getElementById('manageProposalModal');
     const attEl = document.getElementById('managePropAttachments');
+    if (attEl) attEl.dataset.proposalId = String(id);
     if (attEl) attEl.innerHTML = '<p style="color:var(--color-text-muted);font-size:13px;">Carregando anexos...</p>';
     if (typeof showLoading === 'function') showLoading('Carregando proposta...');
 
     try {
-    const raw = await DB.getProposal(id);
+    const raw = this._workflowDraft?.id === id ? this._workflowDraft : await DB.getProposal(id);
+    if (openToken !== this._adminOpenToken) return;
     const proposal = this._normProposal(raw);
     if (!proposal) return;
 
@@ -4785,6 +4858,7 @@ window.Proposals = {
 
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
+      if (openToken !== this._adminOpenToken) return;
       const canManage = this._canPartnerManageProposals();
       if (!belongs) viewOnly = true;
       else if (!canManage) viewOnly = true;
@@ -4818,6 +4892,7 @@ window.Proposals = {
           const current = await DB.getUser(vid).catch(() => null);
           if (current) vendors = [current, ...vendors];
         }
+        if (openToken !== this._adminOpenToken) return;
 
         vendors.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         vendorSel.innerHTML = vendors.length
@@ -4837,6 +4912,7 @@ window.Proposals = {
     }
 
     const client = proposal.clientCpf ? await this._lookupClientByCpf(String(proposal.clientCpf).replace(/\D/g, '')) : null;
+    if (openToken !== this._adminOpenToken) return;
     const detailEl = document.getElementById('managePropClientDetail');
     if (detailEl) {
       detailEl.style.display = '';
@@ -4919,11 +4995,14 @@ window.Proposals = {
       this.resetAnexoFolders(proposal.attachments);
     }
     this._applyManageModalMode(viewOnly);
+    if (window.ProposalWorkflow) await ProposalWorkflow.open(proposal, viewOnly);
+    if (openToken !== this._adminOpenToken) return;
     modal?.classList.add('open');
     if (typeof hideLoading === 'function') hideLoading();
 
     await this._loadProposalAttachments(id, proposal, attEl, this._adminEditCache[id]);
     } catch (e) {
+      if (openToken !== this._adminOpenToken) return;
       console.error(e);
       alert('Erro ao carregar proposta: ' + (e.message || 'tente novamente'));
       modal?.classList.remove('open');
@@ -4935,7 +5014,7 @@ window.Proposals = {
     const user = Auth.getSession();
     const gv = id => document.getElementById(id)?.value || '';
     const id = gv('managePropId');
-    let proposal = this._adminEditCache[id] ? { ...this._adminEditCache[id] } : await DB.getProposal(id);
+    let proposal = this._workflowDraft?.id === id ? { ...this._workflowDraft } : await DB.getProposal(id);
     if (!proposal) {
       const msg = 'Proposta não encontrada. Feche o modal e abra novamente.';
       if (typeof showToast === 'function') showToast(msg, 'error');
@@ -4943,6 +5022,11 @@ window.Proposals = {
       return;
     }
     proposal = this._normProposal(proposal) || proposal;
+    const beforeSave = JSON.parse(JSON.stringify(proposal));
+    if (window.ProposalWorkflow && !await ProposalWorkflow.canEdit(proposal, user)) {
+      showToast('Sem permissão para alterar esta proposta.', 'warning');
+      return;
+    }
     if (!this._assertProposalNotPaidForSave(proposal)) return;
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
@@ -5013,7 +5097,7 @@ window.Proposals = {
     // ── Tabela / Valor Final (definido pelo Financeiro) ──────────────
     const tabelaEl = document.getElementById('managePropTabela');
     let novaTabela = '';
-    if (tabelaEl) {
+    if (tabelaEl && (!window.ProposalWorkflow || ProposalWorkflow.permissions(user).financial)) {
       novaTabela = tabelaEl.value;
       if (novaTabela) {
         const pct = this._tabelaPct[novaTabela] ?? 1;
@@ -5037,7 +5121,7 @@ window.Proposals = {
     proposal.protocoloBacen  = gv('managePropProtBacen');
     proposal.dataSolicitacaoBacen = gv('managePropDataBacen');
     proposal.assinou         = gv('managePropAssinou');
-    const newStatusOp = gv('managePropStatusOp');
+    let newStatusOp = gv('managePropStatusOp');
     const oldStatus = proposal.status;
     const oldStatusOp = String(proposal.statusOp || proposal.status_op || '').trim();
     let newStatus = gv('managePropStatus') || proposal.status;
@@ -5059,6 +5143,13 @@ window.Proposals = {
     proposal.posVenda        = gv('managePropPosVenda');
     proposal.nuvidio         = gv('managePropNuvidio');
     proposal.fases           = gv('managePropFases');
+
+    if (window.ProposalWorkflow) {
+      await ProposalWorkflow.validateVendor(proposal, beforeSave, user);
+      ProposalWorkflow.collect(proposal, beforeSave, user);
+      newStatus = proposal.status;
+      newStatusOp = proposal.statusOp || proposal.status;
+    }
 
     const note = gv('managePropHistoryNote');
 
@@ -5099,6 +5190,7 @@ window.Proposals = {
     }
 
     if (pendingAtt) {
+        if (window.ProposalWorkflow && !ProposalWorkflow.permissions(user).vendor && !ProposalWorkflow.permissions(user).operational) throw new Error('Sem permissão para alterar anexos.');
         try {
           proposal.attachments = await this._resolveAttachmentsForSaveQuick(id, proposal, 'managePropAnexosFolders');
         } catch (e) {
@@ -5125,7 +5217,9 @@ window.Proposals = {
         }
       }
       try {
-        await this._saveProposalClientData(proposal, 'manage');
+        if (!window.ProposalWorkflow || ProposalWorkflow.permissions(user).vendor) {
+          if (!['TIM', 'C6 PJ'].includes(proposal.product)) await this._saveProposalClientData(proposal, 'manage');
+        }
       } catch (clientErr) {
         console.error('[adminSave] cliente', clientErr);
         const cm = String(clientErr?.message || clientErr || '');
@@ -5135,10 +5229,12 @@ window.Proposals = {
       }
       const tClient = Date.now();
       const toSave = { ...proposal };
+      if (this._workflowDraft?.id === id && window.ProposalWorkflow) ProposalWorkflow.validateAttachments(toSave);
+      if (window.ProposalWorkflow) ProposalWorkflow.audit(toSave, beforeSave, user);
       /* Só omite attachments no PATCH se não houve upload novo — senão o boleto some. */
-      if (!pendingAtt) delete toSave.attachments;
+      if (!pendingAtt && this._workflowDraft?.id !== id) delete toSave.attachments;
       const saved = await this._withTimeout(
-        DB.saveProposal(toSave, { skipHydrate: true }),
+        this._workflowDraft?.id === id ? DB.addProposal(toSave) : DB.saveProposal(toSave, { skipHydrate: true }),
         45000,
         'Salvar proposta',
       );
@@ -5151,6 +5247,7 @@ window.Proposals = {
       }, 'C');
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) SalesRanking.invalidateCache();
       delete this._adminEditCache[id];
+      if (this._workflowDraft?.id === id) this._workflowDraft = null;
       this._mergeAdminListCacheRow(proposal);
       if (typeof showToast === 'function') showToast('Proposta atualizada!', 'success');
       else alert('Proposta atualizada!');
@@ -5159,7 +5256,8 @@ window.Proposals = {
       const patched = this._patchAdminTableRow(proposal);
       this._propPerfLog('proposals.js:adminSave', 'ui refresh', { patched, id: proposal.id }, 'D');
       if (!patched) {
-        void this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
+        if (document.getElementById('manageProposalsTbody')) void this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
+        else void this.renderEmployeeList();
       }
     } catch (e) {
       console.error('[adminSave]', e);

@@ -7,12 +7,14 @@ error_reporting(E_ALL);
 
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/FinanceMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/FinanceWorkbookMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/BeneficiosMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/TrainingTracksMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/InternalChatMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/RhMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/LeadsMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/PostgRestCompat.php';
+require_once dirname(__DIR__) . '/lib/ProposalMysqlSchema.php';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'OPTIONS') {
     soublu_json(['ok' => true], 204);
@@ -42,6 +44,10 @@ try {
     $t0 = microtime(true);
     $run = static function () use ($table, $method, $body, $query) {
         $pdo = soublu_pdo();
+        if ($table === "finance_workbook" || $table === "finance_suppliers") soublu_ensure_finance_workbook($pdo);
+        if ($table === 'proposals' && in_array($method, ['POST', 'PATCH'], true)) {
+            soublu_ensure_proposals_json_columns($pdo);
+        }
         // Ensure só no caminho das tabelas do módulo — evita INFORMATION_SCHEMA em todo GET.
         if (str_starts_with($table, 'finance_') && !soublu_finance_modulos_tables_exist($pdo)) {
             soublu_ensure_finance_modulos_tables($pdo);

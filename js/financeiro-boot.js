@@ -1,6 +1,7 @@
 /* SOU+BLU — Boot do módulo Financeiro */
 (function () {
   const SECTION_LABELS = {
+    secFinanceWorkbook: 'Cadastros e parâmetros financeiros',
     secContaCorrenteGestao: 'Gestão de conta',
     secWithdrawals: 'Saque PIX',
     secBalance: 'Gerenciador de pontos',
@@ -149,6 +150,7 @@
   }
 
   function initModules() {
+    window.FinanceWorkbook?.init();
     if (window.MarketplaceBlu?.init) MarketplaceBlu.init();
     if (window.FornecedorFinanceiro?.init) FornecedorFinanceiro.init();
     if (window.PrestadorServicos?.init) PrestadorServicos.init();
@@ -391,6 +393,7 @@
     }
 
     const renders = {
+      secFinanceWorkbook: () => window.FinanceWorkbook?.load?.(),
       secWithdrawals: () => (typeof renderWithdrawalsTable === 'function' ? renderWithdrawalsTable() : Promise.resolve()),
       secBalance: async () => {
         if (typeof populateBalanceSelect === 'function') await populateBalanceSelect();
