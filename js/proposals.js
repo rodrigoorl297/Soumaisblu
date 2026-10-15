@@ -2,9 +2,27 @@ window.Proposals = {
   /** Limite por anexo de proposta (alinhado com api/upload.php). */
   PROPOSAL_MAX_FILE_MB: 50,
 
+  /** Debounce da busca automática ao digitar CPF no modal Nova Proposta. */
+  _cpfPopupTimer: null,
+
   init: function() {
     this._applyMobileListLimits();
     this._initAnexoFolderDelegation();
+    this._bindManageStatusSync();
+    this._ensureAdminProposalActionsDelegation();
+    void this._bootstrapProposalUi();
+  },
+
+  /** Estado do catálogo configurável (convênios, produtos, situações). */
+  _catalogOverrides: null,
+  _catalogLoadPromise: null,
+
+  /**
+   * _bootstrapProposalUi — carrega catálogo remoto e monta selects + botão de config.
+   */
+  _bootstrapProposalUi: async function() {
+    await this._loadProposalCatalog();
+    this._ensureProposalManageToolbar();
     this._initStaticProposalSelects();
     if (document.getElementById('propAnexosFolders')) {
       this.initAnexoFolders();
@@ -235,6 +253,623 @@ window.Proposals = {
     { v: 'Cancelado', l: 'Cancelado' },
   ],
 
+  /** Papéis que podem abrir Configurar cadastro de proposta. */
+  _canManageProposalCatalog: function() {
+    const r = this._normProposalManageRole(
+      typeof Auth !== 'undefined' && Auth.getSession?.()?.role
+    );
+    return [
+      'master', 'fundador', 'desenvolvedor', 'gerente', 'gerencia', 'diretoria',
+      'sup_backoffice', 'backoffice', 'operacional', 'financeiro', 'financial',
+    ].includes(r);
+  },
+
+  _proposalCatalogApiUrl: function(action) {
+    const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
+    const apiBase = String(cfg.API_BASE_URL || cfg.SITE_URL || '').replace(/\/+$/, '')
+      || (typeof location !== 'undefined' ? location.origin : '');
+    return `${apiBase}/api/proposal-catalog.php?action=${encodeURIComponent(action || 'get')}`;
+  },
+
+  /**
+   * _loadProposalCatalog — busca overrides do servidor e aplica nos selects da esteira.
+   * Se a API falhar, mantém defaults em _PRODUTOS / _CONVENIOS (código abaixo).
+   */
+  _loadProposalCatalog: async function() {
+    if (this._catalogLoadPromise) return this._catalogLoadPromise;
+    this._catalogLoadPromise = (async () => {
+      try {
+        const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
+        const apiKey = String(cfg.API_KEY || '').trim();
+        if (!apiKey) return;
+        const res = await fetch(this._proposalCatalogApiUrl('get'), {
+          headers: { 'X-API-Key': apiKey },
+          cache: 'no-store',
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data?.ok && data.overrides) {
+          this._applyCatalogOverrides(data.overrides);
+        }
+} catch (e) {
+        console.warn('[Proposals] catálogo remoto:', e?.message || e);
+      }
+    })();
+    return this._catalogLoadPromise;
+  },
+
+  /** Aplica overrides salvos (mescla entidades; substitui listas simples). */
+  _applyCatalogOverrides: function(overrides) {
+    if (!overrides || typeof overrides !== 'object') return;
+    this._catalogOverrides = overrides;
+    if (Array.isArray(overrides.produtos) && overrides.produtos.length) {
+      this._PRODUTOS = overrides.produtos.map((p) => {
+        const v = String(p.v || p).trim();
+        return { v, l: String(p.l || v) };
+      });
+    }
+    if (Array.isArray(overrides.convenios) && overrides.convenios.length) {
+      this._CONVENIOS = overrides.convenios.map((c) => String(c).trim().toUpperCase()).filter(Boolean);
+    }
+    if (overrides.convenioEntidades && typeof overrides.convenioEntidades === 'object') {
+      Object.assign(this._CONVENIO_ENTIDADES, overrides.convenioEntidades);
+    }
+    if (Array.isArray(overrides.vendorSituacoes) && overrides.vendorSituacoes.length) {
+      this._VENDOR_SITUACOES = overrides.vendorSituacoes.map((o) => ({
+        v: String(o.v || o.value || '').trim(),
+        l: String(o.l || o.label || o.v || '').trim(),
+      })).filter((o) => o.v);
+    }
+    if (Array.isArray(overrides.bancosComprados) && overrides.bancosComprados.length) {
+      this._BANCOS_COMPRADOS = overrides.bancosComprados.slice();
+    }
+    if (Array.isArray(overrides.bancosDigitados) && overrides.bancosDigitados.length) {
+      this._BANCOS_DIGITADOS = overrides.bancosDigitados.slice();
+    }
+    if (Array.isArray(overrides.tiposOperacao) && overrides.tiposOperacao.length) {
+      this._TIPOS_OPERACAO = overrides.tiposOperacao.slice();
+    }
+    ['propEtapaVendedor', 'empPropEtapa', 'managePropStatusOp', 'proposalStatusFilterHeader'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) delete el.dataset.situLoaded;
+    });
+    ['propProduct', 'empPropProduct', 'propBancoComprado', 'propBancoDigitado', 'propTipoOperacao'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) delete el.dataset.catalogBound;
+    });
+  },
+
+  _catalogEntidadesToText: function() {
+    const map = this._getConvenioEntidadesMap();
+    const lines = [];
+    Object.keys(map).sort().forEach((k) => {
+      lines.push(`[${k}]`);
+      (map[k] || []).forEach((e) => lines.push(e));
+      lines.push('');
+    });
+    return lines.join('\n').trim();
+  },
+
+  _parseCatalogEntidadesText: function(text) {
+    const map = {};
+    let current = null;
+    String(text || '').split(/\r?\n/).forEach((line) => {
+      const t = line.trim();
+      if (!t) return;
+      const m = t.match(/^\[(.+)\]$/);
+      if (m) {
+        current = m[1].trim().toUpperCase();
+        if (!map[current]) map[current] = [];
+        return;
+      }
+      if (current) map[current].push(t);
+    });
+    return map;
+  },
+
+  _catalogFormsToOverrides: function() {
+    const gv = (id) => document.getElementById(id)?.value || '';
+    const lines = (s) => String(s || '').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+    const produtos = lines(gv('propCatProdutos'));
+    const convenios = lines(gv('propCatConvenios')).map((c) => c.toUpperCase());
+    const situRaw = lines(gv('propCatSituacoes'));
+    const vendorSituacoes = situRaw.map((row) => {
+      const p = row.split('|');
+      const v = (p[0] || '').trim();
+      const l = (p[1] || v).trim();
+      return v ? { v, l } : null;
+    }).filter(Boolean);
+    return {
+      produtos,
+      convenios,
+      convenioEntidades: this._parseCatalogEntidadesText(gv('propCatEntidades')),
+      vendorSituacoes,
+      bancosComprados: lines(gv('propCatBancosComprados')),
+      bancosDigitados: lines(gv('propCatBancosDigitados')),
+      tiposOperacao: lines(gv('propCatTiposOperacao')),
+    };
+  },
+
+  openCatalogConfigModal: async function() {
+    if (!this._canManageProposalCatalog()) {
+      showToast('Sem permissão para configurar o cadastro.', 'error');
+      return;
+    }
+    await this._loadProposalCatalog();
+    this._ensureProposalManageToolbar();
+    const modal = document.getElementById('propCatalogConfigModal');
+    if (!modal) return;
+    const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+    set('propCatProdutos', (this._PRODUTOS || []).map((o) => o.v || o).join('\n'));
+    set('propCatConvenios', (this._CONVENIOS || []).join('\n'));
+    set('propCatEntidades', this._catalogEntidadesToText());
+    set('propCatSituacoes', (this._VENDOR_SITUACOES || []).map((o) => `${o.v}|${o.l}`).join('\n'));
+    set('propCatBancosComprados', (this._BANCOS_COMPRADOS || []).join('\n'));
+    set('propCatBancosDigitados', (this._BANCOS_DIGITADOS || []).join('\n'));
+    set('propCatTiposOperacao', (this._TIPOS_OPERACAO || []).join('\n'));
+    const firstTab = document.querySelector('#propCatalogConfigModal .prop-catalog-tab');
+    this.switchCatalogConfigTab('propCatPanelProdutos', firstTab);
+    if (typeof openModal === 'function') openModal('propCatalogConfigModal');
+    else { modal.classList.add('open'); modal.style.display = 'flex'; }
+},
+
+  saveCatalogConfig: async function() {
+    if (!this._canManageProposalCatalog()) {
+      showToast('Sem permissão.', 'error');
+      return;
+    }
+    const overrides = this._catalogFormsToOverrides();
+    if (!overrides.produtos.length || !overrides.convenios.length) {
+      showToast('Informe ao menos 1 produto e 1 convênio.', 'warning');
+      return;
+    }
+    const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
+    const apiKey = String(cfg.API_KEY || '').trim();
+    const role = typeof Auth !== 'undefined' ? Auth.getSession()?.role : '';
+    try {
+      const res = await fetch(this._proposalCatalogApiUrl('save'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
+        body: JSON.stringify({ role, overrides }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!data.ok) throw new Error(data.error || 'Falha ao salvar');
+      this._applyCatalogOverrides(data.overrides || overrides);
+      this._initStaticProposalSelects();
+      if (typeof closeModal === 'function') closeModal('propCatalogConfigModal');
+      showToast('Cadastro de proposta atualizado.', 'success');
+      void this.renderAdminList({ soft: true, forceRefresh: true });
+} catch (e) {
+      showToast(String(e?.message || e || 'Erro ao salvar configuração'), 'error');
+    }
+  },
+
+  /**
+   * _removeKanbanUi — remove visualização kanban/esteira (só lista na gestão de propostas).
+   */
+  _removeKanbanUi: function() {
+    document.querySelector('.esteira-view-toggle')?.remove();
+    document.getElementById('esteiraViewList')?.closest('.esteira-view-toggle')?.remove();
+    document.getElementById('masterKanbanArea')?.remove();
+    const card = document.querySelector('#secManageProposals .proposals-list-card');
+    if (card) card.style.display = '';
+    try { localStorage.removeItem('soublu_esteira_view'); } catch (_) { /* noop */ }
+  },
+
+  /**
+   * _ensureProposalManageToolbar — busca/config/botões; no desktop sobe para o topbar ao lado de Minha Conta.
+   */
+  _ensureProposalManageToolbar: function() {
+    this._removeKanbanUi();
+    const sec = document.getElementById('secManageProposals');
+    if (!sec) return;
+
+    let headerActions = document.getElementById('propManageTopbarTools')
+      || sec.querySelector('.prop-manage-header-actions')
+      || sec.querySelector('.page-header > div[style*="display:flex"]');
+    if (!headerActions) return;
+    headerActions.id = 'propManageTopbarTools';
+    headerActions.classList.add('prop-manage-header-actions');
+
+    // Remove controles soltos na barra (ficam só dentro do modal Configuração).
+    document.getElementById('btnPropCatalogConfig')?.remove();
+    document.getElementById('btnLimparPropostasDuplicadas')?.remove();
+    headerActions.querySelector('button[onclick*="exportAdminCsv"]')?.remove();
+
+    const searchBar = headerActions.querySelector('.search-bar');
+    if (searchBar) {
+      searchBar.classList.add('prop-search-bar--wide');
+      searchBar.style.width = '';
+    }
+
+    this._ensureManageConfigModal(headerActions);
+    this._ensureLivecredDateFilter();
+
+    if (!document.getElementById('btnPropManageConfig')) {
+      const cfgBtn = document.createElement('button');
+      cfgBtn.type = 'button';
+      cfgBtn.id = 'btnPropManageConfig';
+      cfgBtn.className = 'btn btn-outline btn-sm';
+      cfgBtn.title = 'Filtro de data, exportar CSV, limpar clones e cadastro';
+      cfgBtn.textContent = '⚙ Configuração';
+      cfgBtn.onclick = () => this.openManageConfigModal();
+      const clienteBtn = headerActions.querySelector('button[onclick*="openClientModalAdmin"]');
+      if (clienteBtn) headerActions.insertBefore(cfgBtn, clienteBtn);
+      else headerActions.appendChild(cfgBtn);
+    }
+
+    const oldCat = document.getElementById('propCatalogConfigModal');
+    if (oldCat && !oldCat.querySelector('.prop-catalog-modal')) oldCat.remove();
+    const oldManage = document.getElementById('propManageConfigModal');
+    // Recria modal antigo (com datas embutidas) — filtro agora é barra Livecred na lista.
+    if (oldManage && oldManage.dataset.ui !== 'livecred-dates') {
+      oldManage.remove();
+    }
+
+    if (!document.getElementById('propCatalogConfigModal')) {
+      this._ensureCatalogConfigModalBody();
+    }
+    this._ensureProposalTableScrollContainer();
+    this._bindProposalResponsiveLayout();
+    this._syncProposalToolsPlacement();
+    this._syncProposalResponsiveLayout();
+  },
+
+  /**
+   * _syncProposalTopbarToolsVisibility — mostra a barra no topbar só na Gestão de Propostas.
+   */
+  _syncProposalTopbarToolsVisibility: function() {
+    const tools = document.getElementById('propManageTopbarTools');
+    if (!tools) return;
+    const sec = document.getElementById('secManageProposals');
+    const active = !!(sec && sec.classList.contains('active'));
+    tools.hidden = !active;
+    tools.style.display = active ? '' : 'none';
+    document.body.classList.toggle('prop-manage-tools-active', active);
+  },
+
+  /**
+   * _syncProposalToolsPlacement — desktop: topbar ao lado de Minha Conta; mobile: volta ao page-header.
+   */
+  _syncProposalToolsPlacement: function() {
+    const tools = document.getElementById('propManageTopbarTools')
+      || document.querySelector('.prop-manage-header-actions');
+    const sec = document.getElementById('secManageProposals');
+    if (!tools || !sec) return;
+    const pageHeader = sec.querySelector('.page-header');
+    const mobile = this._isProposalMobileLayout();
+    let topbarActions = document.querySelector('.topbar .topbar-actions, header.topbar .topbar-actions');
+    if (!topbarActions) {
+      const topbar = document.querySelector('.topbar, header.topbar');
+      if (topbar && !mobile) {
+        topbarActions = document.createElement('div');
+        topbarActions.className = 'topbar-actions';
+        topbar.appendChild(topbarActions);
+      }
+    }
+    if (!mobile && topbarActions) {
+      const anchor = topbarActions.querySelector('.minha-conta-topbar')
+        || topbarActions.querySelector('button[onclick*="openMinhaConta"]')
+        || topbarActions.querySelector('button[onclick*="Auth.logout"]');
+      if (tools.parentElement !== topbarActions) {
+        if (anchor) topbarActions.insertBefore(tools, anchor);
+        else topbarActions.prepend(tools);
+      }
+      pageHeader?.classList.add('prop-page-header--tools-in-topbar');
+    } else if (pageHeader) {
+      if (tools.parentElement !== pageHeader) pageHeader.appendChild(tools);
+      pageHeader.classList.remove('prop-page-header--tools-in-topbar');
+    }
+    this._syncProposalTopbarToolsVisibility();
+},
+
+  /**
+   * _ensureLivecredDateFilter — faixa de filtro no padrão Livecred (acima da tabela).
+   * Radios Cadastro/Digitação/Pagamento + Data Inicial/Final + Consultar/Limpar.
+   * Consultar aplica o filtro (não aplica ao digitar a data, como no Livecred).
+   */
+  _ensureLivecredDateFilter: function() {
+    const sec = document.getElementById('secManageProposals');
+    if (!sec) return;
+
+    // Tira datas do topbar/header — só na faixa acima da lista.
+    document.getElementById('propManageConfigDatesPanel')?.remove();
+    document.querySelectorAll('#propManageTopbarTools .proposal-date-filter, #secManageProposals .page-header .proposal-date-filter').forEach((el) => {
+      el.remove();
+    });
+
+    let wrap = document.getElementById('proposalLivecredDateFilter');
+    const card = sec.querySelector('.proposals-list-card');
+    const needRebuild = wrap && wrap.dataset.ui !== 'livecred-radios';
+    if (needRebuild) wrap.remove();
+    wrap = document.getElementById('proposalLivecredDateFilter');
+
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = 'proposalLivecredDateFilter';
+      wrap.className = 'proposal-date-filter proposal-date-filter--livecred';
+      wrap.dataset.ui = 'livecred-radios';
+      wrap.innerHTML = `
+        <div class="prop-date-filter__title">Consulta por período</div>
+        <div class="prop-date-filter__radios" role="radiogroup" aria-label="Tipo de data">
+          <label class="prop-date-filter__radio">
+            <input type="radio" name="proposalDateFieldRadio" value="criacao"/>
+            <span>Cadastro</span>
+          </label>
+          <label class="prop-date-filter__radio">
+            <input type="radio" name="proposalDateFieldRadio" value="digitacao"/>
+            <span>Digitação</span>
+          </label>
+          <label class="prop-date-filter__radio">
+            <input type="radio" name="proposalDateFieldRadio" value="pagamento"/>
+            <span>Pagamento</span>
+          </label>
+        </div>
+        <div class="prop-date-filter__row">
+          <div class="prop-date-filter__field">
+            <label for="proposalDateFrom">Data Inicial</label>
+            <input type="date" id="proposalDateFrom" class="form-control" title="Data inicial"/>
+          </div>
+          <div class="prop-date-filter__field">
+            <label for="proposalDateTo">Data Final</label>
+            <input type="date" id="proposalDateTo" class="form-control" title="Data final"/>
+          </div>
+          <input type="hidden" id="proposalDateField" value="criacao"/>
+          <div class="prop-date-filter__actions">
+            <button type="button" class="btn btn-primary btn-sm" id="proposalDateApplyBtn">Consultar</button>
+            <button type="button" class="btn btn-outline btn-sm" id="proposalDateClearBtn">Limpar</button>
+          </div>
+        </div>`;
+    }
+
+    // Posição: logo acima da tabela de propostas.
+    if (card && wrap.parentElement !== card.parentElement) {
+      card.parentElement.insertBefore(wrap, card);
+    } else if (!wrap.parentElement && sec) {
+      sec.appendChild(wrap);
+    }
+
+    // Remove IDs duplicados fora desta faixa.
+    document.querySelectorAll('#proposalDateFrom, #proposalDateTo, #proposalDateField').forEach((el) => {
+      if (wrap.contains(el)) return;
+      el.closest('.prop-date-filter__field, label')?.remove() || el.remove();
+    });
+
+    const fieldEl = document.getElementById('proposalDateField');
+    const fromEl = document.getElementById('proposalDateFrom');
+    const toEl = document.getElementById('proposalDateTo');
+    const applyBtn = document.getElementById('proposalDateApplyBtn');
+    const clearBtn = document.getElementById('proposalDateClearBtn');
+    const radios = wrap.querySelectorAll('input[name="proposalDateFieldRadio"]');
+
+    /**
+     * _syncDateFieldFromRadios — grava o radio ativo no hidden #proposalDateField.
+     * Mantém _getAdminDateFilter lendo um único id, como antes.
+     */
+    const syncFieldFromRadios = () => {
+      const checked = wrap.querySelector('input[name="proposalDateFieldRadio"]:checked');
+      const val = checked ? checked.value : (this._adminList.dateField || 'criacao');
+      if (fieldEl) fieldEl.value = val;
+      this._adminList.dateField = val;
+    };
+
+    radios.forEach((r) => {
+      if (r.dataset.bound) return;
+      r.dataset.bound = '1';
+      r.addEventListener('change', () => syncFieldFromRadios());
+    });
+
+    // Só Consultar/Limpar disparam a lista — padrão Livecred (não filtra ao mudar a data).
+    if (applyBtn && !applyBtn.dataset.bound) {
+      applyBtn.dataset.bound = '1';
+      applyBtn.addEventListener('click', () => {
+        syncFieldFromRadios();
+        this.onAdminDateFilter();
+      });
+    }
+    if (clearBtn && !clearBtn.dataset.bound) {
+      clearBtn.dataset.bound = '1';
+      clearBtn.addEventListener('click', () => this.clearAdminDateFilter());
+    }
+
+    const curField = this._adminList.dateField || 'criacao';
+    if (fieldEl) fieldEl.value = curField;
+    radios.forEach((r) => { r.checked = (r.value === curField); });
+    if (fromEl) fromEl.value = this._adminList.dateFrom || '';
+    if (toEl) toEl.value = this._adminList.dateTo || '';
+  },
+
+  /**
+   * _normalizeManageConfigDateSlot — legado (datas saíram do modal; no-op seguro).
+   */
+  _normalizeManageConfigDateSlot: function() { /* datas na faixa Livecred */ },
+
+  /**
+   * _ensureDateFilterHome — mantém a faixa Livecred acima da tabela.
+   */
+  _ensureDateFilterHome: function() {
+    this._ensureLivecredDateFilter();
+    return document.getElementById('proposalLivecredDateFilter');
+  },
+
+  /** Modal único de configuração da gestão de propostas (sem filtro de data — fica na lista). */
+  _ensureManageConfigModal: function(headerActions) {
+    this._ensureLivecredDateFilter();
+    void headerActions;
+
+    if (!document.getElementById('propManageConfigModal')) {
+      const modal = document.createElement('div');
+      modal.className = 'modal-overlay';
+      modal.id = 'propManageConfigModal';
+      modal.dataset.ui = 'livecred-dates';
+      modal.innerHTML = `
+        <div class="modal prop-manage-config-modal">
+          <div class="modal-header">
+            <div class="prop-manage-config-header-text">
+              <h3>Configuração</h3>
+              <p>Gestão de propostas</p>
+            </div>
+            <button type="button" class="modal-close" onclick="Proposals.closeManageConfigModal()" aria-label="Fechar"></button>
+          </div>
+          <div class="modal-body prop-manage-config-body">
+            <div class="prop-manage-config-panel">
+              <h4 class="prop-manage-config-panel__title">Ferramentas</h4>
+              <ul class="prop-manage-config-menu" role="menu">
+                <li role="none">
+                  <button type="button" role="menuitem" id="propCfgBtnCatalog" onclick="Proposals.openCatalogFromManageConfig()">
+                    Configurar cadastro
+                    <span>Produtos, convênios e status</span>
+                  </button>
+                </li>
+                <li role="none">
+                  <button type="button" role="menuitem" onclick="Proposals.exportAdminExcel(); Proposals.closeManageConfigModal();">
+                    Baixar Planilha
+                    <span>Excel com os filtros atuais (inclui data de pagamento)</span>
+                  </button>
+                </li>
+                <li role="none" class="prop-manage-config-menu__danger">
+                  <button type="button" role="menuitem" id="propCfgBtnClones" onclick="Proposals.cleanupDuplicateProposals()">
+                    Limpar clones
+                    <span>Mesmo CPF, produto e banco</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div class="modal-footer prop-manage-config-footer">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="Proposals.closeManageConfigModal()">Fechar</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+
+    const catBtn = document.getElementById('propCfgBtnCatalog');
+    if (catBtn) {
+      const showCat = this._canManageProposalCatalog();
+      catBtn.style.display = showCat ? '' : 'none';
+      catBtn.closest('li')?.style.setProperty('display', showCat ? '' : 'none');
+    }
+    const cloneBtn = document.getElementById('propCfgBtnClones');
+    if (cloneBtn) {
+      const showClone = this._canDeleteProposal();
+      cloneBtn.style.display = showClone ? '' : 'none';
+      cloneBtn.closest('li')?.style.setProperty('display', showClone ? '' : 'none');
+    }
+  },
+
+  _ensureCatalogConfigModalBody: function() {
+    const modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'propCatalogConfigModal';
+    modal.innerHTML = `
+      <div class="modal prop-catalog-modal" style="max-width:960px;">
+        <div class="prop-catalog-hero">
+          <div>
+            <p class="prop-catalog-hero__eyebrow">SOU+BLU · Propostas</p>
+            <h3>Configurar cadastro</h3>
+            <p class="prop-catalog-hero__sub">Listas usadas em Nova Proposta e na gestão operacional</p>
+          </div>
+          <button type="button" class="modal-close prop-catalog-hero__close" onclick="closeModal('propCatalogConfigModal')" aria-label="Fechar"></button>
+        </div>
+        <div class="prop-catalog-tabs" role="tablist">
+          <button type="button" class="prop-catalog-tab active" data-tab="propCatPanelProdutos" onclick="Proposals.switchCatalogConfigTab('propCatPanelProdutos', this)">📦 Produtos</button>
+          <button type="button" class="prop-catalog-tab" data-tab="propCatPanelConvenios" onclick="Proposals.switchCatalogConfigTab('propCatPanelConvenios', this)">🏛 Convênios</button>
+          <button type="button" class="prop-catalog-tab" data-tab="propCatPanelEntidades" onclick="Proposals.switchCatalogConfigTab('propCatPanelEntidades', this)">🏢 Entidades</button>
+          <button type="button" class="prop-catalog-tab" data-tab="propCatPanelSituacoes" onclick="Proposals.switchCatalogConfigTab('propCatPanelSituacoes', this)">📋 Status</button>
+          <button type="button" class="prop-catalog-tab" data-tab="propCatPanelBancos" onclick="Proposals.switchCatalogConfigTab('propCatPanelBancos', this)">🏦 Bancos</button>
+        </div>
+        <div class="modal-body prop-catalog-body">
+          <div id="propCatPanelProdutos" class="prop-catalog-panel active">
+            <div class="prop-catalog-hint">
+              <strong>Uma opção por linha.</strong> Ex.: NOVO, CARTÃO, COMPRA DE DÍVIDA
+            </div>
+            <label class="prop-catalog-label" for="propCatProdutos">Produtos disponíveis</label>
+            <textarea id="propCatProdutos" class="form-control prop-catalog-textarea" rows="10" spellcheck="false"></textarea>
+          </div>
+          <div id="propCatPanelConvenios" class="prop-catalog-panel">
+            <div class="prop-catalog-hint">
+              <strong>Convênios em MAIÚSCULAS</strong> — uma por linha (FEDERAL, INSS, CLT…)
+            </div>
+            <label class="prop-catalog-label" for="propCatConvenios">Convênios</label>
+            <textarea id="propCatConvenios" class="form-control prop-catalog-textarea" rows="10" spellcheck="false"></textarea>
+          </div>
+          <div id="propCatPanelEntidades" class="prop-catalog-panel">
+            <div class="prop-catalog-hint">
+              Use bloco <code>[CONVÊNIO]</code> e liste os órgãos abaixo. Ex.: <code>[INSS]</code> na linha, depois APOSENTADO, PENSIONISTA…
+            </div>
+            <label class="prop-catalog-label" for="propCatEntidades">Entidades por convênio</label>
+            <textarea id="propCatEntidades" class="form-control prop-catalog-textarea prop-catalog-textarea--tall" rows="14" spellcheck="false" placeholder="[INSS]&#10;APOSENTADO&#10;PENSIONISTA"></textarea>
+          </div>
+          <div id="propCatPanelSituacoes" class="prop-catalog-panel">
+            <div class="prop-catalog-hint">
+              Formato <code>VALOR|Rótulo</code> — ex.: <code>AG. BOLETO|Aguardando boleto</code>
+            </div>
+            <label class="prop-catalog-label" for="propCatSituacoes">Situações / status da esteira</label>
+            <textarea id="propCatSituacoes" class="form-control prop-catalog-textarea prop-catalog-textarea--tall" rows="12" spellcheck="false"></textarea>
+          </div>
+          <div id="propCatPanelBancos" class="prop-catalog-panel">
+            <div class="form-row prop-catalog-bancos-row">
+              <div class="form-group" style="flex:1;margin-bottom:0;">
+                <label class="prop-catalog-label" for="propCatBancosComprados">Bancos comprados</label>
+                <textarea id="propCatBancosComprados" class="form-control prop-catalog-textarea" rows="8" spellcheck="false"></textarea>
+              </div>
+              <div class="form-group" style="flex:1;margin-bottom:0;">
+                <label class="prop-catalog-label" for="propCatBancosDigitados">Bancos para digitação</label>
+                <textarea id="propCatBancosDigitados" class="form-control prop-catalog-textarea" rows="8" spellcheck="false"></textarea>
+              </div>
+            </div>
+            <label class="prop-catalog-label" for="propCatTiposOperacao" style="margin-top:16px;">Tipos de operação</label>
+            <textarea id="propCatTiposOperacao" class="form-control prop-catalog-textarea" rows="5" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer prop-catalog-footer">
+          <button type="button" class="btn btn-ghost" onclick="closeModal('propCatalogConfigModal')">Cancelar</button>
+          <button type="button" class="btn btn-primary" onclick="Proposals.saveCatalogConfig()">Salvar configuração</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+  },
+
+  /** Troca aba do modal de cadastro (propCatPanel*). */
+  switchCatalogConfigTab: function(panelId, btn) {
+    const root = document.getElementById('propCatalogConfigModal');
+    if (!root) return;
+    root.querySelectorAll('.prop-catalog-tab').forEach((t) => t.classList.remove('active'));
+    root.querySelectorAll('.prop-catalog-panel').forEach((p) => p.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const panel = document.getElementById(panelId);
+    if (panel) panel.classList.add('active');
+  },
+
+  openManageConfigModal: function() {
+    this._ensureProposalManageToolbar();
+    this._ensureDateFilterHome();
+    if (typeof openModal === 'function') openModal('propManageConfigModal');
+    else document.getElementById('propManageConfigModal')?.classList.add('open');
+  },
+
+  closeManageConfigModal: function() {
+    if (typeof closeModal === 'function') closeModal('propManageConfigModal');
+    else document.getElementById('propManageConfigModal')?.classList.remove('open');
+  },
+
+  applyManageConfigDateFilter: function() {
+    this.onAdminDateFilter();
+    this.closeManageConfigModal();
+  },
+
+  /** Limpa filtro De/Até e recarrega a lista. */
+  clearAdminDateFilter: function() {
+    this._syncAdminDateInputs('', '', this._adminList.dateField || 'criacao');
+    this._adminList.page = 1;
+    void this.renderAdminList({ forceRefresh: true });
+    if (typeof showToast === 'function') showToast('Filtro de data removido.', 'info');
+  },
+
+  openCatalogFromManageConfig: function() {
+    this.closeManageConfigModal();
+    void this.openCatalogConfigModal();
+  },
+
   _getConvenioEntidadesMap: function() {
     return this._CONVENIO_ENTIDADES;
   },
@@ -340,14 +975,45 @@ window.Proposals = {
   },
 
   _vendorSituacaoOptionsHtml: function(selected) {
-    const sel = String(selected || '');
+    const sel = String(selected || '').trim();
     let html = '<option value="">Selecione</option>';
+    let found = !sel;
     (this._VENDOR_SITUACOES || []).forEach(o => {
       const val = o.v || o;
       const lbl = o.l || o.v || o;
+      if (sel === val) found = true;
       html += `<option value="${this._escAttr(val)}"${sel === val ? ' selected' : ''}>${this._escHtml(lbl)}</option>`;
     });
+    // Status legado fora da lista — mantém valor visível sem precisar mudar duas vezes
+    if (sel && !found) {
+      html += `<option value="${this._escAttr(sel)}" selected>${this._escHtml(sel)}</option>`;
+    }
     return html;
+  },
+
+  /**
+   * _bindManageStatusSync — remove campo legado "Status Geral" se ainda existir no HTML em cache.
+   * Status único: #managePropStatusOp (status + statusOp gravam o mesmo valor no save).
+   */
+  _bindManageStatusSync: function() {
+    const legacy = document.getElementById('managePropStatus');
+    if (!legacy) return;
+    const grp = legacy.closest('.form-group');
+    let prev = grp?.previousElementSibling;
+    if (prev && prev.tagName === 'H4' && /status geral/i.test(prev.textContent || '')) {
+      prev.remove();
+    }
+    grp?.remove();
+},
+
+  /**
+   * _readManageStatusFromForm — lê o único select de status do modal de gestão.
+   */
+  _readManageStatusFromForm: function(gv, proposal, cached) {
+    const ui = String(gv('managePropStatusOp') || gv('managePropStatus') || '').trim();
+    if (ui) return ui;
+    const base = cached || proposal || {};
+    return String(base.statusOp || base.status_op || base.status || '').trim();
   },
 
   _fillBankSelect: function(selectId, catalog, currentValue) {
@@ -492,17 +1158,142 @@ window.Proposals = {
     }
   },
 
-  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '', dateFrom: '', dateTo: '' },
+  _adminList: { page: 1, pageSize: 25, total: 0, vendorId: '', statusFilter: '', dateFrom: '', dateTo: '', dateField: 'criacao', sortField: '', sortDir: 'asc' },
   _employeeList: { page: 1, pageSize: 20, total: 0 },
 
   _applyMobileListLimits: function() {
     try {
-      const mobile = (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
-        || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
-      if (!mobile) return;
+      if (!this._isProposalMobileLayout()) return;
       this._adminList.pageSize = Math.min(this._adminList.pageSize || 25, 20);
       this._employeeList.pageSize = Math.min(this._employeeList.pageSize || 20, 15);
     } catch (_) { /* noop */ }
+  },
+
+  /**
+   * _isProposalMobileLayout — celular/tablet estreito: cards em vez de tabela desktop.
+   */
+  _isProposalMobileLayout: function() {
+    try {
+      return (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
+        || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    } catch (_) {
+      return (window.innerWidth || 0) <= 900;
+    }
+  },
+
+  /**
+   * _bindProposalResponsiveLayout — reage ao redimensionar (mobile ↔ desktop).
+   */
+  _bindProposalResponsiveLayout: function() {
+    if (this._propResponsiveBound) return;
+    this._propResponsiveBound = true;
+    let timer;
+    window.addEventListener('resize', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const wasMobile = document.getElementById('secManageProposals')?.classList.contains('prop-manage--mobile');
+        this._syncProposalToolsPlacement();
+        this._syncProposalResponsiveLayout();
+        const isMobile = this._isProposalMobileLayout();
+        if (wasMobile !== isMobile && document.getElementById('secManageProposals')?.classList.contains('active')) {
+          void this.renderAdminList({ soft: true });
+        }
+      }, 220);
+    });
+  },
+
+  /**
+   * _ensureProposalMobileFilters — painel de filtros vertical (busca fica no header; datas aqui).
+   */
+  _ensureProposalMobileFilters: function() {
+    const sec = document.getElementById('secManageProposals');
+    if (!sec || document.getElementById('propMobileFilterPanel')) return;
+    const card = sec.querySelector('.proposals-list-card');
+    if (!card) return;
+    const panel = document.createElement('div');
+    panel.id = 'propMobileFilterPanel';
+    panel.className = 'prop-mobile-filters';
+    panel.innerHTML = `
+      <p class="prop-mobile-filters__label">Período</p>
+      <div id="propMobileDateSlot" class="prop-mobile-date-fields"></div>
+      <div class="prop-mobile-filter-actions">
+        <button type="button" class="btn btn-primary btn-block" onclick="Proposals.applyMobileDateFilter()">Filtrar</button>
+        <button type="button" class="btn btn-outline btn-block" onclick="Proposals.clearAdminDateFilter()">Limpar filtros</button>
+      </div>`;
+    card.parentElement.insertBefore(panel, card);
+  },
+
+  /**
+   * _syncProposalResponsiveLayout — alterna classes e reposiciona filtro de datas no mobile.
+   */
+  _syncProposalResponsiveLayout: function() {
+    const sec = document.getElementById('secManageProposals');
+    if (!sec) return;
+    const mobile = this._isProposalMobileLayout();
+    sec.classList.toggle('prop-manage--mobile', mobile);
+    // Faixa Livecred fica acima da tabela (desktop e mobile).
+    this._ensureDateFilterHome();
+    const searchWrap = sec.querySelector('.prop-manage-header-actions .search-bar')
+      || document.querySelector('#propManageTopbarTools .search-bar');
+    if (searchWrap && !searchWrap.querySelector('.prop-mobile-search-label') && mobile) {
+      const lbl = document.createElement('label');
+      lbl.className = 'prop-mobile-search-label';
+      lbl.setAttribute('for', 'proposalSearch');
+      lbl.textContent = 'Buscar proposta';
+      searchWrap.prepend(lbl);
+    }
+    const headerActions = document.getElementById('propManageTopbarTools')
+      || sec.querySelector('.prop-manage-header-actions');
+    if (headerActions) headerActions.classList.toggle('prop-manage-header-actions--stack', mobile);
+  },
+
+  /** Filtrar por data no painel mobile (sem abrir modal Configuração). */
+  applyMobileDateFilter: function() {
+    this.onAdminDateFilter();
+    if (typeof showToast === 'function') showToast('Filtro aplicado.', 'success');
+  },
+
+  /**
+   * _mobileProposalCardHtml — card compacto para celular (Ver detalhes abre modal completo).
+   */
+  _mobileProposalCardHtml: function(p, opts) {
+    const fmtR = (v) => (v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—');
+    const stage = this._vendorStage(p);
+    const statusLabel = this._proposalDisplayStatus(p);
+    const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
+    const safeId = this._escAttr(p.id);
+    const safeLabel = this._escAttr(p.numero || p.clientName || p.id);
+    const isPartnerRow = !!opts.isPartner;
+    const partnerBadge = isPartnerRow
+      ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
+      : '';
+    const role = this._normProposalManageRole(typeof Auth !== 'undefined' && Auth.getSession()?.role);
+    const adminOpensEdit = this._canEditNumeroValor(role);
+    const canDelete = this._canDeleteProposal();
+    const onDetails = adminOpensEdit
+      ? `Proposals.openAdminModal('${safeId}', false)`
+      : `Proposals.openAdminViewModal('${safeId}')`;
+    const valorExibir = p.valorFinal != null && p.valorFinal !== '' ? p.valorFinal : p.valor;
+    const delBtn = canDelete
+      ? `<button type="button" class="btn btn-ghost btn-sm client-actions__btn--danger" data-prop-action="delete" data-prop-id="${safeId}" data-prop-label="${safeLabel}">Excluir</button>`
+      : '';
+    return `
+      <article class="prop-mobile-card${isPartnerRow ? ' proposal-row--partner' : ''}" data-prop-id="${safeId}">
+        <div class="prop-mobile-card__head">
+          ${partnerBadge}<strong class="prop-mobile-card__num">${this._escHtml(p.numero || p.id)}</strong>
+        </div>
+        <dl class="prop-mobile-card__grid">
+          <div class="prop-mobile-card__row"><dt>Cliente</dt><dd>${this._escHtml(p.clientName || '—')}</dd></div>
+          <div class="prop-mobile-card__row"><dt>Vendedor</dt><dd>${this._escHtml(p.vendorName || '—')}</dd></div>
+          <div class="prop-mobile-card__row"><dt>Valor</dt><dd class="prop-mobile-card__valor">${fmtR(valorExibir)}</dd></div>
+          <div class="prop-mobile-card__row"><dt>Status</dt><dd><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></dd></div>
+          <div class="prop-mobile-card__row"><dt>Data</dt><dd>${this._escHtml(this._propDateStr(p))}</dd></div>
+        </dl>
+        <div class="prop-mobile-card__actions" style="display:flex;gap:8px;margin-top:10px;">
+          <button type="button" class="btn btn-primary btn-block prop-mobile-card__details" onclick="${onDetails}">Ver detalhes</button>
+          ${delBtn}
+        </div>
+      </article>`;
   },
   _employeeEditCache: {},
   _adminEditCache: {},
@@ -570,6 +1361,10 @@ window.Proposals = {
     const statusLabel = this._proposalDisplayStatus(p);
     const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
     setCol('status', `<span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>`);
+    const paidAt = (typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function')
+      ? DB.proposalPaidAt(p)
+      : null;
+    setCol('paidAt', paidAt ? this._escHtml(this._fmtDateTime(paidAt)) : '—');
     row.classList.add('proposal-row--saved-flash');
     setTimeout(() => row.classList.remove('proposal-row--saved-flash'), 1800);
     return true;
@@ -647,7 +1442,7 @@ window.Proposals = {
     return false;
   },
 
-  /** Tabelas financeiras (valor final = valor bruto × pct) — planilha Ago/2026. */
+  /** Tabelas financeiras (valor final = valor bruto × pct) — AMIGOZ/NEO/AKI Ago/2026 + FUTURO TABELAS 2 set/2026. */
   _TABELA_GROUPS: [
     {
       group: "AMIGOZ — GOV MG RCC",
@@ -827,6 +1622,107 @@ window.Proposals = {
         { value: "AKI_SIAPE_RMC_F16_35", label: "AKI SIAPE RMC F16 — 35%", pct: 0.35 },
       ],
     },
+    {
+      group: "FUTURO — GOV PR RCC 96X",
+      items: [
+        { value: "FUTURO_GOVPR_RCC_96X_CB_385_85", label: "FUTURO GOV PR RCC 96X TX 3,85 — 85%", pct: 0.85 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_380_85", label: "FUTURO GOV PR RCC 96X TX 3,80 — 85%", pct: 0.85 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_349_70", label: "FUTURO GOV PR RCC 96X TX 3,49 — 70%", pct: 0.7 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_325_60", label: "FUTURO GOV PR RCC 96X TX 3,25 — 60%", pct: 0.6 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_330_45", label: "FUTURO GOV PR RCC 96X TX 3,30 — 45%", pct: 0.45 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_285_34", label: "FUTURO GOV PR RCC 96X TX 2,85 — 34%", pct: 0.34 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_250_28", label: "FUTURO GOV PR RCC 96X TX 2,50 — 28%", pct: 0.28 },
+        { value: "FUTURO_GOVPR_RCC_96X_CB_240_10", label: "FUTURO GOV PR RCC 96X TX 2,40 — 10%", pct: 0.1 },
+      ],
+    },
+    {
+      group: "FUTURO — GOV RO RMC 96X",
+      items: [
+        { value: "FUTURO_GOVRO_RMC_96X_CB_35_100", label: "FUTURO GOV RO RMC 96X TX 3,5 — 100%", pct: 1.0 },
+        { value: "FUTURO_GOVRO_RMC_96X_CB_33_80", label: "FUTURO GOV RO RMC 96X TX 3,3 — 80%", pct: 0.8 },
+        { value: "FUTURO_GOVRO_RMC_96X_CLT_35_80", label: "FUTURO GOV RO CLT RMC 96X TX 3,5 — 80%", pct: 0.8 },
+        { value: "FUTURO_GOVRO_RMC_96X_CLT_35_65", label: "FUTURO GOV RO CLT RMC 96X TX 3,5 — 65%", pct: 0.65 },
+        { value: "FUTURO_GOVRO_RMC_96X_SENIOR_35_80", label: "FUTURO GOV RO SENIOR RMC 96X TX 3,5 — 80%", pct: 0.8 },
+        { value: "FUTURO_GOVRO_RMC_96X_SENIOR_35_65", label: "FUTURO GOV RO SENIOR RMC 96X TX 3,5 — 65%", pct: 0.65 },
+      ],
+    },
+    {
+      group: "FUTURO — GOV SP RMC 96X",
+      items: [
+        { value: "FUTURO_GOVSP_RMC_96X_CLT_35_115", label: "FUTURO GOV SP CLT RMC 96X TX 3,5 — 115%", pct: 1.15 },
+        { value: "FUTURO_GOVSP_RMC_96X_CLT_34_95", label: "FUTURO GOV SP CLT RMC 96X TX 3,4 — 95%", pct: 0.95 },
+        { value: "FUTURO_GOVSP_RMC_96X_CLT_32_90", label: "FUTURO GOV SP CLT RMC 96X TX 3,2 — 90%", pct: 0.9 },
+        { value: "FUTURO_GOVSP_RMC_96X_CLT_29_80", label: "FUTURO GOV SP CLT RMC 96X TX 2,9 — 80%", pct: 0.8 },
+        { value: "FUTURO_GOVSP_RMC_96X_CLT_27_70", label: "FUTURO GOV SP CLT RMC 96X TX 2,7 — 70%", pct: 0.7 },
+        { value: "FUTURO_GOVSP_RMC_96X_CLT_24_45", label: "FUTURO GOV SP CLT RMC 96X TX 2,4 — 45%", pct: 0.45 },
+      ],
+    },
+    {
+      group: "FUTURO — TJ SP RMC 96X",
+      items: [
+        { value: "FUTURO_TJSP_RMC_96X_CB_351_38", label: "FUTURO TJ SP RMC 96X TX 3,51 — 38%", pct: 0.38 },
+        { value: "FUTURO_TJSP_RMC_96X_CB_344_32", label: "FUTURO TJ SP RMC 96X TX 3,44 — 32%", pct: 0.32 },
+        { value: "FUTURO_TJSP_RMC_96X_CB_339_26", label: "FUTURO TJ SP RMC 96X TX 3,39 — 26%", pct: 0.26 },
+        { value: "FUTURO_TJSP_RMC_96X_CB_33_12", label: "FUTURO TJ SP RMC 96X TX 3,3 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "FUTURO — SIAPE EMP 117X",
+      items: [
+        { value: "FUTURO_SIAPE_EMP_117X_EMP_180_15", label: "FUTURO SIAPE EMP 117X TX 1,80 — 15%", pct: 0.15 },
+      ],
+    },
+    {
+      group: "FUTURO — SIAPE EMP 96X",
+      items: [
+        { value: "FUTURO_SIAPE_EMP_96X_EMP_180_12", label: "FUTURO SIAPE EMP 96X TX 1,80 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "FUTURO — SIAPE CC-CB 96X",
+      items: [
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_419_30", label: "FUTURO SIAPE CC-CB 96X NCDT TX 4,19 — 30%", pct: 0.3 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_399_27", label: "FUTURO SIAPE CC-CB 96X NCDT TX 3,99 — 27%", pct: 0.27 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_379_24", label: "FUTURO SIAPE CC-CB 96X NCDT TX 3,79 — 24%", pct: 0.24 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_359_18", label: "FUTURO SIAPE CC-CB 96X NCDT TX 3,59 — 18%", pct: 0.18 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_339_15", label: "FUTURO SIAPE CC-CB 96X NCDT TX 3,39 — 15%", pct: 0.15 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_319_9", label: "FUTURO SIAPE CC-CB 96X NCDT TX 3,19 — 9%", pct: 0.09 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_309_6", label: "FUTURO SIAPE CC-CB 96X NCDT TX 3,09 — 6%", pct: 0.06 },
+        { value: "FUTURO_SIAPE_CCCB_96X_NCDT_299_3", label: "FUTURO SIAPE CC-CB 96X NCDT TX 2,99 — 3%", pct: 0.03 },
+      ],
+    },
+    {
+      group: "FUTURO — GOV AM RCC 96X",
+      items: [
+        { value: "FUTURO_GOVAM_RCC_96X_CB_390_85", label: "FUTURO GOV AM RCC 96X TX 3,90 — 85%", pct: 0.85 },
+        { value: "FUTURO_GOVAM_RCC_96X_CB_360_70", label: "FUTURO GOV AM RCC 96X TX 3,60 — 70%", pct: 0.7 },
+        { value: "FUTURO_GOVAM_RCC_96X_CB_330_60", label: "FUTURO GOV AM RCC 96X TX 3,30 — 60%", pct: 0.6 },
+        { value: "FUTURO_GOVAM_RCC_96X_CB_300_50", label: "FUTURO GOV AM RCC 96X TX 3,00 — 50%", pct: 0.5 },
+      ],
+    },
+    {
+      group: "FUTURO — GOV AM RMC 96X",
+      items: [
+        { value: "FUTURO_GOVAM_RMC_96X_CC_390_85", label: "FUTURO GOV AM CC RMC 96X TX 3,90 — 85%", pct: 0.85 },
+        { value: "FUTURO_GOVAM_RMC_96X_CC_360_70", label: "FUTURO GOV AM CC RMC 96X TX 3,60 — 70%", pct: 0.7 },
+        { value: "FUTURO_GOVAM_RMC_96X_CC_330_60", label: "FUTURO GOV AM CC RMC 96X TX 3,30 — 60%", pct: 0.6 },
+        { value: "FUTURO_GOVAM_RMC_96X_CC_300_50", label: "FUTURO GOV AM CC RMC 96X TX 3,00 — 50%", pct: 0.5 },
+      ],
+    },
+    {
+      group: "FUTURO — EXERCITO EMP 96X",
+      items: [
+        { value: "FUTURO_EXERCITO_EMP_96X_EMP_203_14", label: "FUTURO EXERCITO EMP 96X TX 2,03 — 14%", pct: 0.14 },
+        { value: "FUTURO_EXERCITO_EMP_96X_EMP_190_12", label: "FUTURO EXERCITO EMP 96X TX 1,90 — 12%", pct: 0.12 },
+      ],
+    },
+    {
+      group: "FUTURO — AERONAUTICA EMP 96X",
+      items: [
+        { value: "FUTURO_AERONAUTICA_EMP_96X_EMP_203_14", label: "FUTURO AERONAUTICA EMP 96X TX 2,03 — 14%", pct: 0.14 },
+        { value: "FUTURO_AERONAUTICA_EMP_96X_EMP_190_12", label: "FUTURO AERONAUTICA EMP 96X TX 1,90 — 12%", pct: 0.12 },
+      ],
+    },
   ],
 
   _tabelaPct: {
@@ -913,6 +1809,52 @@ window.Proposals = {
     AKI_SIAPE_RMC_F14_50: 0.5,
     AKI_SIAPE_RMC_F15_45: 0.45,
     AKI_SIAPE_RMC_F16_35: 0.35,
+    FUTURO_GOVPR_RCC_96X_CB_385_85: 0.85,
+    FUTURO_GOVPR_RCC_96X_CB_380_85: 0.85,
+    FUTURO_GOVPR_RCC_96X_CB_349_70: 0.7,
+    FUTURO_GOVPR_RCC_96X_CB_325_60: 0.6,
+    FUTURO_GOVPR_RCC_96X_CB_330_45: 0.45,
+    FUTURO_GOVPR_RCC_96X_CB_285_34: 0.34,
+    FUTURO_GOVPR_RCC_96X_CB_250_28: 0.28,
+    FUTURO_GOVPR_RCC_96X_CB_240_10: 0.1,
+    FUTURO_GOVRO_RMC_96X_CB_35_100: 1.0,
+    FUTURO_GOVRO_RMC_96X_CB_33_80: 0.8,
+    FUTURO_GOVRO_RMC_96X_CLT_35_80: 0.8,
+    FUTURO_GOVRO_RMC_96X_CLT_35_65: 0.65,
+    FUTURO_GOVRO_RMC_96X_SENIOR_35_80: 0.8,
+    FUTURO_GOVRO_RMC_96X_SENIOR_35_65: 0.65,
+    FUTURO_GOVSP_RMC_96X_CLT_35_115: 1.15,
+    FUTURO_GOVSP_RMC_96X_CLT_34_95: 0.95,
+    FUTURO_GOVSP_RMC_96X_CLT_32_90: 0.9,
+    FUTURO_GOVSP_RMC_96X_CLT_29_80: 0.8,
+    FUTURO_GOVSP_RMC_96X_CLT_27_70: 0.7,
+    FUTURO_GOVSP_RMC_96X_CLT_24_45: 0.45,
+    FUTURO_TJSP_RMC_96X_CB_351_38: 0.38,
+    FUTURO_TJSP_RMC_96X_CB_344_32: 0.32,
+    FUTURO_TJSP_RMC_96X_CB_339_26: 0.26,
+    FUTURO_TJSP_RMC_96X_CB_33_12: 0.12,
+    FUTURO_SIAPE_EMP_117X_EMP_180_15: 0.15,
+    FUTURO_SIAPE_EMP_96X_EMP_180_12: 0.12,
+    FUTURO_SIAPE_CCCB_96X_NCDT_419_30: 0.3,
+    FUTURO_SIAPE_CCCB_96X_NCDT_399_27: 0.27,
+    FUTURO_SIAPE_CCCB_96X_NCDT_379_24: 0.24,
+    FUTURO_SIAPE_CCCB_96X_NCDT_359_18: 0.18,
+    FUTURO_SIAPE_CCCB_96X_NCDT_339_15: 0.15,
+    FUTURO_SIAPE_CCCB_96X_NCDT_319_9: 0.09,
+    FUTURO_SIAPE_CCCB_96X_NCDT_309_6: 0.06,
+    FUTURO_SIAPE_CCCB_96X_NCDT_299_3: 0.03,
+    FUTURO_GOVAM_RCC_96X_CB_390_85: 0.85,
+    FUTURO_GOVAM_RCC_96X_CB_360_70: 0.7,
+    FUTURO_GOVAM_RCC_96X_CB_330_60: 0.6,
+    FUTURO_GOVAM_RCC_96X_CB_300_50: 0.5,
+    FUTURO_GOVAM_RMC_96X_CC_390_85: 0.85,
+    FUTURO_GOVAM_RMC_96X_CC_360_70: 0.7,
+    FUTURO_GOVAM_RMC_96X_CC_330_60: 0.6,
+    FUTURO_GOVAM_RMC_96X_CC_300_50: 0.5,
+    FUTURO_EXERCITO_EMP_96X_EMP_203_14: 0.14,
+    FUTURO_EXERCITO_EMP_96X_EMP_190_12: 0.12,
+    FUTURO_AERONAUTICA_EMP_96X_EMP_203_14: 0.14,
+    FUTURO_AERONAUTICA_EMP_96X_EMP_190_12: 0.12,
     FUTURO_100: 1,
     FUTURO_95: 0.95,
     FUTURO_90: 0.9,
@@ -1015,12 +1957,30 @@ window.Proposals = {
   },
 
   /** Escopo para listar vendedores no filtro/modal de proposta (Master/financeiro = todos). */
+  /**
+   * _VENDOR_TRANSFER_GLOBAL_IDS — usuários liberados a passar venda para qualquer vendedor.
+   * Pedido: Vinicius (sup_backoffice) transferir fichas (ex.: Goianésia → Viviane).
+   */
+  _VENDOR_TRANSFER_GLOBAL_IDS: ['umpe2d8mbt3sd8'],
+
+  /**
+   * _proposalVendorScopeAdmin — escopo do select “Vendedor responsável”.
+   * null = todos os vendedores (master/gerente/BO e allowlist de transferência).
+   */
   _proposalVendorScopeAdmin: function(session) {
-    const r = session?.role || '';
-    const globalRoles = ['master', 'fundador', 'desenvolvedor', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria'];
+    const r = this._normProposalManageRole(session?.role);
+    const uid = String(session?.id || '');
+    if (uid && (this._VENDOR_TRANSFER_GLOBAL_IDS || []).includes(uid)) return null;
+    // Gerente/gerência/BO vê todos — senão o select só lista o próprio time e
+    // não dá para “passar a venda” (ex.: Viviane / Goianésia).
+    const globalRoles = [
+      'master', 'fundador', 'desenvolvedor', 'gerente', 'gerencia',
+      'financeiro', 'financial', 'rh', 'diretoria',
+      'backoffice', 'sup_backoffice', 'operacional',
+    ];
     if (globalRoles.includes(r)) return null;
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return window.PARTNER_ROOT_ID;
-    if (r === 'supervisor' || r === 'sup_backoffice' || r === 'parceiro') return session?.id || null;
+    if (r === 'supervisor' || r === 'parceiro') return session?.id || null;
     return session?.adminId || session?.id || null;
   },
 
@@ -1061,10 +2021,7 @@ window.Proposals = {
         : String(p.vendorId || p.vendor_id || p.employee_id || '').trim();
       return vid && set.has(String(vid));
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'sup-team-fix',hypothesisId:'H2',location:'proposals.js:supervisor-team-filter',message:'supervisor proposals filtered',data:{before:proposals.length,after:filtered.length,scopeSize:set.size},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return filtered;
+return filtered;
   },
 
   /** Mantém só propostas da equipe do parceiro (vendedores vinculados). Master não usa. */
@@ -1601,8 +2558,15 @@ window.Proposals = {
     return attachments;
   },
 
+  /**
+   * _isVendedorRole — perfil de vendedor (mesa/employee).
+   * Inclui employee/funcionario — no RH muitos vendedores usam role "employee".
+   */
   _isVendedorRole: function(role) {
-    return role === 'vendedor';
+    const r = typeof this._normProposalManageRole === 'function'
+      ? this._normProposalManageRole(role)
+      : String(role || '').trim().toLowerCase();
+    return r === 'vendedor' || r === 'employee' || r === 'funcionario';
   },
 
   _labelEtapaVendedor: function(val) {
@@ -1718,10 +2682,56 @@ window.Proposals = {
     const val = this._getAdminVendorFilter();
     this._adminList.vendorId = val;
     this._adminList.page = 1;
-    
+
     const headerSel = document.getElementById('proposalVendorFilterHeader');
     if (headerSel) headerSel.value = val === '' ? '' : val;
     this.renderAdminList();
+  },
+
+  /**
+   * toggleAdminVendorSort — alterna ordenação por nome de funcionário (vendedor): nenhuma → A-Z → Z-A → nenhuma.
+   */
+  toggleAdminVendorSort: function() {
+    if (this._adminList.sortField !== 'vendedor') {
+      this._adminList.sortField = 'vendedor';
+      this._adminList.sortDir = 'asc';
+    } else if (this._adminList.sortDir === 'asc') {
+      this._adminList.sortDir = 'desc';
+    } else {
+      this._adminList.sortField = '';
+      this._adminList.sortDir = 'asc';
+    }
+    this._adminList.page = 1;
+    this._updateAdminVendorSortHeader();
+    this.renderAdminList();
+  },
+
+  /**
+   * _updateAdminVendorSortHeader — sincroniza texto/estilo do botão #proposalVendorSortBtn com o estado atual.
+   */
+  _updateAdminVendorSortHeader: function() {
+    const btn = document.getElementById('proposalVendorSortBtn');
+    if (!btn) return;
+    const active = this._adminList.sortField === 'vendedor';
+    const dir = this._adminList.sortDir;
+    btn.classList.toggle('btn-primary', active);
+    btn.classList.toggle('btn-outline', !active);
+    btn.textContent = active && dir === 'desc' ? 'Vendedor ↓ Z-A' : (active ? 'Vendedor ↑ A-Z' : 'Vendedor A-Z');
+    btn.title = active
+      ? (dir === 'desc' ? 'Ordenado Z-A por funcionário — clique para remover a ordenação' : 'Ordenado A-Z por funcionário — clique para inverter')
+      : 'Ordenar propostas por nome de funcionário (vendedor), A-Z';
+  },
+
+  /**
+   * _sortProposalsByVendorName — ordena lista de propostas pelo vendorName (pt-BR).
+   */
+  _sortProposalsByVendorName: function(list, dir) {
+    const mult = dir === 'desc' ? -1 : 1;
+    return (list || []).slice().sort((a, b) => {
+      const va = String(a.vendorName || '').trim().toLocaleLowerCase('pt-BR');
+      const vb = String(b.vendorName || '').trim().toLocaleLowerCase('pt-BR');
+      return va.localeCompare(vb, 'pt-BR', { sensitivity: 'base' }) * mult;
+    });
   },
 
   _getAdminStatusFilter: function() {
@@ -1742,8 +2752,15 @@ window.Proposals = {
   /** YYYY-MM-DD em America/Sao_Paulo (calendário civil BR). */
   _ymdInPropTz: function(dateOrRaw) {
     if (dateOrRaw == null || dateOrRaw === '') return '';
-    const d = dateOrRaw instanceof Date ? dateOrRaw : new Date(dateOrRaw);
-    if (Number.isNaN(d.getTime())) return '';
+    // Já veio como dia civil YYYY-MM-DD — não reinterpretar como UTC (evita dia -1).
+    if (typeof dateOrRaw === 'string') {
+      const m = String(dateOrRaw).trim().match(/^(\d{4}-\d{2}-\d{2})/);
+      if (m && !/[T\s]\d{2}:\d{2}/.test(String(dateOrRaw).trim())) return m[1];
+    }
+    const d = dateOrRaw instanceof Date
+      ? dateOrRaw
+      : (typeof _parseSouBluDate === 'function' ? _parseSouBluDate(dateOrRaw) : new Date(dateOrRaw));
+    if (!d || Number.isNaN(d.getTime())) return '';
     try {
       const parts = new Intl.DateTimeFormat('en-CA', {
         timeZone: this._PROP_TZ,
@@ -1752,10 +2769,9 @@ window.Proposals = {
         day: '2-digit',
       }).formatToParts(d);
       const y = parts.find(p => p.type === 'year')?.value;
-      const m = parts.find(p => p.type === 'month')?.value;
+      const mth = parts.find(p => p.type === 'month')?.value;
       const day = parts.find(p => p.type === 'day')?.value;
-      if (y && m && day) return `${y}-${m}-${day}`;
-      // en-CA costuma devolver YYYY-MM-DD direto
+      if (y && mth && day) return `${y}-${mth}-${day}`;
       const flat = new Intl.DateTimeFormat('en-CA', {
         timeZone: this._PROP_TZ,
         year: 'numeric',
@@ -1773,11 +2789,59 @@ window.Proposals = {
     return this._ymdInPropTz(p?.createdAt || p?.created_at || '');
   },
 
+  /**
+   * _proposalFilterDayKey — dia usado no filtro De/Até (estilo Livecred).
+   * Tipo: criacao | digitacao | pagamento (select #proposalDateField).
+   */
+  _proposalFilterDayKey: function(p, statusFilter) {
+    const field = String(
+      this._adminList.dateField
+      || document.getElementById('proposalDateField')?.value
+      || 'criacao'
+    ).toLowerCase();
+    if (field === 'pagamento' || field === 'pago' || field === 'pagas') {
+      if (typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function') {
+        const paid = DB.proposalPaidAt(p);
+        const day = this._ymdInPropTz(paid);
+        if (day) return day;
+      }
+      // Sem data de pagamento → fora do filtro de pagamento
+      return '';
+    }
+    if (field === 'digitacao' || field === 'digitadas') {
+      const dig = this._digitacaoAt(p);
+      const day = this._ymdInPropTz(dig);
+      if (day) return day;
+      return '';
+    }
+    // Fallback legado: status PAGO sem tipo explícito ainda usa pagamento
+    const st = String(statusFilter || this._adminList.statusFilter || '').trim().toUpperCase();
+    if (st === 'PAGO' || st === 'PAGA' || st === 'PAGAS') {
+      if (typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function') {
+        const paid = DB.proposalPaidAt(p);
+        const day = this._ymdInPropTz(paid);
+        if (day) return day;
+      }
+    }
+    return this._proposalCreatedDayKey(p);
+  },
+
   _getAdminDateFilter: function() {
     const fromEl = document.getElementById('proposalDateFrom');
     const toEl = document.getElementById('proposalDateTo');
-    let from = fromEl ? String(fromEl.value || '').trim() : (this._adminList.dateFrom || '');
-    let to = toEl ? String(toEl.value || '').trim() : (this._adminList.dateTo || '');
+    const fieldEl = document.getElementById('proposalDateField');
+    const radio = document.querySelector('#proposalLivecredDateFilter input[name="proposalDateFieldRadio"]:checked');
+    let from = fromEl ? String(fromEl.value || '').trim() : '';
+    let to = toEl ? String(toEl.value || '').trim() : '';
+    let dateField = radio
+      ? String(radio.value || '').trim()
+      : (fieldEl ? String(fieldEl.value || '').trim() : '');
+    if (!fromEl && !toEl) {
+      from = this._adminList.dateFrom || '';
+      to = this._adminList.dateTo || '';
+    }
+    if (!dateField) dateField = this._adminList.dateField || 'criacao';
+    if (fieldEl) fieldEl.value = dateField;
     if (from && to && from > to) {
       const tmp = from;
       from = to;
@@ -1787,31 +2851,43 @@ window.Proposals = {
     }
     this._adminList.dateFrom = from;
     this._adminList.dateTo = to;
-    return { dateFrom: from, dateTo: to };
+    this._adminList.dateField = dateField;
+    return { dateFrom: from, dateTo: to, dateField };
   },
 
-  _matchesDateFilter: function(p, dateFrom, dateTo) {
+  _matchesDateFilter: function(p, dateFrom, dateTo, statusFilter) {
     if (!dateFrom && !dateTo) return true;
-    const day = this._proposalCreatedDayKey(p);
+    const day = this._proposalFilterDayKey(p, statusFilter);
     if (!day) return false;
     if (dateFrom && day < dateFrom) return false;
     if (dateTo && day > dateTo) return false;
     return true;
   },
 
-  _syncAdminDateInputs: function(from, to) {
+  /**
+   * _syncAdminDateInputs — espelha De/Até/tipo nos inputs e radios Livecred.
+   */
+  _syncAdminDateInputs: function(from, to, dateField) {
     const fromEl = document.getElementById('proposalDateFrom');
     const toEl = document.getElementById('proposalDateTo');
+    const fieldEl = document.getElementById('proposalDateField');
     if (fromEl) fromEl.value = from || '';
     if (toEl) toEl.value = to || '';
+    if (fieldEl && dateField) fieldEl.value = dateField;
+    if (dateField) {
+      document.querySelectorAll('#proposalLivecredDateFilter input[name="proposalDateFieldRadio"]').forEach((r) => {
+        r.checked = (r.value === dateField);
+      });
+    }
     this._adminList.dateFrom = from || '';
     this._adminList.dateTo = to || '';
+    if (dateField) this._adminList.dateField = dateField;
   },
 
   onAdminDateFilter: function() {
     this._getAdminDateFilter();
     this._adminList.page = 1;
-    this.renderAdminList();
+    this.renderAdminList({ forceRefresh: true });
   },
 
 
@@ -1866,6 +2942,8 @@ window.Proposals = {
       const vendors = await DB.getVendorsForSelect(scopeAdmin);
       const opts = (vendors || [])
         .filter(v => v && v.id)
+        .slice()
+        .sort((a, b) => String(a.name || a.email || '').localeCompare(String(b.name || b.email || ''), 'pt-BR', { sensitivity: 'base' }))
         .map(v => {
           const label = String(v.name || v.email || v.id || '').toUpperCase();
           return `<option value="${this._escAttr(v.id)}">${this._escHtml(label)}</option>`;
@@ -1890,7 +2968,8 @@ window.Proposals = {
   },
 
   _adminListColspan: function() {
-    return this._isFinanceiroGestao() ? 12 : 11;
+    // +1 coluna "Data pagamento" (gestão/financeiro).
+    return this._isFinanceiroGestao() ? 13 : 12;
   },
 
   _finGestaoActionBtns: function(id) {
@@ -1929,7 +3008,7 @@ window.Proposals = {
   },
 
   /**
-   * _unlockManageValorFields — libera nº/valor no modal admin (HTML vem com readonly no bruto).
+   * _unlockManageValorFields — libera nº/valor no modal admin (HTML vem com fundo cinza no bruto).
    * Entrada: editable true quando backoffice/supervisor+ em modo edição.
    */
   _unlockManageValorFields: function(editable) {
@@ -1941,8 +3020,9 @@ window.Proposals = {
         el.removeAttribute('readonly');
         el.disabled = false;
         el.readOnly = false;
+        el.style.cursor = 'text';
         if (id === 'managePropValorBruto') {
-          el.style.cursor = 'text';
+          el.style.background = 'var(--color-surface, #fff)';
         }
       }
     });
@@ -1975,6 +3055,184 @@ window.Proposals = {
       inner += `<button type="button" class="client-actions__btn client-actions__btn--danger" title="Arquivar na Localweb" aria-label="Arquivar proposta" onclick="${onDelete}">${trash}</button>`;
     }
     return `<div class="client-actions" role="group" aria-label="Ações da proposta">${inner}</div>`;
+  },
+
+  /**
+   * _ensureProposalTableScrollContainer — marca o wrapper da tabela para scroll horizontal.
+   * Garante classe proposals-table-scroll mesmo em HTML legado no DOM.
+   */
+  _ensureProposalTableScrollContainer: function() {
+    const wrap = document.querySelector('#secManageProposals .table-wrap');
+    if (wrap) wrap.classList.add('proposals-table-scroll');
+  },
+
+  /**
+   * _probeProposalTableLayout — mede scroll horizontal da tabela (debug responsivo).
+   */
+  _probeProposalTableLayout: function(runId) {
+    const sec = document.getElementById('secManageProposals');
+    const wrap = sec?.querySelector('.table-wrap');
+    const table = wrap?.querySelector('table.data-table');
+    const main = document.querySelector('.main-area');
+    const page = document.querySelector('.page-content');
+    if (!wrap || !table) return;
+    const csWrap = getComputedStyle(wrap);
+    const csPage = page ? getComputedStyle(page) : null;
+    const card = sec?.querySelector('.proposals-list-card');
+    const csCard = card ? getComputedStyle(card) : null;
+},
+
+  /**
+   * _resetAdminProposalTableLayout — remove hacks de layout (colgroup / table-layout fixed).
+   * Mantém tabela fluida; ações ficam na coluna via DOM paint.
+   */
+  _resetAdminProposalTableLayout: function() {
+    const table = document.querySelector('#secManageProposals table.data-table');
+    if (!table) return;
+    table.querySelector('colgroup')?.remove();
+    table.style.removeProperty('min-width');
+    table.style.removeProperty('table-layout');
+    delete table.dataset.propLayoutReady;
+  },
+
+  /**
+   * _runProposalAction — executa Ver/Editar/Arquivar a partir do botão da lista.
+   * Usado pelos handlers diretos nos botões (não depende de bubbling até o tbody).
+   */
+  _runProposalAction: function(btn) {
+    if (!btn) return;
+    const id = btn.getAttribute('data-prop-id');
+    const label = btn.getAttribute('data-prop-label') || id;
+    const act = btn.getAttribute('data-prop-action');
+    if (!id || !act) return;
+    this._openModalBusy = false;
+    if (act === 'view') {
+      if (btn.getAttribute('data-prop-employee') === '1') this.openEmployeeViewModal(id);
+      else if (btn.getAttribute('data-prop-admin-edit') === '1') this.openAdminModal(id, false);
+      else this.openAdminViewModal(id);
+    } else if (act === 'edit') {
+      if (btn.getAttribute('data-prop-employee') === '1') this.openEmployeeModal(id);
+      else this.openAdminModal(id, false);
+    } else if (act === 'delete') {
+      this.masterDeleteProposal(id, label);
+    }
+  },
+
+  /**
+   * _ensureAdminProposalActionsDelegation — fallback de cliques Ver/Editar/Arquivar.
+   * Capture=true no documento: sobrevive a re-render e não some se o tbody for trocado.
+   */
+  _ensureAdminProposalActionsDelegation: function() {
+    if (typeof document === 'undefined') return;
+    if (document.documentElement.dataset.propActionsBound === '1') return;
+    document.documentElement.dataset.propActionsBound = '1';
+    document.addEventListener('click', (ev) => {
+      const btn = ev.target.closest?.('[data-prop-action]');
+      if (!btn) return;
+      const inAdmin = btn.closest('#manageProposalsTbody, #manageProposalsMobileList, #secManageProposals');
+      if (!inAdmin) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      this._runProposalAction(btn);
+    }, true);
+  },
+
+  /**
+   * _paintProposalActionCell — monta botões de ação via DOM na célula da lista admin.
+   * Handlers diretos no botão (onclick) — não dependem de bubbling até o tbody.
+   */
+  _paintProposalActionCell: function(td, id, opts = {}) {
+    if (!td) return;
+    td.innerHTML = '';
+    td.classList.add('td-proposal-actions');
+    // Só impede clique da linha financeira; deixa os botões de ação funcionarem.
+    td.onclick = (ev) => {
+      if (ev.target.closest('[data-prop-action], .client-actions__btn')) return;
+      ev.stopPropagation();
+    };
+
+    if (opts.finGestao) {
+      td.insertAdjacentHTML('beforeend', this._finGestaoActionBtns(id));
+    }
+
+    const wrap = document.createElement('div');
+    wrap.className = 'client-actions';
+    wrap.setAttribute('role', 'group');
+    wrap.setAttribute('aria-label', 'Ações da proposta');
+
+    const safeId = String(id ?? '');
+    const label = String(opts.label || id || '');
+    const employee = !!opts.employee;
+    const canEdit = opts.canEdit !== false;
+    const canDelete = !!opts.canDelete;
+    let adminOpensEdit = false;
+    try {
+      const role = this._normProposalManageRole(typeof Auth !== 'undefined' && Auth.getSession()?.role);
+      adminOpensEdit = !employee && this._canEditNumeroValor(role);
+    } catch (_) { /* noop */ }
+
+    const self = this;
+    const mkBtn = (action, title, iconName, danger) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'client-actions__btn' + (danger ? ' client-actions__btn--danger' : '');
+      btn.title = title;
+      btn.setAttribute('aria-label', title + ' proposta');
+      btn.setAttribute('data-prop-action', action);
+      btn.setAttribute('data-prop-id', safeId);
+      btn.setAttribute('data-prop-label', label);
+      if (employee) btn.setAttribute('data-prop-employee', '1');
+      if (adminOpensEdit && action === 'view') btn.setAttribute('data-prop-admin-edit', '1');
+      btn.innerHTML = this._actionIconSvg(iconName);
+      btn.addEventListener('click', (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        self._runProposalAction(btn);
+      });
+      return btn;
+    };
+
+    wrap.appendChild(mkBtn('view', 'Ver', 'eye', false));
+    if (canEdit) wrap.appendChild(mkBtn('edit', 'Editar', 'pen', false));
+    if (canDelete) wrap.appendChild(mkBtn('delete', 'Arquivar na Localweb', 'trash', true));
+    td.appendChild(wrap);
+  },
+
+  /**
+   * _paintAdminProposalActionCells — preenche coluna Ações após render da tabela (gestão admin).
+   */
+  _paintAdminProposalActionCells: function(proposals, opts = {}) {
+    const tbody = document.getElementById('manageProposalsTbody');
+    if (!tbody || !proposals?.length) return;
+    this._ensureAdminProposalActionsDelegation();
+    const finGestao = !!opts.finGestao;
+    proposals.forEach((p) => {
+      const sid = String(p.id);
+      const esc = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(sid) : sid.replace(/"/g, '');
+      let row = tbody.querySelector(`tr[data-prop-id="${esc}"]`);
+      if (!row) {
+        row = [...tbody.querySelectorAll('tr[data-prop-id]')].find((tr) => tr.getAttribute('data-prop-id') === sid);
+      }
+      if (!row) return;
+      let td = row.querySelector('.td-proposal-actions');
+      if (!td) {
+        td = document.createElement('td');
+        td.className = 'td-proposal-actions';
+        row.appendChild(td);
+      }
+      const canEditRow = typeof opts.canEditRowFn === 'function'
+        ? opts.canEditRowFn(p)
+        : (opts.canEdit !== false);
+      const canDeleteRow = typeof opts.canDeleteFn === 'function'
+        ? opts.canDeleteFn(p)
+        : !!opts.canDelete;
+      this._paintProposalActionCell(td, p.id, {
+        finGestao,
+        canEdit: canEditRow,
+        canDelete: canDeleteRow,
+        label: p.numero || p.clientName || p.id,
+      });
+    });
   },
 
   _escUrlAttr: function(s) {
@@ -2026,8 +3284,21 @@ window.Proposals = {
 
   _proposalSaveErrorNotify: function(err) {
     const msg = this._proposalSaveErrorMsg(err);
-    if (typeof showToast === 'function') showToast(msg, 'error', 6000);
-    else alert('Erro ao salvar proposta: ' + msg);
+    this._notifyOverModal(msg, 'error');
+  },
+
+  /**
+   * _notifyOverModal — toast/alert visível COM modal aberto.
+   * Toast antigo (z-index 9999) ficava atrás do overlay (999999) e o Salvar
+   * parecia “não fazer nada” quando o save era bloqueado.
+   */
+  _notifyOverModal: function(msg, type) {
+    const text = String(msg || '').trim() || 'Não foi possível salvar.';
+    if (typeof showToast === 'function') showToast(text, type || 'error', 8000);
+    // Bloqueios críticos: alert garante feedback mesmo se o toast falhar
+    if (type === 'error' || type === 'warning') {
+      try { window.alert(text); } catch (_) { /* noop */ }
+    }
   },
 
   _applyProposalUploadResult: function(att, grupo, uploaded, fallbackNome) {
@@ -2089,10 +3360,7 @@ window.Proposals = {
       const set = seenByFolder[folder] = seenByFolder[folder] || new Set();
       if (set.has(sig)) {
         console.warn('[Proposals] anexo duplicado removido no save:', k, sig.slice(0, 120));
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'H-C',location:'proposals.js:_dedupeAttachmentsByUrl',message:'anexo duplicado removido antes de gravar',data:{key:k,sig:sig.slice(0,120)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        delete parsed[k];
+delete parsed[k];
         delete parsed[k + '_nome'];
         delete parsed[k + '_caminho'];
         delete parsed[k + '_public'];
@@ -3244,6 +4512,18 @@ window.Proposals = {
       if (!nowOk) return;
       if (this._isBoletoValidadoStatus(oldStatus, oldStatusOp)) return;
 
+      /* Seed lembrete a cada 2 dias até PAGO (esteira de pendências). */
+      try {
+        const vid = proposal.employee_id || proposal.employeeId || proposal.user_id || proposal.vendor_id;
+        if (vid && typeof DB?.upsertBoletoReminder === 'function') {
+          DB.upsertBoletoReminder({
+            proposalId: proposal.id,
+            vendorId: vid,
+            clientName: proposal.clientName || proposal.client_name || null,
+          }).catch(() => {});
+        }
+      } catch (_) { /* noop */ }
+
       const cfg = (typeof window !== 'undefined' && window.SOUBLU_CONFIG) ? window.SOUBLU_CONFIG : {};
       const apiBase = String(cfg.API_BASE_URL || cfg.SITE_URL || '').replace(/\/+$/, '')
         || (typeof location !== 'undefined' ? location.origin : '');
@@ -3320,6 +4600,9 @@ window.Proposals = {
   },
 
   _canPickVendor: function(role) {
+    const r = this._normProposalManageRole(role);
+    // Gerente/gerência sempre pode trocar o vendedor da proposta (pedido explícito).
+    if (r === 'gerente' || r === 'gerencia') return true;
     return this._isSupervisorOrAbove(role);
   },
 
@@ -3330,11 +4613,20 @@ window.Proposals = {
 
   /**
    * _canEditTabelaComissao — define/altera tabela de comissão (bloco Financeiro).
-   * Financeiro interno ou permissões canFinanceiroHub no perfil.
+   * Super Backoffice / backoffice operacional também editam (antes só financeiro/gerente).
+   * Supervisor de vendedor: pode mexer na tabela só se a proposta NÃO estiver paga.
+   * Sem isso o select fica travado e o valor final “paga” 100% do bruto.
    */
-  _canEditTabelaComissao: function(role) {
+  _canEditTabelaComissao: function(role, opts) {
     const r = this._normProposalManageRole(role);
-    if (['master', 'fundador', 'financeiro', 'financial', 'gerente', 'gerencia'].includes(r)) return true;
+    const paid = !!(opts && opts.paid);
+    // Supervisor de vendedor: libera tabela em abertas; em pagas continua bloqueado.
+    if (r === 'supervisor') return !paid;
+    if ([
+      'master', 'fundador', 'desenvolvedor', 'financeiro', 'financial',
+      'gerente', 'gerencia', 'diretoria',
+      'sup_backoffice', 'backoffice', 'operacional',
+    ].includes(r)) return true;
     const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (s && typeof Auth.hasFinanceiroInternoAccess === 'function' && Auth.hasFinanceiroInternoAccess(s)) {
       return true;
@@ -3343,70 +4635,124 @@ window.Proposals = {
   },
 
   /**
-   * _readManageValorInput — lê valor bruto do modal (campo verde ou azul).
-   * Prioriza managePropValorEdit; se vazio, usa managePropValorBruto.
+   * _canChangeProposalStatus — quem pode alterar a situação (status/statusOp).
+   * Supervisor de vendedor NÃO altera status; backoffice, gerente, master, etc. podem.
+   * Vendedor continua alterando a situação nas próprias fichas (modal employee).
+   */
+  _canChangeProposalStatus: function(role) {
+    const r = this._normProposalManageRole(role);
+    if (r === 'supervisor') return false;
+    if (typeof this._isVendedorRole === 'function' && this._isVendedorRole(role)) return true;
+    return this._isSupervisorOrAbove(role);
+  },
+
+  /**
+   * _applyTabelaToProposal — aplica tabela e recalcula valorFinal/desconto.
+   * Evita proposta “PAGO” com comissão no valor bruto quando a tabela está vazia/errada.
+   */
+  _applyTabelaToProposal: function(proposal, tabelaCode) {
+    if (!proposal) return;
+    const code = String(tabelaCode || '').trim();
+    if (!code) {
+      proposal.tabela = '';
+      proposal.valorFinal = Number(proposal.valor) || 0;
+      proposal.desconto = 0;
+      return;
+    }
+    const pct = this._tabelaPct[code];
+    const factor = (pct != null && !isNaN(pct)) ? Number(pct) : 1;
+    const bruto = Number(proposal.valor) || 0;
+    proposal.tabela = code;
+    proposal.valorFinal = parseFloat((bruto * factor).toFixed(2));
+    proposal.desconto = parseFloat((bruto - proposal.valorFinal).toFixed(2));
+  },
+
+  /**
+   * _readManageValorInput — lê o valor digitado no modal.
+   * Prioriza o campo em foco; se vazio de propósito, NÃO puxa o outro (senão não dá para apagar).
    */
   _readManageValorInput: function() {
     const editEl = document.getElementById('managePropValorEdit');
     const brutoEl = document.getElementById('managePropValorBruto');
-    const editParsed = this._parseBrMoneyInput(editEl?.value);
-    const brutoParsed = this._parseBrMoneyInput(brutoEl?.value);
     const activeId = document.activeElement?.id || '';
-    if (activeId === 'managePropValorBruto' && !isNaN(brutoParsed)) return brutoParsed;
-    if (activeId === 'managePropValorEdit' && !isNaN(editParsed)) return editParsed;
-    // Evita que "0,00" no bloco verde apague valor digitado no azul ao mudar a tabela (blur).
-    const positives = [editParsed, brutoParsed].filter((v) => !isNaN(v) && v > 0);
-    if (positives.length) return Math.max(...positives);
-    if (!isNaN(editParsed) && editParsed >= 0) return editParsed;
-    if (!isNaN(brutoParsed) && brutoParsed >= 0) return brutoParsed;
+    const rawOf = (el) => String(el?.value || '').replace(/^R\$\s*/i, '').trim();
+
+    if (activeId === 'managePropValorEdit') {
+      const raw = rawOf(editEl);
+      if (!raw) return NaN;
+      return this._parseBrMoneyInput(raw);
+    }
+    if (activeId === 'managePropValorBruto') {
+      const raw = rawOf(brutoEl);
+      if (!raw) return NaN;
+      return this._parseBrMoneyInput(raw);
+    }
+
+    const editRaw = rawOf(editEl);
+    if (editRaw) {
+      const p = this._parseBrMoneyInput(editRaw);
+      if (!isNaN(p)) return p;
+    }
+    const brutoRaw = rawOf(brutoEl);
+    if (brutoRaw) {
+      const p = this._parseBrMoneyInput(brutoRaw);
+      if (!isNaN(p)) return p;
+    }
     return NaN;
   },
 
   /**
-   * _syncManageValorFields — mantém os dois inputs de valor alinhados ao abrir/editar.
+   * _syncManageValorFields — alinha verde/azul ao abrir ou ao sair do campo (blur).
+   * valor null/NaN limpa os dois (permite apagar).
    */
   _syncManageValorFields: function(valor) {
     const v = valor != null && valor !== '' && !isNaN(parseFloat(valor)) ? parseFloat(valor) : null;
-    const txt = v != null
-      ? v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-      : '';
-    const fmtBruto = v != null ? ('R$ ' + txt) : '';
+    const empty = v == null || isNaN(v);
+    const txt = empty
+      ? ''
+      : v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtBruto = empty ? '' : ('R$ ' + txt);
     const editEl = document.getElementById('managePropValorEdit');
     const brutoEl = document.getElementById('managePropValorBruto');
     if (editEl) editEl.value = txt;
     if (brutoEl) brutoEl.value = fmtBruto;
   },
 
+  /**
+   * _bindManageValorInputs — digitação livre no valor.
+   * Não mexe no texto enquanto digita/apaga; formata só no blur.
+   */
   _bindManageValorInputs: function() {
-    if (this._manageValorBound) return;
-    this._manageValorBound = true;
-    const onInput = () => {
-      const editEl = document.getElementById('managePropValorEdit');
-      const brutoEl = document.getElementById('managePropValorBruto');
-      const parsed = this._readManageValorInput();
-      if (!isNaN(parsed) && parsed >= 0) {
-        const txt = parsed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        if (editEl && document.activeElement !== editEl) editEl.value = txt;
-        if (brutoEl && document.activeElement !== brutoEl) brutoEl.value = 'R$ ' + txt;
+    const BIND_VER = 'v4';
+    const rawOf = (el) => String(el?.value || '').replace(/^R\$\s*/i, '').trim();
+
+    const onBlurFormat = (sourceId) => {
+      const el = document.getElementById(sourceId);
+      const raw = rawOf(el);
+      // Campo apagado → limpa os dois (não restaura o valor antigo).
+      if (!raw) {
+        this._syncManageValorFields(null);
+        this.calcAdminValorFinal();
+        return;
       }
+      const parsed = this._parseBrMoneyInput(raw);
+      if (!isNaN(parsed) && parsed >= 0) this._syncManageValorFields(parsed);
       this.calcAdminValorFinal();
     };
+
     ['managePropValorEdit', 'managePropValorBruto'].forEach((id) => {
       const el = document.getElementById(id);
-      if (el && !el.dataset.valorBound) {
-        el.dataset.valorBound = '1';
-        el.addEventListener('input', onInput);
-        el.addEventListener('blur', onInput);
-      }
+      if (!el || el.dataset.valorBound === BIND_VER) return;
+      el.dataset.valorBound = BIND_VER;
+      // Só recalcula preview — não reescreve o que o usuário está digitando/apagando.
+      el.addEventListener('input', () => this.calcAdminValorFinal());
+      el.addEventListener('blur', () => onBlurFormat(id));
     });
+
     const tabEl = document.getElementById('managePropTabela');
-    if (tabEl && !tabEl.dataset.valorSyncBound) {
-      tabEl.dataset.valorSyncBound = '1';
-      tabEl.addEventListener('change', () => {
-        const parsed = this._readManageValorInput();
-        if (!isNaN(parsed) && parsed >= 0) this._syncManageValorFields(parsed);
-        this.calcAdminValorFinal();
-      });
+    if (tabEl && tabEl.dataset.valorSyncBound !== BIND_VER) {
+      tabEl.dataset.valorSyncBound = BIND_VER;
+      tabEl.addEventListener('change', () => this.calcAdminValorFinal());
     }
   },
 
@@ -3414,13 +4760,22 @@ window.Proposals = {
     return typeof Auth !== 'undefined' && Auth.isMaster();
   },
 
-  /** Master/gerente; parceiros NÃO excluem propostas (só veem/editam a própria rede). */
+  /**
+   * _canDeleteProposal — quem pode arquivar/excluir proposta (lixeira Localweb).
+   * Usa _normProposalManageRole p/ aceitar "Gerência"/"Super Backoffice" com acento.
+   * Parceiros NÃO excluem (só veem/editam a própria rede).
+   */
   _canDeleteProposal: function() {
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return false;
-    const role = String(typeof Auth !== 'undefined' && Auth.getSession()?.role || '').toLowerCase();
-    if (role === 'parceiro') return false;
     if (this._isMaster()) return true;
-    return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
+    const role = this._normProposalManageRole(
+      typeof Auth !== 'undefined' && Auth.getSession()?.role
+    );
+    if (!role || role === 'parceiro') return false;
+    return [
+      'master', 'fundador', 'desenvolvedor', 'gerente', 'gerencia',
+      'sup_backoffice', 'financeiro', 'financial', 'diretoria',
+    ].includes(role);
   },
 
   _isProposalPaid: function(p) {
@@ -3436,30 +4791,16 @@ window.Proposals = {
   /** Proposta paga = somente leitura (salvar altera updatedAt e distorce o dashboard). */
   _assertProposalNotPaidForSave: function(proposal) {
     if (!this._isProposalPaid(proposal)) return true;
-    const msg = 'Proposta paga é somente leitura. Não é permitido salvar alterações.';
-    if (typeof showToast === 'function') showToast(msg, 'warning');
-    else alert(msg);
+    const msg = 'Proposta paga é somente leitura. Não é permitido salvar alterações de status. Use a correção de nº/valor se precisar.';
+    this._notifyOverModal(msg, 'warning');
     return false;
   },
 
   /**
-   * _ensureCleanupDuplicatesBtn — injeta o botão na barra de gestão de propostas.
-   * Só master/gerente/sup_backoffice ( _canDeleteProposal ). Parceiro não vê.
-   * O clique chama cleanupDuplicateProposals: apaga CLONE (mesmo produto+banco), não segundo produto.
+   * _ensureCleanupDuplicatesBtn — clones ficam no modal Configuração (não na barra).
    */
   _ensureCleanupDuplicatesBtn: function() {
-    if (document.getElementById('btnLimparPropostasDuplicadas')) return;
-    const exportBtn = document.querySelector('#secManageProposals button[onclick*="exportAdminCsv"]');
-    if (!exportBtn || !exportBtn.parentElement) return;
-    if (!this._canDeleteProposal()) return;
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.id = 'btnLimparPropostasDuplicadas';
-    btn.className = 'btn btn-outline btn-sm';
-    btn.title = 'Só apaga clones: mesmo CPF + mesmo produto + mesmo banco. Dois produtos no mesmo cliente (ex.: Cartão + BTW) NÃO são apagados.';
-    btn.textContent = 'Limpar clones';
-    btn.onclick = () => this.cleanupDuplicateProposals();
-    exportBtn.parentElement.insertBefore(btn, exportBtn);
+    this._ensureProposalManageToolbar();
   },
 
   /**
@@ -3653,6 +4994,11 @@ window.Proposals = {
         row('CEP', addr.cep),
       ].filter(Boolean).join('')
       : row('Endereço', client.address);
+    const bankHtml = [
+      row('Banco (conta)', client.banco || client.bank),
+      row('Agência', client.agencia),
+      row('Conta', client.conta || client.conta_corrente),
+    ].filter(Boolean).join('');
     return [
       row('Nome completo', client.name),
       row('CPF', client.cpf || client.id),
@@ -3662,6 +5008,7 @@ window.Proposals = {
       row('E-mail', client.email),
       row('Estado civil', client.civilState),
       addrHtml,
+      bankHtml,
       row('Nome da mãe', client.motherName),
       row('Nome do pai', client.fatherName),
     ].filter(Boolean).join('');
@@ -3741,28 +5088,46 @@ window.Proposals = {
           </div>
         </div>
         <div style="margin-top:6px;padding-top:12px;border-top:1px dashed var(--color-border);">
-          <p style="font-weight:700;margin:0 0 10px;font-size:13px;color:var(--color-primary);">Endereço</p>
+          <p style="font-weight:700;margin:0 0 10px;font-size:13px;color:var(--color-primary);">Endereço <span style="color:var(--color-danger);">*</span> <span style="font-weight:500;color:var(--color-text-muted);font-size:11px;">(obrigatório para vendedores)</span></p>
           <div style="display:grid;grid-template-columns:72px 1fr 1fr;gap:10px;">
             <div class="form-group" style="margin:0;">
-              <label style="font-size:11px;">UF</label>
+              <label style="font-size:11px;">UF <span style="color:var(--color-danger);">*</span></label>
               <select id="${p}ClientEstado" class="form-control prop-client-field"${disSel}>${ufOpts}</select>
             </div>
             <div class="form-group" style="margin:0;">
-              <label style="font-size:11px;">Município</label>
+              <label style="font-size:11px;">Município <span style="color:var(--color-danger);">*</span></label>
               <input type="text" id="${p}ClientMunicipio" class="form-control prop-client-field" value="${this._escAttr(addr.municipio)}"${dis}/>
             </div>
             <div class="form-group" style="margin:0;">
-              <label style="font-size:11px;">CEP</label>
+              <label style="font-size:11px;">CEP <span style="color:var(--color-danger);">*</span></label>
               <input type="text" id="${p}ClientCep" class="form-control prop-client-field" placeholder="00000-000" value="${this._escAttr(addr.cep)}"${dis}/>
             </div>
           </div>
           <div class="form-group" style="margin:10px 0 0;">
-            <label style="font-size:11px;">Rua / nº / complemento</label>
+            <label style="font-size:11px;">Rua / nº / complemento <span style="color:var(--color-danger);">*</span></label>
             <input type="text" id="${p}ClientRua" class="form-control prop-client-field" value="${this._escAttr(addr.rua)}"${dis}/>
           </div>
           <div class="form-group" style="margin:10px 0 0;">
-            <label style="font-size:11px;">Bairro</label>
+            <label style="font-size:11px;">Bairro <span style="color:var(--color-danger);">*</span></label>
             <input type="text" id="${p}ClientBairro" class="form-control prop-client-field" value="${this._escAttr(addr.bairro)}"${dis}/>
+          </div>
+        </div>
+        <div style="margin-top:6px;padding-top:12px;border-top:1px dashed var(--color-border);">
+          <p style="font-weight:700;margin:0 0 10px;font-size:13px;color:var(--color-primary);">Conta do cliente <span style="color:var(--color-danger);">*</span> <span style="font-weight:500;color:var(--color-text-muted);font-size:11px;">(obrigatório para vendedores)</span></p>
+          <p style="color:var(--color-text-muted);margin:0 0 8px;font-size:12px;">Vendedor precisa informar banco, agência e conta. Backoffice pode salvar sem isso.</p>
+          <div class="form-group" style="margin:0;">
+            <label style="font-size:11px;">Banco <span style="color:var(--color-danger);">*</span></label>
+            <input type="text" id="${p}ClientBanco" class="form-control prop-client-field" placeholder="Ex.: Banco do Brasil" value="${this._escAttr(client.banco || client.bank || '')}"${dis}/>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;">
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:11px;">Agência <span style="color:var(--color-danger);">*</span></label>
+              <input type="text" id="${p}ClientAgencia" class="form-control prop-client-field" placeholder="0000" value="${this._escAttr(client.agencia || '')}"${dis}/>
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label style="font-size:11px;">Conta <span style="color:var(--color-danger);">*</span></label>
+              <input type="text" id="${p}ClientConta" class="form-control prop-client-field" placeholder="00000-0" value="${this._escAttr(client.conta || client.conta_corrente || '')}"${dis}/>
+            </div>
           </div>
         </div>
       </div>
@@ -3787,6 +5152,9 @@ window.Proposals = {
       civilState: gv('CivilState'),
       motherName: gv('MotherName'),
       fatherName: gv('FatherName'),
+      banco: gv('Banco'),
+      agencia: gv('Agencia'),
+      conta: gv('Conta'),
       address: this._formatAddress({
         estado: gv('Estado'),
         municipio: gv('Municipio'),
@@ -3794,7 +5162,86 @@ window.Proposals = {
         bairro: gv('Bairro'),
         cep: gv('Cep'),
       }),
+      _addrParts: {
+        estado: gv('Estado'),
+        municipio: gv('Municipio'),
+        rua: gv('Rua'),
+        bairro: gv('Bairro'),
+        cep: gv('Cep'),
+      },
     };
+  },
+
+  /**
+   * _clientHasRequiredAddressAndBank — checa endereço + conta num registro de cliente.
+   * Usado no envio de proposta nova pelo vendedor (sem form emp/manage).
+   */
+  _clientHasRequiredAddressAndBank: function(client) {
+    if (!client) return false;
+    const parts = this._parseAddress(client.address || '');
+    if (!String(parts.estado || '').trim()) return false;
+    if (!String(parts.municipio || '').trim()) return false;
+    if (!String(parts.rua || '').trim()) return false;
+    if (!String(parts.bairro || '').trim()) return false;
+    if (!String(parts.cep || '').replace(/\D/g, '')) return false;
+    if (!String(client.banco || client.bank || '').trim()) return false;
+    if (!String(client.agencia || '').trim()) return false;
+    if (!String(client.conta || client.conta_corrente || '').trim()) return false;
+    return true;
+  },
+
+  /**
+   * _shouldRequireClientAddressAndBank — obrigatoriedade SÓ para vendedor.
+   * Backoffice/supervisor/gerente/financeiro salvam sem endereço/conta (correção de ficha).
+   */
+  _shouldRequireClientAddressAndBank: function(/* proposal */) {
+    const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    return this._isVendedorRole(session?.role);
+  },
+
+  /**
+   * _assertClientAddressAndBank — bloqueia save do vendedor sem endereço + conta.
+   * Backoffice não passa por esta trava (pode corrigir nº/valor sem completar cadastro).
+   * Se faltar dado, destaca o bloco do cliente no modal para o vendedor ver os campos.
+   */
+  _assertClientAddressAndBank: function(prefix, proposal) {
+    void proposal;
+    if (!this._shouldRequireClientAddressAndBank()) return true;
+    const pfx = prefix || 'manage';
+    // Modal sem bloco de cliente (campo não renderizado): não bloqueia.
+    if (!document.getElementById(`${pfx}ClientName`)) return true;
+    const form = this._readProposalClientForm(pfx);
+    const parts = form._addrParts || this._parseAddress(form.address);
+    const missing = [];
+    if (!String(parts.estado || '').trim()) missing.push('UF');
+    if (!String(parts.municipio || '').trim()) missing.push('Município');
+    if (!String(parts.rua || '').trim()) missing.push('Rua');
+    if (!String(parts.bairro || '').trim()) missing.push('Bairro');
+    if (!String(parts.cep || '').replace(/\D/g, '')) missing.push('CEP');
+    if (!String(form.banco || '').trim()) missing.push('Banco (conta do cliente)');
+    if (!String(form.agencia || '').trim()) missing.push('Agência');
+    if (!String(form.conta || '').trim()) missing.push('Conta');
+    if (!missing.length) return true;
+
+    // Destaca e rola até o bloco (antes ficava escondido por CSS display:none).
+    const detailId = pfx === 'emp' ? 'empPropClientDetail' : 'managePropClientDetail';
+    const detailEl = document.getElementById(detailId);
+    if (detailEl) {
+      detailEl.classList.add('is-open', 'is-required');
+      detailEl.style.display = 'block';
+      try { detailEl.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (_) { /* noop */ }
+    }
+    const firstMissing =
+      document.getElementById(`${pfx}ClientEstado`)
+      || document.getElementById(`${pfx}ClientBanco`)
+      || detailEl;
+    try { firstMissing?.focus?.(); } catch (_) { /* noop */ }
+
+    const msg = 'Preencha os dados obrigatórios do cliente antes de salvar: ' + missing.join(', ') + '.';
+    if (typeof this._notifyOverModal === 'function') this._notifyOverModal(msg, 'error');
+    else if (typeof showToast === 'function') showToast(msg, 'error');
+    else alert(msg);
+    return false;
   },
 
   _proposalVendorSupervisorId: function(proposal) {
@@ -3824,6 +5271,9 @@ window.Proposals = {
       motherName: form.motherName || client?.motherName || client?.mother_name || '',
       fatherName: form.fatherName || client?.fatherName || client?.father_name || '',
       address: form.address || client?.address || '',
+      banco: form.banco || client?.banco || client?.bank || '',
+      agencia: form.agencia || client?.agencia || '',
+      conta: form.conta || client?.conta || client?.conta_corrente || '',
       updatedAt: nowBrazilSql(),
     };
     if (supervisorId) {
@@ -3849,6 +5299,16 @@ window.Proposals = {
     if (form.cpf) {
       proposal.clientCpf = form.cpf;
       proposal.client_cpf = form.cpf;
+    }
+    // Espelha conta do cliente na meta da proposta (auditoria / esteira).
+    const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
+    if (form.banco || form.agencia || form.conta) {
+      meta.client_bank = {
+        banco: form.banco || '',
+        agencia: form.agencia || '',
+        conta: form.conta || '',
+      };
+      proposal.meta = meta;
     }
 
     await this._ensureClientRecordForProposal(proposal, prefix);
@@ -3920,22 +5380,47 @@ window.Proposals = {
 
   updateAnexosLabel: function() {},  // compatibilidade
 
+  /**
+   * _parseBrMoneyInput — interpreta valor em formato BR ou simples.
+   * "2.040,50" → 2040.5 | "2040,5" → 2040.5 | "2040" → 2040
+   * Evita o bug do parseFloat("2.040") = 2.04 (ponto como milhar).
+   */
   _parseBrMoneyInput: function(raw) {
-    const s = String(raw ?? '').trim();
+    let s = String(raw ?? '').trim();
     if (!s) return NaN;
-    const clean = s.replace(/[^\d,.-]/g, '');
-    if (!clean) return NaN;
-    if (clean.includes(',')) {
-      return parseFloat(clean.replace(/\./g, '').replace(',', '.'));
+    s = s.replace(/[^\d,.-]/g, '');
+    if (!s || s === '-' || s === '.' || s === ',') return NaN;
+
+    const hasComma = s.includes(',');
+    const hasDot = s.includes('.');
+
+    if (hasComma) {
+      // Formato BR: pontos = milhar, vírgula = decimal
+      return parseFloat(s.replace(/\./g, '').replace(',', '.'));
     }
-    return parseFloat(clean);
+
+    if (hasDot) {
+      const parts = s.split('.');
+      // Vários pontos OU um ponto com exatamente 3 dígitos → milhar BR sem centavos
+      // Ex.: "2.040" / "40.454.358"
+      if (parts.length > 2 || (parts.length === 2 && parts[1].length === 3 && parts[0].length >= 1)) {
+        return parseFloat(parts.join(''));
+      }
+      // Um ponto com 1–2 casas → decimal (ex.: "2.5")
+      return parseFloat(s);
+    }
+
+    return parseFloat(s);
   },
 
+  /**
+   * calcAdminValorFinal — atualiza só o display do valor final / info da tabela.
+   * Não reescreve os inputs de valor (senão a digitação vira "2,04" no meio do tipo).
+   */
   calcAdminValorFinal: function() {
     const fmtR = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
     const parsed = this._readManageValorInput();
     const bruto = (!isNaN(parsed) && parsed >= 0) ? parsed : 0;
-    if (bruto > 0) this._syncManageValorFields(bruto);
     const tabela = document.getElementById('managePropTabela')?.value || '';
     const pct    = tabela ? (this._tabelaPct[tabela] ?? 1) : null;
     const finalV = pct !== null ? parseFloat((bruto * pct).toFixed(2)) : null;
@@ -3966,9 +5451,52 @@ window.Proposals = {
     this._fillEntidadeSelect('empPropEntidade', conv, '');
   },
 
-  /** Cadastro de proposta liberado para todos. */
+  /**
+   * _assertCanCreateProposal — bloqueia se pendência vencida (esteira).
+   * Independente do bloqueio de saque.
+   */
   _assertCanCreateProposal: async function() {
+    if (typeof window.EsteiraPendencias?.assertCanEditProposals === 'function') {
+      return window.EsteiraPendencias.assertCanEditProposals();
+    }
+    if (typeof DB !== 'undefined' && typeof DB.isProposalCreateBlocked === 'function') {
+      const u = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
+      if (u?.id) {
+        try {
+          const fresh = await DB.getUser(u.id, true).catch(() => u);
+          if (DB.isProposalCreateBlocked(fresh)) {
+            alert('Bloqueado por pendência em atraso. Resolva com o backoffice/supervisor.');
+            return false;
+          }
+        } catch (_) { /* segue */ }
+      }
+    }
     return true;
+  },
+
+  /**
+   * closeModal — fecha pop-up Nova Proposta (admin) ou card inline (vendedor).
+   * closeCreatePanel é alias para compatibilidade com HTML antigo.
+   */
+  closeModal: function() {
+    const overlay = document.getElementById('propFormModal');
+    if (overlay) {
+      if (typeof window.closeModal === 'function') window.closeModal('propFormModal');
+      else overlay.classList.remove('open');
+      return;
+    }
+    const container = document.getElementById('propFormContainer');
+    if (container) {
+      container.style.display = 'none';
+      container.classList.remove('prop-form-panel-open');
+    }
+    document.body.classList.remove('prop-form-panel-open');
+    const backdrop = document.getElementById('propFormBackdrop');
+    if (backdrop) backdrop.classList.remove('is-visible');
+  },
+
+  closeCreatePanel: function() {
+    this.closeModal();
   },
 
   openModal: async function() {
@@ -3979,7 +5507,7 @@ window.Proposals = {
         alert('Erro: O formulário de proposta não foi encontrado.');
         return;
       }
-      container.style.display = 'block';
+      if (typeof window.closeMobileNav === 'function') window.closeMobileNav();
       // Lista da busca anterior; sem isso o submit podia achar clone do cliente de antes.
       this._cpfExistingProposals = [];
       this._initProposalCatalogSelects();
@@ -3997,6 +5525,9 @@ window.Proposals = {
       this._initBankSelects();
       const area = document.getElementById('propFormArea');
       if (area) area.style.display = 'none';
+      const popupEl = document.getElementById('propCpfPopup');
+      if (popupEl) popupEl.style.display = 'none';
+      clearTimeout(this._cpfPopupTimer);
       const fileEl = document.getElementById('filePaystub');
       if (fileEl) fileEl.value = '';
 
@@ -4006,7 +5537,14 @@ window.Proposals = {
       this._initStaticProposalSelects();
       this._applyVendedorFormRules();
       this._ensureSupBackofficeDateUi('prop');
-      container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const overlay = document.getElementById('propFormModal');
+      if (overlay) {
+        if (typeof window.openModal === 'function') window.openModal('propFormModal');
+        else overlay.classList.add('open');
+      } else {
+        container.style.display = 'block';
+        container.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     } catch(e) {
       alert("Erro ao abrir formulário: " + e.message);
     }
@@ -4192,27 +5730,64 @@ window.Proposals = {
   },
 
   /**
+   * onCpfInput — dispara busca automática ao completar 11 dígitos do CPF.
+   * Usa debounce curto para não consultar a cada tecla.
+   */
+  onCpfInput: function() {
+    const input = document.getElementById('propCpf');
+    const popup = document.getElementById('propCpfPopup');
+    if (!input) return;
+
+    const cpf = input.value.replace(/\D/g, '');
+    clearTimeout(this._cpfPopupTimer);
+
+    if (cpf.length !== 11) {
+      if (popup) popup.style.display = 'none';
+      const area = document.getElementById('propFormArea');
+      if (area) area.style.display = 'none';
+      return;
+    }
+
+    this._cpfPopupTimer = setTimeout(() => {
+      this.searchCpf({ silent: true });
+    }, 350);
+  },
+
+  /**
    * searchCpf — busca o cadastro (1 por CPF) e as propostas já lançadas.
    * Não bloqueia se já existir ficha: preenche o form e lista produtos atuais.
    * Grava this._cpfExistingProposals para o submit detectar clone vs segundo produto.
+   * opts.silent: feedback no popup em vez de alert/botão (busca automática ao digitar).
    */
-  searchCpf: async function() {
+  searchCpf: async function(opts) {
+    opts = opts || {};
+    const popup = document.getElementById('propCpfPopup');
     try {
       const cpfStr = document.getElementById('propCpf').value;
       const cpf = cpfStr.replace(/\D/g, '');
       if (cpf.length !== 11) {
-        alert("Por favor, digite um CPF válido.");
+        if (!opts.silent) alert("Por favor, digite um CPF válido.");
         return;
       }
-      
-      const btn = event.target || document.querySelector('#propFormContainer .btn-primary');
-      const oldText = btn ? btn.innerText : 'Buscar Cliente';
-      if(btn) btn.innerText = 'Buscando...';
 
-      // Procura por CPF (id ou campo cpf)
+      let btn = null;
+      let oldText = '';
+      if (opts.silent) {
+        if (popup) {
+          popup.className = 'prop-cpf-popup';
+          popup.style.display = 'block';
+          popup.innerHTML = '<span style="color:var(--color-text-muted);">Buscando cliente...</span>';
+        }
+      } else {
+        btn = (typeof event !== 'undefined' && event && event.target)
+          || document.querySelector('#propFormContainer .btn-primary');
+        oldText = btn ? btn.innerText : 'Buscar Cliente';
+        if (btn) btn.innerText = 'Buscando...';
+      }
+
       const client = await this._lookupClientByCpf(cpf);
-      
-      if(btn) btn.innerText = oldText;
+
+      if (btn) btn.innerText = oldText;
 
       if (client) {
         this._cpfExistingProposals = [];
@@ -4234,12 +5809,31 @@ window.Proposals = {
         this._setFolderContext('propAnexosFolders', 'prop');
         this.initAnexoFolders();
         this._applyVendedorFormRules();
+
+        if (popup) {
+          popup.className = 'prop-cpf-popup prop-cpf-popup--found';
+          popup.innerHTML = `✓ Cliente encontrado: <strong>${this._escHtml(client.name)}</strong>`;
+          setTimeout(() => { popup.style.display = 'none'; }, 1800);
+        }
       } else {
-        alert("Cliente não encontrado. Por favor, vá na aba 'Clientes' e cadastre o cliente primeiro.");
         document.getElementById('propFormArea').style.display = 'none';
+        if (opts.silent) {
+          if (popup) {
+            popup.className = 'prop-cpf-popup prop-cpf-popup--notfound';
+            popup.innerHTML = "Cliente não encontrado. Vá em 'Clientes' e cadastre primeiro.";
+          }
+        } else {
+          alert("Cliente não encontrado. Por favor, vá na aba 'Clientes' e cadastre o cliente primeiro.");
+          if (popup) popup.style.display = 'none';
+        }
       }
     } catch (e) {
-      alert("Erro ao buscar cliente: " + e.message);
+      if (opts.silent && popup) {
+        popup.className = 'prop-cpf-popup prop-cpf-popup--notfound';
+        popup.innerHTML = 'Erro ao buscar cliente.';
+      } else if (!opts.silent) {
+        alert('Erro ao buscar cliente: ' + e.message);
+      }
     }
   },
 
@@ -4270,6 +5864,26 @@ window.Proposals = {
       const role = user.role || '';
       const isVendedor = this._isVendedorRole(role);
       const etapaVendedor = (document.getElementById('propEtapaVendedor')?.value || '').trim();
+
+      // Vendedor: precisa ter endereço no cadastro do cliente antes de criar a proposta.
+      // Banco/agência/conta são exigidos ao salvar a ficha (modal editar), não aqui —
+      // o cadastro de cliente ainda não tem esses campos estruturados.
+      if (isVendedor) {
+        let clientRow = null;
+        try {
+          clientRow = typeof this._lookupClientByCpf === 'function'
+            ? await this._lookupClientByCpf(cpf)
+            : null;
+        } catch (_) { clientRow = null; }
+        const addr = String(clientRow?.address || '').trim();
+        if (!addr || addr.length < 8) {
+          alert(
+            'Complete o endereço do cliente no cadastro antes de enviar a proposta.\n\n' +
+            'Abra o cliente, preencha o endereço e tente novamente.'
+          );
+          return;
+        }
+      }
 
       const saveBtn = document.querySelector('#propFormArea .btn-primary');
       let oldText = 'Enviar Proposta';
@@ -4403,7 +6017,7 @@ window.Proposals = {
       if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
       alert("Proposta enviada com sucesso!");
       
-      document.getElementById('propFormContainer').style.display = 'none';
+      this.closeCreatePanel();
       /* Limpa slots e arquivos selecionados — evita anexos "fantasma" na próxima proposta. */
       this._setFolderContext('propAnexosFolders', 'prop');
       this.resetAnexoFolders();
@@ -4430,6 +6044,102 @@ window.Proposals = {
     }
   },
 
+  /**
+   * _isGestaoCreditoProposal — ficha da 2ª esteira (CD-* / entidade COMPRA_DIVIDA).
+   * Separada de Minhas Propostas: vendedor olha em "Propostas de Crédito" ou no menu Gestão de Crédito.
+   */
+  _isGestaoCreditoProposal: function(p) {
+    if (!p) return false;
+    if (typeof window.EsteiraCompraDivida?.isCompraDividaProposal === 'function') {
+      return !!window.EsteiraCompraDivida.isCompraDividaProposal(p);
+    }
+    const ent = String(p.entidade || '').toUpperCase().normalize('NFD').replace(/\p{M}/gu, '');
+    if (ent === 'COMPRA_DIVIDA' || ent === 'COMPRA DE DIVIDA') return true;
+    if (String(p.id || '').startsWith('CD-') || String(p.numero || '').startsWith('CD-')) return true;
+    const obs = String(p.obs || '');
+    return obs.includes('tipo_esteira=compra_divida') || /\[COMPRA[_\s]?DIVIDA\]/i.test(obs);
+  },
+
+  /**
+   * _ensureEmployeeCreditBlock — card separado sob Meus Clientes para fichas de crédito.
+   * Evita misturar com NOVO/CARTÃO e deixa claro onde a Gestão de Crédito aparece.
+   */
+  _ensureEmployeeCreditBlock: function() {
+    let list = document.getElementById('employeeCreditProposalsList');
+    if (list) return list;
+    const proposalsList = document.getElementById('proposalsList');
+    const host = proposalsList?.closest('.card.card-padded')?.parentElement
+      || document.getElementById('secProposals');
+    if (!host || !proposalsList) return null;
+    const card = document.createElement('div');
+    card.className = 'card card-padded';
+    card.id = 'employeeCreditProposalsCard';
+    card.style.marginBottom = '20px';
+    card.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:15px;">
+        <div>
+          <h3 style="margin:0;">Propostas de Crédito</h3>
+          <p style="margin:4px 0 0;font-size:13px;color:var(--color-text-muted);">Esteira Gestão de Crédito (separado das propostas normais)</p>
+        </div>
+        <button type="button" class="btn btn-outline btn-sm" id="employeeCreditGoBtn">Abrir Gestão de Crédito</button>
+      </div>
+      <div id="employeeCreditProposalsList"></div>`;
+    const normalCard = proposalsList.closest('.card.card-padded');
+    if (normalCard && normalCard.parentNode) {
+      normalCard.parentNode.insertBefore(card, normalCard);
+    } else {
+      host.appendChild(card);
+    }
+    card.querySelector('#employeeCreditGoBtn')?.addEventListener('click', () => {
+      if (typeof window.EsteiraCompraDivida?.ensureVendorSection === 'function') {
+        window.EsteiraCompraDivida.ensureVendorSection();
+      }
+      const nav = document.getElementById('navGestaoCredito');
+      if (nav) nav.click();
+      else if (typeof navigateTo === 'function') navigateTo('secEsteiraCompraDivida');
+    });
+    return document.getElementById('employeeCreditProposalsList');
+  },
+
+  /** _employeeProposalCardHtml — card compacto da lista do vendedor (normal ou crédito). */
+  _employeeProposalCardHtml: function(p, clientsByCpf) {
+    const fmtR = (v) => (v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) : '—');
+    const stage = this._vendorStage(p);
+    const statusLabel = this._proposalDisplayStatus(p);
+    const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
+    const phone = this._formatPhoneDisplay(this._proposalClientPhone(p, clientsByCpf));
+    const email = this._proposalClientEmail(p, clientsByCpf);
+    const protoParts = [];
+    if (p.protocolo) protoParts.push(`<strong>Nº Protocolo:</strong> ${this._escHtml(p.protocolo)}`);
+    if (phone) protoParts.push(`<strong>Telefone:</strong> ${this._escHtml(phone)}`);
+    if (email) protoParts.push(`<strong>E-mail:</strong> ${this._escHtml(email)}`);
+    const protoPhoneHtml = protoParts.length
+      ? `<div style="font-size:14px;margin-top:4px;">${protoParts.join(' | ')}</div>`
+      : '';
+    return `
+      <div class="card" style="padding: 16px; margin-bottom: 12px;">
+         <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px;">
+            <div>
+              <strong style="font-size:16px;">${this._escHtml(p.numero || p.id)}</strong>
+              ${p.numero ? `<span style="font-size:11px;color:var(--color-text-muted);margin-left:8px;">(${this._escHtml(p.id)})</span>` : ''}
+            </div>
+            <span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>
+         </div>
+         <div style="margin-bottom:4px; font-size:14px;"><strong>Cliente:</strong> ${this._escHtml(p.clientName)} (CPF: ${this._escHtml(p.clientCpf)})</div>
+         <div style="font-size:14px;"><strong>Produto:</strong> ${this._escHtml(p.product || '—')} | <strong>Convênio:</strong> ${this._escHtml(p.convenio || '—')} | <strong>Entidade:</strong> ${this._escHtml(p.entidade || '—')}</div>
+         ${protoPhoneHtml}
+         <div style="display:flex; gap:20px; margin-top:10px; background:var(--color-surface-2); padding:10px; border-radius:8px; flex-wrap:wrap;">
+           <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Proposta</span><br><strong>${fmtR(p.valor)}</strong></div>
+           <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Desconto</span><br><strong style="color:var(--color-danger);">− ${fmtR(p.desconto)}</strong></div>
+           <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Final</span><br><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></div>
+         </div>
+         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px;">
+           <div style="font-size: 12px; color: var(--color-text-muted);">Criada em: ${this._propDateStr(p)}</div>
+           <div style="flex-shrink:0;">${this.actionsRowHtml(p.id, { employee: true })}</div>
+         </div>
+      </div>`;
+  },
+
   renderEmployeeList: async function() {
     this._applyMobileListLimits();
     const listEl = document.getElementById('proposalsList');
@@ -4439,6 +6149,8 @@ window.Proposals = {
     if (!user?.id) return;
 
     listEl.innerHTML = '<p style="color:var(--color-text-muted);">Carregando propostas...</p>';
+    const creditEl = this._ensureEmployeeCreditBlock();
+    if (creditEl) creditEl.innerHTML = '<p style="color:var(--color-text-muted);">Carregando propostas de crédito...</p>';
 
     try {
       const me = await DB.getUser(user.id).catch(() => null);
@@ -4447,10 +6159,14 @@ window.Proposals = {
       const raw = await DB.getProposals(user.id, vendorUser);
       // getProposals já filtra por vendor_id/employee_id e por CPF dos clientes do vendedor.
       // Não aplicar _ownsProposal de novo — isso escondia propostas com vendor_id vazio/errado.
-      let proposals = this._rowsFromProposalQuery(raw)
+      let all = this._rowsFromProposalQuery(raw)
         .map(p => this._normProposal(p));
 
-      proposals = this._sortProposalsNewestFirst(proposals);
+      all = this._sortProposalsNewestFirst(all);
+
+      // Separa Gestão de Crédito (CD) das propostas CRM normais.
+      const credit = all.filter((p) => this._isGestaoCreditoProposal(p));
+      let proposals = all.filter((p) => !this._isGestaoCreditoProposal(p));
 
       let clientsByCpf = {};
       if (typeof DB.getClients === 'function') {
@@ -4460,7 +6176,7 @@ window.Proposals = {
         } catch (_) { /* noop */ }
       }
       const pageCpfs = [...new Set(
-        proposals.map((p) => String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '')).filter(Boolean)
+        all.map((p) => String(p.clientCpf || p.client_cpf || '').replace(/\D/g, '')).filter(Boolean)
       )];
       const missingCpfs = pageCpfs.filter((cpf) => !clientsByCpf[cpf]);
       if (missingCpfs.length && typeof DB.getClientByCpf === 'function') {
@@ -4470,6 +6186,13 @@ window.Proposals = {
         }));
       }
 
+      if (creditEl) {
+        if (!credit.length) {
+          creditEl.innerHTML = '<p style="color:var(--color-text-muted);">Nenhuma proposta de crédito nesta esteira. Use <strong>Gestão de Crédito</strong> no menu para cadastrar.</p>';
+        } else {
+          creditEl.innerHTML = credit.map((p) => this._employeeProposalCardHtml(p, clientsByCpf)).join('');
+        }
+      }
 
       this._employeeList.total = proposals.length;
       const startEmp = (this._employeeList.page - 1) * this._employeeList.pageSize;
@@ -4481,51 +6204,12 @@ window.Proposals = {
         return;
       }
 
-      const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
-      let html = '';
-      proposals.forEach(p => {
-        const stage = this._vendorStage(p);
-        const statusLabel = this._proposalDisplayStatus(p);
-        const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
-        const safeId = this._escAttr(p.id);
-        const phone = this._formatPhoneDisplay(this._proposalClientPhone(p, clientsByCpf));
-        const email = this._proposalClientEmail(p, clientsByCpf);
-        const protoParts = [];
-        if (p.protocolo) protoParts.push(`<strong>Nº Protocolo:</strong> ${this._escHtml(p.protocolo)}`);
-        if (phone) protoParts.push(`<strong>Telefone:</strong> ${this._escHtml(phone)}`);
-        if (email) protoParts.push(`<strong>E-mail:</strong> ${this._escHtml(email)}`);
-        const protoPhoneHtml = protoParts.length
-          ? `<div style="font-size:14px;margin-top:4px;">${protoParts.join(' | ')}</div>`
-          : '';
-        html += `
-          <div class="card" style="padding: 16px; margin-bottom: 12px;">
-             <div style="display:flex; justify-content: space-between; align-items:center; margin-bottom: 8px;">
-                <div>
-                  <strong style="font-size:16px;">${p.numero || p.id}</strong>
-                  ${p.numero ? `<span style="font-size:11px;color:var(--color-text-muted);margin-left:8px;">(${p.id})</span>` : ''}
-                </div>
-                <span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>
-             </div>
-             <div style="margin-bottom:4px; font-size:14px;"><strong>Cliente:</strong> ${this._escHtml(p.clientName)} (CPF: ${this._escHtml(p.clientCpf)})</div>
-             <div style="font-size:14px;"><strong>Produto:</strong> ${this._escHtml(p.product || '—')} | <strong>Convênio:</strong> ${this._escHtml(p.convenio || '—')} | <strong>Entidade:</strong> ${this._escHtml(p.entidade || '—')}</div>
-             ${protoPhoneHtml}
-             <div style="display:flex; gap:20px; margin-top:10px; background:var(--color-surface-2); padding:10px; border-radius:8px; flex-wrap:wrap;">
-               <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Proposta</span><br><strong>${fmtR(p.valor)}</strong></div>
-               <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Desconto</span><br><strong style="color:var(--color-danger);">− ${fmtR(p.desconto)}</strong></div>
-               <div style="font-size:13px;"><span style="color:var(--color-text-muted);">Valor Final</span><br><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></div>
-             </div>
-             <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; flex-wrap:wrap; gap:8px;">
-               <div style="font-size: 12px; color: var(--color-text-muted);">Criada em: ${this._propDateStr(p)}</div>
-               <div style="flex-shrink:0;">${this.actionsRowHtml(p.id, { employee: true })}</div>
-             </div>
-          </div>
-        `;
-      });
-      listEl.innerHTML = html;
+      listEl.innerHTML = proposals.map((p) => this._employeeProposalCardHtml(p, clientsByCpf)).join('');
       this._renderPagination('employeeProposalsPagination', this._employeeList, 'Proposals.employeeSetPage');
     } catch (e) {
       console.error('[Proposals] renderEmployeeList:', e);
       listEl.innerHTML = '<p style="color:var(--color-danger);">Erro ao carregar propostas. Recarregue a página.</p>';
+      if (creditEl) creditEl.innerHTML = '';
     }
   },
 
@@ -4625,13 +6309,20 @@ window.Proposals = {
     }
     proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
+    // Lista padrão esconde Cancelado — exclusão/arquivamento some na hora (filtro Cancelado ainda mostra).
+    if (!statusFilter || statusFilter === 'todos') {
+      proposals = proposals.filter((p) => !(typeof DB !== 'undefined' && typeof DB.isCancelledProposal === 'function' && DB.isCancelledProposal(p)));
+    }
     proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
-    proposals = proposals.filter(p => this._matchesDateFilter(p, dateFrom, dateTo));
-    if (this._isDigitacaoStatus(statusFilter)) {
+    proposals = proposals.filter(p => this._matchesDateFilter(p, dateFrom, dateTo, statusFilter));
+    if (this._adminList.sortField === 'vendedor') {
+      proposals = this._sortProposalsByVendorName(proposals, this._adminList.sortDir);
+    } else if (this._isDigitacaoStatus(statusFilter)) {
       proposals = this._sortProposalsDigitacaoFifo(proposals);
     } else {
       proposals = this._sortProposalsNewestFirst(proposals);
     }
+    this._updateAdminVendorSortHeader();
 
     this._propPerfLog('proposals.js:_fetchAdminProposalsFiltered', 'list fetched', {
       ms: Date.now() - t0, count: proposals.length, partnerRoot: !!window.PARTNER_ROOT_ID, fromCache: !!canUseCache,
@@ -4660,44 +6351,42 @@ window.Proposals = {
   },
 
   _proposalExportRow: function(p) {
-    const etapa = this._vendorStage(p);
-    const situacao = etapa ? this._labelEtapaVendedor(etapa) : '';
     const num = (v) => (v != null && v !== '' && Number.isFinite(parseFloat(v)) ? parseFloat(v) : '');
     const dt = this._proposalCreatedAt(p);
     let dataCriacao = '';
     if (dt) {
       try { dataCriacao = typeof formatDateTime === 'function' ? formatDateTime(dt) : this._fmtDateTime(dt); } catch (_) { dataCriacao = String(dt); }
     }
+    let dataPagamento = '';
+    if (typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function') {
+      const paidAt = DB.proposalPaidAt(p);
+      if (paidAt) {
+        try {
+          dataPagamento = typeof formatDateTime === 'function'
+            ? formatDateTime(paidAt)
+            : this._fmtDateTime(paidAt);
+        } catch (_) {
+          dataPagamento = String(paidAt);
+        }
+      }
+    }
     return {
       'Nº Proposta': p.numero || p.id || '',
-      'ID Sistema': p.id || '',
       Vendedor: p.vendorName || '',
       Cliente: p.clientName || '',
       CPF: p.clientCpf || '',
       Produto: p.product || '',
-      Convênio: p.convenio || '',
-      Entidade: p.entidade || '',
-      Matrícula: p.matricula || '',
-      Protocolo: p.protocolo || '',
-      'Banco comprado': p.bancoComprado || '',
-      'Banco para digitação': p.bancoDigitado || '',
-      'Tipo de operação': p.tipoOperacao || '',
-      'Valor Proposta (R$)': num(p.valor),
-      'Desconto (R$)': num(p.desconto),
       'Valor Final (R$)': num(p.valorFinal),
-      Tabela: p.tabela || '',
       Status: p.status || p.statusOp || '',
-      'Situação vendedor': situacao,
-      Observações: (p.obs || '').replace(/\s+/g, ' ').trim(),
-      Fases: (p.fases || '').replace(/\s+/g, ' ').trim(),
       'Data criação': dataCriacao,
+      'Data pagamento': dataPagamento,
     };
   },
 
   _downloadProposalCsv: function(rows, filenameBase) {
     const headers = rows.length
       ? Object.keys(rows[0])
-      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Status', 'Data criação'];
+      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
     const stamp = nowBrazilSql().slice(0, 10);
     const fname = `${filenameBase}_${stamp}.csv`;
     const bom = '\uFEFF';
@@ -4712,8 +6401,79 @@ window.Proposals = {
     URL.revokeObjectURL(url);
   },
 
+  /**
+   * _downloadProposalXlsx — gera .xlsx com cabeçalho fixo, autofilter e moeda.
+   * Usa SheetJS (ensureXlsx); se falhar, o caller faz fallback para CSV.
+   */
+  _downloadProposalXlsx: async function(rows, filenameBase) {
+    if (typeof window.ensureXlsx === 'function') await window.ensureXlsx();
+    if (typeof XLSX === 'undefined') throw new Error('Biblioteca de planilha indisponível.');
+
+    const headers = rows.length
+      ? Object.keys(rows[0])
+      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+    const moneyCols = new Set(['Valor Final (R$)']);
+    const moneyColIdx = headers.reduce((acc, h, i) => { if (moneyCols.has(h)) acc.push(i); return acc; }, []);
+
+    const aoa = [headers, ...rows.map(r => headers.map(h => r[h]))];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    for (let R = 1; R < aoa.length; R++) {
+      moneyColIdx.forEach((C) => {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell && typeof cell.v === 'number') cell.z = '"R$" #,##0.00';
+      });
+    }
+
+    ws['!cols'] = headers.map((h, i) => {
+      const maxLen = aoa.reduce((m, row) => Math.max(m, String(row[i] ?? '').length), h.length);
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 42) };
+    });
+    ws['!freeze'] = { xSplit: 0, ySplit: 1 };
+    ws['!autofilter'] = {
+      ref: XLSX.utils.encode_range({
+        s: { r: 0, c: 0 },
+        e: { r: Math.max(aoa.length - 1, 0), c: headers.length - 1 },
+      }),
+    };
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Propostas');
+    const stamp = nowBrazilSql().slice(0, 10);
+    XLSX.writeFile(wb, `${filenameBase}_${stamp}.xlsx`);
+  },
+
   exportAdminExcel: async function() {
-    return this.exportAdminCsv();
+    if (!document.getElementById('manageProposalsTbody')) return;
+    if (typeof showLoading === 'function') showLoading('Gerando planilha...');
+    try {
+      const { proposals, q } = await this._fetchAdminProposalsFiltered();
+      if (!proposals.length) {
+        if (typeof showToast === 'function') {
+          showToast(q ? 'Nenhuma proposta encontrada com os filtros atuais.' : 'Não há propostas para exportar.', 'warning');
+        } else alert('Nenhuma proposta para exportar.');
+        return;
+      }
+      const rows = proposals.map(p => this._proposalExportRow(p));
+      try {
+        await this._downloadProposalXlsx(rows, 'propostas_soublu');
+        if (typeof showToast === 'function') {
+          showToast(`${proposals.length} proposta(s) exportada(s) em Excel.`, 'success', 4500);
+        }
+      } catch (xlsxErr) {
+        console.error('[Proposals] exportAdminExcel xlsx fallback:', xlsxErr);
+        this._downloadProposalCsv(rows, 'propostas_soublu');
+        if (typeof showToast === 'function') {
+          showToast(`${proposals.length} proposta(s) exportada(s) em CSV (Excel indisponível).`, 'warning', 5500);
+        }
+      }
+    } catch (e) {
+      console.error('[Proposals] exportAdminExcel:', e);
+      if (typeof showToast === 'function') showToast('Erro ao gerar planilha. Tente novamente.', 'error');
+      else alert('Erro ao gerar planilha.');
+    } finally {
+      if (typeof hideLoading === 'function') hideLoading();
+    }
   },
 
   exportAdminCsv: async function() {
@@ -4743,6 +6503,9 @@ window.Proposals = {
 
   renderAdminList: async function(opts = {}) {
     this._applyMobileListLimits();
+    this._syncProposalToolsPlacement();
+    this._syncProposalResponsiveLayout();
+    this._resetAdminProposalTableLayout();
     const tbody = document.getElementById('manageProposalsTbody');
     if (!tbody) return;
 
@@ -4785,6 +6548,16 @@ window.Proposals = {
 
       if (proposals.length === 0) {
         tbody.innerHTML = emptyMsg(q || vendorId || dateFrom || dateTo);
+        const mobileHostEmpty = document.getElementById('manageProposalsMobileList');
+        const tableWrapEmpty = tbody.closest('.table-wrap');
+        const mobileLayout = this._isProposalMobileLayout();
+        if (mobileHostEmpty) {
+          mobileHostEmpty.style.display = mobileLayout ? 'block' : 'none';
+          if (mobileLayout) {
+            mobileHostEmpty.innerHTML = `<div class="prop-mobile-empty">${q || vendorId || dateFrom || dateTo ? 'Nenhuma proposta encontrada.' : 'Nenhuma proposta cadastrada.'}</div>`;
+          }
+        }
+        if (tableWrapEmpty) tableWrapEmpty.style.display = mobileLayout ? 'none' : '';
         this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
         return;
       }
@@ -4806,14 +6579,13 @@ window.Proposals = {
       const showPartnerStyle = this._canSeePartnerProposalsInAdminList();
       const partnerIds = showPartnerStyle ? await this._partnerProposalIdSet(allFiltered) : new Set();
       const partnerRoot = typeof window !== 'undefined' ? window.PARTNER_ROOT_ID : null;
-      const mobileCards = (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
-        || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+      const mobileCards = this._isProposalMobileLayout();
       const tableWrap = tbody.closest('.table-wrap');
       let mobileHost = document.getElementById('manageProposalsMobileList');
       if (!mobileHost && tableWrap?.parentElement) {
         mobileHost = document.createElement('div');
         mobileHost.id = 'manageProposalsMobileList';
-        mobileHost.className = 'mobile-list-cards';
+        mobileHost.className = 'prop-mobile-cards';
         tableWrap.parentElement.insertBefore(mobileHost, tableWrap);
       }
       if (mobileHost) mobileHost.style.display = mobileCards ? 'block' : 'none';
@@ -4821,40 +6593,10 @@ window.Proposals = {
 
       if (mobileCards && mobileHost) {
         let cards = '';
-        proposals.forEach(p => {
-          const stage = this._vendorStage(p);
-          const statusLabel = this._proposalDisplayStatus(p);
-          const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
-          const safeId = this._escAttr(p.id);
-          const isPartnerRow = partnerIds.has(String(p.id));
-          const partnerBadge = isPartnerRow
-            ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
-            : '';
-          const canEditRow = this._isSoubluProposalAdmin() || !partnerRoot || this._canPartnerManageProposals();
-          const finAction = finGestao ? this._finComissaoActionBtn(p.id) : '';
-          cards += `
-            <article class="mobile-list-card${isPartnerRow ? ' proposal-row--partner' : ''}" data-prop-id="${safeId}">
-              <div class="mobile-list-card__head">
-                <div>
-                  ${partnerBadge}<strong>${this._escHtml(p.numero || p.id)}</strong>
-                  <div class="mobile-list-card__meta">${this._escHtml(p.vendorName || '—')}</div>
-                </div>
-                <span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span>
-              </div>
-              <div class="mobile-list-card__body">
-                <div><strong>Cliente:</strong> ${this._escHtml(p.clientName || '—')} <span class="mobile-list-card__muted">${this._escHtml(p.clientCpf || '')}</span></div>
-                <div><strong>Produto:</strong> ${this._escHtml(p.product || '—')} · ${this._escHtml(p.convenio || '—')}</div>
-                <div><strong>Final:</strong> <span style="color:var(--color-success);font-weight:800;">${fmtR(p.valorFinal)}</span>
-                  <span class="mobile-list-card__muted"> · ${this._propDateStr(p)}</span></div>
-              </div>
-              <div class="mobile-list-card__actions" onclick="event.stopPropagation()">
-                ${finAction}${this.actionsRowHtml(p.id, {
-                  canEdit: canEditRow,
-                  canDelete: canDelete && canEditRow,
-                  label: p.numero || p.clientName || p.id,
-                })}
-              </div>
-            </article>`;
+        proposals.forEach((p) => {
+          cards += this._mobileProposalCardHtml(p, {
+            isPartner: partnerIds.has(String(p.id)),
+          });
         });
         mobileHost.innerHTML = cards;
         tbody.innerHTML = '';
@@ -4869,38 +6611,40 @@ window.Proposals = {
         const badgeClass = this._proposalStatusBadgeClass(stage || p.status);
         const subStatus = '';
         const safeId = this._escAttr(p.id);
-        const safeLabel = this._escAttr(p.numero || p.clientName || p.id);
         const isPartnerRow = partnerIds.has(String(p.id));
         const rowClass = isPartnerRow ? 'proposal-row--partner' : '';
         const partnerBadge = isPartnerRow
           ? '<span class="badge badge-info proposal-badge-partner">Parceiro</span> '
           : '';
-        const canEditRow = this._isSoubluProposalAdmin() || !partnerRoot || this._canPartnerManageProposals();
         const comissaoCell = finGestao && window.FinPropostas?.operacaoChipsHtml
           ? `<td class="fin-comissao-col" style="cursor:pointer;" onclick="FinPropostas.openProposalDrawer('${safeId}','dados')" title="Abrir operações financeiras">${FinPropostas.operacaoChipsHtml(p, { baixa: baixaMap[String(p.id)], prejuizo: prejuizoMap[String(p.id)], debito: debitoMap[String(p.id)] })}</td>`
           : '';
-        const finAction = finGestao ? this._finComissaoActionBtn(p.id) : '';
         html += `<tr data-prop-id="${safeId}"${rowClass ? ` class="${rowClass}"` : ''}${finGestao ? ` style="cursor:pointer;" onclick="if(!event.target.closest('.client-actions,.fin-comissao-col'))FinPropostas.openProposalDrawer('${safeId}','dados')"` : ''}>
-            <td>${partnerBadge}<strong>${p.numero || p.id}</strong></td>
-            <td>${p.vendorName || '—'}</td>
-            <td>${p.clientName || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.clientCpf || ''}</div></td>
+            <td>${partnerBadge}<strong>${this._escHtml(p.numero || p.id)}</strong></td>
+            <td>${this._escHtml(p.vendorName || '—')}</td>
+            <td>${this._escHtml(p.clientName || '—')} <div style="font-size:11px;color:var(--color-text-muted);">${this._escHtml(p.clientCpf || '')}</div></td>
             <td>${this._escHtml(p.product || '—')}${subStatus ? ` <div style="font-size:11px;color:var(--color-text-muted);">${this._escHtml(subStatus)}</div>` : ''}</td>
-            <td>${p.convenio || '—'} <div style="font-size:11px;color:var(--color-text-muted);">${p.entidade || ''}</div></td>
+            <td>${this._escHtml(p.convenio || '—')} <div style="font-size:11px;color:var(--color-text-muted);">${this._escHtml(p.entidade || '')}</div></td>
             <td data-col="protocolo">${p.protocolo ? this._escHtml(p.protocolo) : '—'}</td>
             <td data-col="valor">${fmtR(p.valor)}</td>
             <td data-col="valorFinal"><strong style="color:var(--color-success);">${fmtR(p.valorFinal)}</strong></td>
-            <td>${this._propDateStr(p)}</td>
+            <td>${this._escHtml(this._propDateStr(p))}</td>
             <td data-col="status"><span class="badge ${badgeClass}">${this._escHtml(statusLabel)}</span></td>
+            <td data-col="paidAt">${(typeof DB !== 'undefined' && typeof DB.proposalPaidAt === 'function' && DB.proposalPaidAt(p)) ? this._escHtml(this._fmtDateTime(DB.proposalPaidAt(p))) : '—'}</td>
             ${comissaoCell}
-            <td class="td-proposal-actions" onclick="event.stopPropagation()">${finAction}${this.actionsRowHtml(p.id, {
-              canEdit: canEditRow,
-              canDelete: canDelete && canEditRow,
-              label: p.numero || p.clientName || p.id,
-            })}</td>
+            <td class="td-proposal-actions"></td>
           </tr>`;
       });
       tbody.innerHTML = html;
+      this._paintAdminProposalActionCells(proposals, {
+        finGestao,
+        canDelete,
+        canEditRowFn: () => this._isSoubluProposalAdmin() || !partnerRoot || this._canPartnerManageProposals(),
+        canDeleteFn: () => canDelete && (this._isSoubluProposalAdmin() || !partnerRoot || this._canPartnerManageProposals()),
+      });
       this._renderPagination('proposalsPagination', this._adminList, 'Proposals.adminSetPage');
+      this._ensureProposalTableScrollContainer();
+      requestAnimationFrame(() => this._probeProposalTableLayout('prop-table2-post-render'));
     } catch (e) {
       console.error('[Proposals] renderAdminList:', e);
       const msg = (e && e.message) ? String(e.message).slice(0, 200) : 'Erro desconhecido';
@@ -5050,11 +6794,21 @@ window.Proposals = {
   },
 
   openEmployeeModal: async function(id, viewOnly) {
-    if (this._openModalBusy) return;
+    // Token invalida carga antiga — permite abrir outra proposta sem F5
+    const token = (this._modalLoadToken = (this._modalLoadToken || 0) + 1);
     this._openModalBusy = true;
     viewOnly = !!viewOnly;
     const user = Auth.getSession();
     if (!user?.id) { this._openModalBusy = false; return; }
+
+    /* Pendência vencida: só visualização — não edita proposta. */
+    if (!viewOnly && typeof window.EsteiraPendencias?.assertCanEditProposals === 'function') {
+      const ok = await window.EsteiraPendencias.assertCanEditProposals();
+      if (!ok) {
+        this._openModalBusy = false;
+        return this.openEmployeeModal(id, true);
+      }
+    }
 
     const modal = document.getElementById('employeeProposalModal');
     this._applyEmployeeModalMode(viewOnly);
@@ -5070,6 +6824,7 @@ window.Proposals = {
 
     try {
       const raw = await DB.getProposal(id, { lite: true });
+      if (token !== this._modalLoadToken) return;
       const proposal = this._normProposal(raw);
       if (!proposal) {
         alert('Proposta não encontrada.');
@@ -5092,15 +6847,28 @@ window.Proposals = {
 
       const cpf = String(proposal.clientCpf || '').replace(/\D/g, '');
       const client = cpf ? await this._lookupClientByCpf(cpf) : null;
+      if (token !== this._modalLoadToken) return;
 
       const sv = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val ?? ''; };
       sv('empPropId', proposal.id);
 
       const detailEl = document.getElementById('empPropClientDetail');
       if (detailEl) {
-        detailEl.style.display = '';
-        detailEl.innerHTML = '<strong style="display:block;margin-bottom:8px;">Dados cadastrais do cliente</strong>' +
+        // CSS base é display:none — precisa da classe is-open (style='' voltava a esconder).
+        detailEl.classList.add('is-open');
+        detailEl.style.display = 'block';
+        const needClientReq = !viewOnly && this._shouldRequireClientAddressAndBank();
+        detailEl.classList.toggle('is-required', needClientReq);
+        detailEl.innerHTML =
+          '<strong style="display:block;margin-bottom:8px;">Dados cadastrais do cliente' +
+          (needClientReq ? ' <span style="color:var(--color-danger);">*</span>' : '') +
+          '</strong>' +
+          (needClientReq
+            ? '<p style="margin:0 0 10px;font-size:12px;color:var(--color-warning);font-weight:600;">Preencha endereço completo e conta (banco/agência/conta) para salvar.</p>'
+            : '') +
           this._renderEditableClientDetail(client, proposal, { prefix: 'emp', editable: !viewOnly });
+        // Reaplica readonly/liberação nos campos recém-criados.
+        this._applyEmployeeModalMode(viewOnly);
       }
 
       const fmtR = v => v != null && v !== '' ? 'R$ ' + parseFloat(v).toLocaleString('pt-BR', {minimumFractionDigits:2}) : '—';
@@ -5135,6 +6903,9 @@ window.Proposals = {
       const etapaSel = document.getElementById('empPropEtapa');
       if (etapaSel) {
         etapaSel.innerHTML = this._vendorSituacaoOptionsHtml(this._vendorStage(proposal));
+        // Supervisor de vendedor: situação só leitura no modal do vendedor.
+        const canChangeStatusEmpUi = this._canChangeProposalStatus(user?.role);
+        etapaSel.disabled = !!viewOnly || !canChangeStatusEmpUi;
       } else {
         sv('empPropEtapa', this._vendorStage(proposal));
       }
@@ -5165,6 +6936,7 @@ window.Proposals = {
 
       this._employeeEditCache[id] = { ...proposal };
 
+      if (token !== this._modalLoadToken) return;
       if (typeof hideLoading === 'function') hideLoading();
       this._openModalBusy = false;
 
@@ -5180,8 +6952,10 @@ window.Proposals = {
       if (typeof hideLoading === 'function') hideLoading();
       if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
     } finally {
-      this._openModalBusy = false;
-      if (typeof hideLoading === 'function') hideLoading();
+      if (token === this._modalLoadToken) {
+        this._openModalBusy = false;
+        if (typeof hideLoading === 'function') hideLoading();
+      }
     }
   },
 
@@ -5215,6 +6989,8 @@ window.Proposals = {
     const product = gv('empPropProduct');
     const etapa = gv('empPropEtapa');
 
+    if (!this._assertClientAddressAndBank('emp', proposal)) return;
+
     const saveBtn = document.getElementById('empPropSaveBtn');
     const oldText = saveBtn?.innerText || 'Salvar';
     if (saveBtn) { saveBtn.innerText = 'Salvando...'; saveBtn.disabled = true; }
@@ -5229,7 +7005,8 @@ window.Proposals = {
     proposal.obs = gv('empPropObs');
     const oldBancoDigitado = String(proposal.bancoDigitado || proposal.banco_digitado || '').trim();
     const newBancoDigitado = String(gv('empPropBancoDigitado') || '').trim();
-    const tipoOperacao = String(gv('empPropTipoOperacao') || '').trim();
+    const tipoOperacao = String(gv('empPropTipoOperacao') || '').trim()
+      || String(this._normTipoOperacao(proposal) || '').trim();
     if (!newBancoDigitado) {
       alert('Selecione o Banco para digitação.');
       if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
@@ -5251,9 +7028,11 @@ window.Proposals = {
     const bancoMudouPendencia = this._applyBancoChangePendencia(proposal, oldBancoDigitado, newBancoDigitado);
     const oldStatus = proposal.status;
     const oldStatusOp = proposal.statusOp || proposal.status_op || '';
+    // Supervisor de vendedor: não aplica mudança de situação (só vendedor/backoffice+).
+    const canChangeStatusEmp = this._canChangeProposalStatus(user?.role);
     if (bancoMudouPendencia) {
       /* status já setado em Pendenciado */
-    } else if (etapa) {
+    } else if (canChangeStatusEmp && etapa) {
       proposal.statusOp = etapa;
       proposal.status = etapa;
     }
@@ -5272,7 +7051,7 @@ window.Proposals = {
 
     proposal.history = proposal.history || [];
     let empAction = 'Proposta atualizada pelo vendedor';
-    if (etapa && String(etapa) !== String(oldStatusOp || oldStatus)) {
+    if (canChangeStatusEmp && etapa && String(etapa) !== String(oldStatusOp || oldStatus)) {
       empAction = `Status: [${oldStatusOp || oldStatus || '—'}] → [${etapa}]`;
     }
     const empHistEntry = {
@@ -5306,6 +7085,9 @@ window.Proposals = {
       const tClient = Date.now();
       await DB.saveProposal(proposal, { skipHydrate: true });
       void this._notifyBoletoValidadoWebhook(proposal, oldStatus, oldStatusOp);
+      if (isPaidEmp && typeof DB?.deactivateBoletoRemindersForProposal === 'function') {
+        void DB.deactivateBoletoRemindersForProposal(proposal.id);
+      }
       this._propPerfLog('proposals.js:employeeSave', 'save done', {
         msTotal: Date.now() - saveT0, msClient: tClient - saveT0, msDb: Date.now() - tClient,
       }, 'C');
@@ -5349,9 +7131,16 @@ window.Proposals = {
     const canEditValor = opts.canEditValor !== false;
     const valorOnlyMode = !!opts.valorOnlyMode;
     const role = this._normProposalManageRole(typeof Auth !== 'undefined' && Auth.getSession()?.role);
-    const canEditTabela = this._canEditTabelaComissao(role);
+    const canEditTabela = (opts.canEditTabela != null)
+      ? !!opts.canEditTabela
+      : this._canEditTabelaComissao(role, { paid: valorOnlyMode });
+    const canChangeStatus = (opts.canChangeStatus != null)
+      ? !!opts.canChangeStatus
+      : (this._canChangeProposalStatus(role) && !valorOnlyMode);
+    const canPickVendor = this._canPickVendor(role);
     const valorFieldIds = new Set(['managePropValorBruto', 'managePropValorEdit', 'managePropNumeroEdit']);
     const tabelaFieldIds = new Set(['managePropTabela']);
+    const statusFieldIds = new Set(['managePropStatusOp', 'managePropStatus']);
     if (modal.dataset) modal.dataset.valorOnlySave = valorOnlyMode ? '1' : '';
 
     const title = document.getElementById('manageProposalTitle');
@@ -5380,6 +7169,19 @@ window.Proposals = {
       body.querySelectorAll('input, select, textarea').forEach(el => {
         if (el.type === 'hidden') return;
         const id = el.id || '';
+        // Select de vendedor: gerente+ continua editável mesmo em proposta paga (valorOnly).
+        if (id === 'managePropVendor' && canPickVendor && (!viewOnly || valorOnlyMode)) {
+          el.disabled = false;
+          el.readOnly = false;
+          return;
+        }
+        // Status: supervisor de vendedor não altera; backoffice/gerente etc. sim.
+        if (statusFieldIds.has(id)) {
+          const lockStatus = viewOnly || valorOnlyMode || !canChangeStatus;
+          if (el.tagName === 'SELECT') el.disabled = lockStatus;
+          else el.readOnly = lockStatus;
+          return;
+        }
         if (valorOnlyMode) {
           const canEditField = valorFieldIds.has(id)
             || (canEditTabela && tabelaFieldIds.has(id));
@@ -5410,6 +7212,12 @@ window.Proposals = {
       document.querySelectorAll('.backoffice-edit-block').forEach(el => { el.style.display = ''; });
     }
 
+    // Garante bloco de vendedor visível quando o perfil pode trocar (inclui proposta paga).
+    const vendorBlock = document.getElementById('managePropVendorBlock');
+    if (vendorBlock) {
+      vendorBlock.style.display = (canPickVendor && (!viewOnly || valorOnlyMode)) ? '' : 'none';
+    }
+
     this._unlockManageValorFields((canEditValor && !viewOnly) || valorOnlyMode);
 
     const saveBtn = modal.querySelector('.modal-footer .btn-primary');
@@ -5421,7 +7229,8 @@ window.Proposals = {
   },
 
     openAdminModal: async function(id, viewOnly) {
-    if (this._openModalBusy) return;
+    // Token invalida carga antiga — permite abrir outra proposta sem F5
+    const token = (this._modalLoadToken = (this._modalLoadToken || 0) + 1);
     this._openModalBusy = true;
     viewOnly = !!viewOnly;
     const modal = document.getElementById('manageProposalModal');
@@ -5431,6 +7240,7 @@ window.Proposals = {
 
     try {
     const raw = await DB.getProposal(id, { lite: true });
+    if (token !== this._modalLoadToken) return;
     const proposal = this._normProposal(raw);
     if (!proposal) {
       alert('Proposta não encontrada.');
@@ -5438,6 +7248,7 @@ window.Proposals = {
     }
 
     // Paga: backoffice+ corrige só nº/valor (preserveUpdatedAt — não mexe na data do dashboard).
+    // Supervisor de vendedor NÃO edita tabela em pagas.
     let valorOnlyMode = false;
     const roleEarly = this._normProposalManageRole(Auth.getSession()?.role);
     const canFixPaidValor = this._canEditNumeroValor(roleEarly);
@@ -5445,7 +7256,7 @@ window.Proposals = {
       if (canFixPaidValor) {
         valorOnlyMode = true;
         viewOnly = false;
-        const canFixTabela = this._canEditTabelaComissao(roleEarly);
+        const canFixTabela = this._canEditTabelaComissao(roleEarly, { paid: true });
         if (typeof showToast === 'function') {
           showToast(
             canFixTabela
@@ -5489,11 +7300,14 @@ window.Proposals = {
       if (vendorSel) {
         // Usar escopo mesclado (Ana Bela / Viviane) — não só session.id
         const scopeAdmin = await this._proposalVendorScopeForSession(user);
+        if (token !== this._modalLoadToken) return;
         let vendors = await DB.getVendorsForSelect(scopeAdmin).catch(() => []);
+        if (token !== this._modalLoadToken) return;
 
         const vid = proposal.vendorId || proposal.employee_id || '';
         if (vid && !vendors.some(v => v.id === vid)) {
           const current = await DB.getUser(vid).catch(() => null);
+          if (token !== this._modalLoadToken) return;
           if (current) vendors = [current, ...vendors];
         }
 
@@ -5505,14 +7319,16 @@ window.Proposals = {
         else if (vendors.length) vendorSel.selectedIndex = 0;
       }
     }
+    if (token !== this._modalLoadToken) return;
     sv('managePropNumeroEdit', proposal.numero);
     this._syncManageValorFields(proposal.valor);
     this._bindManageValorInputs();
 
     const client = proposal.clientCpf ? await this._lookupClientByCpf(String(proposal.clientCpf).replace(/\D/g, '')) : null;
+    if (token !== this._modalLoadToken) return;
     const detailEl = document.getElementById('managePropClientDetail');
     if (detailEl) {
-      detailEl.style.display = '';
+      detailEl.style.display = 'block';
       detailEl.innerHTML = '<strong style="display:block;margin-bottom:8px;">Dados cadastrais do cliente</strong>' +
         this._renderManageClientDetail(client, proposal, !viewOnly);
     }
@@ -5552,7 +7368,7 @@ window.Proposals = {
     this._initBankSelects({
       bancoComprado: proposal.bancoComprado,
       bancoDigitado: proposal.bancoDigitado,
-      tipoOperacao: proposal.tipoOperacao,
+      tipoOperacao: this._normTipoOperacao(proposal),
     });
     sv('managePropBoleto', proposal.solicitouBoleto || proposal.solicitacaoBoleto);
     sv('managePropValor', proposal.valor);
@@ -5562,11 +7378,16 @@ window.Proposals = {
     sv('managePropProtBacen', proposal.protocoloBacen);
     sv('managePropDataBacen', this._cleanProposalDate(proposal.dataSolicitacaoBacen));
     sv('managePropAssinou', proposal.assinou);
-    sv('managePropStatusOp', proposal.statusOp || proposal.status);
+    const statusUnified = String(proposal.statusOp || proposal.status_op || proposal.status || '').trim();
+    const opEl = document.getElementById('managePropStatusOp');
+    if (opEl) {
+      opEl.innerHTML = this._vendorSituacaoOptionsHtml(statusUnified);
+      opEl.value = statusUnified;
+    }
+    this._bindManageStatusSync();
     sv('managePropPosVenda', proposal.posVenda);
     sv('managePropNuvidio', proposal.nuvidio);
     sv('managePropFases', proposal.fases);
-    sv('managePropStatus', proposal.status);
     sv('managePropHistoryNote', '');
 
     let histHtml = '';
@@ -5593,9 +7414,15 @@ window.Proposals = {
       this._setFolderContext('managePropAnexosFolders', 'manageProp');
       this.resetAnexoFolders(proposal.attachments);
     }
-    this._applyManageModalMode(viewOnly, { canEditValor: canEditProp, valorOnlyMode, canEditTabela: this._canEditTabelaComissao(role) });
+    this._applyManageModalMode(viewOnly, {
+      canEditValor: canEditProp,
+      valorOnlyMode,
+      canEditTabela: this._canEditTabelaComissao(role, { paid: valorOnlyMode || this._isProposalPaid(proposal) }),
+      canChangeStatus: this._canChangeProposalStatus(role) && !valorOnlyMode,
+    });
     this._ensureSupBackofficeDateUi('manageProp');
     this._resetSupBackofficeDateUi('manageProp', proposal);
+    if (token !== this._modalLoadToken) return;
     if (typeof openModal === 'function') openModal('manageProposalModal');
     else modal?.classList.add('open');
     if (typeof hideLoading === 'function') hideLoading();
@@ -5612,64 +7439,121 @@ window.Proposals = {
       if (typeof hideLoading === 'function') hideLoading();
       if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
     } finally {
-      this._openModalBusy = false;
-      if (typeof hideLoading === 'function') hideLoading();
+      if (token === this._modalLoadToken) {
+        this._openModalBusy = false;
+        if (typeof hideLoading === 'function') hideLoading();
+      }
     }
   },
 
   /**
-   * _adminSaveValorOnlyPaid — correção de nº/valor em proposta já paga (backoffice+).
+   * _adminSaveValorOnlyPaid — correção de nº/valor (e vendedor, se permitido) em proposta já paga.
    * Usa preserveUpdatedAt para não alterar a data no dashboard de faturamento.
+   * Gerente+ pode trocar o vendedor mesmo neste modo — o status da proposta não muda.
    */
   _adminSaveValorOnlyPaid: async function(proposal, user, gv) {
     const id = proposal.id;
-    const orig = { valor: proposal.valor, numero: proposal.numero, tabela: proposal.tabela, valorFinal: proposal.valorFinal };
+    const origVendorId = String(proposal.vendorId || proposal.vendor_id || proposal.employee_id || '').trim();
+    const origVendorName = String(proposal.vendorName || proposal.vendor_name || '').trim();
+    const orig = {
+      valor: proposal.valor,
+      numero: proposal.numero,
+      tabela: proposal.tabela,
+      valorFinal: proposal.valorFinal,
+      vendorId: origVendorId,
+      vendorName: origVendorName,
+    };
     const saveBtn = document.querySelector('#manageProposalModal .btn-primary[onclick*="adminSave"], #manageProposalModal button[onclick*="adminSave"]');
     const saveBtnText = saveBtn?.innerText;
     if (typeof showLoading === 'function') showLoading('Salvando correção…');
     if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Salvando…'; }
     try {
-      const novoNumero = gv('managePropNumeroEdit');
+      const rolePaid = this._normProposalManageRole(user?.role);
+      let vendorChanged = false;
+      // Gerente+ grava troca de vendedor também em proposta paga (UI já libera o select).
+      if (this._canPickVendor(rolePaid)) {
+        const vendorSel = document.getElementById('managePropVendor');
+        if (vendorSel && vendorSel.value) {
+          const newVid = String(vendorSel.value || '').trim();
+          const opt = vendorSel.options[vendorSel.selectedIndex];
+          const newName = opt ? String(opt.textContent || '').trim() : '';
+          if (newVid && newVid !== origVendorId) {
+            proposal.vendorId = newVid;
+            proposal.vendor_id = newVid;
+            proposal.employee_id = newVid;
+            if (newName) {
+              proposal.vendorName = newName;
+              proposal.vendor_name = newName;
+            }
+            vendorChanged = true;
+          }
+        }
+      }
+
+      const novoNumero = String(gv('managePropNumeroEdit') || '').trim();
       const parsedValor = this._readManageValorInput();
+      // Backoffice pode trocar nº/valor/tabela livremente (inclui baixar valor).
       if (novoNumero) proposal.numero = novoNumero;
       if (!isNaN(parsedValor) && parsedValor >= 0) proposal.valor = parsedValor;
       const tabelaEl = document.getElementById('managePropTabela');
-      if (tabelaEl?.value) {
-        const novaTabela = tabelaEl.value;
-        const pct = this._tabelaPct[novaTabela] ?? 1;
-        proposal.tabela = novaTabela;
-        proposal.valorFinal = parseFloat(((proposal.valor || 0) * pct).toFixed(2));
-        proposal.desconto = parseFloat(((proposal.valor || 0) - proposal.valorFinal).toFixed(2));
+      if (tabelaEl && this._canEditTabelaComissao(rolePaid, { paid: true })) {
+        this._applyTabelaToProposal(proposal, String(tabelaEl.value || '').trim());
       } else if (!isNaN(parsedValor) && parsedValor >= 0 && proposal.tabela) {
-        const pct = this._tabelaPct[proposal.tabela] ?? 1;
-        proposal.valorFinal = parseFloat(((proposal.valor || 0) * pct).toFixed(2));
-        proposal.desconto = parseFloat(((proposal.valor || 0) - proposal.valorFinal).toFixed(2));
+        this._applyTabelaToProposal(proposal, proposal.tabela);
+      } else if (!isNaN(parsedValor) && parsedValor >= 0 && !proposal.tabela) {
+        proposal.valorFinal = Number(proposal.valor) || 0;
+        proposal.desconto = 0;
       }
-      const changed = proposal.valor !== orig.valor
+      const changed = vendorChanged
+        || proposal.valor !== orig.valor
         || proposal.numero !== orig.numero
-        || proposal.tabela !== orig.tabela;
+        || proposal.tabela !== orig.tabela
+        || Number(proposal.valorFinal) !== Number(orig.valorFinal);
       if (!changed) {
-        if (typeof showToast === 'function') showToast('Nenhuma alteração em número ou valor.', 'info');
+        this._notifyOverModal(
+          'Nenhuma alteração em número/valor/tabela/vendedor. Em proposta paga o status não é salvo por este botão.',
+          'warning'
+        );
         return;
       }
       proposal.history = Array.isArray(proposal.history) ? proposal.history.slice() : [];
+      const noteParts = [];
+      if (proposal.valor !== orig.valor) noteParts.push(`Valor: ${orig.valor} → ${proposal.valor}`);
+      if (orig.numero !== proposal.numero) noteParts.push(`Nº: ${orig.numero || '—'} → ${proposal.numero}`);
+      if (orig.tabela !== proposal.tabela) noteParts.push(`Tabela: ${orig.tabela || '—'} → ${proposal.tabela}`);
+      if (vendorChanged) noteParts.push(`Vendedor: ${orig.vendorName || orig.vendorId || '—'} → ${proposal.vendorName || proposal.vendorId}`);
+      const actionLabel = vendorChanged && noteParts.length === 1
+        ? 'Troca de vendedor (proposta paga)'
+        : (orig.tabela !== proposal.tabela
+          ? 'Correção de valor/nº/tabela (proposta paga)'
+          : (vendorChanged
+            ? 'Correção de valor/nº/vendedor (proposta paga)'
+            : 'Correção de valor/nº (proposta paga)'));
       proposal.history.push({
         date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
         actorName: user?.name || 'Sistema',
-        action: orig.tabela !== proposal.tabela
-          ? 'Correção de valor/nº/tabela (proposta paga)'
-          : 'Correção de valor/nº (proposta paga)',
-        note: `Valor: ${orig.valor} → ${proposal.valor}${orig.numero !== proposal.numero ? ` · Nº: ${orig.numero || '—'} → ${proposal.numero}` : ''}${orig.tabela !== proposal.tabela ? ` · Tabela: ${orig.tabela || '—'} → ${proposal.tabela}` : ''}`,
-        kind: 'valor_fix_paid',
+        action: actionLabel,
+        note: noteParts.join(' · ') || actionLabel,
+        kind: vendorChanged && noteParts.length === 1 ? 'vendor_fix_paid' : 'valor_fix_paid',
       });
-      const saved = await DB.saveProposal(proposal, { skipHydrate: true, preserveUpdatedAt: true });
+      const saved = await this._withTimeout(
+        DB.saveProposal(proposal, { skipHydrate: true, preserveUpdatedAt: true }),
+        45000,
+        'Salvar correção de valor',
+      );
       const merged = saved ? (this._normProposal({ ...proposal, ...saved }) || { ...proposal, ...saved }) : proposal;
       delete this._adminEditCache[id];
       this._mergeAdminListCacheRow(merged);
-      if (typeof showToast === 'function') showToast('Valor atualizado com sucesso!', 'success');
-      else alert('Valor atualizado com sucesso!');
-      const modal = document.getElementById('manageProposalModal');
-      if (modal) modal.classList.remove('open');
+      const okMsg = vendorChanged && noteParts.length === 1
+        ? 'Vendedor atualizado com sucesso!'
+        : (vendorChanged ? 'Valor/vendedor atualizados com sucesso!' : 'Valor atualizado com sucesso!');
+      if (typeof showToast === 'function') showToast(okMsg, 'success');
+      else alert(okMsg);
+      if (typeof closeModal === 'function') closeModal('manageProposalModal');
+      else {
+        const modal = document.getElementById('manageProposalModal');
+        if (modal) modal.classList.remove('open');
+      }
       if (!this._patchAdminTableRow(merged)) {
         void this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
       }
@@ -5683,12 +7567,23 @@ window.Proposals = {
   },
 
   adminSave: async function() {
+    const _dbg = (hypothesisId, message, data) => {
+};
     const user = Auth.getSession();
     const gv = id => document.getElementById(id)?.value || '';
     const id = gv('managePropId');
+    _dbg('S0', 'adminSave entry', {
+      id: String(id || '').slice(0, 24),
+      role: String(user?.role || ''),
+      statusUi: gv('managePropStatus'),
+      statusOpUi: gv('managePropStatusOp'),
+      tabelaUi: gv('managePropTabela'),
+      valorOnly: document.getElementById('manageProposalModal')?.dataset?.valorOnlySave || '',
+    });
     let proposal = this._adminEditCache[id] ? { ...this._adminEditCache[id] } : await DB.getProposal(id);
     if (!proposal) {
       const msg = 'Proposta não encontrada. Feche o modal e abra novamente.';
+      _dbg('S1', 'proposal missing', { id: String(id || '').slice(0, 24) });
       if (typeof showToast === 'function') showToast(msg, 'error');
       else alert(msg);
       return;
@@ -5697,9 +7592,21 @@ window.Proposals = {
     const roleNorm = this._normProposalManageRole(user?.role);
     const valorOnlySave = document.getElementById('manageProposalModal')?.dataset?.valorOnlySave === '1';
     if (valorOnlySave && this._canEditNumeroValor(roleNorm)) {
+      _dbg('S2', 'route valorOnlyPaid (status NÃO será salvo)', {
+        id: String(id || '').slice(0, 24),
+        status: proposal.status,
+        statusOp: proposal.statusOp || proposal.status_op,
+      });
       return this._adminSaveValorOnlyPaid(proposal, user, gv);
     }
-    if (!this._assertProposalNotPaidForSave(proposal)) return;
+    if (!this._assertProposalNotPaidForSave(proposal)) {
+      _dbg('S3', 'blocked already-paid assert', {
+        id: String(id || '').slice(0, 24),
+        status: proposal.status,
+        statusOp: proposal.statusOp || proposal.status_op,
+      });
+      return;
+    }
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID && !this._isSoubluProposalAdmin()) {
       const belongs = await this._proposalBelongsToSessionPartnerOrg(proposal);
       if (!belongs) {
@@ -5715,10 +7622,17 @@ window.Proposals = {
         return;
       }
     }
-    if (typeof showLoading === 'function') showLoading('Salvando…');
+    if (typeof showLoading === 'function') showLoading('Salvando…', { maxMs: 65000 });
     const saveBtn = document.querySelector('#manageProposalModal .btn-primary[onclick*="adminSave"], #manageProposalModal button[onclick*="adminSave"]');
     const saveBtnText = saveBtn?.innerText;
     if (saveBtn) { saveBtn.disabled = true; saveBtn.innerText = 'Salvando…'; }
+    const releaseSaveUi = () => {
+      if (typeof hideLoading === 'function') hideLoading();
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        if (saveBtnText) saveBtn.innerText = saveBtnText;
+      }
+    };
     try {
     /* Contexto ANTES de detectar uploads — senão defs/prefixo de outro modal
        fazem pendingAtt=false e o save apaga/ignora os boletos anexados. */
@@ -5737,24 +7651,38 @@ window.Proposals = {
 
     const role = roleNorm;
 
-    // Vendedor responsável (supervisor+)
+    // Vendedor responsável — troca grava history (passar venda para outro).
     if (this._canPickVendor(role)) {
       const vendorSel = document.getElementById('managePropVendor');
       if (vendorSel && vendorSel.value) {
-        proposal.vendorId = vendorSel.value;
-        proposal.vendor_id = vendorSel.value;
-        proposal.employee_id = vendorSel.value;
+        const prevVid = String(proposal.vendorId || proposal.vendor_id || proposal.employee_id || '').trim();
+        const prevName = String(proposal.vendorName || proposal.vendor_name || '').trim();
+        const newVid = String(vendorSel.value || '').trim();
         const opt = vendorSel.options[vendorSel.selectedIndex];
-        if (opt) {
-          proposal.vendorName = opt.textContent.trim();
-          proposal.vendor_name = opt.textContent.trim();
+        const newName = opt ? String(opt.textContent || '').trim() : '';
+        proposal.vendorId = newVid;
+        proposal.vendor_id = newVid;
+        proposal.employee_id = newVid;
+        if (newName) {
+          proposal.vendorName = newName;
+          proposal.vendor_name = newName;
+        }
+        if (newVid && newVid !== prevVid) {
+          proposal.history = Array.isArray(proposal.history) ? proposal.history.slice() : [];
+          proposal.history.push({
+            date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
+            actorName: user?.name || 'Sistema',
+            action: 'Troca de vendedor',
+            note: `Vendedor: ${prevName || prevVid || '—'} → ${newName || newVid}`,
+            kind: 'vendor_transfer',
+          });
         }
       }
     }
 
-    // ── Nº e Valor editados por supervisor+ ──────────────────────────
+    // ── Nº e Valor — backoffice pode trocar livremente ──
     if (this._canEditNumeroValor(role)) {
-      const novoNumero = gv('managePropNumeroEdit');
+      const novoNumero = String(gv('managePropNumeroEdit') || '').trim();
       const parsedValor = this._readManageValorInput();
       if (novoNumero) proposal.numero = novoNumero;
       if (!isNaN(parsedValor) && parsedValor >= 0) {
@@ -5763,21 +7691,20 @@ window.Proposals = {
       }
     }
 
-    // ── Tabela / Valor Final (definido pelo Financeiro) ──────────────
+    // ── Tabela / Valor Final ──
     const tabelaEl = document.getElementById('managePropTabela');
+    const oldTabela = String(proposal.tabela || '').trim();
     let novaTabela = '';
-    if (tabelaEl && this._canEditTabelaComissao(role)) {
-      novaTabela = tabelaEl.value;
-      if (novaTabela) {
-        const pct = this._tabelaPct[novaTabela] ?? 1;
-        proposal.tabela     = novaTabela;
-        proposal.valorFinal = parseFloat(((proposal.valor||0) * pct).toFixed(2));
-        proposal.desconto   = parseFloat(((proposal.valor||0) - proposal.valorFinal).toFixed(2));
-      } else {
-        proposal.tabela = '';
-        proposal.valorFinal = proposal.valor || 0;
-        proposal.desconto = 0;
-      }
+    if (tabelaEl && this._canEditTabelaComissao(role, { paid: false })) {
+      novaTabela = String(tabelaEl.value || '').trim();
+      this._applyTabelaToProposal(proposal, novaTabela);
+    } else if (this._canEditNumeroValor(role) && proposal.tabela) {
+      // Sem permissão de tabela: ainda recalcula valorFinal com a tabela já gravada
+      this._applyTabelaToProposal(proposal, proposal.tabela);
+    } else if (this._canEditNumeroValor(role) && !proposal.tabela) {
+      // Sem tabela definida: valor final = bruto (evita lixo antigo)
+      proposal.valorFinal = Number(proposal.valor) || 0;
+      proposal.desconto = 0;
     }
 
     proposal.compraDivida    = gv('managePropDivida');
@@ -5786,12 +7713,16 @@ window.Proposals = {
     const newBancoDigitado = String(gv('managePropBancoDigitado') || '').trim();
     proposal.bancoDigitado   = newBancoDigitado;
     const tipoOperacao = String(gv('managePropTipoOperacao') || '').trim();
-    proposal.tipoOperacao = tipoOperacao;
-    proposal.tipo_operacao = tipoOperacao;
-    {
+    proposal.tipoOperacao = tipoOperacao || proposal.tipoOperacao || '';
+    proposal.tipo_operacao = proposal.tipoOperacao;
+    // Lite fetch pode omitir meta — só grava meta se o usuário setou tipo OU já havia meta
+    if (tipoOperacao) {
       const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
-      if (tipoOperacao) meta.tipo_operacao = tipoOperacao;
-      else delete meta.tipo_operacao;
+      meta.tipo_operacao = tipoOperacao;
+      proposal.meta = meta;
+    } else if (proposal.meta && typeof proposal.meta === 'object') {
+      const meta = { ...proposal.meta };
+      delete meta.tipo_operacao;
       proposal.meta = meta;
     }
     const bancoMudouPendencia = this._applyBancoChangePendencia(proposal, oldBancoDigitado, newBancoDigitado);
@@ -5802,25 +7733,56 @@ window.Proposals = {
     proposal.protocoloBacen  = gv('managePropProtBacen');
     proposal.dataSolicitacaoBacen = gv('managePropDataBacen');
     proposal.assinou         = gv('managePropAssinou');
-    const newStatusOp = bancoMudouPendencia ? 'Pendenciado' : gv('managePropStatusOp');
     const oldStatus = proposal.status;
     const oldStatusOp = String(proposal.statusOp || proposal.status_op || '').trim();
+    const cachedSnap = this._adminEditCache[id] || { status: oldStatus, statusOp: oldStatusOp };
     let newStatus = bancoMudouPendencia
       ? 'Pendenciado'
-      : (gv('managePropStatus') || proposal.status);
-    // Parceiro costuma alterar só "Status Proposta (Op.)"; se o geral não mudou, espelha o Op.
-    if (newStatusOp && newStatusOp !== oldStatusOp && newStatus === oldStatus) {
-      newStatus = newStatusOp;
+      : this._readManageStatusFromForm(gv, proposal, cachedSnap);
+    let newStatusOp = newStatus;
+    // Supervisor de vendedor: ignora mudança manual de status (mantém o atual).
+    if (!bancoMudouPendencia && !this._canChangeProposalStatus(role)) {
+      newStatus = oldStatus;
+      newStatusOp = oldStatusOp || oldStatus;
     }
+
+    // Endereço + conta: obrigatório só para vendedor (backoffice salva sem trava).
+    if (!this._assertClientAddressAndBank('manage', proposal)) {
+      releaseSaveUi();
+      return;
+    }
+
+    // Bloqueia 1º PAGO sem tabela — evita “pagar” comissão no valor bruto
+    {
+      const preview = { status: newStatus, statusOp: newStatusOp, status_op: newStatusOp };
+      const wasPaidGate = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+        ? DB.isPaidProposal({ status: oldStatus, statusOp: oldStatusOp, status_op: oldStatusOp })
+        : String(oldStatus || '').toUpperCase().includes('PAGO');
+      const willBePaid = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+        ? DB.isPaidProposal(preview)
+        : String(newStatus || '').toUpperCase().includes('PAGO');
+      if (!wasPaidGate && willBePaid && !String(proposal.tabela || '').trim()) {
+        const msg = 'Defina a Tabela de comissão antes de marcar como PAGO.';
+        _dbg('S4', 'blocked PAGO without tabela', {
+          id: String(id || '').slice(0, 24),
+          newStatus, newStatusOp, oldStatus, oldStatusOp,
+        });
+        this._notifyOverModal(msg, 'error');
+        releaseSaveUi();
+        return;
+      }
+    }
+
+    _dbg('S5', 'status transition accepted', {
+      id: String(id || '').slice(0, 24),
+      oldStatus, oldStatusOp, newStatus, newStatusOp,
+      tabela: String(proposal.tabela || '').slice(0, 40),
+      pendingAtt: !!pendingAtt,
+    });
+
     proposal.status = newStatus;
-    if (newStatusOp) {
-      proposal.statusOp = newStatusOp;
-    } else if (newStatus !== oldStatus) {
-      proposal.statusOp = newStatus;
-    } else {
-      proposal.statusOp = proposal.statusOp || proposal.status;
-    }
-    proposal.status_op = proposal.statusOp;
+    proposal.statusOp = newStatusOp;
+    proposal.status_op = newStatusOp;
     this._syncProposalStatusFields(proposal);
     this._ensureDigitacaoTimestamp(proposal, oldStatus, oldStatusOp);
     proposal.posVenda        = gv('managePropPosVenda');
@@ -5836,7 +7798,7 @@ window.Proposals = {
        else if (newStatusOp && newStatusOp !== oldStatusOp) {
          action = `Status: [${oldStatusOp || oldStatus}] → [${newStatusOp}]`;
        }
-       if (novaTabela && novaTabela !== (proposal._prevTabela || '')) {
+       if (novaTabela && novaTabela !== oldTabela) {
          const pctLabel = Math.round((this._tabelaPct[novaTabela]??1)*100);
          action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
        }
@@ -5888,12 +7850,25 @@ window.Proposals = {
           proposal._billingPaidBy = user.name;
         }
         if (typeof DB.awardRouletteOnProposalPaid === 'function') {
-          await DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null);
+          _dbg('S6', 'before awardRoulette', { id: String(id || '').slice(0, 24) });
+          await this._withTimeout(
+            DB.awardRouletteOnProposalPaid(proposal, user).catch(() => null),
+            12000,
+            'Roleta proposta paga',
+          ).catch((e) => { _dbg('S6e', 'awardRoulette timeout/fail', { err: String(e?.message || e).slice(0, 120) }); });
+          _dbg('S6b', 'after awardRoulette', { id: String(id || '').slice(0, 24) });
         }
       }
       try {
-        await this._saveProposalClientData(proposal, 'manage');
+        _dbg('S7', 'before save client', { id: String(id || '').slice(0, 24) });
+        await this._withTimeout(
+          this._saveProposalClientData(proposal, 'manage'),
+          15000,
+          'Salvar cliente da proposta',
+        );
+        _dbg('S7b', 'after save client', { id: String(id || '').slice(0, 24) });
       } catch (clientErr) {
+        _dbg('S7e', 'client save fail', { err: String(clientErr?.message || clientErr).slice(0, 160) });
         console.error('[adminSave] cliente', clientErr);
         const cm = String(clientErr?.message || clientErr || '');
         if (typeof showToast === 'function') {
@@ -5916,15 +7891,34 @@ window.Proposals = {
       }
       /* Só omite attachments no PATCH se não houve upload novo — senão o boleto some. */
       if (!pendingAtt) delete toSave.attachments;
+      _dbg('S8', 'before DB.saveProposal', {
+        id: String(id || '').slice(0, 24),
+        status: toSave.status,
+        statusOp: toSave.statusOp,
+        hasAtt: !!toSave.attachments,
+      });
       const saved = await this._withTimeout(
         DB.saveProposal(toSave, { skipHydrate: true }),
         45000,
         'Salvar proposta',
       );
+      _dbg('S8b', 'after DB.saveProposal', {
+        id: String(id || '').slice(0, 24),
+        ok: !!saved,
+        ms: Date.now() - saveT0,
+      });
       proposal = saved
         ? (this._normProposal({ ...proposal, ...saved }) || { ...proposal, ...saved })
         : proposal;
       void this._notifyBoletoValidadoWebhook(proposal, oldStatus, oldStatusOp);
+      {
+        const paidNow = typeof DB !== 'undefined' && typeof DB.isPaidProposal === 'function'
+          ? DB.isPaidProposal(proposal)
+          : String(proposal.status || '').toUpperCase().includes('PAGO');
+        if (paidNow && typeof DB?.deactivateBoletoRemindersForProposal === 'function') {
+          void DB.deactivateBoletoRemindersForProposal(proposal.id);
+        }
+      }
       this._propPerfLog('proposals.js:adminSave', 'save done', {
         msTotal: Date.now() - saveT0, msClient: tClient - saveT0, msDb: Date.now() - tClient,
       }, 'C');
@@ -5943,22 +7937,24 @@ window.Proposals = {
       else alert(bancoMudouPendencia
         ? 'Banco alterado — proposta colocada em Pendenciado.'
         : 'Proposta atualizada!');
-      const modal = document.getElementById('manageProposalModal');
-      if (modal) modal.classList.remove('open');
+      if (typeof closeModal === 'function') closeModal('manageProposalModal');
+      else {
+        const modal = document.getElementById('manageProposalModal');
+        if (modal) modal.classList.remove('open');
+      }
       const patched = this._patchAdminTableRow(proposal);
+      _dbg('S9', 'ui refresh done', { patched: !!patched, id: String(proposal.id || '').slice(0, 24) });
       this._propPerfLog('proposals.js:adminSave', 'ui refresh', { patched, id: proposal.id }, 'D');
       if (!patched) {
         void this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
       }
     } catch (e) {
+      _dbg('S10', 'adminSave catch', { err: String(e?.message || e).slice(0, 200) });
       console.error('[adminSave]', e);
       this._proposalSaveErrorNotify(e);
     } finally {
-      if (typeof hideLoading === 'function') hideLoading();
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        if (saveBtnText) saveBtn.innerText = saveBtnText;
-      }
+      _dbg('S11', 'adminSave finally', { id: String(id || '').slice(0, 24) });
+      releaseSaveUi();
     }
   },
 
@@ -5975,8 +7971,8 @@ window.Proposals = {
     }
     const nome = label || id;
     if (!confirm(
-      `Arquivar a proposta "${nome}" na Localweb?\n\n` +
-      `Ela NÃO some do banco: vira Cancelado e uma cópia JSON fica em uploads/proposal-archive.\n` +
+      `Arquivar a proposta "${nome}"?\n\n` +
+      `A ficha vira Cancelado e uma cópia fica na Localweb.\n` +
       `Proposta PAGA não é cancelada — só a cópia de segurança é gravada.`
     )) return;
 
@@ -5997,15 +7993,41 @@ window.Proposals = {
       const result = await DB.deleteProposal(id, { by: session?.name || session?.email || 'admin' });
       delete this._adminEditCache[id];
       delete this._employeeEditCache[id];
+      // Atualiza cache local: cancelada some da lista padrão (não parece “botão morto”).
+      if (Array.isArray(this._adminListCache) && !result?.keptPaid) {
+        this._adminListCache = this._adminListCache.filter((p) => String(p?.id) !== String(id));
+      } else if (Array.isArray(this._adminListCache) && result?.keptPaid) {
+        const idx = this._adminListCache.findIndex((p) => String(p?.id) === String(id));
+        if (idx >= 0) {
+          this._adminListCache[idx] = {
+            ...this._adminListCache[idx],
+            /* paga permanece; só refresh visual */
+          };
+        }
+      } else {
+        this._adminListCache = null;
+      }
       if (typeof SalesRanking !== 'undefined' && SalesRanking.invalidateCache) {
         SalesRanking.invalidateCache();
       }
-      if (fromModal) closeModal('manageProposalModal');
+      if (fromModal) {
+        if (typeof closeModal === 'function') closeModal('manageProposalModal');
+        else {
+          const modal = document.getElementById('manageProposalModal');
+          if (modal) modal.classList.remove('open');
+        }
+      }
       const toastMsg = result?.keptPaid
         ? 'Proposta paga permanece. Cópia salva na Localweb.'
-        : 'Proposta arquivada na Localweb (status Cancelado).';
+        : 'Proposta arquivada (status Cancelado).';
       if (typeof showToast === 'function') showToast(toastMsg, 'success');
-      await this.renderAdminList();
+      else alert(toastMsg);
+      // Remove a linha na hora (feedback imediato) e re-renderiza.
+      const row = this._findAdminTableRow(id);
+      if (row && !result?.keptPaid) row.remove();
+      const mobileCard = document.querySelector(`#manageProposalsMobileList [data-prop-id="${CSS?.escape ? CSS.escape(String(id)) : String(id)}"]`);
+      if (mobileCard && !result?.keptPaid) mobileCard.remove();
+      await this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
       if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
         try { await renderAdminRanking(); } catch (_) { /* noop */ }
       }
@@ -6020,12 +8042,32 @@ window.Proposals = {
 
 document.addEventListener('DOMContentLoaded', () => {
   if (window.Proposals) {
+    Proposals._ensureAdminProposalActionsDelegation();
     Proposals._initAnexoFolderDelegation();
-    Proposals._initStaticProposalSelects();
+    void (Proposals._bootstrapProposalUi?.() || Promise.resolve().then(() => {
+      Proposals._initStaticProposalSelects();
+    }));
     if (document.getElementById('propAnexosFolders')) {
       Proposals._setFolderContext('propAnexosFolders', 'prop');
       Proposals.initAnexoFolders();
       Proposals._applyVendedorFormRules();
     }
+  }
+});
+
+/** Fecha Nova Proposta com Escape quando o overlay está aberto. */
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const overlay = document.getElementById('propFormModal');
+  if (overlay && overlay.classList.contains('open')) {
+    if (window.Proposals && typeof Proposals.closeModal === 'function') {
+      Proposals.closeModal();
+    }
+    return;
+  }
+  const panel = document.getElementById('propFormContainer');
+  if (!panel || panel.style.display === 'none' || !panel.classList.contains('prop-form-panel-open')) return;
+  if (window.Proposals && typeof Proposals.closeModal === 'function') {
+    Proposals.closeModal();
   }
 });

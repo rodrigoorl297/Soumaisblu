@@ -227,10 +227,19 @@ if (typeof window !== 'undefined') {
       this.clearAllUsersCache();
       if (typeof _cacheDel === 'function') _cacheDel('users');
       if (this.online) {
-        await this._ensureOnlineUsersOnce();
-        await this._purgeLegacyDemoUsersOnce().catch(() => null);
-        await this.ensurePersistTablesOnline().catch(() => null);
-        await this.ensureRhTablesOnline().catch(() => null);
+        try {
+          await Promise.race([
+            this._ensureOnlineUsersOnce(),
+            new Promise((resolve) => setTimeout(resolve, 4000)),
+          ]);
+        } catch (_) { /* painel abre mesmo se a lista de usuários atrasar */ }
+        // Migração no boot abria vários PHP juntos e o nginx respondia 429.
+        const db = this;
+        setTimeout(() => {
+          db._purgeLegacyDemoUsersOnce().catch(() => null);
+          db.ensurePersistTablesOnline().catch(() => null);
+          db.ensureRhTablesOnline().catch(() => null);
+        }, 45000);
         return;
       }
 
@@ -299,7 +308,7 @@ if (typeof window !== 'undefined') {
       const mat = String(u.matricula || '').toUpperCase();
       if (['DEV001', 'FIN001', 'BCK001', 'DIR001', 'JUR001', 'RH001', 'GER001', 'OUV001', 'OPR001'].includes(mat)) return true;
       const name = String(u.name || '').trim().toLowerCase();
-      return ['desenvolvedor', 'financeiro f', 'backoffice op', 'diretoria d', 'jurídico j', 'juridico j', 'gerência geral', 'gerencia geral'].includes(name);
+      return ['desenvolvedor', 'financeiro f', 'backoffice op', 'diretoria d', 'jurídico j', 'juridico j', 'gerência geral', 'gerencia geral', 'vendedor teste'].includes(name);
     },
 
     _filterOutLegacyDemoUsers(list) {
@@ -1555,7 +1564,7 @@ if (typeof window !== 'undefined') {
       return `${code} - ${label}`;
     },
 
-    /** Bloqueio por treinamentos obrigatórios: impede cadastrar proposta. */
+    /** Flag legada de bloqueio. Não trava proposta — o saque é que para. */
     isTrainingBlocked(emp) {
       if (!emp) return false;
       const v = emp.training_block;
@@ -1571,10 +1580,304 @@ if (typeof window !== 'undefined') {
       return this.isTrainingBlocked(emp);
     },
 
-    /** Cadastro de proposta liberado para todos — bloqueio de conta não trava envio. */
-    isProposalCreateBlocked() {
-      return false;
+    /**
+     * isPendencyBlocked — vendedor com pendência vencida (esteira).
+     * Independente do bloqueio de saque (account_block_*).
+     */
+    isPendencyBlocked(emp) {
+      if (!emp) return false;
+      const v = emp.pendency_block_active;
+      return v === true || v === 1 || v === '1' || v === 'true';
     },
+
+    /**
+     * isProposalCreateBlocked — trava só por pendência vencida.
+     * Bloqueio de saque (account_block) NÃO impede digitar proposta.
+     */
+    isProposalCreateBlocked(emp) {
+      return this.isPendencyBlocked(emp);
+    },
+
+    /**
+     * setPendencyBlock — marca users.pendency_block_* e liga à pendência.
+     * by = quem aplicou (sistema ou usuário); pendenciaId = vendor_pendencias.id.
+     */
+    async setPendencyBlock(empId, { by, pendenciaId } = {}) {
+      const byId = by != null ? String(by) : 'system';
+      const patch = {
+        pendency_block_active: true,
+        pendency_block_at: nowBrazilSql(),
+        pendency_block_by: byId,
+        pendency_block_pendencia_id: pendenciaId ? String(pendenciaId) : null,
+      };
+      const row = await this.updateUser(empId, patch);
+      if (this.__allUsersMem) {
+        this.__allUsersMem = null;
+        this.__allUsersMemAt = 0;
+      }
+      _cacheDel('users');
+      return row;
+    },
+
+    /**
+     * clearPendencyBlock — libera digitação de proposta após desbloqueio na esteira.
+     */
+    async clearPendencyBlock(empId) {
+      const patch = {
+        pendency_block_active: false,
+        pendency_block_at: null,
+        pendency_block_by: null,
+        pendency_block_pendencia_id: null,
+      };
+      const row = await this.updateUser(empId, patch);
+      if (this.__allUsersMem) {
+        this.__allUsersMem = null;
+        this.__allUsersMemAt = 0;
+      }
+      _cacheDel('users');
+      return row;
+    },
+
+    /** _normPendencia — history JSON → array; status padrão aberta. */
+    _normPendencia(row) {
+      if (!row || typeof row !== 'object') return row;
+      let hist = row.history;
+      if (typeof hist === 'string' && hist) {
+        try { hist = JSON.parse(hist); } catch { hist = []; }
+      }
+      if (!Array.isArray(hist)) hist = [];
+      return { ...row, history: hist, status: String(row.status || 'aberta') };
+    },
+
+    /**
+     * getVendorPendencias — lista pendências (filtro opcional por vendor/supervisor/status).
+     */
+    async getVendorPendencias({ vendorId, supervisorId, status, limit } = {}) {
+      const lim = Math.min(Number(limit) || 500, 1000);
+      if (this.online) {
+        let q = `?select=*&order=due_at.asc&limit=${lim}`;
+        if (vendorId) q += `&vendor_id=eq.${encodeURIComponent(vendorId)}`;
+        if (supervisorId) q += `&supervisor_id=eq.${encodeURIComponent(supervisorId)}`;
+        if (status) {
+          if (Array.isArray(status)) {
+            q += `&status=in.(${status.map((s) => encodeURIComponent(s)).join(',')})`;
+          } else {
+            q += `&status=eq.${encodeURIComponent(status)}`;
+          }
+        }
+        const rows = await supaReq('GET', 'vendor_pendencias', null, q);
+        return (Array.isArray(rows) ? rows : []).map((r) => this._normPendencia(r));
+      }
+      let list = (this._lget('soublu_vendor_pendencias') || []).map((r) => this._normPendencia(r));
+      if (vendorId) list = list.filter((r) => String(r.vendor_id) === String(vendorId));
+      if (supervisorId) list = list.filter((r) => String(r.supervisor_id) === String(supervisorId));
+      if (status) {
+        const set = new Set((Array.isArray(status) ? status : [status]).map(String));
+        list = list.filter((r) => set.has(String(r.status)));
+      }
+      return list.sort((a, b) => String(a.due_at || '').localeCompare(String(b.due_at || '')));
+    },
+
+    /**
+     * getVendorPendenciaById — busca 1 pendência por id (evita “não encontrada”
+     * quando a lista limitada por due_at não inclui o registro).
+     */
+    async getVendorPendenciaById(id) {
+      const pid = String(id || '').trim();
+      if (!pid) return null;
+      if (this.online) {
+        const rows = await supaReq(
+          'GET',
+          'vendor_pendencias',
+          null,
+          `?id=eq.${encodeURIComponent(pid)}&select=*&limit=1`
+        );
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        return row ? this._normPendencia(row) : null;
+      }
+      const list = this._lget('soublu_vendor_pendencias') || [];
+      const row = list.find((t) => String(t.id) === pid);
+      return row ? this._normPendencia(row) : null;
+    },
+
+    /**
+     * addVendorPendencia — BO/master lança pendência com prazo (due_at).
+     */
+    async addVendorPendencia(data) {
+      const now = nowBrazilSql();
+      const hist = Array.isArray(data.history) ? data.history : [{
+        at: now,
+        by: data.opened_by || null,
+        action: 'aberta',
+        note: data.title || '',
+      }];
+      const row = {
+        id: data.id || this._genId('vp'),
+        vendor_id: String(data.vendor_id || ''),
+        vendor_name: data.vendor_name || null,
+        supervisor_id: data.supervisor_id || null,
+        opened_by: data.opened_by || null,
+        opened_by_name: data.opened_by_name || null,
+        opened_at: data.opened_at || now,
+        due_at: data.due_at,
+        title: String(data.title || '').trim(),
+        description: data.description || null,
+        proposal_id: data.proposal_id || null,
+        // client_name/cpf — gravados no lançamento para o card da esteira
+        // mostrar cliente sem precisar reconsultar a proposta a cada refresh.
+        client_name: data.client_name || null,
+        client_cpf: data.client_cpf || null,
+        status: data.status || 'aberta',
+        resolved_at: null,
+        resolved_by: null,
+        resolved_note: null,
+        blocked_at: null,
+        block_reason: null,
+        unlocked_at: null,
+        unlocked_by: null,
+        unlock_note: null,
+        history: hist,
+        created_at: now,
+        updated_at: now,
+      };
+      if (!row.vendor_id || !row.title || !row.due_at) {
+        throw new Error('vendor_id, title e due_at são obrigatórios.');
+      }
+      if (this.online) {
+        await supaReq('POST', 'vendor_pendencias', row);
+      } else {
+        const list = this._lget('soublu_vendor_pendencias') || [];
+        list.push(row);
+        this._lset('soublu_vendor_pendencias', list);
+      }
+      return this._normPendencia(row);
+    },
+
+    /**
+     * updateVendorPendencia — PATCH parcial; faz merge de history se enviado.
+     */
+    async updateVendorPendencia(id, updates) {
+      const patch = { ...updates, updated_at: nowBrazilSql() };
+      if (this.online) {
+        const r = await supaReq('PATCH', 'vendor_pendencias', patch, `?id=eq.${encodeURIComponent(id)}`);
+        return this._normPendencia((Array.isArray(r) ? r[0] : r) || { id, ...patch });
+      }
+      const list = this._lget('soublu_vendor_pendencias') || [];
+      const idx = list.findIndex((t) => String(t.id) === String(id));
+      if (idx < 0) return null;
+      list[idx] = this._normPendencia({ ...list[idx], ...patch });
+      this._lset('soublu_vendor_pendencias', list);
+      return list[idx];
+    },
+
+    /**
+     * deleteVendorPendencia — remove definitivamente (uso em resolvida/cancelada).
+     */
+    async deleteVendorPendencia(id) {
+      const pid = String(id || '');
+      if (!pid) return false;
+      if (this.online) {
+        await supaReq('DELETE', 'vendor_pendencias', null, `?id=eq.${encodeURIComponent(pid)}`);
+        return true;
+      }
+      const list = (this._lget('soublu_vendor_pendencias') || []).filter((t) => String(t.id) !== pid);
+      this._lset('soublu_vendor_pendencias', list);
+      return true;
+    },
+
+    /**
+     * getProposalReminders — lembretes ativos (ex.: boleto_validado) do vendedor.
+     */
+    async getProposalReminders({ vendorId, kind, activeOnly } = {}) {
+      if (this.online) {
+        let q = '?select=*&order=updated_at.desc&limit=200';
+        if (vendorId) q += `&vendor_id=eq.${encodeURIComponent(vendorId)}`;
+        if (kind) q += `&kind=eq.${encodeURIComponent(kind)}`;
+        if (activeOnly !== false) q += '&active=eq.true';
+        const rows = await supaReq('GET', 'proposal_reminders', null, q);
+        return Array.isArray(rows) ? rows : [];
+      }
+      let list = this._lget('soublu_proposal_reminders') || [];
+      if (vendorId) list = list.filter((r) => String(r.vendor_id) === String(vendorId));
+      if (kind) list = list.filter((r) => String(r.kind) === String(kind));
+      if (activeOnly !== false) list = list.filter((r) => r.active === true || r.active === 1 || r.active === '1');
+      return list;
+    },
+
+    /**
+     * upsertBoletoReminder — cria/reativa lembrete quando status vira BOLETO VALIDADO.
+     */
+    async upsertBoletoReminder({ proposalId, vendorId, clientName } = {}) {
+      const pid = String(proposalId || '');
+      const vid = String(vendorId || '');
+      if (!pid || !vid) return null;
+      const existing = await this.getProposalReminders({ vendorId: vid, kind: 'boleto_validado', activeOnly: false });
+      const found = (existing || []).find((r) => String(r.proposal_id) === pid);
+      const now = nowBrazilSql();
+      if (found) {
+        return this.updateProposalReminder(found.id, {
+          active: true,
+          client_name: clientName || found.client_name || null,
+          updated_at: now,
+        });
+      }
+      const row = {
+        id: this._genId('prm'),
+        proposal_id: pid,
+        vendor_id: vid,
+        kind: 'boleto_validado',
+        client_name: clientName || null,
+        active: true,
+        last_reminded_at: null,
+        created_at: now,
+        updated_at: now,
+      };
+      if (this.online) {
+        await supaReq('POST', 'proposal_reminders', row);
+      } else {
+        const list = this._lget('soublu_proposal_reminders') || [];
+        list.push(row);
+        this._lset('soublu_proposal_reminders', list);
+      }
+      return row;
+    },
+
+    async updateProposalReminder(id, updates) {
+      const patch = { ...updates, updated_at: nowBrazilSql() };
+      if (this.online) {
+        const r = await supaReq('PATCH', 'proposal_reminders', patch, `?id=eq.${encodeURIComponent(id)}`);
+        return (Array.isArray(r) ? r[0] : r) || { id, ...patch };
+      }
+      const list = this._lget('soublu_proposal_reminders') || [];
+      const idx = list.findIndex((t) => String(t.id) === String(id));
+      if (idx < 0) return null;
+      list[idx] = { ...list[idx], ...patch };
+      this._lset('soublu_proposal_reminders', list);
+      return list[idx];
+    },
+
+    /**
+     * deactivateBoletoRemindersForProposal — desliga lembrete quando status vira PAGO/cancelada.
+     */
+    async deactivateBoletoRemindersForProposal(proposalId) {
+      const pid = String(proposalId || '');
+      if (!pid) return;
+      if (this.online) {
+        try {
+          await supaReq('PATCH', 'proposal_reminders', { active: false, updated_at: nowBrazilSql() },
+            `?proposal_id=eq.${encodeURIComponent(pid)}&kind=eq.boleto_validado&active=eq.true`);
+        } catch (e) {
+          console.warn('[DB] deactivate boleto reminder', e);
+        }
+        return;
+      }
+      const list = this._lget('soublu_proposal_reminders') || [];
+      list.forEach((r) => {
+        if (String(r.proposal_id) === pid && r.kind === 'boleto_validado') r.active = false;
+      });
+      this._lset('soublu_proposal_reminders', list);
+    },
+
 
     async setTrainingBlock(empId, blocked) {
       const on = !!blocked;
@@ -3176,6 +3479,8 @@ if (!allowed) return null;
         'motherName', 'mother_name', 'fatherName', 'father_name',
         'documents', 'created_at', 'updated_at', 'updatedAt',
         'supervisorId', 'supervisor_id',
+        // Conta do cliente na proposta. Sem estas colunas o save apagava banco/agência/conta.
+        'banco', 'agencia', 'conta',
       ]);
     },
 
@@ -3314,6 +3619,74 @@ if (!allowed) return null;
       return this.findClientByCpf(cpf);
     },
 
+    /**
+     * searchClients — busca no banco por nome, e-mail, CPF ou telefone.
+     * A lista da tela só traz os últimos ~800; nome de cliente antigo não aparecia.
+     */
+    async searchClients(query, opts = {}) {
+      const raw = String(query || '').trim();
+      if (!raw) return [];
+      const limit = Math.min(Number(opts.limit) || 80, 200);
+      const cols = opts.full ? '*' : this._CLIENTS_LIST_COLS;
+      const digits = raw.replace(/\D/g, '');
+      const safe = raw.replace(/[*%(),]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+      const like = '*' + safe.replace(/\s+/g, '*') + '*';
+      const seen = new Set();
+      const out = [];
+      const add = (rows) => {
+        (Array.isArray(rows) ? rows : []).forEach((c) => {
+          const k = String(c?.cpf || c?.id || '').replace(/\D/g, '') || String(c?.id || '');
+          if (!k || seen.has(k)) return;
+          seen.add(k);
+          out.push(c);
+        });
+      };
+      if (this.online) {
+        try {
+          add(await supaReq(
+            'GET', 'clients', null,
+            `?or=(name.ilike.${encodeURIComponent(like)},email.ilike.${encodeURIComponent(like)})&select=${cols}&limit=${limit}`
+          ));
+        } catch (e) {
+          console.warn('[DB] searchClients name:', e.message || e);
+          try {
+            add(await supaReq(
+              'GET', 'clients', null,
+              `?name=ilike.${encodeURIComponent(like)}&select=${cols}&limit=${limit}`
+            ));
+          } catch (e2) {
+            console.warn('[DB] searchClients name-fallback:', e2.message || e2);
+          }
+        }
+        if (digits.length >= 3) {
+          if (digits.length === 11) {
+            const one = await this.findClientByCpf(digits).catch(() => null);
+            if (one) add([one]);
+          }
+          try {
+            add(await supaReq(
+              'GET', 'clients', null,
+              `?cpf=ilike.*${encodeURIComponent(digits)}*&select=${cols}&limit=${limit}`
+            ));
+          } catch (_) { /* noop */ }
+          try {
+            add(await supaReq(
+              'GET', 'clients', null,
+              `?or=(phone1.ilike.*${encodeURIComponent(digits)}*,phone2.ilike.*${encodeURIComponent(digits)}*)&select=${cols}&limit=${limit}`
+            ));
+          } catch (_) { /* noop */ }
+        }
+      } else {
+        const list = this._lget(this.LK.clients) || [];
+        add(list.filter((c) => (
+          typeof window.Clients?.matchesClientSearch === 'function'
+            ? Clients.matchesClientSearch(c, raw)
+            : String(c.name || '').toLowerCase().includes(raw.toLowerCase())
+        )));
+      }
+      return out.slice(0, limit);
+    },
+
     async findClientByCpf(cpf) {
       const digits = String(cpf || '').replace(/\D/g, '');
       if (!digits) return null;
@@ -3382,8 +3755,9 @@ if (!allowed) return null;
     },
   
     /* Colunas leves — evita timeout ao buscar attachments/history em massa.
-     * Sem history na listagem (payload ~metade e não trava o celular). */
-    _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissaoRecebida,valorComissaoRecebida,createdAt,created_at,updatedAt,updated_at,employee_id',
+     * history na lista: filtro Livecred (pagamento/digitação). */
+    /* bancoDigitado na lista: Limpar clones (proposalCloneKey) precisa do banco. */
+    _PROPOSALS_LIST_COLS: 'id,numero,vendorId,vendor_id,vendorName,vendor_name,clientName,client_name,clientCpf,client_cpf,product,convenio,entidade,valor,valorFinal,valor_final,desconto,tabela,status,statusOp,status_op,matricula,protocolo,obs,fases,comissaoElegivel,comissaoRecebida,valorComissaoRecebida,createdAt,created_at,updatedAt,updated_at,employee_id,bancoDigitado,banco_digitado,history',
 
     /** Detalhe sem attachments — evita baixar base64 gigante ao abrir modal no celular.
      *  Só colunas que existem no MySQL (sem tipoOperacao/meta — quebram o select). */
@@ -3513,17 +3887,24 @@ if (!allowed) return null;
 
     /**
      * proposalCloneKey — chave de CLONE (ficha repetida), não de cliente.
-     * Clone = mesmo CPF + mesmo produto + mesmo banco de digitação.
-     * Cartão vs BTW / compra de dívida vs Neo NÃO batem — são dois produtos e devem coexistir.
-     * Sem produto ou sem banco retorna vazio: não agrupa, para não apagar segundo lançamento incompleto.
+     * Preferência: CPF + produto + banco de digitação.
+     * Sem banco: cai para CPF + produto + número da proposta (mesmo nº = clone claro).
+     * Cartão vs BTW / dívida vs Neo NÃO batem — produtos diferentes coexistem.
+     * Sem produto (e sem nº+banco) retorna vazio — não agrupa incompleto.
      */
     proposalCloneKey(p) {
       const client = this.proposalClientDedupeKey(p);
       if (!client) return '';
       const product = this._proposalClonePart(p.product);
+      if (!product) return '';
       const bank = this._proposalClonePart(p.bancoDigitado || p.banco_digitado);
-      if (!product || !bank) return '';
-      return `${client}|prod:${product}|banco:${bank}`;
+      if (bank) return `${client}|prod:${product}|banco:${bank}`;
+      const num = String(p.numero || p.numeroProposta || p.proposalNumber || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .toUpperCase();
+      if (num) return `${client}|prod:${product}|num:${num}`;
+      return '';
     },
 
     /**
@@ -3700,6 +4081,8 @@ if (!allowed) return null;
     /**
      * Data em que a proposta passou a Paga (histórico → [PAGO]).
      * É a data usada no faturamento: criada em jun/paga em jul → conta em jul.
+     * Preferência: último carimbo kind=paid (ajuste manual/oficial);
+     * senão, última transição de status → PAGO.
      */
     proposalPaidAt(p) {
       if (!p) return null;
@@ -3709,18 +4092,25 @@ if (!allowed) return null;
         if (!Number.isNaN(d.getTime())) return d;
       }
       const hist = this._parseProposalHistoryArr(p.history);
-      let lastPaidMs = null;
+      let lastPaidStampMs = null;
+      let lastPaidStatusMs = null;
       for (const h of hist) {
         const action = String(h?.action || '');
         const kind = String(h?.kind || h?.billing || '').toLowerCase();
-        const isPaidMark = kind === 'paid' || kind === 'paid_at'
-          || /(→|->|⇒)\s*\[?\s*PAGO\b/i.test(action)
-          || /(→|->|⇒)\s*\[?\s*Pago\b/i.test(action);
-        if (!isPaidMark || !h?.date) continue;
+        if (!h?.date) continue;
         const t = new Date(h.date).getTime();
-        if (!Number.isNaN(t)) lastPaidMs = t;
+        if (Number.isNaN(t)) continue;
+        if (kind === 'paid' || kind === 'paid_at') {
+          lastPaidStampMs = t;
+          continue;
+        }
+        const isPaidMark =
+          /(→|->|⇒)\s*\[?\s*PAGO\b/i.test(action) ||
+          /(→|->|⇒)\s*\[?\s*Pago\b/i.test(action);
+        if (isPaidMark) lastPaidStatusMs = t;
       }
-      if (lastPaidMs != null) return new Date(lastPaidMs);
+      if (lastPaidStampMs != null) return new Date(lastPaidStampMs);
+      if (lastPaidStatusMs != null) return new Date(lastPaidStatusMs);
       // Paga sem histórico de transição: usa última atualização (não a criação).
       if (this.isPaidProposal(p)) {
         const raw = p.updatedAt || p.updated_at;
@@ -4453,6 +4843,31 @@ if (!allowed) return null;
       return out;
     },
 
+    /**
+     * findProposalByRef — resolve proposta por id, numero ou protocolo.
+     * Usado na esteira de pendências (BO cola o número da ficha, não o PROP-…).
+     */
+    async findProposalByRef(ref) {
+      const key = String(ref || '').trim();
+      if (!key) return null;
+      if (this.online) {
+        try {
+          const cols = 'id,numero,protocolo,client_name,clientName,client_cpf,clientCpf,vendor_id,vendor_name,product,status';
+          const enc = encodeURIComponent(key);
+          const q = `?select=${cols}&or=(id.eq.${enc},numero.eq.${enc},protocolo.eq.${enc})&limit=1`;
+          const rows = await supaReq('GET', 'proposals', null, q);
+          if (Array.isArray(rows) && rows[0]) return rows[0];
+        } catch (e) {
+          console.warn('[DB] findProposalByRef:', e.message || e);
+        }
+      }
+      try {
+        const byId = await this.getProposal(key, { lite: true });
+        if (byId) return byId;
+      } catch { /* ignore */ }
+      return null;
+    },
+
     /** Uma proposta completa (select=*) — lista parcial não traz attachments/history.
      *  opts.lite = true → sem coluna attachments (abre modal sem travar no celular). */
     async getProposal(id, opts = {}) {
@@ -4631,6 +5046,11 @@ if (!allowed) return null;
     },
 
     /** Nome seguro no Storage — sem acentos no caminho (exibição usa _nome original). */
+    /**
+     * _safeProposalStorageFileName — nome seguro para objeto no Storage.
+     * Remove path chars e colapsa ".." (ex.: WhatsApp "DOC-...WA0270..pdf"),
+     * senão api/upload.php rejeita com "Caminho inválido".
+     */
     _safeProposalStorageFileName(name) {
       const base = String(name || 'arquivo')
         .normalize('NFD')
@@ -4640,7 +5060,11 @@ if (!allowed) return null;
         .trim();
       const ext = base.includes('.') ? base.split('.').pop() : '';
       const stem = ext ? base.slice(0, -(ext.length + 1)) : base;
-      const safeStem = (stem || 'arquivo').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 120);
+      const safeStem = (stem || 'arquivo')
+        .replace(/[^a-zA-Z0-9._-]/g, '_')
+        .replace(/\.+/g, '.')
+        .replace(/^\.+|\.+$/g, '')
+        .slice(0, 120) || 'arquivo';
       const safeExt = String(ext || 'bin').replace(/[^a-zA-Z0-9]/g, '').slice(0, 12) || 'bin';
       return `${safeStem}.${safeExt}`;
     },
@@ -4688,6 +5112,22 @@ if (!allowed) return null;
 
       const _cfg = typeof window !== 'undefined' && window.SOUBLU_CONFIG ? window.SOUBLU_CONFIG : {};
       const phpUp = _cfg.UPLOAD_URL && _cfg.API_KEY;
+      /* Locaweb: multipart some; POST fatiado (soubluRawUpload) grava pelo corpo cru. */
+      if (phpUp && typeof window.soubluRawUpload === 'function') {
+        try {
+          const rel = await window.soubluRawUpload(file, bucket, path);
+          if (rel) {
+            return {
+              url: rel,
+              caminho: this.normalizeProposalCaminho(rel),
+              nome: origName,
+              public_url: null,
+            };
+          }
+        } catch (e) {
+          console.warn('[DB.uploadProposalFile] raw:', e && e.message ? e.message : e);
+        }
+      }
 if (phpUp) {
         const fd = new FormData();
         fd.append('file', file, origName);
@@ -5148,10 +5588,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
 
     async deleteTraining(id) {
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'C',location:'db.js:deleteTraining:entry',message:'deleteTraining start',data:{id:String(id||''),online:!!this.online},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (!id) return;
+if (!id) return;
       // Prevent Universidade seed from recreating this default course id.
       try {
         if (typeof TrainingTracks !== 'undefined' && typeof TrainingTracks.blockSeedCourseId === 'function') {
@@ -5209,10 +5646,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
         }
         await supaReq('DELETE', 'trainings', null, `?id=eq.${encodeURIComponent(id)}`);
         _cacheDel('trainings');
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'C',location:'db.js:deleteTraining:deleted',message:'DELETE trainings done',data:{id:String(id)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return;
+return;
       }
       this._lset(this.LK.trainings, (this._lget(this.LK.trainings) || []).filter(x => x.id !== id));
       this._lset(this.LK.training_attempts, (this._lget(this.LK.training_attempts) || []).filter(x => x.training_id !== id));
@@ -8413,17 +8847,11 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
 
         const ok = !Object.values(steps).some((s) => s && s.ok === false);
         const out = { ok, steps };
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',hypothesisId:'H1-H4',location:'db.js:ensureRhTablesOnline',message:'rh migrate steps',data:{ok,steps},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return out;
+return out;
       } catch (e) {
         console.warn('[DB] ensureRhTablesOnline:', e);
         const out = { ok: false, error: e.message, steps };
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',hypothesisId:'H4',location:'db.js:ensureRhTablesOnline',message:'rh migrate exception',data:{error:e?.message||String(e),steps},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return out;
+return out;
       }
     },
 

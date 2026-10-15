@@ -16,6 +16,8 @@ final class PostgRestCompat
         'transactions' => 1000,
         'clients' => 2000,
         'tickets' => 500,
+        'vendor_pendencias' => 1000,
+        'proposal_reminders' => 1000,
         'leads' => 50000,
         'wa_messages' => 500,
         'wa_chats' => 500,
@@ -25,6 +27,9 @@ final class PostgRestCompat
         'rh_employees' => 1000,
         'internal_chat_messages' => 500,
         'internal_chat_threads' => 300,
+        // Estoque de chips WhatsApp (Solicite um Número) — cap médio p/ listagens admin/vendedor.
+        'wa_number_requests' => 500,
+        'wa_numbers' => 500,
     ];
 
     private const ALLOWED = [
@@ -47,6 +52,10 @@ final class PostgRestCompat
         'internal_chat_threads', 'internal_chat_messages',
         'account_block_events',
         'proposal_archive',
+        // Tabelas do estoque de números WhatsApp (claim/release/admin).
+        'wa_number_requests', 'wa_numbers',
+        // Esteira de pendências do vendedor (bloqueio por atraso ≠ saque).
+        'vendor_pendencias', 'proposal_reminders',
     ];
 
     /** Nome na API (snake_case) → coluna física no MySQL. */
@@ -82,6 +91,7 @@ final class PostgRestCompat
         'finance_proposta_ops' => ['data'],
         'transactions' => ['meta'],
         'tickets' => ['messages', 'thread'],
+        'vendor_pendencias' => ['history'],
         'meetings' => ['target_roles', 'acknowledgements', 'participant_ids'],
         'trainings' => ['questions', 'audience_roles'],
         'training_attempts' => ['answers', 'lesson_progress'],
@@ -134,6 +144,15 @@ final class PostgRestCompat
         if ($table === 'users') {
             $this->ensureUsersExtraColumns();
         }
+        if ($table === 'clients') {
+            $this->ensureClientsExtraColumns();
+        }
+        if ($table === 'vendor_pendencias') {
+            $this->ensureVendorPendenciasExtraColumns();
+        }
+        if ($table === 'proposals') {
+            $this->ensureProposalsExtraColumns();
+        }
 
         $params = $this->parseQuery($queryString);
         $method = strtoupper($method);
@@ -171,6 +190,10 @@ final class PostgRestCompat
                 'account_block_code' => "VARCHAR(8) NULL COMMENT 'codigo motivo bloqueio 001-005'",
                 'account_block_at' => 'DATETIME NULL',
                 'account_block_by' => 'VARCHAR(64) NULL',
+                'pendency_block_active' => "TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1=bloqueado por pendencia vencida'",
+                'pendency_block_at' => 'DATETIME NULL',
+                'pendency_block_by' => 'VARCHAR(64) NULL',
+                'pendency_block_pendencia_id' => 'VARCHAR(64) NULL',
             ];
             foreach ($need as $col => $ddl) {
                 if (in_array($col, $cols, true)) {
@@ -178,6 +201,108 @@ final class PostgRestCompat
                 }
                 $this->pdo->exec('ALTER TABLE `users` ADD COLUMN `' . $col . '` ' . $ddl);
                 unset($this->tableColumnsCache['users']);
+            }
+        } catch (Throwable $e) {
+            /* ambiente sem permissão ALTER — segue sem bloquear a API */
+        }
+    }
+
+    /**
+     * ensureClientsExtraColumns — cria banco/agência/conta no cadastro do cliente.
+     * Usado na proposta (endereço + conta obrigatórios para o vendedor salvar).
+     */
+    private function ensureClientsExtraColumns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $cols = $this->tableColumns('clients');
+            $need = [
+                'banco' => "VARCHAR(120) NULL COMMENT 'Banco da conta do cliente'",
+                'agencia' => "VARCHAR(32) NULL COMMENT 'Agencia da conta do cliente'",
+                'conta' => "VARCHAR(64) NULL COMMENT 'Conta corrente do cliente'",
+            ];
+            foreach ($need as $col => $ddl) {
+                if (in_array($col, $cols, true)) {
+                    continue;
+                }
+                $this->pdo->exec('ALTER TABLE `clients` ADD COLUMN `' . $col . '` ' . $ddl);
+                unset($this->tableColumnsCache['clients']);
+            }
+        } catch (Throwable $e) {
+            /* ambiente sem permissão ALTER — segue sem bloquear a API */
+        }
+    }
+
+    /**
+     * ensureProposalsExtraColumns — JSON da esteira Compra de Dívida / crédito.
+     * Sem credito_esteira o save perde o payload e o GET com select dessa coluna
+     * retorna 500 (lista “Nenhuma proposta encontrada”).
+     */
+    private function ensureProposalsExtraColumns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $schema = __DIR__ . '/ProposalMysqlSchema.php';
+            if (is_file($schema)) {
+                require_once $schema;
+            }
+            if (function_exists('soublu_ensure_proposals_json_columns')) {
+                soublu_ensure_proposals_json_columns($this->pdo);
+                unset($this->tableColumnsCache['proposals']);
+                return;
+            }
+            $cols = $this->tableColumns('proposals');
+            $need = [
+                'credito_esteira' => 'LONGTEXT NULL',
+                'credito_retorno' => 'LONGTEXT NULL',
+                'meta' => 'LONGTEXT NULL',
+                'attachments' => 'LONGTEXT NULL',
+                'history' => 'LONGTEXT NULL',
+                'protocolo' => 'VARCHAR(64) NULL',
+            ];
+            foreach ($need as $col => $ddl) {
+                if (in_array($col, $cols, true)) {
+                    continue;
+                }
+                $this->pdo->exec('ALTER TABLE `proposals` ADD COLUMN `' . $col . '` ' . $ddl);
+                unset($this->tableColumnsCache['proposals']);
+            }
+        } catch (Throwable $e) {
+            /* sem ALTER — front usa select safe sem credito_esteira */
+        }
+    }
+
+    /**
+     * ensureVendorPendenciasExtraColumns — cliente da proposta na esteira.
+     * Sem isso o card só mostra vendedor; BO precisa ver cliente + proposta.
+     */
+    private function ensureVendorPendenciasExtraColumns(): void
+    {
+        static $done = false;
+        if ($done) {
+            return;
+        }
+        $done = true;
+        try {
+            $cols = $this->tableColumns('vendor_pendencias');
+            $need = [
+                'client_name' => "VARCHAR(255) NULL COMMENT 'Nome do cliente da proposta vinculada'",
+                'client_cpf' => "VARCHAR(14) NULL COMMENT 'CPF do cliente (somente digitos ou mascarado)'",
+            ];
+            foreach ($need as $col => $ddl) {
+                if (in_array($col, $cols, true)) {
+                    continue;
+                }
+                $this->pdo->exec('ALTER TABLE `vendor_pendencias` ADD COLUMN `' . $col . '` ' . $ddl);
+                unset($this->tableColumnsCache['vendor_pendencias']);
             }
         } catch (Throwable $e) {
             /* ambiente sem permissão ALTER — segue sem bloquear a API */
@@ -283,6 +408,25 @@ final class PostgRestCompat
         return $mapped;
     }
 
+    /**
+     * pdoScalarRow — um valor escalar por coluna (JSON se array/objeto).
+     * PDO não faz bind de array (MySQL 1136) e o placeholder :phone come :phone2.
+     */
+    private function pdoScalarRow(array $row): array
+    {
+        $out = [];
+        foreach ($row as $k => $v) {
+            if (is_array($v) || (is_object($v) && !$v instanceof DateTimeInterface)) {
+                $encoded = json_encode($v, JSON_UNESCAPED_UNICODE);
+                $v = $encoded === false ? '{}' : $encoded;
+            } elseif (is_bool($v)) {
+                $v = $v ? 1 : 0;
+            }
+            $out[$k] = $v;
+        }
+        return $out;
+    }
+
     private function insert(string $table, array $body, array $params): array
     {
         $items = isset($body[0]) ? $body : [$body];
@@ -296,16 +440,16 @@ final class PostgRestCompat
             if ($params['on_conflict']) {
                 $out[] = $this->upsert($table, $row, $params['on_conflict']);
             } else {
+                $row = $this->pdoScalarRow($row);
                 $cols = array_keys($row);
-                $placeholders = array_map(fn ($c) => ':' . $c, $cols);
                 $sql = sprintf(
                     'INSERT INTO `%s` (`%s`) VALUES (%s)',
                     $table,
                     implode('`,`', $cols),
-                    implode(',', $placeholders)
+                    implode(',', array_fill(0, count($cols), '?'))
                 );
                 $stmt = $this->pdo->prepare($sql);
-                $stmt->execute($row);
+                $stmt->execute(array_values($row));
                 $out[] = $this->hydrateRow($table, $row);
             }
         }
@@ -314,6 +458,7 @@ final class PostgRestCompat
 
     private function upsert(string $table, array $row, string $conflictCol): array
     {
+        $row = $this->pdoScalarRow($row);
         $cols = array_keys($row);
         $updates = [];
         foreach ($cols as $c) {
@@ -322,16 +467,15 @@ final class PostgRestCompat
             }
             $updates[] = "`{$c}`=VALUES(`{$c}`)";
         }
-        $placeholders = array_map(fn ($c) => ':' . $c, $cols);
         $sql = sprintf(
             'INSERT INTO `%s` (`%s`) VALUES (%s) ON DUPLICATE KEY UPDATE %s',
             $table,
             implode('`,`', $cols),
-            implode(',', $placeholders),
+            implode(',', array_fill(0, count($cols), '?')),
             implode(',', $updates)
         );
         $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($row);
+        $stmt->execute(array_values($row));
         return $this->hydrateRow($table, $row);
     }
 
@@ -521,7 +665,7 @@ final class PostgRestCompat
             'active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial',
             'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner',
             'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned', 'training_block',
-            'account_block_active',
+            'account_block_active', 'pendency_block_active',
         ];
         if (!in_array($col, $boolCols, true)) {
             return $val;
@@ -656,6 +800,9 @@ final class PostgRestCompat
             $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
             $item['meta'] = soublu_partner_meta_normalize_for_api($item['meta'], $uploadDir, true);
         }
+        if ($table === 'leads' && array_key_exists('cpf', $item) && function_exists('soublu_leads_normalize_cpf')) {
+            $item['cpf'] = soublu_leads_normalize_cpf($item['cpf']);
+        }
         $jsonCols = self::JSON_COLUMNS[$table] ?? [];
         $row = [];
         foreach ($item as $k => $v) {
@@ -664,9 +811,18 @@ final class PostgRestCompat
             }
             $physical = $this->resolveCol($table, (string) $k);
             if (in_array($physical, $jsonCols, true)) {
-                $row[$physical] = $v === null ? null : json_encode($v, JSON_UNESCAPED_UNICODE);
+                if ($v === null) {
+                    $row[$physical] = null;
+                } elseif (is_string($v)) {
+                    $row[$physical] = $v;
+                } else {
+                    $row[$physical] = json_encode($v, JSON_UNESCAPED_UNICODE);
+                }
             } elseif (is_bool($v)) {
                 $row[$physical] = $v ? 1 : 0;
+            } elseif (is_array($v) || (is_object($v) && !$v instanceof DateTimeInterface)) {
+                // PDO não aceita array no bind — vira 1136 (column count vs values).
+                $row[$physical] = json_encode($v, JSON_UNESCAPED_UNICODE);
             } else {
                 $row[$physical] = $v;
             }
@@ -684,7 +840,7 @@ final class PostgRestCompat
                     $row[$k] = $decoded;
                 }
             }
-            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner', 'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned', 'training_block', 'account_block_active'], true)) {
+            if (in_array($k, ['active', 'show_points', 'doc_verified', 'approved_by_master', 'approved_by_financial', 'met_target', 'lock_triggered', 'passed', 'is_lead_locked', 'is_partner', 'cc_money_active', 'acesso_clube', 'exige_ciencia', 'pinned', 'training_block', 'account_block_active', 'pendency_block_active'], true)) {
                 $row[$k] = (bool) (int) $v;
             }
         }
@@ -697,6 +853,9 @@ final class PostgRestCompat
             require_once dirname(__DIR__) . '/lib/FileStorage.php';
             $uploadDir = defined('UPLOAD_DIR') ? (string) UPLOAD_DIR : (dirname(__DIR__, 2) . '/uploads');
             $row['meta'] = soublu_partner_meta_normalize_for_api($row['meta'], $uploadDir, false);
+        }
+        if ($table === 'leads' && array_key_exists('cpf', $row) && function_exists('soublu_leads_normalize_cpf')) {
+            $row['cpf'] = soublu_leads_normalize_cpf($row['cpf']);
         }
         foreach (self::REVERSE_ALIASES[$table] ?? [] as $physical => $apiName) {
             if (array_key_exists($physical, $row) && !array_key_exists($apiName, $row)) {
