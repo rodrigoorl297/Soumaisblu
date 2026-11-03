@@ -14,6 +14,29 @@ function _peekDB() {
   return null;
 }
 
+/**
+ * ensureEmployeeSimulacao — carrega js/simulacao.js se faltar e chama init().
+ * No painel do colaborador o HTML da seção existia, mas o script não era incluído,
+ * então #simTabela ficava vazio e os saldos/troco ficavam em "—".
+ */
+async function ensureEmployeeSimulacao() {
+  if (!window.SimulacaoTroco) {
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src*="simulacao.js"]');
+      if (existing && window.SimulacaoTroco) {
+        resolve();
+        return;
+      }
+      const s = document.createElement('script');
+      s.src = '../js/simulacao.js?v=emp-sim1';
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Falha ao carregar simulacao.js'));
+      document.head.appendChild(s);
+    });
+  }
+  if (window.SimulacaoTroco) SimulacaoTroco.init();
+}
+
 async function _requireDB(maxWaitMs = 9000) {
   const deadline = Date.now() + maxWaitMs;
   let db = _peekDB();
@@ -60,8 +83,13 @@ function _applyPartnerEmployeeUI() {
   const navSim = document.getElementById('navSimulacao');
   if (navProp) navProp.style.display = showProp ? '' : 'none';
   if (navSim) navSim.style.display = showProp ? '' : 'none';
+  const navSimCpf = document.getElementById('navSimulacaoCpf');
+  if (navSimCpf) {
+    navSimCpf.style.display = showProp ? '' : 'none';
+    navSimCpf.hidden = !showProp;
+  }
 
-  const land = role === 'backoffice' ? 'secTickets' : 'secProposals';
+  const land = 'secProposals';
   const landBtn = document.querySelector(`.nav-item[data-section="${land}"]`);
   const fallback = document.querySelector('.nav-item[data-section="secProfile"]');
   const target = (landBtn && landBtn.style.display !== 'none') ? land : (fallback?.dataset.section || 'secProfile');
@@ -71,7 +99,7 @@ function _applyPartnerEmployeeUI() {
 }
 
 function _applyPortariaEmployeeUI() {
-  const hideSections = ['secOrders', 'secRanking', 'secMeetings', 'secProposals', 'secSimulacao', 'secWhatsApp'];
+  const hideSections = ['secOrders', 'secRanking', 'secMeetings', 'secProposals', 'secSimulacao', 'secSimulacaoCpf', 'secWhatsApp'];
   hideSections.forEach((id) => {
     document.querySelectorAll(`.nav-item[data-section="${id}"]`).forEach((el) => { el.style.display = 'none'; });
     const sec = document.getElementById(id);
@@ -137,6 +165,16 @@ function _applyEmployeeLeadsNav(user) {
       btn.style.display = showLeads ? '' : 'none';
     }
   });
+}
+
+/**
+ * _canEmployeeAccessTickets — chamados só para allowlist (Eli/Flávia/Paulo/Gabryelle).
+ */
+function _canEmployeeAccessTickets(user) {
+  if (typeof Auth !== 'undefined' && typeof Auth.canAccessChamados === 'function') {
+    return !!Auth.canAccessChamados(user);
+  }
+  return false;
 }
 
 function syncSidebarDividers() {
@@ -304,6 +342,16 @@ if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
       PainelSonhos.applyEmployeeNav(currentUser.role);
     }
 
+    // Chamados desativado para perfis fora da lista de gestão solicitada.
+    const canTickets = _canEmployeeAccessTickets(currentUser);
+    const navTickets = document.querySelector('.nav-item[data-section="secTickets"]');
+    if (navTickets) navTickets.style.display = canTickets ? '' : 'none';
+    const secTickets = document.getElementById('secTickets');
+    if (secTickets && !canTickets) {
+      secTickets.style.display = 'none';
+      secTickets.classList.remove('active');
+    }
+
     // Permissões para Propostas (área completa do colaborador; modo perfil não usa)
     if (!window.__PERFIL_MODE__ && ['vendedor', 'backoffice', 'master', 'supervisor'].includes(currentUser.role)) {
        const btnProp = document.getElementById('navProposals');
@@ -359,6 +407,10 @@ hideLoading();
         await PropostaCredito.applyEmployeeNavVisibility(currentUser);
       }
     }
+    // Gestão de Crédito (2ª esteira) — menu separado; só fichas do próprio vendedor.
+    if (window.EsteiraCompraDivida && typeof EsteiraCompraDivida.init === 'function') {
+      try { await EsteiraCompraDivida.init(); } catch (_) { /* noop */ }
+    }
     if (window.PixAutorizarEmployee) {
       await PixAutorizarEmployee.init(currentUser);
     }
@@ -400,12 +452,22 @@ hideLoading();
           if (window.Proposals) await Proposals.renderEmployeeList();
           if (window.Clients && document.getElementById('clientsList')) await Clients.renderEmployeeList();
         }
+        if (s==='secEsteiraCompraDivida' && window.EsteiraCompraDivida) {
+          EsteiraCompraDivida.ensureVendorSection();
+        }
         if (s==='secPropostaCredito' && window.PropostaCredito) PropostaCredito.renderEmployee();
         if (s==='secAutorizarPix' && window.PixAutorizarEmployee) PixAutorizarEmployee.render();
-        if (s==='secSimulacao') { if (window.SimulacaoTroco) SimulacaoTroco.init(); }
+        // Simulação: no employee o script não vinha no HTML — carrega sob demanda e preenche #simTabela.
+        if (s==='secSimulacao' || s==='secSimulacaoCpf') {
+          await ensureEmployeeSimulacao();
+          if (s === 'secSimulacaoCpf' && window.SimulacaoTroco?.openSimulacaoCpf) {
+            window.SimulacaoTroco.openSimulacaoCpf();
+          }
+        }
         if (s==='secClients')   { if(window.Clients) await Clients.renderEmployeeList(); }
         if (s==='secClubeBeneficios' && window.BeneficiosClube?.init) await BeneficiosClube.init();
         if (s==='secTickets')   {
+if (!_canEmployeeAccessTickets(currentUser)) return;
 if (window.Tickets) {
             Tickets.init();
             await Tickets.renderEmployeeList();
@@ -442,7 +504,7 @@ if (window.Tickets) {
 function _ensureEmployeeSectionVisible() {
   const active = document.querySelector('.section.active');
   if (active && active.style.display !== 'none') return;
-  const ids = ['secInicio', 'secProfile', 'secProposals', 'secTickets', 'secStore'];
+  const ids = ['secInicio', 'secProfile', 'secProposals', 'secStore'];
   for (const id of ids) {
     const sec = document.getElementById(id);
     if (!sec || sec.style.display === 'none') continue;
@@ -461,11 +523,21 @@ function _ensureEmployeeSectionVisible() {
   }
 }
 
+function _isEmployeeMobileBoot() {
+  try {
+    if (typeof window.isSoubluMobile === 'function') return !!window.isSoubluMobile();
+    return !!(window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+  } catch (_) {
+    return (window.innerWidth || 0) <= 900;
+  }
+}
+
 async function _deferredEmployeeBoot(_inPartnerOrg) {
   const t0 = Date.now();
+  const mobileBoot = _isEmployeeMobileBoot();
   const tasks = [];
   if (!window.__PERFIL_MODE__) {
-    if (!_inPartnerOrg) {
+    if (!_inPartnerOrg && !mobileBoot) {
       tasks.push(
         renderCategories(),
         renderProducts(),
@@ -474,8 +546,8 @@ async function _deferredEmployeeBoot(_inPartnerOrg) {
       );
     }
     tasks.push(renderProfile());
-    if (window.RouletteUI) tasks.push(RouletteUI.renderRoulettePage());
-    if (window.BolaoCopa) {
+    if (!mobileBoot && window.RouletteUI) tasks.push(RouletteUI.renderRoulettePage());
+    if (!mobileBoot && window.BolaoCopa) {
       BolaoCopa.ensureDom();
       BolaoCopa.applyNavVisibility();
       tasks.push(BolaoCopa.init());
@@ -483,7 +555,7 @@ async function _deferredEmployeeBoot(_inPartnerOrg) {
     if (['vendedor', 'backoffice', 'supervisor'].includes(currentUser?.role) && window.Proposals) {
       tasks.push(Proposals.renderEmployeeList());
     }
-    if (!_inPartnerOrg && typeof renderMeetingsEmployee === 'function') {
+    if (!mobileBoot && !_inPartnerOrg && typeof renderMeetingsEmployee === 'function') {
       tasks.push(renderMeetingsEmployee());
     }
   }
