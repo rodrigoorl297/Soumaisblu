@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');const {chromium}=require('playwright');
+(async()=>{const browser=await chromium.launch({channel:'msedge',headless:true});try{const page=await browser.newPage();let authorized=false;let invoices=0,tickets=0;const requests=[];
+ await page.route('**/pages/prestador.html',route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.resolve(__dirname,'../pages/prestador.html'),'utf8').replace('<link rel="stylesheet" href="../css/variables.css">','')}));
+ await page.route('**/js/finance-access.js',route=>route.fulfill({contentType:'text/javascript',body:fs.readFileSync(path.resolve(__dirname,'../js/finance-access.js'),'utf8')}));await page.route('**/js/provider-portal.js',route=>route.fulfill({contentType:'text/javascript',body:fs.readFileSync(path.resolve(__dirname,'../js/provider-portal.js'),'utf8')}));
+ await page.route('**/api/finance.php?*',async route=>{const req=route.request(),action=new URL(req.url()).searchParams.get('action');requests.push(action);let result={ok:true};let status=200;
+ if(action==='login'){authorized=true;result.csrf='test-csrf';result.user_id='provider1';}
+ else if(!authorized){status=401;result={ok:false,message:'Entre novamente.'};}
+ else if(action==='session'){result.csrf='test-csrf';result.user_id='provider1';}
+ else if(action==='portal')result={ok:true,supplier:{id:'supplier1',name:'Prestador um'},balance:42.25,lines:[{amount:42.25,type:'credit',reason:'Serviço',created_at:'2026-10-06'}],payments:[],records:[{id:'ticket1',kind:'chamado_prestador',data:{subject:'Dúvida',message:'Pagamento',status:'aberto',response:'Em análise'}}]};
+ else if(action==='invoice'){assert.equal(req.headers()['x-finance-csrf'],'test-csrf');invoices++;}
+ else if(action==='ticket'){assert.equal(req.headers()['x-finance-csrf'],'test-csrf');const data=req.postDataJSON();assert.equal(data.subject,'Pagamento');assert.equal(data.user_id,undefined);assert.equal(data.supplier_id,undefined);tickets++;}
+ await route.fulfill({status,contentType:'application/json',body:JSON.stringify(result)});});
+ await page.goto('http://127.0.0.1:8000/pages/prestador.html');await page.waitForFunction(()=>document.getElementById('providerMessage').textContent==='Entre novamente.');assert.equal(await page.locator('#providerContent').isVisible(),false);
+ await page.fill('#providerUser','provider1');await page.fill('#providerPassword','senha-de-teste');await page.locator('#providerLogin button').click();await page.waitForFunction(()=>!document.getElementById('providerContent').hidden);assert.equal(await page.locator('#providerName').innerText(),'Prestador um');assert.match(await page.locator('#providerBalance').innerText(),/42,25/);assert.equal(await page.locator('#providerPassword').inputValue(),'');
+ await page.fill('#providerTicket [name=subject]','Pagamento');await page.fill('#providerTicket [name=message]','Quando será pago?');await page.locator('#providerTicket button').click();await page.waitForFunction(()=>document.getElementById('providerTicket').elements.subject.value==='');assert.equal(tickets,1);
+ await page.fill('#providerInvoice [name=month]','2026-10');await page.locator('#providerInvoice [name=file]').setInputFiles({name:'nota.pdf',mimeType:'application/pdf',buffer:Buffer.from('%PDF-1.4\n')});await page.locator('#providerInvoice button').click();await page.waitForFunction(()=>document.getElementById('providerInvoice').elements.month.value==='');assert.equal(invoices,1);
+ assert.ok(!requests.includes('schedule_run'));console.log('PASS: portal exige login, mostra extrato próprio, envia nota e chamado com CSRF.');
+ }finally{await browser.close();}})().catch(e=>{console.error(e);process.exitCode=1});

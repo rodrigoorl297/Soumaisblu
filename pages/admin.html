@@ -173,14 +173,17 @@
 
     </script>
     <script src="../js/config.js?v=wanr8" defer></script>
-    <script src="../js/db.js?v=nomes-caps1" defer></script>
-    <script src="../js/auth.js?v=bira-chamada1" defer></script>
+    <script src="../js/db.js?v=finance-20261006-2" defer></script>
+    <script src="../js/auth.js?v=finance-20261006-2" defer></script>
     <script src="../js/partners.js?v=geany-saque1" defer></script>
     <script src="../js/proposals.js?v=workflow-partner131-1" defer></script><script src="../js/proposal-workflow.js?v=workflow-convenio-menu-3" defer></script>
     <script src="../js/clients.js?v=client-search1" defer></script>
     <script src="../js/tickets.js?v=nomes-caps1" defer></script>
     <script src="../js/wa-number-requests.js?v=wanr12" defer></script>
-  </head>
+  <script src="../js/finance-access.js?v=finance-secure1" defer></script>
+<script src="../js/commission-engine.js?v=company1" defer></script>
+<link rel="stylesheet" href="../css/proposals-page.css?v=20261103-2" />
+</head>
 
   <body>
     <div class="app-layout">
@@ -1002,26 +1005,26 @@
           </section>
           <!-- GESTÃO DE PROPOSTAS -->
           <section class="section" id="secManageProposals">
-            <div class="page-header">
+            <div class="page-header proposal-page-header">
               <div class="page-header-text">
-                <h2> Gestão de Propostas</h2>
+                <span class="proposal-eyebrow">GESTÃO COMERCIAL</span><h2>Gestão de Propostas</h2><p class="proposal-page-description">Acompanhe suas propostas, consulte o andamento e encontre o que precisa.</p>
                 <p id="manageProposalsSubtitle" style="display:none" hidden></p>
               </div>
-              <div style="display:flex; gap: 8px; align-items:center; flex-wrap:wrap;">
+              <div class="proposal-toolbar">
                 <div class="search-bar" style="width:260px;">
                   <span class="search-icon">
                   </span>
-                  <input type="search" id="proposalSearch" name="sb_proposal_list_q" placeholder="Buscar proposta..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" readonly onfocus="this.removeAttribute('readonly');if(window.Proposals&&Proposals._onProposalSearchFocus)Proposals._onProposalSearchFocus(this)" onkeydown="if(window.Proposals)Proposals._markProposalSearchTyped()" onpaste="if(window.Proposals)Proposals._markProposalSearchTyped()" oninput="Proposals._onProposalSearchInput()" />
+                  <input type="search" id="proposalSearch" name="sb_proposal_list_q" placeholder="Buscar proposta, cliente ou CPF..." autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" data-lpignore="true" data-1p-ignore="true" data-form-type="other" readonly onfocus="this.removeAttribute('readonly');if(window.Proposals&&Proposals._onProposalSearchFocus)Proposals._onProposalSearchFocus(this)" onkeydown="if(window.Proposals)Proposals._markProposalSearchTyped()" onpaste="if(window.Proposals)Proposals._markProposalSearchTyped()" oninput="Proposals._onProposalSearchInput()" />
                 </div>
                 <span class="proposal-date-filter" style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                  <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">De<input type="date" id="proposalDateFrom" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data início" />
+                  <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">Data inicial<input type="date" id="proposalDateFrom" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data início" />
                   </label>
-                  <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">Até<input type="date" id="proposalDateTo" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data fim" />
+                  <label style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--color-text-muted);margin:0;white-space:nowrap;">Data final<input type="date" id="proposalDateTo" class="form-control" style="width:138px;min-height:36px;padding:4px 8px;" onchange="Proposals.onAdminDateFilter()" title="Data fim" />
                   </label>
                 </span>
                 <button type="button" class="btn btn-outline btn-sm" id="proposalVendorSortBtn" onclick="Proposals.toggleAdminVendorSort()" title="Ordenar propostas por nome de funcionário (vendedor), A-Z">Vendedor A-Z</button>
-                <button type="button" class="btn btn-outline btn-sm" onclick="Proposals.exportAdminExcel()" title="Exportar propostas visíveis (Excel) com os filtros atuais, incluindo a data em que cada uma foi paga">Baixar Planilha</button>
-                <button class="btn btn-primary" onclick="openClientModalAdmin()">+ Novo Cliente</button>
+                <button type="button" class="btn btn-outline btn-sm" onclick="Proposals.exportAdminExcel()" title="Exportar propostas visíveis (Excel) com os filtros atuais, incluindo a data em que cada uma foi paga">Exportar planilha</button>
+                <button class="btn btn-outline proposal-new-client" onclick="openClientModalAdmin()">+ Novo Cliente</button>
                 <button class="btn btn-primary" onclick="openProposalModalAdmin()">+ Nova Proposta</button>
               </div>
             </div>

@@ -1,0 +1,513 @@
+[
+  {
+    "banco": "FUTURO",
+    "convenio": "GERAL",
+    "produto": "EMP",
+    "tabela": "FUTURO_CB_FLEX3_30%",
+    "empresa": 18
+  },
+  {
+    "banco": "FUTURO",
+    "convenio": "GERAL",
+    "produto": "EMP",
+    "tabela": "FUTURO_CB_FLEX_10%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.4,50_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.4,25_ 85%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,99_65%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,75_50%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,50_45%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.4,50_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.4,25_ 85%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,99_65%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,75_50%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV MG",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,50_45%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PB",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.5,00_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PB",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.4,50_ 85%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PB",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,98_55%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PB",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,75_35%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PB",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,50_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.4,5_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,98_ 85%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,75_55%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,50_35%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.3,25_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP CELETISTA",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.5,00_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP CELETISTA",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.5,00_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.4,5_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,98_ 85%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,75_55%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,50_35%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,25_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV ES",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.3,50_35%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV ES",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.2,46_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PI",
+    "produto": "RMC",
+    "tabela": "AMIGOZ_CB_TX.4,79_80%",
+    "empresa": 18
+  },
+  {
+    "banco": "Amigoz",
+    "convenio": "GOV PI",
+    "produto": "RCC",
+    "tabela": "AMIGOZ_CB_TX.4,79_80%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,99_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,79_ 80%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,59_65%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,39_50%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,19_30%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.2,99_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV PR",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,99_100%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV PR",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,79_ 80%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV PR",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,59_65%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV PR",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,39_50%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV PR",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,19_30%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV PR",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.2,99_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.4,19_83%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,99_73%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,79_ 63%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,59_53%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,39_43%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,19_23%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.2,99_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.4,19_83%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,99_73%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,79_ 63%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,59_53%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,39_43%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.3,19_23%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RCC",
+    "tabela": "NEO_CB_TX.2,99_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.4,19_83%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,99_73%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,79_ 63%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,59_53%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,39_43%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,19_23%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "GOV MA",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.2,99_12%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.4,19_83%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,99_73%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,79_ 63%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,59_53%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,39_43%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.3,19_23%",
+    "empresa": 18
+  },
+  {
+    "banco": "NEO",
+    "convenio": "PREF SP",
+    "produto": "RMC",
+    "tabela": "NEO_CB_TX.2,99_12%",
+    "empresa": 18
+  }
+]

@@ -5,18 +5,6 @@
 
 const LeadsDB = {
 
-  /** phone2 não é coluna de `leads`: o import grava em extra_data.phone2. Expõe no topo para as telas. */
-  _withPhones(rows) {
-    if (!Array.isArray(rows)) return rows;
-    for (const l of rows) {
-      if (!l || l.phone2) continue;
-      let ed = l.extra_data;
-      if (typeof ed === 'string') { try { ed = JSON.parse(ed); } catch (_) { ed = null; } }
-      if (ed && ed.phone2) l.phone2 = String(ed.phone2).trim();
-    }
-    return rows;
-  },
-
   /* ── BATCHES ── */
   async getBatches(managerId = null) {
     let params = '?select=*&order=created_at.desc';
@@ -67,7 +55,8 @@ const LeadsDB = {
   async importLeads(batchId, leadsArray) {
     _cacheDel('leads');
     // nginx rejeita POST ~>=50KB com 400 HTML; manter margem (evidência: 45KB ok, 57KB fail).
-    const MAX_CHUNK_BYTES = 40000;
+    // WAF da Locaweb esvazia POST acima de ~16KB (corpo chega vazio e o INSERT vira 1136).
+    const MAX_CHUNK_BYTES = 12000;
     const MAX_CHUNK_ROWS = 80;
     let imported = 0;
     let i = 0;
@@ -78,7 +67,17 @@ const LeadsDB = {
         const lead = leadsArray[i];
         const extraData = lead.extra_data || {};
         if (lead.score) extraData.score = (lead.score || '').trim();
-        if (lead.phone2) extraData.phone2 = (lead.phone2 || '').trim();
+        // Resgata "CEL 1" etc. antes de gravar — evita mesa sem número
+        let phone = (lead.phone || '').trim();
+        let phone2 = (lead.phone2 || '').trim();
+        if (!phone.replace(/\D/g, '') && typeof LeadsImport !== 'undefined' && LeadsImport.pickPhoneFromExtra) {
+          phone = (LeadsImport.pickPhoneFromExtra(extraData, 1) || '').trim();
+        }
+        if (!phone2.replace(/\D/g, '') && typeof LeadsImport !== 'undefined' && LeadsImport.pickPhoneFromExtra) {
+          phone2 = (LeadsImport.pickPhoneFromExtra(extraData, 2) || '').trim();
+        }
+        if (phone2) extraData.phone2 = phone2;
+        // extra_data como JSON texto — PDO não aceita objeto/array no INSERT (erro 1136).
         const row = {
           id: DB._genId('ld'),
           batch_id: batchId,
@@ -86,8 +85,8 @@ const LeadsDB = {
           orgao: (lead.orgao || '').trim(),
           cpf: (lead.cpf || '').trim(),
           mother_name: (lead.mother_name || '').trim(),
-          phone: (lead.phone || '').trim(),
-          extra_data: extraData,
+          phone,
+          extra_data: JSON.stringify(extraData && typeof extraData === 'object' ? extraData : {}),
           status: 'pending',
           assigned_to: null,
           assigned_date: null,
@@ -103,15 +102,9 @@ const LeadsDB = {
         approxBytes += rowBytes;
         i += 1;
       }
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'import-chunk',hypothesisId:'G2',location:'leads-db.js:importLeads',message:'posting lead chunk',data:{chunkRows:chunk.length,approxBytes,importedBefore:imported,total:leadsArray.length,batchId},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
       try {
         await supaReq('POST', 'leads', chunk);
       } catch (err) {
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'import-chunk',hypothesisId:'G2',location:'leads-db.js:importLeads:catch',message:'chunk post failed',data:{status:err?.status||null,error:String(err?.message||err).slice(0,200),chunkRows:chunk.length,approxBytes},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
         throw err;
       }
       imported += chunk.length;
@@ -130,33 +123,31 @@ const LeadsDB = {
     if (filters.assigned_to) params += `&assigned_to=eq.${encodeURIComponent(filters.assigned_to)}`;
     if (filters.assigned_date) params += `&assigned_date=eq.${encodeURIComponent(filters.assigned_date)}`;
     if (filters.offset) params += `&offset=${filters.offset}`;
-    return this._withPhones(await supaReq('GET', 'leads', null, params));
+    return await supaReq('GET', 'leads', null, params);
   },
 
   async getLeadsByUser(userId, date = null) {
-    let params = `?assigned_to=eq.${encodeURIComponent(userId)}&select=*&order=assigned_date.desc&limit=${this._DESK_LIMIT}`;
+    let params = `?assigned_to=eq.${encodeURIComponent(userId)}&select=*&order=assigned_date.desc&limit=500`;
     if (date) params += `&assigned_date=eq.${encodeURIComponent(date)}`;
-    return this._withPhones(await supaReq('GET', 'leads', null, params));
+    return await supaReq('GET', 'leads', null, params);
   },
 
   async getLeadsByUserAndWeek(userId, weekNumber, year) {
-    return this._withPhones(await supaReq('GET', 'leads', null,
-      `?assigned_to=eq.${encodeURIComponent(userId)}&assigned_week=eq.${weekNumber}&assigned_year=eq.${year}&select=*&order=assigned_date.asc&limit=${this._DESK_LIMIT}`
-    ));
+    return await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${encodeURIComponent(userId)}&assigned_week=eq.${weekNumber}&assigned_year=eq.${year}&select=*&order=assigned_date.asc&limit=500`
+    );
   },
 
   /**
-   * Mesa do vendedor: leads do dia + pendentes (não depende de carregar o histórico inteiro).
-   * A API limita leads a 200–500; buscar “todos” por created_at.asc escondia os pendentes novos.
+   * Mesa do vendedor: meta do dia + trabalhados de hoje.
+   * Busca status trabalhados à parte — senão o limit=500 dos recentes “perde”
+   * os já ligados e no F5 a cota reenche com backlog (volta aos 50/500).
    */
   // Lotes com atribuição fantasma (distribuição incompleta) — não mostrar na mesa
-  // Teto por consulta da mesa (API aceita até 50000 em `leads`); 500 cortava vendedores com fila maior
-  _DESK_LIMIT: 900,
-
   _GHOST_BATCH_IDS: new Set(['lbmpwlwzf2meozi', 'lbmpwm1by2w2lyy']),
 
   async getEmployeeTodayLeads(userId, todayStr) {
-    const today = todayStr || this.getCurrentDateStr();
+    const today = this._normDate(todayStr) || this.getCurrentDateStr();
     const { week: weekNumber, year } = this.getWeekAndYearFromDateStr(today);
     const uid = encodeURIComponent(userId);
     const byId = new Map();
@@ -165,27 +156,82 @@ const LeadsDB = {
       for (const l of rows || []) {
         if (!l || !l.id) continue;
         if (l.batch_id && this._GHOST_BATCH_IDS.has(String(l.batch_id))) continue;
-        byId.set(l.id, l);
+        // phone/phone2 podem vir só em extra_data (ex.: coluna "CEL 1" não mapeada)
+        this._hydrateLeadPhones(l);
+        byId.set(String(l.id), l);
       }
     };
 
-    // 1) Pendentes do vendedor (mesa real)
-    merge(this._withPhones(await supaReq('GET', 'leads', null,
-      `?assigned_to=eq.${uid}&status=eq.pending&select=*&order=assigned_date.asc&limit=${this._DESK_LIMIT}`
-    ).catch(() => [])));
-
-    // 2) Designados para hoje (qualquer status)
+    // 0) HOJE primeiro — lote novo não some atrás de 2000 atrasados
     merge(await this.getLeadsByUser(userId, today).catch(() => []));
+    merge(await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${uid}&status=eq.pending&assigned_date=eq.${encodeURIComponent(today)}&select=*&limit=1000`
+    ).catch(() => []));
 
-    // 3) Semana atual (progresso / trabalhados da semana)
+    // 1) Pendentes do backlog (mais antigos primeiro)
+    merge(await supaReq('GET', 'leads', null,
+      `?assigned_to=eq.${uid}&status=eq.pending&select=*&order=assigned_date.asc&limit=2000`
+    ).catch(() => []));
+
+    // 2) Trabalhados por status (em paralelo)
+    const workedBatches = await Promise.all(
+      this.WORKED_STATUSES.map((st) =>
+        supaReq('GET', 'leads', null,
+          `?assigned_to=eq.${uid}&status=eq.${encodeURIComponent(st)}&select=*&order=completed_at.desc&limit=500`
+        ).catch(() => [])
+      )
+    );
+    workedBatches.forEach((rows) => merge(rows));
+
+    // 3) Reforço: semana atual + recentes
     merge(await this.getLeadsByUserAndWeek(userId, weekNumber, year).catch(() => []));
+    merge(await this.getLeadsByUser(userId).catch(() => []));
 
-    // 4) Fallback: últimos atribuídos (mais recentes primeiro)
-    if (byId.size === 0) {
-      merge(await this.getLeadsByUser(userId).catch(() => []));
-    }
+    const all = [...byId.values()];
+    const workedToday = all.filter((l) => {
+      if (!this.isWorkedStatus(l.status || 'pending')) return false;
+      if (!l.completed_at) {
+        const assigned = this._normDate(l.assigned_date);
+        return !assigned || assigned === today;
+      }
+      const completedLocal = this._normDate(l.completed_at) || this._toLocalDateStr(new Date(l.completed_at));
+      return completedLocal === today;
+    });
 
-    return this._filterDeskLeads([...byId.values()], today);
+    const wa = await this.getWeeklyAssignmentOrLatest(userId, weekNumber, year).catch(() => null);
+    const dailyTarget = Math.max(1, Number(wa?.daily_target) || 50);
+    const remainingByMeta = Math.max(0, dailyTarget - workedToday.length);
+
+    const pendingPool = all
+      .filter((l) => {
+        const status = l.status || 'pending';
+        if (status !== 'pending') return false;
+        const assigned = this._normDate(l.assigned_date);
+        return !assigned || assigned <= today;
+      })
+      .sort((a, b) => String(a.assigned_date || '').localeCompare(String(b.assigned_date || '')));
+
+    /**
+     * Regra da mesa (todos os vendedores):
+     * 1) SEMPRE mostra pendentes de HOJE (lote novo não some após meta batida).
+     * 2) Atrasados: sobra da meta + mínimo de backlog (não zera atraso só porque há lote novo).
+     */
+    const pendingToday = pendingPool.filter((l) => this._normDate(l.assigned_date) === today);
+    const pendingOverdue = pendingPool.filter((l) => {
+      const a = this._normDate(l.assigned_date);
+      return !a || a < today;
+    });
+    const overdueFloor = Math.min(40, dailyTarget);
+    const overdueCap = Math.max(remainingByMeta, overdueFloor);
+    const pendingOnDesk = [
+      ...pendingToday,
+      ...pendingOverdue.slice(0, overdueCap),
+    ];
+
+    const deskMap = new Map();
+    workedToday.forEach((l) => deskMap.set(String(l.id), l));
+    pendingOnDesk.forEach((l) => deskMap.set(String(l.id), l));
+    return [...deskMap.values()];
   },
 
   _filterDeskLeads(leads, todayStr) {
@@ -194,15 +240,8 @@ const LeadsDB = {
       const status = l.status || 'pending';
       const assigned = this._normDate(l.assigned_date);
       if (assigned && assigned === today) return true;
-      // Pendentes / não finalizados: hoje + atrasados
       if (!this.isWorkedStatus(status)) {
         if (!assigned || assigned <= today) return true;
-        const { week, year } = this.getWeekAndYearFromDateStr(today);
-        const ws = this._getWeekStartDate(year, week);
-        const we = new Date(ws);
-        we.setDate(we.getDate() + 6);
-        const ad = new Date(assigned + 'T12:00:00');
-        if (!Number.isNaN(ad.getTime()) && ad >= ws && ad <= we) return true;
         return false;
       }
       if (l.completed_at) {
@@ -245,12 +284,206 @@ const LeadsDB = {
     if (status === 'pending') {
       updates.completed_at = null;
     }
-    const updated = await this.updateLead(id, updates);
+
+    let updated = null;
+    try {
+      updated = await this.updateLead(id, updates);
+    } catch (e) {
+      // Se completed_at/notes não existem no MySQL, grava só o status (evita lead “voltar” pendente).
+      if (Object.prototype.hasOwnProperty.call(updates, 'completed_at') || notes) {
+        const fallback = { status };
+        updated = await this.updateLead(id, fallback);
+      } else {
+        throw e;
+      }
+    }
+
     const uid = updated?.assigned_to;
     if (uid && this.isWorkedStatus(status)) {
       await this.tryAwardDailyLeadsCoin(uid).catch(() => null);
     }
     return updated;
+  },
+
+  _parseExtraData(raw) {
+    if (!raw) return {};
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+      } catch (_) {
+        return {};
+      }
+    }
+    return typeof raw === 'object' && !Array.isArray(raw) ? { ...raw } : {};
+  },
+
+  /**
+   * _hydrateLeadPhones — preenche phone/phone2 a partir do extra_data.
+   * Cobre planilhas com "CEL 1" que entraram sem mapear a coluna de telefone.
+   */
+  _hydrateLeadPhones(lead) {
+    if (!lead) return lead;
+    const extra = this._parseExtraData(lead.extra_data);
+    const pick = (which) => {
+      if (typeof LeadsImport !== 'undefined' && typeof LeadsImport.pickPhoneFromExtra === 'function') {
+        return LeadsImport.pickPhoneFromExtra(extra, which);
+      }
+      const want = which === 2 ? 2 : 1;
+      for (const [k, v] of Object.entries(extra || {})) {
+        const n = String(k || '').toLowerCase().replace(/[_\-\s]+/g, '');
+        const ok = want === 2
+          ? /^(cel|celular|tel|telefone|fone|whatsapp|phone|contato)2$/.test(n)
+          : /^(cel|celular|tel|telefone|fone|whatsapp|phone|contato)1?$/.test(n);
+        if (!ok) continue;
+        const digits = String(v || '').replace(/\D/g, '');
+        if (digits.length >= 8) return String(v).trim();
+      }
+      return '';
+    };
+    if (!String(lead.phone || '').replace(/\D/g, '')) {
+      const p = pick(1) || (extra.phone ? String(extra.phone).trim() : '');
+      if (p) lead.phone = p;
+    }
+    if (!String(lead.phone2 || '').replace(/\D/g, '')) {
+      const p2 = pick(2) || (extra.phone2 ? String(extra.phone2).trim() : '');
+      if (p2) lead.phone2 = p2;
+    }
+    return lead;
+  },
+
+  /**
+   * computeEmployeeDailyStats — meta e trabalhados do dia na mesa do vendedor.
+   * Conta trabalhados de hoje mesmo se a mesa local estiver incompleta (F5).
+   */
+  async computeEmployeeDailyStats(userId, todayStr, deskLeads) {
+    const today = this._normDate(todayStr) || this.getCurrentDateStr();
+    const desk = deskLeads || [];
+    const countWorkedOnDesk = () => desk.filter((l) => {
+      if (!this.isWorkedStatus(l.status)) return false;
+      if (!l.completed_at) return true;
+      const completedLocal = this._normDate(l.completed_at) || this._toLocalDateStr(new Date(l.completed_at));
+      return completedLocal === today;
+    }).length;
+
+    const { week, year } = this.getWeekAndYearFromDateStr(today);
+    const wa = await this.getWeeklyAssignmentOrLatest(userId, week, year).catch(() => null);
+    const dailyFromWeek = Math.max(0, Number(wa?.daily_target) || 0);
+
+    // Contagem real no banco (não só o que está no DOM da mesa) — em paralelo
+    let workedFromDb = 0;
+    try {
+      const uid = encodeURIComponent(userId);
+      const seen = new Set();
+      const batches = await Promise.all(
+        this.WORKED_STATUSES.map((st) =>
+          supaReq('GET', 'leads', null,
+            `?assigned_to=eq.${uid}&status=eq.${encodeURIComponent(st)}&select=id,completed_at,assigned_date&order=completed_at.desc&limit=400`
+          ).catch(() => [])
+        )
+      );
+      for (const rows of batches) {
+        for (const l of rows || []) {
+          if (!l?.id || seen.has(String(l.id))) continue;
+          const completedLocal = this._normDate(l.completed_at) || this._toLocalDateStr(new Date(l.completed_at));
+          const ok = completedLocal === today
+            || (!l.completed_at && (this._normDate(l.assigned_date) === today || !l.assigned_date));
+          if (!ok) continue;
+          seen.add(String(l.id));
+          workedFromDb += 1;
+        }
+      }
+    } catch (_) { /* fallback desk */ }
+
+    const worked = Math.max(countWorkedOnDesk(), workedFromDb);
+    const pendingOnDesk = desk.filter((l) => (l.status || 'pending') === 'pending').length;
+    const pendingTodayOnDesk = desk.filter((l) => {
+      if ((l.status || 'pending') !== 'pending') return false;
+      return this._normDate(l.assigned_date) === today;
+    }).length;
+
+    if (dailyFromWeek > 0) {
+      // Contador acompanha a mesa: meta semanal OU trabalhados + pendentes de hoje
+      const target = Math.max(dailyFromWeek, worked + pendingTodayOnDesk);
+      return {
+        target,
+        worked,
+        dueLeads: desk,
+        pendingDue: pendingOnDesk,
+      };
+    }
+
+    const pendingDue = pendingOnDesk;
+    const target = Math.max(pendingDue + worked, 1);
+    return { target, worked, dueLeads: desk, pendingDue };
+  },
+
+  _dialHistoryKey(userId) {
+    const uid = userId || (typeof Auth !== 'undefined' ? Auth.getSession()?.id : '') || 'anon';
+    return 'le_dial_history_' + uid;
+  },
+
+  getDialHistory(userId, limit = 20) {
+    try {
+      const raw = localStorage.getItem(this._dialHistoryKey(userId));
+      const list = raw ? JSON.parse(raw) : [];
+      return Array.isArray(list) ? list.slice(0, limit) : [];
+    } catch (_) {
+      return [];
+    }
+  },
+
+  _appendLocalDialHistory(entry, userId) {
+    const list = this.getDialHistory(userId, 40);
+    list.unshift(entry);
+    try {
+      localStorage.setItem(this._dialHistoryKey(userId), JSON.stringify(list.slice(0, 40)));
+    } catch (_) { /* ignore */ }
+  },
+
+  /**
+   * logCall — grava histórico de discagem no extra_data do lead (e localStorage).
+   */
+  async logCall(leadId, phone, meta = {}) {
+    const digits = String(phone || '').replace(/\D/g, '');
+    if (!digits) return null;
+    const entry = {
+      phone: digits,
+      at: new Date().toISOString(),
+      via: meta.via || 'click2call',
+      method: meta.method || '',
+    };
+    this._appendLocalDialHistory({ ...entry, lead_id: leadId || '' }, meta.user_id);
+    if (!leadId) return entry;
+    try {
+      const rows = await supaReq('GET', 'leads', null,
+        `?id=eq.${encodeURIComponent(leadId)}&select=id,extra_data&limit=1`
+      );
+      const row = rows?.[0];
+      if (!row) return entry;
+      const extra = this._parseExtraData(row.extra_data);
+      const calls = Array.isArray(extra.calls) ? extra.calls.slice() : [];
+      calls.unshift(entry);
+      extra.calls = calls.slice(0, 40);
+      extra.last_called_at = entry.at;
+      await this.updateLead(leadId, { extra_data: extra });
+    } catch (_) { /* histórico local já gravado */ }
+    return entry;
+  },
+
+  /**
+   * markLeadTouchedOnCall — ao discar, conta o lead como trabalhado.
+   * Pendente → nao_atende (vendedor pode ajustar depois no Atender).
+   */
+  async markLeadTouchedOnCall(leadId) {
+    if (!leadId) return null;
+    const rows = await supaReq('GET', 'leads', null,
+      `?id=eq.${encodeURIComponent(leadId)}&select=id,status,assigned_to&limit=1`
+    ).catch(() => []);
+    const row = rows?.[0] || null;
+    const current = row?.status || 'pending';
+    if (current !== 'pending') return row;
+    return await this.markLeadAs(leadId, 'nao_atende', 'Discagem registrada');
   },
 
   /** Vendedor: +1 moeda ao bater a cota diária de leads (1x por dia). */
@@ -316,9 +549,85 @@ const LeadsDB = {
   },
 
   async getUnassignedLeads(batchId) {
-    return this._withPhones(await supaReq('GET', 'leads', null,
-      `?batch_id=eq.${encodeURIComponent(batchId)}&assigned_to=is.null&select=*&order=created_at.asc&limit=50000`
-    ));
+    // Pendentes sem dono (null ou ''). MySQL às vezes grava '' no lugar de NULL.
+    const rows = await this.getPendingLeadsInBatch(batchId);
+    return (rows || []).filter((l) => !String(l.assigned_to || '').trim());
+  },
+
+  /**
+   * getPendingLeadsInBatch — pendentes do lote (mesmo já atribuídos).
+   * Usado no redistribuir/sobrescrever sem mexer nos já trabalhados.
+   */
+  async getPendingLeadsInBatch(batchId) {
+    const rows = [];
+    for (let offset = 0; offset < 500000; offset += 500) {
+      const page = await supaReq('GET', 'leads', null,
+        `?batch_id=eq.${encodeURIComponent(batchId)}&status=eq.pending&select=*&order=created_at.asc,id.asc&limit=500&offset=${offset}`);
+      rows.push(...page);
+      if (page.length < 500) return rows;
+    }
+    throw new Error('Lote muito grande. Divida-o antes de distribuir.');
+  },
+
+  /**
+   * clearPendingAssignmentsInBatch — zera assigned_* só dos pendentes do lote.
+   * Não toca em nao_atende/whatsapp/etc. (histórico preservado).
+   */
+  async clearPendingAssignmentsInBatch(batchId) {
+    _cacheDel('leads');
+    const pending = await this.getPendingLeadsInBatch(batchId);
+    if (!pending.length) return 0;
+    const CHUNK = 30;
+    for (let i = 0; i < pending.length; i += CHUNK) {
+      const chunk = pending.slice(i, i + CHUNK);
+      const orParams = chunk.map((l) => `id.eq.${encodeURIComponent(l.id)}`).join(',');
+      await supaReq('PATCH', 'leads', {
+        assigned_to: null,
+        assigned_date: null,
+        assigned_week: null,
+        assigned_year: null,
+      }, `?or=(${orParams})`);
+    }
+    return pending.length;
+  },
+
+  /**
+   * redistributeLeads — sobrescreve destino dos PENDENTES do lote.
+   * Plano em memória → aplica assigned_* (overwrite) → só então troca cotas semanais.
+   * Assim, se o apply falhar, os leads NÃO ficam sem dono.
+   */
+  async redistributeLeads(batchId, employeeIds, weeksCount = null) {
+    if (!employeeIds?.length) throw new Error('Selecione pelo menos um funcionário.');
+    const pending = await this.getPendingLeadsInBatch(batchId);
+    if (!pending.length) {
+      throw new Error('Não há leads pendentes neste lote para redistribuir (só restam trabalhados).');
+    }
+    const plan = this._buildDistributionPlan(pending, employeeIds, weeksCount);
+    if (!plan.leadUpdates.length) throw new Error('Não foi possível montar a redistribuição.');
+    plan.weeklyAssignments.forEach((w) => { w.batch_id = batchId; });
+
+    // 1) Sobrescreve atribuição (sem limpar antes)
+    await this._applyLeadAssignments(plan.leadUpdates);
+
+    // 2) Troca cotas semanais do lote
+    _cacheDel('lead_weekly_assignments');
+    await supaReq('DELETE', 'lead_weekly_assignments', null,
+      `?batch_id=eq.${encodeURIComponent(batchId)}`
+    );
+    if (plan.weeklyAssignments.length > 0) {
+      await supaReq('POST', 'lead_weekly_assignments', plan.weeklyAssignments);
+    }
+
+    await this.updateBatch(batchId, {
+      status: 'active',
+      distributed_records: plan.distributed,
+    });
+
+    return {
+      distributed: plan.distributed,
+      perEmployee: plan.perEmployee,
+      dailyTarget: plan.dailyTarget,
+    };
   },
 
   /* ── GESTÃO / APAGAR / TROCAR LEADS ── */
@@ -423,24 +732,26 @@ const LeadsDB = {
   },
 
   /* ── DISTRIBUTION ── */
-  async distributeLeads(batchId, employeeIds, weeksCount = null) {
-    _cacheDel('leads');
-    _cacheDel('lead_weekly_assignments');
 
-    const unassigned = await this.getUnassignedLeads(batchId);
-    if (!unassigned.length) throw new Error('Nenhum lead disponível para distribuição.');
-    if (!employeeIds.length) throw new Error('Selecione pelo menos um funcionário.');
+  /**
+   * _buildDistributionPlan — monta assigned_* + cotas semanais EM MEMÓRIA.
+   * Não grava no banco. Usado por distributeLeads e redistributeLeads.
+   * Cap por semana (weekLeadCount) evita despejar o lote inteiro nos dias restantes.
+   */
+  _buildDistributionPlan(leads, employeeIds, weeksCount = null, ref = new Date()) {
+    employeeIds = [...new Set((employeeIds || []).map(id => String(id).trim()).filter(Boolean))];
+    const pool = Array.isArray(leads) ? leads.slice() : [];
+    if (!pool.length) throw new Error('Nenhum lead disponível para distribuição.');
+    if (!employeeIds?.length) throw new Error('Selecione pelo menos um funcionário.');
 
-    const leadsPerEmployee = Math.floor(unassigned.length / employeeIds.length);
-    const remainder = unassigned.length % employeeIds.length;
-
-    // Calculate weeks and daily targets
-    const totalWeeks = weeksCount || Math.ceil(leadsPerEmployee / 200); // Default: ~200 leads/semana
-    const leadsPerWeek = Math.ceil(leadsPerEmployee / totalWeeks);
+    const leadsPerEmployee = Math.floor(pool.length / employeeIds.length);
+    const remainder = pool.length % employeeIds.length;
+    const totalWeeks = weeksCount == null ? Math.max(1, Math.ceil(Math.ceil(pool.length / employeeIds.length) / 200)) : Number(weeksCount);
+    if (!Number.isInteger(totalWeeks) || totalWeeks < 1 || totalWeeks > 52) throw new Error("Informe de 1 a 52 semanas.");
+    const leadsPerWeek = Math.ceil(Math.max(1, leadsPerEmployee) / totalWeeks);
     const dailyTarget = Math.ceil(leadsPerWeek / 5);
-
-    // Get current week/year (segunda-feira, alinhado a _getWeekStartDate)
-    const { week: currentWeek, year: currentYear } = this.getCurrentWeekAndYear();
+    const { week: currentWeek, year: currentYear } = this.getCurrentWeekAndYear(new Date(ref));
+    const firstMonday = this._getWeekStartDate(currentYear, currentWeek);
 
     let leadIndex = 0;
     const weeklyAssignments = [];
@@ -449,49 +760,59 @@ const LeadsDB = {
     for (let empIdx = 0; empIdx < employeeIds.length; empIdx++) {
       const empId = employeeIds[empIdx];
       const empLeadCount = leadsPerEmployee + (empIdx < remainder ? 1 : 0);
+      let empAssigned = 0;
 
-      // Assign leads and create weekly assignments
       for (let week = 0; week < totalWeeks; week++) {
-        let weekNum = currentWeek + week;
-        let yearForWeek = currentYear;
-        // Estouro de ano (semana 53+)
-        while (weekNum > 53) {
-          weekNum -= 52;
-          yearForWeek += 1;
-        }
-        const weekStart = this._getWeekStartDate(yearForWeek, weekNum);
-        const weekLeadCount = Math.min(leadsPerWeek, empLeadCount - (week * leadsPerWeek));
+        const weekStart = new Date(firstMonday);
+        weekStart.setDate(weekStart.getDate() + week * 7);
+        const { week: weekNum, year: yearForWeek } = this.getCurrentWeekAndYear(weekStart);
+        const weekLeadCount = Math.floor(empLeadCount / totalWeeks) + (week < empLeadCount % totalWeeks ? 1 : 0);
         if (weekLeadCount <= 0) break;
 
-        // Create weekly assignment
+        const daysInWeek = 5;
+        let startDayOffset = 0;
+        if (week === 0) {
+          const now = new Date(ref);
+          const dow = now.getDay();
+          if (dow >= 1 && dow <= 5) startDayOffset = dow - 1;
+          else if (dow === 6) startDayOffset = 4;
+        }
+        const daysLeftForTarget = Math.max(1, daysInWeek - startDayOffset);
+        // Cota ≤60: tudo no 1º dia útil. Espalhar 49 em 5 dias (~10/dia) faz a mesa
+        // parecer vazia (“não chegou”) quando o gerente espera ~50 na hora.
+        const dumpAllOnFirstDay = weekLeadCount <= 60;
+        const dailyTargetForWa = dumpAllOnFirstDay
+          ? weekLeadCount
+          : Math.ceil(weekLeadCount / daysLeftForTarget);
+
         weeklyAssignments.push({
           id: DB._genId('lwa'),
           user_id: empId,
-          batch_id: batchId,
+          batch_id: null,
           week_number: weekNum,
           year: yearForWeek,
           total_leads: weekLeadCount,
-          daily_target: Math.ceil(weekLeadCount / 5),
+          daily_target: dailyTargetForWa,
           created_at: new Date().toISOString(),
         });
 
-        // Assign individual leads with dates
-        for (let dayOffset = 0; dayOffset < 5 && leadIndex < unassigned.length; dayOffset++) {
+        let assignedThisWeek = 0;
+
+        for (let dayOffset = startDayOffset; dayOffset < daysInWeek && leadIndex < pool.length && assignedThisWeek < weekLeadCount; dayOffset++) {
           const date = new Date(weekStart);
           date.setDate(date.getDate() + dayOffset);
-          // Skip weekends
           while (date.getDay() === 0 || date.getDay() === 6) {
             date.setDate(date.getDate() + 1);
           }
           const dateStr = this._toLocalDateStr(date);
-          // Divide exato: a soma dos 5 dias = weekLeadCount (ceil por dia estourava a semana)
-          const dailyCount = Math.floor(weekLeadCount / 5) + (dayOffset < weekLeadCount % 5 ? 1 : 0);
+          const slotsLeft = weekLeadCount - assignedThisWeek;
+          const daysRemaining = daysInWeek - dayOffset;
+          const dailyCount = dumpAllOnFirstDay
+            ? slotsLeft
+            : Math.ceil(slotsLeft / Math.max(1, daysRemaining));
 
-          for (let d = 0; d < dailyCount && leadIndex < unassigned.length; d++) {
-            const empTotalAssigned = leadIndex - (empIdx > 0 ? (leadsPerEmployee * empIdx + Math.min(empIdx, remainder)) : 0);
-            if (empTotalAssigned >= empLeadCount) break;
-
-            const lead = unassigned[leadIndex];
+          for (let d = 0; d < dailyCount && leadIndex < pool.length && assignedThisWeek < weekLeadCount && empAssigned < empLeadCount; d++) {
+            const lead = pool[leadIndex];
             leadUpdates.push({
               id: lead.id,
               assigned_to: empId,
@@ -500,26 +821,55 @@ const LeadsDB = {
               assigned_year: yearForWeek,
             });
             leadIndex++;
+            assignedThisWeek++;
+            empAssigned++;
           }
+          if (dumpAllOnFirstDay) break;
         }
       }
     }
 
-    if (weeklyAssignments.length > 0) {
-      await supaReq('POST', 'lead_weekly_assignments', weeklyAssignments);
+    return {
+      leadUpdates,
+      weeklyAssignments,
+      distributed: leadUpdates.length,
+      perEmployee: leadsPerEmployee,
+      dailyTarget: Math.max(0, ...weeklyAssignments.map(row => row.daily_target)),
+    };
+  },
+
+  buildDistributionPlan(leads, employeeIds, weeksCount = null, ref = new Date()) {
+    return this._buildDistributionPlan(leads, employeeIds, weeksCount, ref);
+  },
+
+  async distributeLeads(batchId, employeeIds, weeksCount = null) {
+    _cacheDel('leads');
+    _cacheDel('lead_weekly_assignments');
+
+    const unassigned = await this.getUnassignedLeads(batchId);
+    if (!unassigned.length) throw new Error('Nenhum lead disponível para distribuição.');
+    if (!employeeIds.length) throw new Error('Selecione pelo menos um funcionário.');
+
+    const plan = this._buildDistributionPlan(unassigned, employeeIds, weeksCount);
+    plan.weeklyAssignments.forEach((w) => { w.batch_id = batchId; });
+
+    if (plan.weeklyAssignments.length > 0) {
+      await supaReq('POST', 'lead_weekly_assignments', plan.weeklyAssignments);
     }
-    if (leadUpdates.length > 0) {
-      // Só campos de atribuição + PATCH em lotes (upsert completo estourava e deixava assigned_to null)
-      await this._applyLeadAssignments(leadUpdates);
+    if (plan.leadUpdates.length > 0) {
+      await this._applyLeadAssignments(plan.leadUpdates);
     }
 
-    // Update batch status
     await this.updateBatch(batchId, {
       status: 'active',
-      distributed_records: leadIndex,
+      distributed_records: plan.distributed,
     });
 
-    return { distributed: leadIndex, perEmployee: leadsPerEmployee, dailyTarget };
+    return {
+      distributed: plan.distributed,
+      perEmployee: plan.perEmployee,
+      dailyTarget: plan.dailyTarget,
+    };
   },
 
   /** Aplica assigned_* em chunks agrupados via PATCH OR (super rápido no MySQL). */
@@ -571,11 +921,63 @@ const LeadsDB = {
   },
 
   /* ── WEEKLY ASSIGNMENTS ── */
+  /**
+   * getWeeklyAssignment — cota da semana do vendedor.
+   * Se houver vários lotes na mesma semana, SOMA daily_target/total_leads.
+   * Sem isso o limit=1 pegava o lote antigo (ex.: 43/dia) e a mesa ficava
+   * em remaining=0 mesmo com lote novo já atribuído.
+   */
   async getWeeklyAssignment(userId, weekNumber, year) {
-    const r = await supaReq('GET', 'lead_weekly_assignments', null,
-      `?user_id=eq.${encodeURIComponent(userId)}&week_number=eq.${weekNumber}&year=eq.${year}&select=*&limit=1`
-    );
-    return r[0] || null;
+    const rows = await supaReq('GET', 'lead_weekly_assignments', null,
+      `?user_id=eq.${encodeURIComponent(userId)}&week_number=eq.${weekNumber}&year=eq.${year}&select=*&limit=50`
+    ).catch(() => []);
+    const list = Array.isArray(rows) ? rows.filter((r) => r && (Number(r.daily_target) > 0 || Number(r.total_leads) > 0)) : [];
+    if (!list.length) {
+      const any = Array.isArray(rows) && rows[0] ? rows[0] : null;
+      return any || null;
+    }
+    list.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    const latest = list[0];
+    const dailyTarget = list.reduce((s, r) => s + (Number(r.daily_target) || 0), 0);
+    const totalLeads = list.reduce((s, r) => s + (Number(r.total_leads) || 0), 0);
+    return {
+      ...latest,
+      daily_target: Math.max(1, dailyTarget),
+      total_leads: totalLeads,
+      _merged_from: list.length,
+      _batch_ids: list.map((r) => r.batch_id).filter(Boolean),
+    };
+  },
+
+  /**
+   * getWeeklyAssignmentOrLatest — meta da semana atual; se não houver, usa a atribuição mais recente.
+   * Ordena/soma no cliente (API pode ignorar order multi-coluna) para não zerar a mesa.
+   */
+  async getWeeklyAssignmentOrLatest(userId, weekNumber, year) {
+    const cur = await this.getWeeklyAssignment(userId, weekNumber, year).catch(() => null);
+    if (cur && Number(cur.daily_target) > 0) return cur;
+    const rows = await supaReq('GET', 'lead_weekly_assignments', null,
+      `?user_id=eq.${encodeURIComponent(userId)}&select=*&limit=50`
+    ).catch(() => []);
+    const list = Array.isArray(rows) ? [...rows] : [];
+    list.sort((a, b) => (Number(b.year) - Number(a.year)) || (Number(b.week_number) - Number(a.week_number)) || String(b.created_at || '').localeCompare(String(a.created_at || '')));
+    // Agrupa a semana mais recente e soma cotas dessa semana
+    if (!list.length) return null;
+    const topWeek = Number(list[0].week_number);
+    const topYear = Number(list[0].year);
+    const same = list.filter((r) => Number(r.week_number) === topWeek && Number(r.year) === topYear);
+    if (same.length > 1) {
+      const dailyTarget = same.reduce((s, r) => s + (Number(r.daily_target) || 0), 0);
+      const totalLeads = same.reduce((s, r) => s + (Number(r.total_leads) || 0), 0);
+      return {
+        ...same[0],
+        daily_target: Math.max(1, dailyTarget),
+        total_leads: totalLeads,
+        _merged_from: same.length,
+      };
+    }
+    const withTarget = list.find((r) => Number(r?.daily_target) > 0);
+    return withTarget || cur || list[0] || null;
   },
 
   async getWeeklyAssignments(batchId) {
@@ -595,11 +997,19 @@ const LeadsDB = {
   async upsertDailyProgress(userId, date, target, completed) {
     _cacheDel('lead_daily_progress');
     const existing = await this.getDailyProgress(userId, date);
-    const metTarget = completed >= target;
+    const safeTarget = Math.max(0, Number(target) || 0);
+    const safeCompleted = Math.max(0, Number(completed) || 0);
+    const metTarget = safeTarget > 0 && safeCompleted >= safeTarget;
+    const payload = {
+      target: safeTarget,
+      completed: safeCompleted,
+      met_target: metTarget,
+    };
 
     if (existing) {
+      // Atualiza meta E feitos — antes só patchava completed e a tela ficava 1/500.
       return await supaReq('PATCH', 'lead_daily_progress',
-        { completed, met_target: metTarget },
+        payload,
         `?id=eq.${encodeURIComponent(existing.id)}`
       );
     }
@@ -608,9 +1018,7 @@ const LeadsDB = {
       id: DB._genId('ldp'),
       user_id: userId,
       work_date: date,
-      target,
-      completed,
-      met_target: metTarget,
+      ...payload,
       lock_triggered: false,
       created_at: new Date().toISOString(),
     });
@@ -637,7 +1045,7 @@ const LeadsDB = {
 
       // Progress zerado / ausente: derivar dos leads reais (evita "0 de 0" falso)
       if (target <= 0) {
-        const dayLeads = (allLeads || []).filter((l) => l.assigned_date === date);
+        const dayLeads = (allLeads || []).filter((l) => this._normDate(l.assigned_date) === date);
         if (dayLeads.length) {
           target = dayLeads.length;
           completed = dayLeads.filter((l) => this.isWorkedStatus(l.status)).length;
@@ -836,7 +1244,14 @@ const LeadsDB = {
     return d.getDay() !== 0 && d.getDay() !== 6;
   },
 
-  /* ── NextBilling Click2Call ── */
+  normalizeBrPhone(raw) {
+    let d = String(raw || '').replace(/\D/g, '');
+    if (!d) return '';
+    if (d.length >= 12 && d.startsWith('55')) d = d.slice(2);
+    if (d.length >= 11 && d[0] === '0') d = d.slice(1);
+    if (d.length < 10 || d.length > 11) return '';
+    return d;
+  },
   _nextBillingApiBase() {
     const cfg = window.SOUBLU_CONFIG || {};
     const base = String(cfg.API_BASE_URL || cfg.SITE_URL || '').replace(/\/+$/, '');
@@ -896,41 +1311,46 @@ const LeadsDB = {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok || !data.ok) throw new Error(data.error || data.hint || `HTTP ${res.status}`);
-    // MicroSIP: abre discagem no softphone (conta Online, ex. blu-209)
-    if (data.method === 'sip' && data.dial_uri) {
-      this.openSoftphoneDial(data);
+    const dst = String(data.dst || opts.dst || '').trim();
+    if (opts.lead_id) {
+      await this.logCall(opts.lead_id, dst, {
+        via: 'click2call',
+        method: data.method || '',
+        user_id: session.id,
+      }).catch(() => null);
     }
     return data;
   },
 
-  /** Dispara URI sip:/callto: para o MicroSIP (handler do Windows). */
-  openSoftphoneDial(data) {
-    const uri = String(data?.dial_uri || '').trim();
-    const uriHost = String(data?.dial_uri_host || '').trim();
-    const dst = String(data?.dst || '').trim();
-    if (!uri && !dst) return false;
-    const tryOpen = (href) => {
-      try {
-        const a = document.createElement('a');
-        a.href = href;
-        a.style.display = 'none';
+  /** Abre o MicroSIP só com o número (conta blu-209). Não usar numero@IP. */
+  openSoftphoneDialNow(rawNumber) {
+    const dst = this.normalizeBrPhone(rawNumber);
+    if (!dst) return false;
+    const href = 'sip:' + dst;
+    try {
+      let a = document.getElementById('leads-sip-anchor');
+      if (!a) {
+        a = document.createElement('a');
+        a.id = 'leads-sip-anchor';
+        a.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px';
         document.body.appendChild(a);
-        a.click();
-        a.remove();
-        return true;
-      } catch (_) {
-        try {
-          window.location.href = href;
-          return true;
-        } catch (__) {
-          return false;
-        }
       }
-    };
-    if (uri && tryOpen(uri)) return true;
-    if (uriHost && uriHost !== uri && tryOpen(uriHost)) return true;
-    if (dst && tryOpen('callto:' + dst)) return true;
-    if (dst && tryOpen('tel:' + dst)) return true;
-    return false;
+      a.setAttribute('href', href);
+      a.click();
+    } catch (_) { /* ignore */ }
+    try {
+      let iframe = document.getElementById('leads-sip-frame');
+      if (!iframe) {
+        iframe = document.createElement('iframe');
+        iframe.id = 'leads-sip-frame';
+        iframe.title = 'sip-dial';
+        iframe.style.cssText = 'position:fixed;width:0;height:0;border:0;opacity:0;pointer-events:none';
+        iframe.setAttribute('aria-hidden', 'true');
+        document.body.appendChild(iframe);
+      }
+      iframe.src = 'about:blank';
+      iframe.src = href;
+    } catch (_) { /* ignore */ }
+    return true;
   },
 };

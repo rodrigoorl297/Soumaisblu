@@ -4,18 +4,18 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <script src="../js/base-path.js?v=1781704178"></script>
-  <script src="../js/db-connect.js?v=1781813000"></script>
+  <script src="../js/db-connect.js?v=dbg-guard1"></script>
   <title>Gerenciador de Leads · SOU+BLU</title>
   <meta name="description" content="Sistema de gerenciamento e distribuição de leads para equipes de vendas"/>
-  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
-  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="icon" href="../images/logo.png?v=blu1" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png?v=blu1"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700" rel="stylesheet"/>
   <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
   <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
-  <link rel="stylesheet" href="../css/global.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/colors-orange.css?v=c5ff2"/>
-  <link rel="stylesheet" href="../css/leads.css?v=logo-new1"/>
+  <link rel="stylesheet" href="../css/global.css?v=sim-fab2"/>
+  <link rel="stylesheet" href="../css/colors-orange.css?v=1781704178"/>
+  <link rel="stylesheet" href="../css/leads.css?v=emp-bs1"/><link rel="stylesheet" href="../css/bootstrap-bridge.css?v=prop-cfg-pro2"/>
   <!-- SheetJS for XLSX parsing (local — CDN costuma bloquear) -->
   <script src="../js/vendor/xlsx.full.min.js?v=xlsx203"></script>
 </head>
@@ -31,7 +31,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="logo-icon" style="display:flex;align-items:center;justify-content:center;"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg></div>
-        <img class="sidebar-wordmark" src="../images/blu-logo-new.png" width="155" height="34" alt="Sou+blu"/>
+        <div class="logo-text">SOU <span>+ BLU</span></div>
       </div>
 
       <nav class="sidebar-nav">
@@ -241,15 +241,26 @@
                 <!-- Toggle Master -> Supervisor -->
                 <div id="distTargetToggle" class="hidden" style="grid-column: 1 / -1; margin-bottom: 8px; padding-bottom: 16px; border-bottom: 1px solid var(--color-border);">
                   <h4 style="margin-bottom:12px;">Destinatário da Distribuição</h4>
-                  <div class="flex items-center" style="gap: 24px;">
+                  <div class="flex items-center" style="gap: 24px; flex-wrap: wrap;">
                     <label class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
                       <input type="radio" name="distTarget" value="employees" checked onchange="loadDistributeTab()"/>
-                      <strong>Distribuir para Vendedores</strong>
+                      <strong>Vendedores SOU+BLU</strong>
                     </label>
                     <label class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
+                      <input type="radio" name="distTarget" value="partners" onchange="loadDistributeTab()"/>
+                      <strong>Parceiros</strong>
+                    </label>
+                    <label id="distTargetSupervisorsLabel" class="flex items-center" style="gap:8px; cursor:pointer; font-size:14px;">
                       <input type="radio" name="distTarget" value="supervisors" onchange="loadDistributeTab()"/>
                       <strong>Repassar para Supervisores</strong>
                     </label>
+                  </div>
+                  <div id="distPartnerPickWrap" class="hidden" style="margin-top:14px;">
+                    <label for="distPartnerSelect" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;">Qual parceiro</label>
+                    <select id="distPartnerSelect" class="form-control" style="max-width:420px;" onchange="onDistPartnerChange()">
+                      <option value="">Selecione o parceiro...</option>
+                    </select>
+                    <p class="text-muted" style="font-size:12px;margin:8px 0 0;">Depois marque os vendedores desse parceiro que vão receber os leads.</p>
                   </div>
                 </div>
 
@@ -414,7 +425,7 @@
       </div>
       <div class="modal-body" style="padding:16px 20px;">
         <p class="text-muted" style="font-size:13px;margin:0 0 14px;">
-          Modo <strong>MicroSIP</strong>: ao clicar em Ligar, a discagem abre no softphone Online (áudio no headset).
+          Modo <strong>MicroSIP</strong>: Ligar dispara o número na conta registrada (ex.: blu-209). Não usa número@IP.
         </p>
         <div id="telefoniaStatusBox" style="padding:12px;border-radius:8px;background:var(--color-surface-2);margin-bottom:14px;font-size:13px;">
           Carregando status…
@@ -431,8 +442,8 @@
         <div class="form-group">
           <label for="telefoniaCallMode">Modo de origem</label>
           <select id="telefoniaCallMode" class="form-control">
-            <option value="softphone">MicroSIP / ramal (recomendado)</option>
-            <option value="cellphone">Celular do perfil</option>
+            <option value="softphone" selected>MicroSIP / ramal</option>
+            <option value="cellphone">Celular do perfil (Click2Call)</option>
           </select>
         </div>
         <div class="form-group">
@@ -441,21 +452,21 @@
             <input type="text" id="telefoniaSrcRamal" class="form-control" inputmode="numeric" placeholder="Ex: 209" maxlength="6"/>
             <button type="button" class="btn btn-outline btn-sm" onclick="saveTelefoniaConfig()">Salvar</button>
           </div>
-          <div class="small text-muted mt-1">Com MicroSIP registrado neste ramal, o headset toca primeiro.</div>
+          <div class="small text-muted mt-1">MicroSIP precisa estar Online neste ramal (ex.: blu-209).</div>
         </div>
 
         <div style="margin:18px 0 12px;padding:14px;border:1px solid #fdba74;border-radius:12px;background:#fff7ed;">
           <div style="font-weight:800;font-size:14px;margin-bottom:10px;color:#9a3412;">📞 Testar ligação</div>
           <div class="form-group mb-2">
-            <label for="telefoniaTestSrc">Ramal / origem (toca primeiro)</label>
-            <input type="tel" id="telefoniaTestSrc" class="form-control" inputmode="tel" placeholder="Ex: 209"/>
+            <label for="telefoniaTestSrc">Origem (toca primeiro)</label>
+            <input type="tel" id="telefoniaTestSrc" class="form-control" inputmode="tel" placeholder="DDD + seu número ou ramal"/>
           </div>
           <div class="form-group mb-2">
             <label for="telefoniaTestDst">Número para testar (destino)</label>
             <input type="tel" id="telefoniaTestDst" class="form-control" inputmode="tel" placeholder="Digite o número com DDD"/>
           </div>
           <button type="button" class="btn btn-success btn-sm w-100" id="telefoniaTestBtn" onclick="testTelefoniaCall()">📞 Ligar para este número</button>
-          <div class="small text-muted mt-2 mb-0">MicroSIP precisa estar <strong>Online</strong>. O Windows pode pedir para abrir o MicroSIP na primeira vez — aceite.</div>
+          <div class="small text-muted mt-2 mb-0">O MicroSIP disca o destino na conta Online (só o número, sem @IP).</div>
         </div>
 
         <div id="telefoniaPhoneList" style="margin-top:16px;"></div>
@@ -467,11 +478,12 @@
   </div>
 
   <!-- Scripts (produção Locaweb = MySQL via db-connect.js no head) -->
-  <script src="../js/config.js?v=rl429fix1"></script>
-  <script src="../js/db.js?v=nomes-caps1"></script>
+  <script src="../js/config.js?v=20260811_dist_fix1"></script>
+  <script src="../js/db.js?v=dbg-guard1"></script>
   <script src="../js/auth.js?v=1781813000"></script>
-  <script src="../js/leads-db.js?v=20260811_dist_fix1"></script>
-  <script src="../js/leads-import.js?v=20260811_dist_fix1"></script>
-  <script src="../js/leads-manager.js?v=20260811_dist_fix1"></script>
+  <script src="../js/leads-db.js?v=leads-reset-20261026"></script>
+  <script src="../js/leads-import.js?v=desk-cel1"></script>
+  <script src="../js/leads-cpf.js?v=chunk12"></script>
+  <script src="../js/leads-manager.js?v=leads-reset-20261026"></script>
 <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

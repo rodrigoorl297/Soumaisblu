@@ -8,6 +8,7 @@ error_reporting(E_ALL);
 require_once dirname(__DIR__) . '/bootstrap.php';
 require_once dirname(__DIR__) . '/lib/FinanceMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/FinanceWorkbookMysqlSchema.php';
+require_once dirname(__DIR__) . '/lib/FinanceSession.php';
 require_once dirname(__DIR__) . '/lib/BeneficiosMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/TrainingTracksMysqlSchema.php';
 require_once dirname(__DIR__) . '/lib/InternalChatMysqlSchema.php';
@@ -44,6 +45,15 @@ try {
     $t0 = microtime(true);
     $run = static function () use ($table, $method, $body, $query) {
         $pdo = soublu_pdo();
+        if ($table === 'finance_workbook') {
+            if ($method !== 'GET') throw new RuntimeException('Use o módulo financeiro autenticado para alterar registros.',403);
+            parse_str($query,$financeQuery);
+            if (($financeQuery['id'] ?? '') !== 'eq.settings') soublu_finance_user($pdo,true);
+        }
+        if ($table === 'finance_suppliers' && is_array($body)) {
+            $items=array_is_list($body)?$body:[$body];
+            foreach($items as $item) if(array_key_exists('linked_user_id',$item)) throw new RuntimeException('Vincule o login pelo módulo financeiro.',403);
+        }
         if ($table === "finance_workbook" || $table === "finance_suppliers") soublu_ensure_finance_workbook($pdo);
         if ($table === 'proposals' && in_array($method, ['POST', 'PATCH'], true)) {
             soublu_ensure_proposals_json_columns($pdo);

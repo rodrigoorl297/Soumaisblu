@@ -11,3 +11,5 @@ ALTER TABLE public.finance_suppliers ADD COLUMN IF NOT EXISTS protocolo text,
  ADD COLUMN IF NOT EXISTS recorrencia_mensal boolean DEFAULT false,
  ADD COLUMN IF NOT EXISTS situacao text DEFAULT 'ativo',
  ADD COLUMN IF NOT EXISTS anexos jsonb;
+
+ALTER TABLE public.finance_suppliers ADD COLUMN IF NOT EXISTS linked_user_id text;

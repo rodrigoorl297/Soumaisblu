@@ -141,6 +141,7 @@ const Auth = {
     const s = this.getSession();
     if (!s) return this.loginPageHref();
     const role = String(s.role || '').toLowerCase();
+    if (role === 'prestador') return this.pageHref('prestador.html');
     if (role === 'juridico') return this.juridicoManagerPageHref();
     if (role === 'portaria' || this.usesAdminPanel(role)) return this.adminPageHref();
     return this.employeePageHref();
@@ -220,12 +221,26 @@ const Auth = {
     const user = await DB.findUserByIdentifier(identifier);
     if (!user) return { ok:false, msg:'Usuário não encontrado.' };
     if (!user.active) return { ok:false, msg:'Conta desativada. Fale com o RH.' };
-    if (user.password !== password) return { ok:false, msg:'Senha incorreta.' };
+    if (String(user.role).toLowerCase()==='prestador') {
+      try { const response=await fetch(new URL('../api/finance.php?action=login',this.pageHref('prestador.html')),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:user.id,password})});const result=await response.json();if(!response.ok||!result.ok)return {ok:false,msg:result.message||'Senha incorreta.'}; }
+      catch(e) {return {ok:false,msg:'Servidor financeiro indisponível.'};}
+    } else if (user.password !== password) return { ok:false, msg:'Senha incorreta.' };
 
     if (user.is_lead_locked) {
       return { ok:false, msg: user.lead_lock_reason || 'Sua conta está bloqueada por não atingir a meta diária de leads. Aguarde aprovação do gerente.' };
     }
 
+    if (['master','fundador','financeiro','financial','prestador'].includes(String(user.role).toLowerCase())) {
+      try { await fetch(new URL('../api/finance.php?action=login',this.pageHref('prestador.html')),{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:user.id,password})}); } catch(e) { console.warn('[Financeiro] sessão do servidor indisponível'); }
+    }
+    if (window.DailyProductionReady) {
+      try {
+        const daily=await window.DailyProductionReady;
+        if (user.role==='vendedor' || ['master','fundador','desenvolvedor','admin','gerente','gerencia','diretoria','rh','financeiro','financial','supervisor','sup_backoffice','parceiro'].includes(String(user.role).toLowerCase())) await daily.authenticate(user.id,password);
+      } catch(e) {
+        if (String(user.role).toLowerCase()==='vendedor') return {ok:false,msg:e.message};
+      }
+    }
     this.clearWaSessionStorage();
     const session = this._sessionFromUser(user, Date.now());
     this._writeSession(session);
@@ -293,6 +308,8 @@ const Auth = {
   },
 
   logout() {
+    window.DailyProduction?.logout();
+    fetch(new URL("../api/finance.php?action=logout",this.pageHref("prestador.html")),{method:"POST",credentials:"same-origin"}).catch(()=>{});
     const s = this.getSession();
     const uid = s?.id || null;
     if (uid) this._disconnectWhatsAppBestEffort(uid);
@@ -469,3 +486,17 @@ const Auth = {
     } catch (_) {}
   },
 };
+
+
+/* Daily production is loaded on every authenticated panel. */
+(function(){
+  const current=document.currentScript;
+  if(!current || window.DailyProductionReady)return;
+  const source=new URL('daily-production.js?v=20261103-8',current.src);
+  window.DailyProductionReady=new Promise((resolve,reject)=>{
+    const node=document.createElement('script');node.src=source.href;node.async=false;
+    node.onload=()=>resolve(window.DailyProduction);node.onerror=()=>reject(new Error('Não foi possível carregar a produção diária. Atualize a página.'));
+    document.head.append(node);
+  });
+  window.DailyProductionReady.catch(()=>{});
+})();

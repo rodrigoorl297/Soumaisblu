@@ -423,6 +423,7 @@
     },
 
     async _preencherBaixaComissao(proposal, prefix = 'fpd') {
+      if(window.CommissionEngine) await CommissionEngine.show(proposal,document.getElementById(`${prefix}ValorComissao`)?.closest('form') || document.getElementById(`${prefix}ValorComissao`)?.parentElement);
       const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
       set(`${prefix}ComissaoRecebida`, proposal.comissaoRecebida || proposal.comissao_recebida || '');
       set(`${prefix}AptoComissao`, proposal.comissaoElegivel || proposal.comissao_elegivel || '');

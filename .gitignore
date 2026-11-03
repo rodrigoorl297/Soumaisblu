@@ -46,3 +46,5 @@ api/repair-*.php
 api/purge-*.php
 api/scan-*.php
 api/debug-session-log.php
+
+!js/commission-seed.json

@@ -3757,6 +3757,7 @@ if (!allowed) return null;
     },
 
     async addProposal(data) {
+      if(window.CommissionEngine) data=await CommissionEngine.attach(data);
       const prop = this._normalizeProposalForDb(
         { id: this._genId('prop'), ...data },
         { isNew: true }
@@ -3793,6 +3794,7 @@ if (!allowed) return null;
     async saveProposal(proposal, opts = {}) {
       if (!proposal?.id) throw new Error('ID da proposta é obrigatório.');
       let merged = opts.skipHydrate ? proposal : await this._hydrateProposalForSave(proposal);
+      if(window.CommissionEngine) merged=await CommissionEngine.attach(merged);
       // Só carimba data de pagamento quando a proposta ACABA de virar Paga (caller marca).
       if (merged?._billingPaidAt || opts.stampPaid) {
         const at = merged._billingPaidAt || new Date().toISOString();
@@ -6394,6 +6396,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
   
     /* ══ GENERIC METHODS FOR NEW COLLECTIONS (CLIENTS, PROPOSALS) ══ */
     async createFinanceWorkbook(data) {
+      if(this.online) { await FinanceAccess.ensure(); const result=await FinanceAccess.request('finance_record',data); _cacheDel('finance_workbook'); return result.record; }
       if (await this.get('finance_workbook', data.id)) throw new Error('Registro já existente.');
       if (this.online) {
         const rows = await supaReq('POST', 'finance_workbook', data);
@@ -6456,6 +6459,7 @@ throw new Error(`Falha ao enviar "${origName}": ${errMsg}`);
     },
   
     async save(collection, data) {
+      if(collection==='finance_workbook' && this.online) { await FinanceAccess.ensure(); const result=await FinanceAccess.request('finance_record',data); _cacheDel('finance_workbook'); return result.record; }
       if (!data || data.id === undefined || data.id === null || data.id === '') {
         throw new Error(`ID obrigatório para salvar em ${collection}.`);
       }

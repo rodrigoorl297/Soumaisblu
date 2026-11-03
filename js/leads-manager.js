@@ -13,18 +13,8 @@ let _allEmployeesChecked = false;
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', async () => {
-  // #region agent log
-  try {
-    const navDist = Array.from(document.querySelectorAll('.nav-item')).map(el => (el.textContent || '').replace(/\s+/g, ' ').trim()).filter(t => /Distrib|Funcion|Upload/i.test(t)).slice(0, 5);
-    const uploadH3 = document.querySelector('#tab-upload h3')?.textContent || '';
-    const uploadP = document.querySelector('#tab-upload p.text-muted')?.textContent || '';
-    const moji = /Ã§|Ã£|Ã©|Ã¡|ðŸ|Â·|Â-/.test(navDist.join('|') + uploadH3 + uploadP);
-    const good = /Distribuição|Funcionários|até/.test(navDist.join('|') + uploadH3 + uploadP);
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'A',location:'leads-manager.js:DOMContentLoaded',message:'encoding probe DOM',data:{characterSet:document.characterSet,contentType:document.contentType||null,moji,good,navDist,uploadH3:uploadH3.slice(0,80),uploadPSnippet:uploadP.replace(/\s+/g,' ').trim().slice(0,120),title:document.title},timestamp:Date.now()})}).catch(()=>{});
-  } catch (_) {}
-  // #endregion
-  try {
-    // Wait for DB
+try {
+// Wait for DB
     if (typeof DB === 'undefined' || !DB.init) {
       await _waitFor(() => typeof DB !== 'undefined' && DB.init, 50, 60);
     }
@@ -91,6 +81,13 @@ function _updateUserUI(session) {
   if (nameEl) nameEl.textContent = session.name || 'Usuário';
   if (roleEl) roleEl.textContent = session.role || 'Gerente';
   if (avatarEl) avatarEl.textContent = (session.name || '?')[0].toUpperCase();
+  const telBtn = document.getElementById('btnLeadsTelefonia');
+  if (telBtn) telBtn.style.display = _canEditTelefonia(session) ? '' : 'none';
+}
+
+function _canEditTelefonia(session) {
+  const role = String(session?.role || '').toLowerCase();
+  return ['master', 'fundador', 'gerente', 'gerencia', 'desenvolvedor', 'admin'].includes(role);
 }
 
 /* ── Navigation ── */
@@ -280,20 +277,14 @@ function filterEmployeeTable() {
 /* ── Upload ── */
 function _setupUploadZone() {
   const zone = document.getElementById('uploadZone');
-  // #region agent log
-  fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-pre',hypothesisId:'F2',location:'leads-manager.js:_setupUploadZone',message:'upload zone setup',data:{hasZone:!!zone,hasInput:!!document.getElementById('fileInput'),hasLeadsImport:typeof LeadsImport!=='undefined',hasXLSX:typeof XLSX!=='undefined',handleOnWindow:typeof window.handleFileUpload},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  if (!zone) return;
+if (!zone) return;
   zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
   zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
   zone.addEventListener('drop', e => {
     e.preventDefault();
     zone.classList.remove('dragover');
     const files = e.dataTransfer?.files;
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-pre',hypothesisId:'F4',location:'leads-manager.js:drop',message:'file dropped',data:{count:files?.length||0,name:files?.[0]?.name||null,type:files?.[0]?.type||null,size:files?.[0]?.size||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    if (files?.length) {
+if (files?.length) {
       handleFileUpload({ target: { files } });
     }
   });
@@ -301,20 +292,14 @@ function _setupUploadZone() {
 
 async function handleFileUpload(event) {
   const file = event.target.files?.[0];
-  // #region agent log
-  fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-pre',hypothesisId:'F2',location:'leads-manager.js:handleFileUpload:entry',message:'upload started',data:{hasFile:!!file,name:file?.name||null,type:file?.type||null,size:file?.size||null,hasXLSX:typeof XLSX!=='undefined',hasLeadsImport:typeof LeadsImport!=='undefined'},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
-  if (!file) return;
+if (!file) return;
 
   try {
     document.getElementById('uploadZone').style.display = 'none';
     if (typeof showLoading === 'function') showLoading('Processando planilha…');
 
     _parsedFile = await LeadsImport.parseFile(file);
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-pre',hypothesisId:'F1',location:'leads-manager.js:handleFileUpload:parsed',message:'parse ok',data:{headers:(_parsedFile?.headers||[]).slice(0,12),totalRows:_parsedFile?.totalRows||0,sheetName:_parsedFile?.sheetName||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    _columnMapping = LeadsImport.autoMapColumns(_parsedFile.headers);
+_columnMapping = LeadsImport.autoMapColumns(_parsedFile.headers);
 
     // Render column mapper
     renderColumnMapper();
@@ -334,16 +319,9 @@ async function handleFileUpload(event) {
     // Set default batch name
     const nameInput = document.getElementById('batchName');
     if (nameInput) nameInput.value = file.name.replace(/\.(xlsx|xls|csv)$/i, '');
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-pre',hypothesisId:'F3',location:'leads-manager.js:handleFileUpload:done',message:'upload ui ready',data:{valid:validation?.valid?.length||0,invalid:validation?.invalid?.length||0,mapped:Object.keys(_columnMapping||{})},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-  } catch (e) {
+} catch (e) {
     console.error('[Upload]', e);
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'upload-pre',hypothesisId:'F1',location:'leads-manager.js:handleFileUpload:catch',message:'upload error',data:{error:String(e?.message||e),name:e?.name||null,hasXLSX:typeof XLSX!=='undefined'},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    const msg = `Erro ao processar arquivo: ${e.message || e}`;
+const msg = `Erro ao processar arquivo: ${e.message || e}`;
     _showAlert('validationAlerts', 'error', msg);
     document.getElementById('previewSection')?.classList.remove('hidden');
     document.getElementById('uploadZone').style.display = '';
@@ -476,12 +454,7 @@ async function confirmImport() {
   try {
     const btn = document.getElementById('confirmImportBtn');
     btn.disabled = true;
-
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'import-chunk',hypothesisId:'G1',location:'leads-manager.js:confirmImport:start',message:'confirm import start',data:{valid:validLeads.length,batchName,hasMapping:!!_columnMapping},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-    // Create batch
+// Create batch
     const batch = await LeadsDB.createBatch({
       name: batchName,
       original_filename: _parsedFile.sheetName || 'planilha',
@@ -489,12 +462,7 @@ async function confirmImport() {
       manager_id: session?.id,
       column_mapping: _columnMapping,
     });
-
-    // #region agent log
-    fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'import-chunk',hypothesisId:'G1',location:'leads-manager.js:confirmImport:batch',message:'batch created',data:{batchId:batch?.id||null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-    // Import leads
+// Import leads
     await LeadsDB.importLeads(batch.id, validLeads);
 
     // Success
@@ -525,6 +493,62 @@ async function confirmImport() {
 }
 
 /* ── Distribution ── */
+function _canDistributeAdvanced(session) {
+  const role = String(session?.role || '').toLowerCase();
+  return ['master', 'fundador', 'desenvolvedor', 'gerente', 'gerencia', 'admin'].includes(role);
+}
+
+function _canRepassToSupervisors(session) {
+  const role = String(session?.role || '').toLowerCase();
+  return ['master', 'fundador', 'desenvolvedor'].includes(role);
+}
+
+function _isUserActiveRow(u) {
+  return u && u.active !== false && u.active !== 0 && u.active !== '0' && String(u.active).toLowerCase() !== 'false';
+}
+
+function _getDistTarget() {
+  const radio = document.querySelector('input[name="distTarget"]:checked');
+  return radio ? String(radio.value || 'employees') : 'employees';
+}
+
+async function _loadPartnerOptionsForDist() {
+  const sel = document.getElementById('distPartnerSelect');
+  if (!sel) return;
+  const prev = sel.value || '';
+  let partners = [];
+  try {
+    partners = typeof DB.getPartners === 'function' ? await DB.getPartners() : [];
+  } catch (_) {
+    partners = [];
+  }
+  const active = (partners || []).filter((p) => {
+    if (!p?.user_id) return false;
+    if (p.active === false || p.active === 0 || p.active === '0') return false;
+    return true;
+  }).sort((a, b) => String(a.razao_social || '').localeCompare(String(b.razao_social || ''), 'pt-BR'));
+
+  sel.innerHTML = '<option value="">Selecione o parceiro...</option>' + active.map((p) => {
+    const label = String(p.razao_social || p.user_id || 'Parceiro').toUpperCase();
+    return `<option value="${_escAttr(p.user_id)}">${_esc(label)}</option>`;
+  }).join('');
+  if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+}
+
+function _escAttr(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;');
+}
+
+async function onDistPartnerChange() {
+  _selectedEmployees.clear();
+  _allEmployeesChecked = false;
+  await loadDistributeTab();
+}
+
 async function loadDistributeTab() {
   if (!_currentBatch) {
     document.getElementById('distNoBatch').classList.remove('hidden');
@@ -544,72 +568,177 @@ async function loadDistributeTab() {
   `;
 
   if (unassigned.length === 0) {
-    document.getElementById('distBatchInfo').className = 'alert alert-success';
-    document.getElementById('distBatchInfo').innerHTML = '✅ Todos os leads deste lote já foram distribuídos.';
-    return;
-  }
+    document.getElementById('distBatchInfo').className = 'alert alert-warning';
+    let pendingInBatch = [];
+    try {
+      pendingInBatch = await LeadsDB.getPendingLeadsInBatch(_currentBatch.id);
+    } catch (_) { pendingInBatch = []; }
 
-  // Load employees or supervisors
-  const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
-  const isMaster = session && (session.role === 'master' || session.role === 'fundador' || session.role === 'desenvolvedor');
-  
-  if (isMaster) {
-    document.getElementById('distTargetToggle').classList.remove('hidden');
+    let summaryHtml = '✅ Todos os leads deste lote já foram atribuídos.';
+    try {
+      const assigned = await LeadsDB.getLeads(_currentBatch.id, { limit: 5000 }).catch(() => []);
+      const byUser = new Map();
+      for (const l of assigned || []) {
+        const uid = String(l.assigned_to || '').trim();
+        if (!uid) continue;
+        byUser.set(uid, (byUser.get(uid) || 0) + 1);
+      }
+      if (byUser.size) {
+        const rows = [];
+        for (const [uid, count] of byUser.entries()) {
+          let name = uid;
+          try {
+            const u = typeof DB.getUser === 'function' ? await DB.getUser(uid) : null;
+            if (u?.name) name = u.name;
+          } catch (_) { /* ignore */ }
+          rows.push(`<li><strong>${_esc(name)}</strong> — ${count.toLocaleString('pt-BR')} leads</li>`);
+        }
+        summaryHtml += `<div class="mt-2 small">Destino atual:</div><ul class="mb-0 small">${rows.join('')}</ul>`;
+      }
+    } catch (_) { /* ignore */ }
+
+    const canRedistribute = (pendingInBatch || []).length > 0;
+    if (canRedistribute) {
+      summaryHtml += `<div class="mt-2"><strong>${pendingInBatch.length.toLocaleString('pt-BR')}</strong> ainda pendentes — pode <strong>redistribuir/sobrescrever</strong> escolhendo os vendedores abaixo (não mexe nos já trabalhados).</div>`;
+      document.getElementById('distBatchInfo').innerHTML = summaryHtml;
+      // Continua o fluxo para montar a lista de funcionários (não dá return)
+      window._distRedistributeMode = true;
+    } else {
+      summaryHtml += `<div class="mt-2 small text-muted">Não há pendentes neste lote para redistribuir.</div>`;
+      document.getElementById('distBatchInfo').innerHTML = summaryHtml;
+      const empList = document.getElementById('employeeCheckboxes');
+      if (empList) empList.innerHTML = '<p class="text-muted small mb-0">Lote sem leads pendentes. Faça upload de um lote novo para distribuir.</p>';
+      window._distRedistributeMode = false;
+      return;
+    }
   } else {
-    document.getElementById('distTargetToggle').classList.add('hidden');
+    window._distRedistributeMode = false;
   }
 
-  let distTarget = 'employees';
-  const radio = document.querySelector('input[name="distTarget"]:checked');
-  if (radio && isMaster) {
-    distTarget = radio.value;
+  const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+  const canAdvanced = _canDistributeAdvanced(session);
+  const canSupervisors = _canRepassToSupervisors(session);
+  const toggle = document.getElementById('distTargetToggle');
+  const partnerWrap = document.getElementById('distPartnerPickWrap');
+  const supervisorsLabel = document.getElementById('distTargetSupervisorsLabel');
+
+  if (canAdvanced) {
+    toggle?.classList.remove('hidden');
+  } else {
+    toggle?.classList.add('hidden');
+    const empRadio = document.querySelector('input[name="distTarget"][value="employees"]');
+    if (empRadio) empRadio.checked = true;
+  }
+  if (supervisorsLabel) supervisorsLabel.style.display = canSupervisors ? '' : 'none';
+  if (!canSupervisors) {
+    const supRadio = document.querySelector('input[name="distTarget"][value="supervisors"]');
+    if (supRadio?.checked) {
+      const empRadio = document.querySelector('input[name="distTarget"][value="employees"]');
+      if (empRadio) empRadio.checked = true;
+    }
+  }
+
+  const distTarget = canAdvanced ? _getDistTarget() : 'employees';
+  if (partnerWrap) {
+    partnerWrap.classList.toggle('hidden', distTarget !== 'partners');
   }
 
   let employees = [];
-  
-  if (distTarget === 'supervisors') {
-    // Show only supervisors
-    document.getElementById('distListTitle').textContent = 'Selecionar Supervisores';
-    document.getElementById('weeksConfigGroup').classList.add('hidden');
-    const allUsers = await DB.getUsers();
-    employees = allUsers.filter(u => ['supervisor','gerente','gerencia'].includes(u.role));
+  const listTitle = document.getElementById('distListTitle');
+  const weeksGroup = document.getElementById('weeksConfigGroup');
+
+  if (distTarget === 'supervisors' && canSupervisors) {
+    if (listTitle) listTitle.textContent = 'Selecionar Supervisores';
+    weeksGroup?.classList.add('hidden');
+    const allUsers = typeof DB.getUsers === 'function'
+      ? await DB.getUsers().catch(() => [])
+      : (await DB.getAllUsers().catch(() => []));
+    employees = (allUsers || []).filter((u) => {
+      const r = String(u.role || '').toLowerCase();
+      return ['supervisor', 'gerente', 'gerencia'].includes(r) && _isUserActiveRow(u);
+    });
+  } else if (distTarget === 'partners' && canAdvanced) {
+    if (listTitle) listTitle.textContent = 'Vendedores do parceiro';
+    weeksGroup?.classList.remove('hidden');
+    await _loadPartnerOptionsForDist();
+    const partnerId = document.getElementById('distPartnerSelect')?.value || '';
+    if (!partnerId) {
+      employees = [];
+    } else {
+      let team = [];
+      try {
+        team = typeof DB.getPartnerTeam === 'function'
+          ? await DB.getPartnerTeam(partnerId)
+          : [];
+      } catch (_) {
+        team = [];
+      }
+      // Fallback: quem tem admin_id = parceiro (cobre cadastro sem partner_root_id)
+      if (!team.length) {
+        try {
+          const byAdmin = typeof DB.getEmployeesByAdmin === 'function'
+            ? await DB.getEmployeesByAdmin(partnerId)
+            : [];
+          team = byAdmin || [];
+        } catch (_) { /* noop */ }
+      }
+      employees = (team || []).filter((u) => {
+        const r = String(u.role || '').toLowerCase();
+        const isSeller = r === 'vendedor' || r === 'employee';
+        return isSeller && _isUserActiveRow(u);
+      });
+      const partnerOpt = document.getElementById('distPartnerSelect')?.selectedOptions?.[0];
+      const partnerName = partnerOpt?.textContent || 'Parceiro';
+      if (listTitle) listTitle.textContent = `Vendedores — ${partnerName}`;
+    }
   } else {
-    // Show only SOU+BLU internal vendedores
-    document.getElementById('distListTitle').textContent = 'Selecionar Vendedores SOU+BLU';
-    document.getElementById('weeksConfigGroup').classList.remove('hidden');
-    
+    if (listTitle) listTitle.textContent = 'Selecionar Vendedores SOU+BLU';
+    weeksGroup?.classList.remove('hidden');
+
     let rawEmployees = await DB.getAllEmployees().catch(() => []);
     if (!rawEmployees.length && session?.id) {
       rawEmployees = await DB.getEmployeesByAdmin(session.id).catch(() => []);
     }
 
-    // Filtrar estritamente SOMENTE vendedores internos do SOU+BLU
-    employees = rawEmployees.filter(e => {
+    const partnerRoots = new Set();
+    try {
+      const partners = typeof DB.getPartners === 'function' ? await DB.getPartners() : [];
+      (partners || []).forEach((p) => { if (p?.user_id) partnerRoots.add(String(p.user_id)); });
+    } catch (_) { /* noop */ }
+
+    employees = (rawEmployees || []).filter((e) => {
       const r = String(e.role || '').toLowerCase();
       const isSeller = (r === 'vendedor' || r === 'employee');
-      const isNotPartner = !e.partner_root_id && !r.includes('parceiro') && !(e.department && String(e.department).toLowerCase().includes('parceiro'));
+      const underPartner = !!(e.partner_root_id)
+        || partnerRoots.has(String(e.admin_id || ''))
+        || r.includes('parceiro')
+        || (e.department && String(e.department).toLowerCase().includes('parceiro'));
       const isNotBackoffice = r !== 'backoffice' && r !== 'sup_backoffice' && r !== 'operacional' && r !== 'supervisor' && r !== 'gerente';
-      const isActive = e.active !== false && String(e.active) !== '0' && e.active !== 0;
-      return isSeller && isNotPartner && isNotBackoffice && isActive;
+      return isSeller && !underPartner && isNotBackoffice && _isUserActiveRow(e);
     });
   }
 
   const selector = document.getElementById('employeeSelector');
-  selector.innerHTML = employees.map(emp => `
-    <label class="employee-check" data-name="${_esc((emp.name || '').toLowerCase())}">
-      <input type="checkbox" value="${emp.id}" onchange="toggleEmployee('${emp.id}', this.checked); updateDistPreview();" />
-      <div>
-        <div class="emp-name">${_esc(emp.name)}</div>
-        <div class="emp-role">${_esc(emp.role || 'vendedor')} · ${_esc(emp.email || '')}</div>
-      </div>
-    </label>
-  `).join('');
-
-  if (!employees.length) {
-    selector.innerHTML = '<p class="text-muted" style="padding:20px;text-align:center;">Nenhum funcionário ativo encontrado.</p>';
+  if (distTarget === 'partners' && !(document.getElementById('distPartnerSelect')?.value)) {
+    selector.innerHTML = '<p class="text-muted" style="padding:20px;text-align:center;">Selecione o parceiro acima para ver os vendedores.</p>';
+  } else if (!employees.length) {
+    selector.innerHTML = distTarget === 'partners'
+      ? '<p class="text-muted" style="padding:20px;text-align:center;">Nenhum vendedor ativo neste parceiro.</p>'
+      : '<p class="text-muted" style="padding:20px;text-align:center;">Nenhum funcionário ativo encontrado.</p>';
+  } else {
+    selector.innerHTML = employees.map((emp) => `
+      <label class="employee-check" data-name="${_esc((emp.name || '').toLowerCase())}">
+        <input type="checkbox" value="${_escAttr(emp.id)}" onchange="toggleEmployee('${_escAttr(emp.id)}', this.checked); updateDistPreview();" />
+        <div>
+          <div class="emp-name">${_esc(emp.name)}</div>
+          <div class="emp-role">${_esc(emp.role || 'vendedor')} · ${_esc(emp.email || '')}</div>
+        </div>
+      </label>
+    `).join('');
   }
 
   _selectedEmployees.clear();
+  _allEmployeesChecked = false;
   updateDistPreview();
 }
 
@@ -638,39 +767,51 @@ async function updateDistPreview() {
     return;
   }
 
-  const radio = document.querySelector('input[name="distTarget"]:checked');
-  const isSupervisors = radio && radio.value === 'supervisors';
+  const distTarget = _getDistTarget();
+  const isSupervisors = distTarget === 'supervisors';
+  const isPartners = distTarget === 'partners';
 
   try {
-    const unassigned = await LeadsDB.getUnassignedLeads(_currentBatch.id);
+    const pool = window._distRedistributeMode
+      ? await LeadsDB.getPendingLeadsInBatch(_currentBatch.id)
+      : await LeadsDB.getUnassignedLeads(_currentBatch.id);
     const empCount = _selectedEmployees.size;
-    const perEmployee = Math.floor(unassigned.length / empCount);
-    const remainder = unassigned.length % empCount;
+    const perEmployee = Math.floor(pool.length / empCount);
+    const remainder = pool.length % empCount;
+    const modeLabel = window._distRedistributeMode ? 'Redistribuir (pendentes)' : 'Leads disponíveis';
 
     if (isSupervisors) {
       summary.innerHTML = `
-        <div class="dist-summary-item"><span class="label">Leads disponíveis</span><span class="value">${unassigned.length.toLocaleString('pt-BR')}</span></div>
+        <div class="dist-summary-item"><span class="label">${modeLabel}</span><span class="value">${pool.length.toLocaleString('pt-BR')}</span></div>
         <div class="dist-summary-item"><span class="label">Supervisores</span><span class="value">${empCount}</span></div>
         <div class="dist-summary-item"><span class="label">Repasse por supervisor</span><span class="value" style="color:var(--color-accent);font-size:18px;">${perEmployee.toLocaleString('pt-BR')}</span></div>
         ${remainder > 0 ? `<div class="dist-summary-item"><span class="label">Excedente (${remainder})</span><span class="value">Distribuído entre os primeiros</span></div>` : ''}
       `;
     } else {
       const weeks = parseInt(document.getElementById('weeksInput').value) || 1;
-      const perWeek = Math.ceil(perEmployee / weeks);
-      const perDay = Math.ceil(perWeek / 5);
+      const plan = LeadsDB._buildDistributionPlan(pool, [..._selectedEmployees], weeks);
+      const perWeek = Math.max(0, ...plan.weeklyAssignments.map(row => row.total_leads));
+      // Até 60/semana → tudo no 1º dia (mesa recebe a cota na hora)
+      const perDay = plan.dailyTarget;
+      const partnerLabel = isPartners
+        ? (document.getElementById('distPartnerSelect')?.selectedOptions?.[0]?.textContent || 'Parceiro')
+        : '';
 
       summary.innerHTML = `
-        <div class="dist-summary-item"><span class="label">Leads disponíveis</span><span class="value">${unassigned.length.toLocaleString('pt-BR')}</span></div>
-        <div class="dist-summary-item"><span class="label">Funcionários</span><span class="value">${empCount}</span></div>
-        <div class="dist-summary-item"><span class="label">Leads por funcionário</span><span class="value">${perEmployee.toLocaleString('pt-BR')}</span></div>
+        ${window._distRedistributeMode ? `<div class="dist-summary-item"><span class="label">Modo</span><span class="value" style="color:var(--color-warning);">Sobrescrever pendentes</span></div>` : ''}
+        ${isPartners ? `<div class="dist-summary-item"><span class="label">Parceiro</span><span class="value">${_esc(partnerLabel)}</span></div>` : ''}
+        <div class="dist-summary-item"><span class="label">${modeLabel}</span><span class="value">${pool.length.toLocaleString('pt-BR')}</span></div>
+        <div class="dist-summary-item"><span class="label">${isPartners ? 'Vendedores do parceiro' : 'Funcionários'}</span><span class="value">${empCount}</span></div>
+        <div class="dist-summary-item"><span class="label">Leads por pessoa</span><span class="value">${perEmployee.toLocaleString('pt-BR')}</span></div>
         ${remainder > 0 ? `<div class="dist-summary-item"><span class="label">Excedente (${remainder})</span><span class="value">Distribuído entre os primeiros</span></div>` : ''}
         <div class="dist-summary-item"><span class="label">Semanas</span><span class="value">${weeks}</span></div>
         <div class="dist-summary-item"><span class="label">Leads por semana</span><span class="value" style="color:var(--color-accent);font-size:18px;">${perWeek.toLocaleString('pt-BR')}</span></div>
-        <div class="dist-summary-item"><span class="label">Meta diária</span><span class="value" style="color:var(--color-success);font-size:18px;">${perDay}</span></div>
+        <div class="dist-summary-item"><span class="label">Meta diária</span><span class="value" style="color:var(--color-success);font-size:18px;">${perDay}${perWeek <= 60 ? ' (tudo hoje)' : ''}</span></div>
       `;
     }
 
-    btn.disabled = false;
+    btn.disabled = pool.length === 0;
+    btn.textContent = window._distRedistributeMode ? 'Confirmar Redistribuição (sobrescrever)' : 'Confirmar Distribuição';
   } catch (e) {
     summary.innerHTML = `<p class="text-danger">Erro: ${_esc(e.message)}</p>`;
     btn.disabled = true;
@@ -685,35 +826,62 @@ async function confirmDistribute() {
   btn.disabled = true;
   btn.textContent = 'Processando...';
 
-  const radio = document.querySelector('input[name="distTarget"]:checked');
-  const isSupervisors = radio && radio.value === 'supervisors';
+  const distTarget = _getDistTarget();
+  const isSupervisors = distTarget === 'supervisors';
+  const isPartners = distTarget === 'partners';
+  const redistribute = !!window._distRedistributeMode;
 
   try {
     if (isSupervisors) {
+      if (redistribute) {
+        throw new Error('Redistribuir para supervisores: use distribuição normal após liberar o lote, ou redistribua para vendedores.');
+      }
       const result = await LeadsDB.repassLeadsToSupervisors(_currentBatch.id, [..._selectedEmployees]);
       _showAlert('distBatchInfo', 'success',
         `✅ ${result.repassed.toLocaleString('pt-BR')} leads repassados para ${_selectedEmployees.size} supervisores em novos sub-lotes!`,
         true
       );
     } else {
+      if (isPartners && !document.getElementById('distPartnerSelect')?.value) {
+        throw new Error('Selecione o parceiro antes de distribuir.');
+      }
+      if (redistribute) {
+        const ok = confirm(
+          `Redistribuir/sobrescrever os PENDENTES deste lote para ${_selectedEmployees.size} pessoa(s)?\n\n` +
+          `• Só mexe em leads ainda pendentes\n` +
+          `• Não apaga os já trabalhados (WhatsApp, não atende, etc.)\n` +
+          `• Datas começam a partir de HOJE`
+        );
+        if (!ok) {
+          btn.textContent = prevText;
+          btn.disabled = false;
+          return;
+        }
+      }
       const weeks = parseInt(document.getElementById('weeksInput').value) || 1;
-      const result = await LeadsDB.distributeLeads(
-        _currentBatch.id,
-        [..._selectedEmployees],
-        weeks
-      );
+      const result = redistribute
+        ? await LeadsDB.redistributeLeads(_currentBatch.id, [..._selectedEmployees], weeks)
+        : await LeadsDB.distributeLeads(_currentBatch.id, [..._selectedEmployees], weeks);
+      const partnerName = isPartners
+        ? (document.getElementById('distPartnerSelect')?.selectedOptions?.[0]?.textContent || 'parceiro')
+        : '';
+      const verb = redistribute ? 'redistribuídos' : 'distribuídos';
       _showAlert('distBatchInfo', 'success',
-        `✅ ${result.distributed.toLocaleString('pt-BR')} leads distribuídos entre ${_selectedEmployees.size} funcionários! Meta diária: ${result.dailyTarget} leads.`,
+        isPartners
+          ? `✅ ${result.distributed.toLocaleString('pt-BR')} leads ${verb} para ${_selectedEmployees.size} vendedores de ${_esc(partnerName)}. Meta diária: ${result.dailyTarget}.`
+          : `✅ ${result.distributed.toLocaleString('pt-BR')} leads ${verb} entre ${_selectedEmployees.size} funcionários! Meta diária: ${result.dailyTarget} leads.`,
         true
       );
+      window._distRedistributeMode = false;
     }
 
     btn.textContent = '✅ Concluído!';
     setTimeout(() => { btn.textContent = prevText; btn.disabled = false; }, 3000);
 
-    // Reload dashboard
+    // Reload dashboard + aba distribuição
     _currentBatch = await LeadsDB.getBatch(_currentBatch.id);
     loadDashboard();
+    try { await loadDistributeTab(); } catch (_) { /* ignore */ }
 
   } catch (e) {
     console.error('[Distribute]', e);
@@ -965,6 +1133,11 @@ function _showAlert(containerId, type, msg, replace = false) {
 
 /* ── Telefonia / NextBilling ── */
 async function openTelefoniaModal() {
+  const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+  if (!_canEditTelefonia(session)) {
+    alert('Apenas master, fundador ou gerente pode configurar a telefonia.');
+    return;
+  }
   const modal = document.getElementById('telefoniaModal');
   if (!modal) return;
   modal.classList.add('open');
@@ -1018,9 +1191,11 @@ async function openTelefoniaModal() {
         <div style="max-height:180px;overflow:auto;font-size:12px;">
           ${rows.map((u) => {
             const phone = String(u.phone || '').trim();
+            const digits = phone.replace(/\D/g, '');
+            const ok = soft ? (digits.length >= 2) : (digits.length >= 10 && digits.length <= 13);
             return `<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid var(--color-border);">
               <span>${_esc(u.name || u.id)}</span>
-              <span style="color:${phone ? 'var(--color-text)' : 'var(--color-text-muted)'};">${phone ? _esc(phone) : (soft ? `padrão ${_esc(String(st.src_ramal || '—'))}` : 'sem telefone')}</span>
+              <span style="color:${ok ? 'var(--color-text)' : 'var(--color-danger)'};font-weight:${ok ? '500' : '700'};">${ok ? _esc(phone) : '⚠ sem telefone (Click2Call não liga)'}</span>
             </div>`;
           }).join('') || '<span class="text-muted">Nenhum funcionário listado.</span>'}
         </div>`;
@@ -1069,19 +1244,34 @@ async function testTelefoniaCall() {
   const src = String(document.getElementById('telefoniaTestSrc')?.value || '').trim();
   const dst = String(document.getElementById('telefoniaTestDst')?.value || '').trim();
   const ramal = String(document.getElementById('telefoniaSrcRamal')?.value || '').trim();
+  const mode = String(document.getElementById('telefoniaCallMode')?.value || 'softphone').trim();
   if (!dst) {
-    alert('Digite o número para testar (destino).');
+    alert('Digite o número para testar (destino), com DDD.');
     document.getElementById('telefoniaTestDst')?.focus();
     return;
   }
-  const origin = src || ramal || '(ramal / conta MicroSIP)';
-  if (!confirm(`Testar ligação via MicroSIP?\n\nConta softphone: ${origin}\nDestino: ${dst}\n\nO MicroSIP precisa estar Online.`)) return;
+  const origin = src || ramal || Auth.getSession()?.phone || '';
+  if (!origin && mode === 'cellphone') {
+    alert('Cadastre seu telefone no perfil para usar o Click2Call.');
+    return;
+  }
+  if (!confirm(
+    mode === 'softphone'
+      ? `Testar MicroSIP?\n\nDestino: ${dst}\n\nO MicroSIP vai discar este número na conta registrada (sem @IP).`
+      : `Testar Click2Call?\n\nOrigem (toca primeiro): ${origin || '(perfil)'}\nDestino: ${dst}\n\nAtenda seu telefone; em seguida o destino será chamado.`
+  )) return;
   const btn = document.getElementById('telefoniaTestBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Ligando…'; }
   try {
+    if (mode === 'softphone' && typeof LeadsDB.openSoftphoneDialNow === 'function') {
+      LeadsDB.openSoftphoneDialNow(dst);
+    }
     const r = await LeadsDB.nextBillingClick2Call({ src: src || ramal || undefined, dst });
-    if (typeof showToast === 'function') showToast(r.message || 'Discagem enviada ao MicroSIP.', 'success');
-    else alert(r.message || 'Discagem enviada ao MicroSIP.');
+    const fallback = mode === 'softphone'
+      ? 'MicroSIP discando o número na conta registrada.'
+      : 'Ligando… atenda seu celular; em seguida o lead será chamado.';
+    if (typeof showToast === 'function') showToast(r.message || fallback, 'success');
+    else alert(r.message || 'Ligação iniciada.');
   } catch (e) {
     alert(e.message || 'Falha no Click2Call');
   } finally {
