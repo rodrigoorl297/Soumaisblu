@@ -1539,6 +1539,7 @@ window.Proposals = {
     {
       group: "NEO — GOV PR RCC",
       items: [
+        { value: "NCDT_096-999_EXCECAO", label: "NCDT_096-999_EXCECAO — Empresa 0% / Vendedor 0%", pct: 1, empresa: 0, vendedor: 0 },
         { value: "NEO_GOVPR_RCC_399_100", label: "NEO GOV PR RCC TX 3,99 — 100%", pct: 1.0 },
         { value: "NEO_GOVPR_RCC_379_80", label: "NEO GOV PR RCC TX 3,79 — 80%", pct: 0.8 },
         { value: "NEO_GOVPR_RCC_359_65", label: "NEO GOV PR RCC TX 3,59 — 65%", pct: 0.65 },
@@ -1726,6 +1727,8 @@ window.Proposals = {
   ],
 
   _tabelaPct: {
+    // Fator do valor da operação; as comissões da exceção são zero.
+    "NCDT_096-999_EXCECAO": 1,
     AMIGOZ_GOVMG_RCC_450_100: 1.0,
     AMIGOZ_GOVMG_RCC_425_85: 0.85,
     AMIGOZ_GOVMG_RCC_399_65: 0.65,

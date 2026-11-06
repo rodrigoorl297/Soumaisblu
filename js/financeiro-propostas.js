@@ -474,6 +474,9 @@
       this._drawerAptoOverride = !!(proposal.comissaoElegivel || proposal.comissao_elegivel);
       this.onDivergenciaChange(prefix);
       this._updateAptoComissao(prefix);
+      const commissionInput=document.getElementById(`${prefix}ValorComissao`);
+      if(commissionInput){const zero=!!window.CommissionEngine?.zeroException(proposal);commissionInput.readOnly=zero;if(zero){commissionInput.value='0';commissionInput.title='NCDT_096-999_EXCECAO: empresa e vendedor com comissão de 0%.';}else commissionInput.title='';}
+
     },
 
     _renderComissaoForm(prefix, opts = {}) {
@@ -736,7 +739,8 @@
         return;
       }
 
-      const rawValor = val(`${prefix}ValorComissao`);
+      const zeroException = !!window.CommissionEngine?.zeroException(p);
+      const rawValor = zeroException ? '0' : val(`${prefix}ValorComissao`);
       const valorComissao = rawValor !== '' && rawValor != null ? Number(rawValor) : null;
 
       const dados = {

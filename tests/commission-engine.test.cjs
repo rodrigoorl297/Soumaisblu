@@ -13,3 +13,17 @@ assert.equal(engine.calculate(p,[{...rule,data:{...rule.data,prazo:36}}]).status
 assert.equal(engine.calculate(p,[{...rule,data:{...rule.data,status:'inativo'}}]).status,'sem_regra');
 assert.equal(engine.calculate(p,[rule]).retention,undefined);
 console.log('PASS: cálculo empresa, base final, vigência, prazo, convênio, produto, conflito e ausência de retenção.');
+
+const exception={...p,bancoDigitado:'Banco Neo',entidade:'GOVERNO DO PARANÁ - PR',tabela:'NCDT_096-999_EXCECAO',valorFinal:10000};
+for(const entity of ['GOVERNO DO PARANÁ - PR','GOV DO PARANÁ - PR','GOV PR']){
+ const result=engine.calculate({...exception,entidade:entity},[]);assert.equal(result.status,'calculado');assert.equal(result.rate,0);assert.equal(result.vendorRate,0);assert.equal(result.amount,0);assert.equal(result.vendorAmount,0);assert.equal(result.base,10000);
+}
+assert.equal(engine.zeroException({...exception,bancoDigitado:'AMIGOZ'}),false);
+assert.equal(engine.zeroException({...exception,entidade:'GOV SP'}),false);
+assert.equal(engine.zeroException({...exception,tabela:'OUTRA'}),false);
+const catalogContext={window:{},console,document:{addEventListener(){}}};vm.createContext(catalogContext);vm.runInContext(fs.readFileSync('js/proposals.js','utf8'),catalogContext);
+const catalog=catalogContext.window.Proposals;
+const entry=catalog._TABELA_GROUPS.find(g=>g.group==='NEO — GOV PR RCC').items.find(i=>i.value===exception.tabela);
+assert.equal(entry.empresa,0);assert.equal(entry.vendedor,0);assert.equal(catalog._tabelaPct[exception.tabela],1);
+assert.equal(10000*catalog._tabelaPct[exception.tabela],10000);
+console.log('PASS: exceção NEO Governo PR, empresa e vendedor 0%, valor da operação preservado e escopo restrito.');
