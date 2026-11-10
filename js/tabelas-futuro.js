@@ -230,6 +230,13 @@
         "taxa": 0.0299,
         "tabela": "NCDT_096-299_318661",
         "coeficiente": 0.0318661932
+      },
+      {
+        "value": "FUTURO_SIAPE_CCCB_96X_NCDT_999_0",
+        "label": "FUTURO SIAPE CC-CB 96X NCDT_096-999_EXCECAO — 0%",
+        "pct": 0,
+        "taxa": 0.0999,
+        "tabela": "NCDT_096-999_EXCECAO"
       }
     ]
   },
