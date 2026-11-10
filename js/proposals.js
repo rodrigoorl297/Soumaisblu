@@ -3525,25 +3525,55 @@ delete parsed[k];
     return this._attachmentDisplayUrl(url, caminho) || '';
   },
 
-  _verifyAttachmentServeUrl: async function(serveUrl) {
+  /**
+   * Consulta file.php?check=1. Retorna a URL confirmada, `false` quando o servidor
+   * responde que o arquivo não existe, ou `null` quando a checagem falhou/expirou
+   * (timeout da Locaweb, 500, HTML de erro) — nesse caso o arquivo pode existir.
+   */
+  _verifyAttachmentServeUrl: async function(serveUrl, timeoutMs = 20000) {
     const u = String(serveUrl || '').trim();
     if (!u || !/file\.php/i.test(u)) return null;
-    try {
-      const checkUrl = u + (u.includes('?') ? '&' : '?') + 'check=1';
-      const res = await fetch(checkUrl, { cache: 'no-store' });
-      const j = await res.json().catch(() => ({}));
-      if (j && j.ok && j.serve_url) return j.serve_url;
-      const normPath = this._normalizeStorageCaminho(decodeURIComponent((u.match(/[?&]path=([^&]+)/i) || [])[1] || ''));
-      if (normPath && normPath !== decodeURIComponent((u.match(/[?&]path=([^&]+)/i) || [])[1] || '')) {
-        const retry = this._fileServeUrl(normPath);
-        if (retry && retry !== u) {
-          const r2 = await fetch(retry + (retry.includes('?') ? '&' : '?') + 'check=1', { cache: 'no-store' });
-          const j2 = await r2.json().catch(() => ({}));
-          if (j2 && j2.ok && j2.serve_url) return j2.serve_url;
-        }
+    const check = async (url) => {
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ctrl ? setTimeout(() => ctrl.abort(), timeoutMs) : null;
+      try {
+        const res = await fetch(url + (url.includes('?') ? '&' : '?') + 'check=1', {
+          cache: 'no-store',
+          signal: ctrl ? ctrl.signal : undefined,
+        });
+        const j = await res.json().catch(() => null);
+        if (j && j.ok && j.serve_url) return j.serve_url;
+        if (j && j.ok === false && res.status === 404) return false;
+        return null;
+      } catch (_) {
+        return null;
+      } finally {
+        if (timer) clearTimeout(timer);
       }
-    } catch (_) { /* noop */ }
-    return null;
+    };
+    const first = await check(u);
+    if (first) return first;
+    const rawPath = decodeURIComponent((u.match(/[?&]path=([^&]+)/i) || [])[1] || '');
+    const normPath = this._normalizeStorageCaminho(rawPath);
+    if (normPath && normPath !== rawPath) {
+      const retry = this._fileServeUrl(normPath);
+      if (retry && retry !== u) {
+        const second = await check(retry);
+        if (second) return second;
+        if (second === null) return null;
+      }
+    }
+    return first;
+  },
+
+  /** Chave bucket/objeto de uma URL file.php (path= ou fetch_url=) — evita checar o mesmo arquivo 2x. */
+  _fileServeKey: function(url) {
+    const s = String(url || '');
+    const p = s.match(/[?&]path=([^&]+)/i);
+    if (p) return this._normalizeStorageCaminho(decodeURIComponent(p[1]));
+    const f = s.match(/[?&]fetch_url=([^&]+)/i);
+    if (f) return this._normalizeStorageCaminho(this._extractStorageRelative(decodeURIComponent(f[1])));
+    return s;
   },
 
   _attachmentPreviewUrl: function(raw, caminho, urls, nome) {
@@ -3730,10 +3760,11 @@ delete parsed[k];
     else modal.classList.add('open');
   },
 
-  _resolveWorkingViewerUrl: async function(displayUrl, urls, raw, caminho) {
+  _resolveWorkingViewerUrl: async function(displayUrl, urls, raw, caminho, requireVerified = false) {
     const candidates = [];
     const add = (u) => {
-      const v = String(u || '').trim();
+      const value = String(u || '').trim();
+      const v = this._fileProxyFromSupabaseUrl(value) || value;
       if (v && !candidates.includes(v)) candidates.push(v);
     };
     add(displayUrl);
@@ -3746,17 +3777,31 @@ delete parsed[k];
     if (/supabase\.co\/storage/i.test(String(raw || ''))) {
       add(String(raw).replace(/ /g, '%20'));
     }
+    const checkedKeys = new Set();
+    let firstServeUrl = '';
+    let checkFailed = false;
     for (const u of candidates) {
       if (/file\.php/i.test(u)) {
+        if (!firstServeUrl) firstServeUrl = u;
+        const key = this._fileServeKey(u);
+        if (checkedKeys.has(key)) continue;
+        checkedKeys.add(key);
         const verified = await this._verifyAttachmentServeUrl(u);
         if (verified) return verified;
+        if (verified === null) {
+          /* Checagem falhou/expirou no servidor: não é "arquivo inexistente".
+             O file.php completo tem mais fallbacks (variantes, list, /uploads) — abre direto. */
+          checkFailed = true;
+          break;
+        }
         continue;
       }
       if (/^(data:|blob:)/i.test(u) || /^https?:\/\//i.test(u)) {
         return String(u).replace(/ /g, '%20');
       }
     }
-    return candidates[0] || displayUrl || '';
+    if (firstServeUrl && (checkFailed || !requireVerified)) return firstServeUrl;
+    return requireVerified ? '' : (candidates[0] || displayUrl || '');
   },
 
   _hasProposalAttachments: function(att) {
@@ -4089,9 +4134,13 @@ delete parsed[k];
       name = nome || name;
     }
 
-    const initialUrl = this._isImageUrl(raw, name)
+    let legacyBlobUrl = '';
+    if (/^data:(?:application\/pdf|image\/(?:png|jpeg|gif|webp));base64,/i.test(raw) && raw.length <= 28 * 1024 * 1024) {
+      try { legacyBlobUrl = this._dataUrlToBlobUrl(raw); } catch (_) { /* use storage fallback */ }
+    }
+    const initialUrl = legacyBlobUrl || (this._isImageUrl(raw, name)
       ? (this._attachmentPreviewUrl(raw, caminho, urls, name) || this._pickViewerUrl(urls, raw, caminho))
-      : this._pickViewerUrl(urls, raw, caminho);
+      : this._pickViewerUrl(urls, raw, caminho));
     if (!initialUrl || this._isHeavyDataUrl(initialUrl) || String(initialUrl).length > 8192 && /^data:/i.test(initialUrl)) {
       alert('Anexo indisponível, inválido ou grande demais para visualizar aqui.');
       return;
@@ -4104,13 +4153,21 @@ delete parsed[k];
     const openExtEl = document.getElementById('attachmentViewerOpenExternal');
     const parentModalOpen = !!document.querySelector('.modal-overlay.open:not(#attachmentViewerModal)');
 
-    let finalUrl = initialUrl;
+    const isPdf = this._isPdfUrl(raw || initialUrl, name);
+    let finalUrl = isPdf ? '' : initialUrl;
     try {
-      finalUrl = await this._resolveWorkingViewerUrl(initialUrl, urls, raw, caminho) || initialUrl;
-    } catch (_) { /* keep initial */ }
+      finalUrl = await this._resolveWorkingViewerUrl(initialUrl, urls, raw, caminho, isPdf);
+    } catch (_) { /* keep the fallback for non-PDF attachments */ }
+    if (!finalUrl) {
+      const message = 'PDF indispon\u00edvel. Confira se o documento foi anexado e tente novamente.';
+      if (typeof showToast === 'function') showToast(message, 'warning');
+      else alert(message);
+      return;
+    }
 
 
-    const fallbackChain = this._attachmentFallbackChain(urls, finalUrl);
+    const viewerUrls = urls.map((url) => this._fileProxyFromSupabaseUrl(url) || url);
+    const fallbackChain = this._attachmentFallbackChain(viewerUrls, finalUrl);
     const fbAttrs = this._attachmentFallbackAttrs(fallbackChain);
     const fbAttrStr = Object.keys(fbAttrs).map((k) => `${k}="${fbAttrs[k]}"`).join(' ');
     const onErr = this._attachmentOnErrorHandler();
