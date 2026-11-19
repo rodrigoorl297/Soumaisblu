@@ -1,0 +1,141 @@
+# Esteira de integração do SOU+BLU
+# Roda em todo push (qualquer branch) e em todo Pull Request para a main.
+# Não faz deploy: só valida. Se algum passo falhar, o commit/PR fica vermelho.
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sintaxe:
+    name: Sintaxe JS/PHP e credenciais
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Sintaxe JavaScript (node --check)
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            if ! out=$(node --check "$f" 2>&1); then
+              echo "$out"
+              echo "::error file=$f::Erro de sintaxe JavaScript"
+              fail=1
+            fi
+          done < <(git ls-files '*.js' '*.cjs' '*.mjs')
+          exit $fail
+
+      - name: Sintaxe PHP (php -l)
+        run: |
+          fail=0
+          while IFS= read -r f; do
+            if ! out=$(php -l "$f" 2>&1); then
+              echo "$out"
+              echo "::error file=$f::Erro de sintaxe PHP"
+              fail=1
+            fi
+          done < <(git ls-files '*.php')
+          exit $fail
+
+      - name: Nenhuma credencial versionada
+        run: |
+          found=$(git ls-files | grep -E '(^|/)config\.[a-z_-]+\.local\.php$|\.(pem|p12)$|(^|/)\.env(\.|$)' || true)
+          if [ -n "$found" ]; then
+            echo "$found"
+            echo "::error::Arquivo de credencial no Git (lista acima). Remova com git rm --cached e confira o .gitignore."
+            exit 1
+          fi
+          echo "Nenhuma credencial versionada."
+
+  testes:
+    name: Testes (Node e PHP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: sintaxe
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: Testes PHP
+        run: |
+          fail=0
+          for f in tests/*.test.php; do
+            [ -e "$f" ] || continue
+            echo "::group::$f"
+            php "$f" || { echo "::error file=$f::Teste PHP falhou"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail
+
+      - name: Testes Node (sem navegador)
+        run: |
+          fail=0
+          for f in tests/*.test.cjs; do
+            [ -e "$f" ] || continue
+            grep -q "require('playwright')" "$f" && continue
+            echo "::group::$f"
+            timeout 120 node "$f" || { echo "::error file=$f::Teste Node falhou"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail
+
+  testes-navegador:
+    name: Testes de tela (Playwright + Edge)
+    # Os testes usam chromium.launch({ channel: 'msedge' }); o Windows do GitHub já vem com o Edge.
+    runs-on: windows-latest
+    timeout-minutes: 15
+    needs: sintaxe
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar Playwright
+        run: npm install --no-save --no-audit --no-fund playwright@1
+
+      - name: Testes com navegador
+        run: |
+          fail=0
+          for f in tests/*.test.cjs; do
+            [ -e "$f" ] || continue
+            grep -q "require('playwright')" "$f" || continue
+            echo "::group::$f"
+            node "$f" || { echo "::error file=$f::Teste de tela falhou"; fail=1; }
+            echo "::endgroup::"
+          done
+          exit $fail

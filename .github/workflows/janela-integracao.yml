@@ -1,0 +1,63 @@
+# Regra do time: commits entram em branches; a integração na main acontece às quintas-feiras.
+# Fora da quinta (horário de Brasília), só entra PR com o rótulo "urgente" (extrema necessidade).
+# Para valer de verdade, marque esta checagem como obrigatória na proteção da branch main.
+
+name: Janela de integração
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, reopened, synchronize, labeled, unlabeled, ready_for_review]
+  schedule:
+    # Reavalia os PRs abertos ao começar e ao terminar a quinta (00:05 de qui e de sex, em Brasília = 03:05 UTC).
+    - cron: '5 3 * * 4'
+    - cron: '5 3 * * 5'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  actions: write
+
+jobs:
+  janela:
+    name: Quinta-feira ou urgente
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Conferir dia e rótulo
+        env:
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        run: |
+          dia=$(TZ=America/Sao_Paulo date +%u)   # 1=segunda ... 4=quinta
+          if [ "$dia" = "4" ]; then
+            echo "Quinta-feira: integração liberada."
+            exit 0
+          fi
+          if echo ",$LABELS," | grep -qi ',urgente,'; then
+            echo "PR com rótulo 'urgente': liberado fora da quinta. Justifique no PR."
+            exit 0
+          fi
+          echo "::error::Fora da janela de integração. A main só recebe PRs às quintas (horário de Brasília). Se for extrema necessidade, adicione o rótulo 'urgente' e explique o motivo no PR."
+          exit 1
+
+  reavaliar:
+    name: Reavaliar PRs abertos
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Reexecutar a checagem da janela em cada PR aberto
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          for pr in $(gh pr list --base main --state open --json number -q '.[].number'); do
+            sha=$(gh pr view "$pr" --json headRefOid -q .headRefOid)
+            run=$(gh run list --workflow "Janela de integração" --commit "$sha" --event pull_request --limit 1 --json databaseId -q '.[0].databaseId')
+            if [ -n "$run" ]; then
+              echo "PR #$pr: reexecutando a checagem $run"
+              gh run rerun "$run" || echo "PR #$pr: não foi possível reexecutar"
+            fi
+          done
