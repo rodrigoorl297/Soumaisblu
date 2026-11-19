@@ -232,6 +232,7 @@
   async function fillVendorSelect() {
     const sel = document.getElementById('cd_vendedor');
     if (!sel) return;
+    if (sel.getAttribute('aria-readonly') === 'true') return; /* travado no vendedor logado: não sobrescrever */
     let list = [];
     try {
       if (typeof DB !== 'undefined' && typeof DB.getVendorsForSelect === 'function') {
@@ -249,6 +250,7 @@
       const existing = [...new Set(_boRows.map((p) => p.vendorName || p.vendor_name).filter(Boolean))];
       list = existing.map((name) => ({ id: name, name }));
     }
+    if (sel.getAttribute('aria-readonly') === 'true') return; /* travou enquanto carregava: mantém o vendedor logado */
     const cur = sel.value;
     sel.innerHTML = `<option value="">Selecione o vendedor...</option>` +
       list.map((v) => {
