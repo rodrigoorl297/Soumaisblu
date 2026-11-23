@@ -4260,32 +4260,23 @@ if (!allowed) return null;
      * Pagina TODAS as propostas (API limita ~800/req).
      * Ranking/faturamento quebravam com só a 1ª página.
      */
-    async _fetchAllProposalPages(cols, extra = '', pageSize = 800, maxPages = 20, batchSize = 1) {
+    async _fetchAllProposalPages(cols, extra = '', pageSize = 800, maxPages = 20) {
       const size = Math.min(Math.max(parseInt(pageSize, 10) || 800, 1), 800);
-      const order = 'updated_at.desc.nullslast,created_at.desc,id.asc';
+      const order = 'updated_at.desc.nullslast,created_at.desc';
       const all = [];
       const seen = new Set();
-      for (let page = 0; page < maxPages;) {
-        // Leia a primeira página sozinha para evitar chamadas extras em listas pequenas.
-        const count = Math.min(page === 0 ? 1 : batchSize, maxPages - page);
-        const requests = Array.from({ length: count }, (_, index) => {
-          const offset = (page + index) * size;
-          const q = `?select=${cols}&order=${order}&limit=${size}&offset=${offset}${extra || ''}`;
-          return supaReq('GET', 'proposals', null, q);
-        });
-        const results = await Promise.allSettled(requests);
-        for (const result of results) {
-          if (result.status === 'rejected') throw result.reason;
-          const chunk = result.value;
-          if (!Array.isArray(chunk)) return all;
-          for (const p of chunk) {
-            if (!p?.id || seen.has(p.id)) continue;
-            seen.add(p.id);
-            all.push(p);
-          }
-          if (chunk.length < size) return all;
+      let offset = 0;
+      for (let page = 0; page < maxPages; page++) {
+        const q = `?select=${cols}&order=${order}&limit=${size}&offset=${offset}${extra || ''}`;
+        const chunk = await supaReq('GET', 'proposals', null, q);
+        if (!Array.isArray(chunk) || !chunk.length) break;
+        for (const p of chunk) {
+          if (!p?.id || seen.has(p.id)) continue;
+          seen.add(p.id);
+          all.push(p);
         }
-        page += count;
+        if (chunk.length < size) break;
+        offset += size;
       }
       return all;
     },
@@ -4314,7 +4305,7 @@ if (!allowed) return null;
             : 'lite:' + limit + ':' + (opts.extra || '');
           return await this._cachedProposals(key, async () => {
             if (all) {
-              return this._fetchAllProposalPages(this._PROPOSALS_LITE_COLS, opts.extra || '', 800, 20, 2);
+              return this._fetchAllProposalPages(this._PROPOSALS_LITE_COLS, opts.extra || '');
             }
             const pageSize = Math.min(Math.max(parseInt(limit, 10) || 600, 1), 800);
             const maxPages = pageSize >= 800 ? 20 : 1;

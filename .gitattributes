@@ -1,0 +1,15 @@
+# Fontes de runtime preservam bytes para comparar hashes com a Locaweb.
+* text=auto
+/api/** -text
+/js/** -text
+/css/** -text
+*.html -text
+/.htaccess -text
+*.png binary
+*.jpg binary
+*.pdf binary
+
+/images/** -text
+/.githooks/** text eol=lf
+/.github/** text eol=lf
+/tools/** text eol=lf

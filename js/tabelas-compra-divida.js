@@ -105,11 +105,7 @@
   function tabelasPor(banco, convenio, produto) {
     const b = String(banco || '').trim();
     const c = String(convenio || '').trim();
-    const pessoal = String(produto || '').trim() === 'CREDITO PESSOAL';
-    return TABELAS.filter((t) => (!b || t.banco === b)
-      && (!c || !t.convenio || t.convenio === c)
-      && (!pessoal || t.produto === 'CREDITO PESSOAL')
-      && (!t.produto || t.produto === produto));
+    return TABELAS.filter((t) => (!b || t.banco === b) && (!c || !t.convenio || t.convenio === c) && (produto !== 'CREDITO PESSOAL' || t.produto === 'CREDITO PESSOAL') && (!t.produto || t.produto === produto));
   }
 
   window.COMPRA_DIVIDA_CATALOG = {

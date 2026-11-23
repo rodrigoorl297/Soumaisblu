@@ -16,6 +16,12 @@
   if (typeof root.todayBrazilYmd !== 'function') root.todayBrazilYmd = function () { return root.nowBrazilSql().slice(0,10); };
 })(typeof window !== 'undefined' ? window : globalThis);
 
+// Carrega a regra de comissão sem alterar os arquivos HTML publicados.
+(function(){
+  if(window.CommissionEngine || window.NeoCommissionReady)return;
+  const url=new URL('commission-engine.js?v=neo-20261106',document.currentScript.src);
+  window.NeoCommissionReady=new Promise(resolve=>{const script=document.createElement('script');script.src=url.href;script.onload=()=>resolve(true);script.onerror=()=>resolve(false);document.head.appendChild(script);});
+})();
 window.Proposals = {
   /** Limite por anexo de proposta (alinhado com api/upload.php). */
   PROPOSAL_MAX_FILE_MB: 50,
@@ -1557,6 +1563,7 @@ window.Proposals = {
     {
       group: "NEO — GOV PR RCC",
       items: [
+
         { value: "NEO_GOVPR_RCC_399_100", label: "NEO GOV PR RCC TX 3,99 — 100%", pct: 1.0 },
         { value: "NEO_GOVPR_RCC_379_80", label: "NEO GOV PR RCC TX 3,79 — 80%", pct: 0.8 },
         { value: "NEO_GOVPR_RCC_359_65", label: "NEO GOV PR RCC TX 3,59 — 65%", pct: 0.65 },
@@ -1710,6 +1717,20 @@ window.Proposals = {
       ],
     },
     {
+      group: "NEO — PREF CURITIBA",
+      items: [
+        { value: "NEO_PREFCURITIBA_NCDT_459_36", label: "NCDT_072-459_478787 — 36%", pct: 0.36 },
+        { value: "NEO_PREFCURITIBA_NCDT_439_33", label: "NCDT_072-439_460750 — 33%", pct: 0.33 },
+        { value: "NEO_PREFCURITIBA_NCDT_419_30", label: "NCDT_072-419_442899 — 30%", pct: 0.3 },
+        { value: "NEO_PREFCURITIBA_NCDT_399_27", label: "NCDT_072-399_425248 — 27%", pct: 0.27 },
+        { value: "NEO_PREFCURITIBA_NCDT_379_24", label: "NCDT_072-379_407813 — 24%", pct: 0.24 },
+        { value: "NEO_PREFCURITIBA_NCDT_359_18", label: "NCDT_072-359_390608 — 18%", pct: 0.18 },
+        { value: "NEO_PREFCURITIBA_NCDT_339_15", label: "NCDT_072-339_373650 — 15%", pct: 0.15 },
+        { value: "NEO_PREFCURITIBA_NCDT_319_9", label: "NCDT_072-319_356955 — 9%", pct: 0.09 },
+        { value: "NEO_PREFCURITIBA_NCDT_299_3", label: "NCDT_072-299_340540 — 3%", pct: 0.03 },
+      ],
+    },
+    {
       group: "FUTURO — GOV AM RCC 96X",
       items: [
         { value: "FUTURO_GOVAM_RCC_96X_CB_390_85", label: "FUTURO GOV AM RCC 96X TX 3,90 — 85%", pct: 0.85 },
@@ -1745,7 +1766,6 @@ window.Proposals = {
   ],
 
   _tabelaPct: {
-    // Fator da tabela de comissão; valor bruto da operação permanece em valor.
     "NCDT_096-999_EXCECAO": 0,
     AMIGOZ_GOVMG_RCC_450_100: 1.0,
     AMIGOZ_GOVMG_RCC_425_85: 0.85,
@@ -1864,6 +1884,25 @@ window.Proposals = {
     FUTURO_SIAPE_CCCB_96X_NCDT_319_9: 0.09,
     FUTURO_SIAPE_CCCB_96X_NCDT_309_6: 0.06,
     FUTURO_SIAPE_CCCB_96X_NCDT_299_3: 0.03,
+    NEO_PREFCURITIBA_NCDT_459_36: 0.36,
+    NEO_PREFCURITIBA_NCDT_439_33: 0.33,
+    NEO_PREFCURITIBA_NCDT_419_30: 0.3,
+    NEO_PREFCURITIBA_NCDT_399_27: 0.27,
+    NEO_PREFCURITIBA_NCDT_379_24: 0.24,
+    NEO_PREFCURITIBA_NCDT_359_18: 0.18,
+    NEO_PREFCURITIBA_NCDT_339_15: 0.15,
+    NEO_PREFCURITIBA_NCDT_319_9: 0.09,
+    NEO_PREFCURITIBA_NCDT_299_3: 0.03,
+    // alias das chaves antigas (72X SIAPE) — mantém % se já tiver sido gravado
+    FUTURO_SIAPE_CCCB_72X_NCDT_459_36: 0.36,
+    FUTURO_SIAPE_CCCB_72X_NCDT_439_33: 0.33,
+    FUTURO_SIAPE_CCCB_72X_NCDT_419_30: 0.3,
+    FUTURO_SIAPE_CCCB_72X_NCDT_399_27: 0.27,
+    FUTURO_SIAPE_CCCB_72X_NCDT_379_24: 0.24,
+    FUTURO_SIAPE_CCCB_72X_NCDT_359_18: 0.18,
+    FUTURO_SIAPE_CCCB_72X_NCDT_339_15: 0.15,
+    FUTURO_SIAPE_CCCB_72X_NCDT_319_9: 0.09,
+    FUTURO_SIAPE_CCCB_72X_NCDT_299_3: 0.03,
     FUTURO_GOVAM_RCC_96X_CB_390_85: 0.85,
     FUTURO_GOVAM_RCC_96X_CB_360_70: 0.7,
     FUTURO_GOVAM_RCC_96X_CB_330_60: 0.6,
@@ -1935,6 +1974,7 @@ window.Proposals = {
   _tabelaLabel: function(code) {
     if (code === 'NCDT_096-999_EXCECAO') return 'TABELA_EXCECAO — sem comissão';
     if (!code) return '';
+    if (this._isTabelaExcecao(code)) return `${code} — sem coeficiente`;
     for (const g of this._TABELA_GROUPS) {
       const hit = g.items.find(i => i.value === code);
       if (hit) return hit.label;
@@ -1950,7 +1990,7 @@ window.Proposals = {
     let html = '<option value="">— Aguardando análise —</option>';
     for (const g of [...this._TABELA_GROUPS.filter(g => g.group !== 'EXCECAO'), ...this._TABELA_GROUPS.filter(g => g.group === 'EXCECAO')]) {
       html += `<optgroup label="${g.group}">`;
-      html += g.items.map(i => {
+      html += g.items.filter(i => i.value === 'NCDT_096-999_EXCECAO' || selected === i.value || !this._isTabelaExcecao(i.value)).map(i => {
         const sel = selected === i.value ? ' selected' : '';
         return `<option value="${this._escAttr(i.value)}"${sel}>${this._escHtml(i.label)}</option>`;
       }).join('');
@@ -3799,6 +3839,9 @@ delete parsed[k];
     const checkedKeys = new Set();
     let firstServeUrl = '';
     let checkFailed = false;
+    /* true quando file.php respondeu 404 real (arquivo sumiu do disco e do Supabase). */
+    let sawMissing = false;
+    this._lastViewerMissing = false;
     for (const u of candidates) {
       if (/file\.php/i.test(u)) {
         if (!firstServeUrl) firstServeUrl = u;
@@ -3807,6 +3850,7 @@ delete parsed[k];
         checkedKeys.add(key);
         const verified = await this._verifyAttachmentServeUrl(u);
         if (verified) return verified;
+        if (verified === false) sawMissing = true;
         if (verified === null) {
           /* Checagem falhou/expirou no servidor: não é "arquivo inexistente".
              O file.php completo tem mais fallbacks (variantes, list, /uploads) — abre direto. */
@@ -3819,10 +3863,13 @@ delete parsed[k];
         return String(u).replace(/ /g, '%20');
       }
     }
+    if (sawMissing && !checkFailed) {
+      this._lastViewerMissing = true;
+      return '';
+    }
     if (firstServeUrl && (checkFailed || !requireVerified)) return firstServeUrl;
     return requireVerified ? '' : (candidates[0] || displayUrl || '');
   },
-
   _hasProposalAttachments: function(att) {
     const parsed = this._parseAttachments(att);
     return Object.keys(parsed || {}).some((k) => {
@@ -3982,36 +4029,13 @@ delete parsed[k];
       || (/soumaisblu\.com\.br\/uploads\//i.test(s) && !/file\.php/i.test(s));
   },
 
-  /** Reenvia anexos que estavam no disco Locaweb para o Supabase ao salvar a proposta. */
+  /**
+   * _migrateLocawebAttachmentsToSupabase — no-op no cutover.
+   * Anexos ficam no disco Locaweb; não reenvia para o Storage legado.
+   */
   _migrateLocawebAttachmentsToSupabase: async function(proposalId, att) {
-    const out = { ...att };
-    const jobs = [];
-    Object.keys(out).forEach((k) => {
-      if (this._isAttachmentMetaKey(k)) return;
-      const v = out[k];
-      if (typeof v !== 'string' || !this._isLocawebProposalUploadUrl(v)) return;
-      if (this._attachmentAlreadyOnStorage(out, k)) return;
-      jobs.push((async () => {
-        try {
-          const res = await fetch(v.replace(/ /g, '%20'), { cache: 'no-store' });
-          if (!res.ok) {
-            console.warn('[Proposals] arquivo Locaweb ausente, reenvie manualmente:', k, v);
-            return;
-          }
-          const blob = await res.blob();
-          const nome = out[k + '_nome'] || `${k}`;
-          const file = new File([blob], nome, { type: blob.type || 'application/octet-stream' });
-          const uploaded = await (window.DB || DB).uploadProposalFile(file, proposalId, k);
-          if (uploaded && (uploaded.caminho || uploaded.url)) {
-            this._applyProposalUploadResult(out, k, uploaded, nome);
-          }
-        } catch (e) {
-          console.warn('[Proposals] migrar anexo Locaweb→Supabase', k, e);
-        }
-      })());
-    });
-    await Promise.all(jobs);
-    return out;
+    void proposalId;
+    return att && typeof att === 'object' ? att : {};
   },
 
   _uploadPendingDataAttachments: async function(proposalId, att) {
@@ -4177,14 +4201,25 @@ delete parsed[k];
     try {
       finalUrl = await this._resolveWorkingViewerUrl(initialUrl, urls, raw, caminho, isPdf);
     } catch (_) { /* keep the fallback for non-PDF attachments */ }
+    if (!finalUrl && this._lastViewerMissing) {
+      const missingMsg = 'Esse anexo n\u00e3o est\u00e1 mais no servidor (arquivo antigo que n\u00e3o veio na migra\u00e7\u00e3o). Pe\u00e7a para o vendedor reenviar e anexe de novo.';
+      if (typeof showToast === 'function') showToast(missingMsg, 'warning', 7000);
+      else alert(missingMsg);
+      return;
+    }
     if (!finalUrl) {
+      const cItem = typeof cacheIdxOrUrl === 'number' ? this._attachmentViewerCache?.[cacheIdxOrUrl] : null;
+      if (cItem && cItem.key && cItem.pid && window.confirm('Esse arquivo n\u00e3o existe mais no servidor. Quer enviar o documento novamente?')) {
+        this.reuploadAttachment(cacheIdxOrUrl, null);
+        return;
+      }
       const message = 'PDF indispon\u00edvel. Confira se o documento foi anexado e tente novamente.';
       if (typeof showToast === 'function') showToast(message, 'warning');
       else alert(message);
       return;
     }
 
-
+    if (typeof window._docViewerSameOrigin === 'function') finalUrl = window._docViewerSameOrigin(finalUrl);
     const viewerUrls = urls.map((url) => this._fileProxyFromSupabaseUrl(url) || url);
     const fallbackChain = this._attachmentFallbackChain(viewerUrls, finalUrl);
     const fbAttrs = this._attachmentFallbackAttrs(fallbackChain);
@@ -4249,19 +4284,34 @@ delete parsed[k];
 
   _isPdfUrl: function(url, nome) {
     if (!url) return false;
-    if (String(url).startsWith('data:application/pdf')) return true;
-    const ref = ((nome || '') + ' ' + String(url).split('?')[0]).toLowerCase();
-    return /\.pdf(\?|$)/i.test(ref);
+    const u = String(url);
+    if (u.startsWith('data:application/pdf')) return true;
+    let q = '';
+    try { q = decodeURIComponent((u.match(/[?&](?:path|fetch_url)=([^&#]+)/i) || [])[1] || ''); } catch (_) { /* noop */ }
+    /* Nome e URL separados: "arquivo.pdf .../file.php" juntos nunca terminavam em .pdf. */
+    return [nome || '', u.split(/[?#]/)[0], q].some((s) => /\.pdf$/i.test(String(s).trim()));
   },
 
   _guessAttachmentKind: function(url, nome) {
     if (this._isImageUrl(url, nome)) return 'image';
     if (this._isPdfUrl(url, nome)) return 'pdf';
     const ref = ((nome || '') + ' ' + String(url || '').split('?')[0]).toLowerCase();
-    if (/\.(mp4|webm|ogv|mov|m4v|avi|mkv)(\?|$)/i.test(ref)) return 'video';
-    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)(\?|$)/i.test(ref)) return 'audio';
-    if (/\.(txt|csv|json|xml|html?|md|log|yml|yaml)(\?|$)/i.test(ref)) return 'text';
+    if (/\.(mp4|webm|ogv|mov|m4v|avi|mkv)(\?|\s|$)/i.test(ref)) return 'video';
+    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)(\?|\s|$)/i.test(ref)) return 'audio';
+    if (/\.(txt|csv|json|xml|html?|md|log|yml|yaml)(\?|\s|$)/i.test(ref)) return 'text';
     return 'other';
+  },
+
+  _openAttachmentHere: function(btn) {
+    const body = btn && btn.closest ? btn.closest('#attachmentViewerBody') : null;
+    const src = btn ? btn.getAttribute('data-src') : '';
+    if (!body || !src) return;
+    const fr = document.createElement('iframe');
+    fr.src = src;
+    fr.title = btn.getAttribute('data-name') || 'Anexo';
+    fr.style.cssText = 'width:100%;height:70vh;border:0;border-radius:8px;background:#fff;';
+    body.innerHTML = '';
+    body.appendChild(fr);
   },
 
   _renderAttachmentViewerBody: function(kind, displayUrl, name, fbAttrStr, onErr) {
@@ -4283,10 +4333,10 @@ delete parsed[k];
     return `<div style="padding:32px 24px;text-align:center;">
       <div style="font-size:52px;line-height:1;margin-bottom:16px;">📎</div>
       <p style="font-weight:600;margin-bottom:8px;word-break:break-word;">${safeName}</p>
-      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:20px;">Este tipo de arquivo não pode ser exibido aqui. Baixe ou abra em nova aba.</p>
+      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:20px;">Não deu pra identificar o tipo do arquivo. Tente abrir aqui mesmo ou em nova aba.</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <a href="${safeDisplay}" download="${safeNameAttr}" class="btn btn-primary" style="text-decoration:none;">Baixar</a>
         <button type="button" class="btn btn-outline" onclick="window.open('${safeDisplay}','_blank','noopener,noreferrer')">Abrir em nova aba</button>
+        <button type="button" class="btn btn-primary" data-src="${safeDisplay}" data-name="${safeNameAttr}" onclick="Proposals._openAttachmentHere(this)">Abrir aqui mesmo</button>
       </div>
     </div>`;
   },
@@ -4683,11 +4733,40 @@ delete parsed[k];
       .replace(/[\s-]+/g, '_');
   },
 
+  /**
+   * _canPickVendor — quem pode trocar o vendedor da proposta.
+   * Backoffice/sup_backoffice, gerente e master/fundador/dev. Supervisor de vendas não.
+   */
   _canPickVendor: function(role) {
     const r = this._normProposalManageRole(role);
-    // Gerente/gerência sempre pode trocar o vendedor da proposta (pedido explícito).
-    if (r === 'gerente' || r === 'gerencia') return true;
-    return this._isSupervisorOrAbove(role);
+    return [
+      'backoffice', 'sup_backoffice',
+      'gerente', 'gerencia',
+      'master', 'fundador', 'desenvolvedor',
+    ].includes(r);
+  },
+
+  /**
+   * _readVendorTransferJustify — texto obrigatório ao passar venda.
+   */
+  _readVendorTransferJustify: function() {
+    return String(document.getElementById('managePropVendorJustify')?.value || '').trim();
+  },
+
+  /**
+   * _syncVendorJustifyVisibility — mostra justificativa só se o select mudou do vendedor atual.
+   */
+  _syncVendorJustifyVisibility: function(origVid) {
+    const sel = document.getElementById('managePropVendor');
+    const wrap = document.getElementById('managePropVendorJustifyWrap');
+    if (!wrap) return;
+    const cur = String(sel?.value || '').trim();
+    const changed = !!(cur && cur !== String(origVid || '').trim());
+    wrap.style.display = changed ? '' : 'none';
+    if (!changed) {
+      const ta = document.getElementById('managePropVendorJustify');
+      if (ta) ta.value = '';
+    }
   },
 
   /** Backoffice/supervisor+ podem ajustar nº e valor (inclusive em proposta já paga). */
@@ -4731,6 +4810,26 @@ delete parsed[k];
   },
 
   /**
+   * _isTabelaExcecao — NCDT_096-999_EXCECAO e equivalentes.
+   * Banco manda sem coeficiente e sem %; não simula e não gera comissão.
+   */
+  _isTabelaExcecao: function(code) {
+    const s = String(code || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /EXCEC/.test(s) || /NCDT_\d{3}-999_/.test(s);
+  },
+
+  /**
+   * _tabelaPctOf — % da tabela para valor final.
+   * EXCECAO = 0 (não cair no fallback 100% do valor bruto).
+   */
+  _tabelaPctOf: function(code) {
+    if (this._isTabelaExcecao(code)) return 0;
+    const pct = this._tabelaPct[code];
+    if (pct != null && !isNaN(pct)) return Number(pct);
+    return null;
+  },
+
+  /**
    * _applyTabelaToProposal — aplica tabela e recalcula valorFinal/desconto.
    * Evita proposta “PAGO” com comissão no valor bruto quando a tabela está vazia/errada.
    */
@@ -4743,7 +4842,7 @@ delete parsed[k];
       proposal.desconto = 0;
       return;
     }
-    const pct = this._tabelaPct[code];
+    const pct = this._tabelaPctOf(code);
     const factor = (pct != null && !isNaN(pct)) ? Number(pct) : 1;
     const bruto = Number(proposal.valor) || 0;
     proposal.tabela = code;
@@ -5448,7 +5547,7 @@ delete parsed[k];
     // usado apenas quando o formulário mostra o campo tabela visivelmente
     const valor  = parseFloat(document.getElementById('propValor')?.value) || 0;
     const tabela = document.getElementById('propTabela')?.value || 'NORMAL';
-    const pct    = this._tabelaPct[tabela] ?? 1;
+    const pct    = this._tabelaPctOf(tabela) ?? (this._isTabelaExcecao(tabela) ? 0 : 1);
     const final  = valor * pct;
     const desconto = valor - final;
     const dispEl = document.getElementById('propValorFinalDisplay');
@@ -5535,7 +5634,7 @@ delete parsed[k];
     const parsed = this._readManageValorInput();
     const bruto = (!isNaN(parsed) && parsed >= 0) ? parsed : 0;
     const tabela = document.getElementById('managePropTabela')?.value || '';
-    const pct    = tabela ? (this._tabelaPct[tabela] ?? 1) : null;
+    const pct    = tabela ? (this._tabelaPctOf(tabela) ?? (this._isTabelaExcecao(tabela) ? 0 : 1)) : null;
     const finalV = pct !== null ? parseFloat((bruto * pct).toFixed(2)) : null;
     const desconto = finalV !== null ? parseFloat((bruto - finalV).toFixed(2)) : null;
 
@@ -6465,6 +6564,19 @@ delete parsed[k];
     this._adminListCacheAt = 0;
   },
 
+  /**
+   * _proposalExportHeaders — colunas do Excel/CSV de Baixar Planilha.
+   * Convênio e entidade saem porque a lista mostra os dois na coluna Convênio.
+   */
+  _proposalExportHeaders: function() {
+    return ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Convênio', 'Entidade', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+  },
+
+  /**
+   * _proposalExportRow — uma linha da planilha da gestão.
+   * Status é o rótulo marcado na ficha (statusOp), o mesmo do badge da tabela.
+   * O filtro do cabeçalho STATUS já corta as linhas em _fetchAdminProposalsFiltered.
+   */
   _proposalExportRow: function(p) {
     const num = (v) => (v != null && v !== '' && Number.isFinite(parseFloat(v)) ? parseFloat(v) : '');
     const dt = this._proposalCreatedAt(p);
@@ -6485,14 +6597,18 @@ delete parsed[k];
         }
       }
     }
+    let status = this._proposalDisplayStatus(p);
+    if (!status || status === '—') status = '';
     return {
       'Nº Proposta': p.numero || p.id || '',
       Vendedor: p.vendorName || '',
       Cliente: p.clientName || '',
       CPF: p.clientCpf || '',
       Produto: p.product || '',
+      'Convênio': p.convenio || '',
+      Entidade: p.entidade || '',
       'Valor Final (R$)': num(p.valorFinal),
-      Status: p.status || p.statusOp || '',
+      Status: status,
       'Data criação': dataCriacao,
       'Data pagamento': dataPagamento,
     };
@@ -6501,7 +6617,7 @@ delete parsed[k];
   _downloadProposalCsv: function(rows, filenameBase) {
     const headers = rows.length
       ? Object.keys(rows[0])
-      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+      : this._proposalExportHeaders();
     const stamp = nowBrazilSql().slice(0, 10);
     const fname = `${filenameBase}_${stamp}.csv`;
     const bom = '\uFEFF';
@@ -6526,7 +6642,7 @@ delete parsed[k];
 
     const headers = rows.length
       ? Object.keys(rows[0])
-      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+      : this._proposalExportHeaders();
     const moneyCols = new Set(['Valor Final (R$)']);
     const moneyColIdx = headers.reduce((acc, h, i) => { if (moneyCols.has(h)) acc.push(i); return acc; }, []);
 
@@ -6822,8 +6938,8 @@ delete parsed[k];
         usedKeys.add(item.key);
         (item.legado || []).forEach((lk) => usedKeys.add(lk));
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
-        html += this._renderAttachmentPreview(doc, cacheIdx);
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho, key: item.key, pid: proposal.id, proposalRef: proposal });
+        html += this._wrapAttachmentTile(doc, cacheIdx);
       });
       if (!algum) html += `<span style="font-size:12px;color:var(--color-text-muted);align-self:center;">Nenhum arquivo</span>`;
       html += `</div></div>`;
@@ -6849,8 +6965,8 @@ delete parsed[k];
         if (!doc) return;
         algumCustom = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
-        html += this._renderAttachmentPreview(doc, cacheIdx);
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho, key, pid: proposal.id, proposalRef: proposal });
+        html += this._wrapAttachmentTile(doc, cacheIdx);
       });
       if (!algumCustom) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
       html += `</div></div>`;
@@ -6869,8 +6985,8 @@ delete parsed[k];
         if (!doc) return;
         algumMisc = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
-        html += this._renderAttachmentPreview(doc, cacheIdx);
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho, key, pid: proposal.id, proposalRef: proposal });
+        html += this._wrapAttachmentTile(doc, cacheIdx);
       });
       if (!algumMisc) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
       html += `</div></div>`;
@@ -6878,6 +6994,152 @@ delete parsed[k];
 
     html += '</div>';
     attEl.innerHTML = html;
+    /* Arquivos que sumiram (Supabase desativado) viram card com "Enviar documento novamente". */
+    if (proposal && proposal.id) void this._flagMissingAttachments(attEl, proposal.id);
+  },
+
+  /** Card do anexo com marcador pra trocar por "arquivo perdido" depois da checagem. */
+  _wrapAttachmentTile: function(doc, cacheIdx) {
+    return `<div class="soublu-att-tile" data-att-idx="${cacheIdx}">${this._renderAttachmentPreview(doc, cacheIdx)}</div>`;
+  },
+
+  /**
+   * _attachmentFileMissing — true só quando o file.php confirma 404 em todos os caminhos.
+   * Erro de rede, 429 ou 500 contam como "não sei" (false) pra não oferecer reenvio à toa.
+   */
+  _attachmentFileMissing: async function(item) {
+    const all = [item.rawUrl, item.url].concat(item.urls || []);
+    const urls = all.filter((u) => /file\.php\?/i.test(String(u || '')));
+    if (!urls.length) return false;
+    const seen = new Set();
+    let checked = 0;
+    for (const u of urls) {
+      const key = typeof this._fileServeKey === 'function' ? this._fileServeKey(u) : u;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let res = null;
+      for (let t = 0; t < 3; t++) {
+        res = await fetch(u + '&check=1', { cache: 'no-store' }).catch(() => null);
+        if (res && res.status === 429) {
+          await new Promise((r) => setTimeout(r, 2500 * (t + 1)));
+          continue;
+        }
+        break;
+      }
+      if (!res) return false;
+      if (res.status === 200) {
+        const j = await res.json().catch(() => null);
+        if (j && j.ok) return false;
+        return false;
+      }
+      if (res.status !== 404) return false;
+      checked++;
+    }
+    return checked > 0;
+  },
+
+  /** Depois de renderizar os anexos, marca os que não existem mais no servidor. */
+  _flagMissingAttachments: async function(attEl, proposalId) {
+    const token = (this._flagMissingToken = (this._flagMissingToken || 0) + 1);
+    const cache = this._attachmentViewerCache || [];
+    for (let i = 0; i < cache.length; i++) {
+      if (token !== this._flagMissingToken || !attEl.isConnected) return;
+      const item = cache[i];
+      if (!item || !item.key) continue;
+      let missing = false;
+      try {
+        missing = await this._attachmentFileMissing(item);
+      } catch (_) {
+        missing = false;
+      }
+      if (!missing || token !== this._flagMissingToken) continue;
+      item.missing = true;
+      item.pid = item.pid || proposalId;
+      const tile = attEl.querySelector(`[data-att-idx="${i}"]`);
+      if (tile) tile.innerHTML = this._missingAttachmentTileHtml(item, i);
+    }
+  },
+
+  _missingAttachmentTileHtml: function(item, cacheIdx) {
+    const nome = this._escHtml(item.nome || item.key || 'Anexo');
+    const shortNome = nome.length > 42 ? (nome.slice(0, 39) + '…') : nome;
+    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:120px;min-height:150px;border-radius:10px;border:2px dashed var(--color-danger,#dc2626);background:var(--color-surface-2,#fff5f5);padding:8px;text-align:center;box-sizing:border-box;" title="${nome} — o arquivo não existe mais no servidor">
+        <span style="font-size:22px;line-height:1;">⚠️</span>
+        <span style="font-size:10px;font-weight:700;color:var(--color-danger,#dc2626);">Arquivo perdido</span>
+        <span style="font-size:10px;line-height:1.2;word-break:break-word;color:var(--color-text-muted);">${shortNome}</span>
+        <button type="button" class="btn btn-primary" style="font-size:10px;padding:4px 6px;line-height:1.2;white-space:normal;" onclick="event.stopPropagation();Proposals.reuploadAttachment(${cacheIdx}, this)">Enviar documento novamente</button>
+      </div>`;
+  },
+
+  /**
+   * reuploadAttachment — reenvia um anexo perdido na mesma categoria (ex.: extrato_1).
+   * Sobe pro disco Locaweb e grava em proposals.attachments sem mexer nos outros anexos.
+   */
+  reuploadAttachment: function(cacheIdx, btn) {
+    const item = this._attachmentViewerCache && this._attachmentViewerCache[cacheIdx];
+    if (!item || !item.key || !item.pid) {
+      const msg = 'Não deu pra identificar o anexo. Feche e abra a proposta de novo.';
+      if (typeof showToast === 'function') showToast(msg, 'warning'); else alert(msg);
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,image/*,.doc,.docx,.xls,.xlsx,.zip';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    const btnLabel = 'Enviar documento novamente';
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        const msg = 'Arquivo maior que 50MB.';
+        if (typeof showToast === 'function') showToast(msg, 'warning'); else alert(msg);
+        return;
+      }
+      if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+      try {
+        const db = window.DB || DB;
+        const uploaded = await db.uploadProposalFile(file, item.pid, item.key);
+        let base = {};
+        try {
+          const full = await db.getProposal(item.pid);
+          base = this._parseAttachments(full && full.attachments);
+        } catch (_) { base = {}; }
+        if (!this._hasProposalAttachments(base)) {
+          const r = await db.getProposalAttachments(item.pid);
+          base = this._parseAttachments(r && r.attachments);
+        }
+        base = { ...(base || {}) };
+        delete base[item.key + '_caminho'];
+        delete base[item.key + '_public'];
+        this._applyProposalUploadResult(base, item.key, uploaded, file.name);
+        await db.updateProposal(item.pid, { attachments: base });
+        if (item.proposalRef && typeof item.proposalRef === 'object') {
+          item.proposalRef.attachments = base;
+        }
+        const caminho = base[item.key + '_caminho'] || '';
+        const raw = base[item.key];
+        Object.assign(item, {
+          url: raw,
+          rawUrl: raw,
+          urls: this._attachmentOpenUrls(raw, caminho),
+          nome: base[item.key + '_nome'] || file.name,
+          caminho,
+          missing: false,
+        });
+        const tile = (btn && btn.closest ? btn.closest('[data-att-idx]') : null)
+          || document.querySelector(`[data-att-idx="${cacheIdx}"]`);
+        if (tile) tile.innerHTML = this._renderAttachmentPreview(item, cacheIdx);
+        if (typeof showToast === 'function') showToast('Documento reenviado.', 'success');
+      } catch (e) {
+        console.warn('[Proposals] reenvio de anexo:', e);
+        const msg = 'Falha ao reenviar: ' + (e && e.message ? e.message : e);
+        if (typeof showToast === 'function') showToast(msg, 'error'); else alert(msg);
+        if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+      }
+    });
+    input.click();
   },
 
   _applyEmployeeModalMode: function(viewOnly) {
@@ -7329,8 +7591,13 @@ delete parsed[k];
 
     // Garante bloco de vendedor visível quando o perfil pode trocar (inclui proposta paga).
     const vendorBlock = document.getElementById('managePropVendorBlock');
+    const showVendor = canPickVendor && (!viewOnly || valorOnlyMode);
     if (vendorBlock) {
-      vendorBlock.style.display = (canPickVendor && (!viewOnly || valorOnlyMode)) ? '' : 'none';
+      vendorBlock.style.display = showVendor ? '' : 'none';
+    }
+    if (!showVendor) {
+      const jw = document.getElementById('managePropVendorJustifyWrap');
+      if (jw) jw.style.display = 'none';
     }
 
     this._unlockManageValorFields((canEditValor && !viewOnly) || valorOnlyMode);
@@ -7432,7 +7699,15 @@ delete parsed[k];
           : '<option value="">Nenhum vendedor encontrado</option>';
         if (vid && vendors.some(v => v.id === vid)) vendorSel.value = vid;
         else if (vendors.length) vendorSel.selectedIndex = 0;
+        vendorSel.dataset.origVendorId = String(vid || '');
+        vendorSel.onchange = () => this._syncVendorJustifyVisibility(vendorSel.dataset.origVendorId);
+        this._syncVendorJustifyVisibility(vid);
+        const justifyEl = document.getElementById('managePropVendorJustify');
+        if (justifyEl) justifyEl.value = '';
       }
+    } else {
+      const jw = document.getElementById('managePropVendorJustifyWrap');
+      if (jw) jw.style.display = 'none';
     }
     if (token !== this._modalLoadToken) return;
     sv('managePropNumeroEdit', proposal.numero);
@@ -7585,7 +7860,8 @@ delete parsed[k];
     try {
       const rolePaid = this._normProposalManageRole(user?.role);
       let vendorChanged = false;
-      // Gerente+ grava troca de vendedor também em proposta paga (UI já libera o select).
+      let vendorJustify = '';
+      // Backoffice grava troca de vendedor também em proposta paga (UI já libera o select).
       if (this._canPickVendor(rolePaid)) {
         const vendorSel = document.getElementById('managePropVendor');
         if (vendorSel && vendorSel.value) {
@@ -7593,6 +7869,11 @@ delete parsed[k];
           const opt = vendorSel.options[vendorSel.selectedIndex];
           const newName = opt ? String(opt.textContent || '').trim() : '';
           if (newVid && newVid !== origVendorId) {
+            vendorJustify = this._readVendorTransferJustify();
+            if (vendorJustify.length < 5) {
+              this._notifyOverModal('Informe a justificativa da troca de vendedor (mín. 5 caracteres).', 'warning');
+              return;
+            }
             proposal.vendorId = newVid;
             proposal.vendor_id = newVid;
             proposal.employee_id = newVid;
@@ -7636,7 +7917,12 @@ delete parsed[k];
       if (proposal.valor !== orig.valor) noteParts.push(`Valor: ${orig.valor} → ${proposal.valor}`);
       if (orig.numero !== proposal.numero) noteParts.push(`Nº: ${orig.numero || '—'} → ${proposal.numero}`);
       if (orig.tabela !== proposal.tabela) noteParts.push(`Tabela: ${orig.tabela || '—'} → ${proposal.tabela}`);
-      if (vendorChanged) noteParts.push(`Vendedor: ${orig.vendorName || orig.vendorId || '—'} → ${proposal.vendorName || proposal.vendorId}`);
+      if (vendorChanged) {
+        noteParts.push(
+          `Vendedor: ${orig.vendorName || orig.vendorId || '—'} → ${proposal.vendorName || proposal.vendorId}`
+          + (vendorJustify ? ` | Justificativa: ${vendorJustify}` : '')
+        );
+      }
       const actionLabel = vendorChanged && noteParts.length === 1
         ? 'Troca de vendedor (proposta paga)'
         : (orig.tabela !== proposal.tabela
@@ -7644,13 +7930,21 @@ delete parsed[k];
           : (vendorChanged
             ? 'Correção de valor/nº/vendedor (proposta paga)'
             : 'Correção de valor/nº (proposta paga)'));
-      proposal.history.push({
+      const histPaid = {
         date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
         actorName: user?.name || 'Sistema',
         action: actionLabel,
         note: noteParts.join(' · ') || actionLabel,
         kind: vendorChanged && noteParts.length === 1 ? 'vendor_fix_paid' : 'valor_fix_paid',
-      });
+      };
+      if (vendorChanged) {
+        histPaid.prevVendorId = orig.vendorId || null;
+        histPaid.prevVendorName = orig.vendorName || null;
+        histPaid.newVendorId = proposal.vendorId || proposal.vendor_id || null;
+        histPaid.newVendorName = proposal.vendorName || proposal.vendor_name || null;
+        histPaid.justification = vendorJustify || null;
+      }
+      proposal.history.push(histPaid);
       const saved = await this._withTimeout(
         DB.saveProposal(proposal, { skipHydrate: true, preserveUpdatedAt: true }),
         45000,
@@ -7766,7 +8060,7 @@ delete parsed[k];
 
     const role = roleNorm;
 
-    // Vendedor responsável — troca grava history (passar venda para outro).
+    // Vendedor responsável — troca grava history (passar venda para outro) + justificativa obrigatória.
     if (this._canPickVendor(role)) {
       const vendorSel = document.getElementById('managePropVendor');
       if (vendorSel && vendorSel.value) {
@@ -7775,21 +8069,31 @@ delete parsed[k];
         const newVid = String(vendorSel.value || '').trim();
         const opt = vendorSel.options[vendorSel.selectedIndex];
         const newName = opt ? String(opt.textContent || '').trim() : '';
-        proposal.vendorId = newVid;
-        proposal.vendor_id = newVid;
-        proposal.employee_id = newVid;
-        if (newName) {
-          proposal.vendorName = newName;
-          proposal.vendor_name = newName;
-        }
         if (newVid && newVid !== prevVid) {
+          const justify = this._readVendorTransferJustify();
+          if (justify.length < 5) {
+            this._notifyOverModal('Informe a justificativa da troca de vendedor (mín. 5 caracteres).', 'warning');
+            return;
+          }
+          proposal.vendorId = newVid;
+          proposal.vendor_id = newVid;
+          proposal.employee_id = newVid;
+          if (newName) {
+            proposal.vendorName = newName;
+            proposal.vendor_name = newName;
+          }
           proposal.history = Array.isArray(proposal.history) ? proposal.history.slice() : [];
           proposal.history.push({
             date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
             actorName: user?.name || 'Sistema',
             action: 'Troca de vendedor',
-            note: `Vendedor: ${prevName || prevVid || '—'} → ${newName || newVid}`,
+            note: `Vendedor: ${prevName || prevVid || '—'} → ${newName || newVid} | Justificativa: ${justify}`,
             kind: 'vendor_transfer',
+            prevVendorId: prevVid || null,
+            prevVendorName: prevName || null,
+            newVendorId: newVid,
+            newVendorName: newName || null,
+            justification: justify,
           });
         }
       }
@@ -7914,7 +8218,7 @@ delete parsed[k];
          action = `Status: [${oldStatusOp || oldStatus}] → [${newStatusOp}]`;
        }
        if (novaTabela && novaTabela !== oldTabela) {
-         const pctLabel = Math.round((this._tabelaPct[novaTabela]??1)*100);
+         const pctLabel = Math.round((this._tabelaPctOf(novaTabela) ?? (this._isTabelaExcecao(novaTabela) ? 0 : 1)) * 100);
          action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
        }
        const histEntry = {
@@ -8086,9 +8390,10 @@ delete parsed[k];
     }
     const nome = label || id;
     if (!confirm(
-      `Arquivar a proposta "${nome}"?\n\n` +
-      `A ficha vira Cancelado e uma cópia fica na Localweb.\n` +
-      `Proposta PAGA não é cancelada — só a cópia de segurança é gravada.`
+      `Arquivar/apagar a proposta "${nome}"?\n\n` +
+      `1º clique: vira Cancelado (some da lista ativa) + cópia na Localweb.\n` +
+      `2º clique (já Cancelado): remove a ficha do banco.\n` +
+      `Proposta PAGA não é apagada — só a cópia de segurança é gravada.`
     )) return;
 
     if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
@@ -8134,7 +8439,9 @@ delete parsed[k];
       }
       const toastMsg = result?.keptPaid
         ? 'Proposta paga permanece. Cópia salva na Localweb.'
-        : 'Proposta arquivada (status Cancelado).';
+        : (result?.removed
+          ? 'Proposta removida (cópia permanece na Localweb).'
+          : 'Proposta arquivada (status Cancelado).');
       if (typeof showToast === 'function') showToast(toastMsg, 'success');
       else alert(toastMsg);
       // Remove a linha na hora (feedback imediato) e re-renderiza.
@@ -8142,6 +8449,15 @@ delete parsed[k];
       if (row && !result?.keptPaid) row.remove();
       const mobileCard = document.querySelector(`#manageProposalsMobileList [data-prop-id="${CSS?.escape ? CSS.escape(String(id)) : String(id)}"]`);
       if (mobileCard && !result?.keptPaid) mobileCard.remove();
+      // Gestão de Crédito: tira a linha do BO e recarrega (não depende só do painel Propostas).
+      try {
+        const cdRow = document.querySelector(`#cd_bo_list tr td select[id="cd_st_${CSS?.escape ? CSS.escape(String(id)) : String(id)}"]`)
+          ?.closest('tr');
+        if (cdRow && !result?.keptPaid) cdRow.remove();
+        if (typeof window.EsteiraCompraDivida?.refreshBo === 'function' && document.getElementById('cd_bo_list')) {
+          await window.EsteiraCompraDivida.refreshBo();
+        }
+      } catch (_) { /* noop */ }
       await this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
       if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
         try { await renderAdminRanking(); } catch (_) { /* noop */ }

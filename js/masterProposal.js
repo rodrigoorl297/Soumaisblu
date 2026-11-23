@@ -22,172 +22,70 @@ const CPFUtils = {
 
 window.masterProposalManager = {
   init() {
-    // Reset da Interface — o formulário inteiro (CPF + dados da proposta) já fica visível
-    // de uma vez; a busca do CPF só preenche os dados do cliente automaticamente.
+    // Reset da Interface
+    const formArea = document.getElementById('masterPropFormArea');
+    if (formArea) formArea.style.display = 'none';
+    
     const fields = [
-      'masterPropCpf', 'masterPropProduct', 'masterPropConvenio',
+      'masterPropCpf', 'masterPropProduct', 'masterPropConvenio', 
       'masterPropEntidade', 'masterPropObs', 'masterPropClientName'
     ];
-
+    
     fields.forEach(id => {
       const el = document.getElementById(id);
       if (el) el.value = '';
     });
 
-    this._initCatalogSelects();
-
     const summary = document.getElementById('masterPropClientSummary');
-    if (summary) {
-      summary.style.color = 'var(--color-text-muted)';
-      summary.innerHTML = 'Digite o CPF acima para buscar os dados do cliente.';
-    }
-
-    const popup = document.getElementById('masterPropCpfPopup');
-    if (popup) popup.style.display = 'none';
+    if (summary) summary.innerHTML = '';
   },
 
-  // Produto / Convênio / Entidade usam o mesmo catálogo do formulário do vendedor (Proposals em proposals.js)
-  _initCatalogSelects() {
-    const P = window.Proposals;
-    if (!P || typeof P._fillConvenioSelect !== 'function') return;
-    P._fillProductSelect('masterPropProduct', '');
-    P._fillConvenioSelect('masterPropConvenio', 'masterPropEntidade', '');
-    const conv = document.getElementById('masterPropConvenio');
-    if (conv && !conv.dataset.catalogBound) {
-      conv.dataset.catalogBound = '1';
-      conv.addEventListener('change', () => P._fillEntidadeSelect('masterPropEntidade', conv.value, ''));
-    }
-  },
-
-  // Abre o pop-up (modal) de "Nova Proposta", igual ao de "Novo Cliente"
-  openModal() {
-    if (window.ProposalWorkflow) return ProposalWorkflow.create();
-    this.init();
-    if (typeof openModal === 'function') openModal('masterProposalModal');
-    else document.getElementById('masterProposalModal')?.classList.add('open');
-  },
-
-  closeModal() {
-    if (typeof closeModal === 'function') closeModal('masterProposalModal');
-    else document.getElementById('masterProposalModal')?.classList.remove('open');
-  },
-
-  // Dispara a busca automaticamente enquanto o usuário digita o CPF.
-  // Assim que completar 11 dígitos, o pop-up aparece sozinho (sem precisar clicar em "Buscar Cliente").
-  _cpfPopupTimer: null,
-
-  onCpfInput() {
-    const input = document.getElementById('masterPropCpf');
-    const popup = document.getElementById('masterPropCpfPopup');
-    if (!input) return;
-
-    const cpf = input.value.replace(/\D/g, '');
-    clearTimeout(this._cpfPopupTimer);
-
-    // CPF incompleto/alterado: some com o pop-up e invalida o cliente já encontrado
-    // (evita enviar a proposta com o nome de um cliente de outro CPF).
-    const nameField = document.getElementById('masterPropClientName');
-    if (nameField) nameField.value = '';
-    const summary = document.getElementById('masterPropClientSummary');
-    if (summary) {
-      summary.style.color = 'var(--color-text-muted)';
-      summary.innerHTML = 'Digite o CPF acima para buscar os dados do cliente.';
-    }
-
-    if (cpf.length !== 11) {
-      if (popup) popup.style.display = 'none';
-      return;
-    }
-
-    // pequeno debounce para não buscar a cada tecla enquanto ainda digita
-    this._cpfPopupTimer = setTimeout(() => {
-      this.searchCpf({ silent: true });
-    }, 350);
-  },
-
-  async _findClientByCpf(cpf) {
-    if (typeof DB.getClientByCpf === 'function') {
-      const hit = await DB.getClientByCpf(cpf).catch(() => null);
-      if (hit) return hit;
-    }
-    if (typeof DB.findClientByCpf === 'function') {
-      const hit = await DB.findClientByCpf(cpf).catch(() => null);
-      if (hit) return hit;
-    }
-    return DB.get('clients', cpf).catch(() => null);
-  },
-
-  async searchCpf(opts) {
-    opts = opts || {};
+  async searchCpf() {
     const cpfInput = document.getElementById('masterPropCpf');
     const cpf = cpfInput.value.replace(/\D/g, '');
-    const popup = document.getElementById('masterPropCpfPopup');
-
+    
     if (!CPFUtils.isValid(cpf)) {
-      if (!opts.silent) showToast("Por favor, digite um CPF válido.", 'warning');
-      return;
+      return showToast("Por favor, digite um CPF válido.", 'warning');
     }
-
-    let btn = null;
-    let oldText = '';
-    if (opts.silent) {
-      if (popup) {
-        popup.className = 'prop-cpf-popup';
-        popup.style.display = 'block';
-        popup.innerHTML = '<span style="color:var(--color-text-muted);">Buscando cliente...</span>';
-      }
-    } else {
-      btn = (typeof event !== 'undefined' && event && event.target) || document.querySelector('#masterProposalModal .btn-primary');
-      oldText = btn ? btn.innerText : 'Buscar Cliente';
-      if (btn) { btn.innerText = 'Buscando...'; btn.disabled = true; }
-    }
+    
+    const btn = event.target;
+    const oldText = btn.innerText;
+    
+    // Proteção UI: Impede múltiplos cliques
+    btn.innerText = 'Buscando...';
+    btn.disabled = true;
 
     try {
-      const client = await this._findClientByCpf(cpf);
-      const summary = document.getElementById('masterPropClientSummary');
-
-      if (client) {
-        if (summary) {
-          summary.style.color = '';
-          summary.innerHTML = `
-            <strong>Nome:</strong> ${client.name}<br>
-            <strong>Celular:</strong> ${client.phone1 || 'Não informado'}<br>
-            <strong>Email:</strong> ${client.email || 'Não informado'}
-          `;
-        }
-        document.getElementById('masterPropClientName').value = client.name;
-
-        if (popup) {
-          popup.className = 'prop-cpf-popup prop-cpf-popup--found';
-          popup.innerHTML = `✓ Cliente encontrado: <strong>${client.name}</strong>`;
-          setTimeout(() => { popup.style.display = 'none'; }, 1800);
-        }
-        if (!opts.silent) showToast("Cliente encontrado!", 'success');
+      let client = null;
+      if (typeof DB.getClientByCpf === 'function') {
+        client = await DB.getClientByCpf(cpf);
+      } else if (typeof DB.findClientByCpf === 'function') {
+        client = await DB.findClientByCpf(cpf);
       } else {
-        document.getElementById('masterPropClientName').value = '';
-        if (summary) {
-          summary.style.color = 'var(--color-danger)';
-          summary.innerHTML = "Cliente não encontrado. Vá em 'Clientes' e cadastre primeiro.";
-        }
-        if (popup) {
-          popup.className = 'prop-cpf-popup prop-cpf-popup--notfound';
-          popup.innerHTML = "Cliente não encontrado. Vá em 'Clientes' e cadastre primeiro.";
-        }
-        if (!opts.silent) showToast("Cliente não encontrado. Cadastre-o primeiro.", 'warning');
+        client = await DB.get('clients', cpf);
+      }
+      const formArea = document.getElementById('masterPropFormArea');
+      
+      if (client) {
+        document.getElementById('masterPropClientSummary').innerHTML = `
+          <strong>Nome:</strong> ${client.name}<br>
+          <strong>Celular:</strong> ${client.phone1 || 'Não informado'}<br>
+          <strong>Email:</strong> ${client.email || 'Não informado'}
+        `;
+        document.getElementById('masterPropClientName').value = client.name;
+        formArea.style.display = 'block';
+        showToast("Cliente encontrado!", 'success');
+      } else {
+        formArea.style.display = 'none';
+        showToast("Cliente não encontrado. Cadastre-o primeiro.", 'warning');
       }
     } catch (e) {
       console.error(e);
-      if (popup && opts.silent) {
-        popup.className = 'prop-cpf-popup prop-cpf-popup--notfound';
-        popup.innerHTML = "Erro ao buscar cliente.";
-      } else if (!opts.silent) {
-        showToast("Erro ao buscar cliente: " + e.message, 'error');
-      }
+      showToast("Erro ao buscar cliente: " + e.message, 'error');
     } finally {
-      if (btn) {
-        btn.innerText = oldText;
-        btn.disabled = false;
-      }
+      // Restaura o botão
+      btn.innerText = oldText;
+      btn.disabled = false;
     }
   },
 
@@ -206,7 +104,7 @@ window.masterProposalManager = {
       return showToast("Preencha os campos obrigatórios (CPF, Cliente, Produto).", 'warning');
     }
 
-    const saveBtn = document.getElementById('masterPropSubmitBtn');
+    const saveBtn = document.querySelector('#masterPropFormArea .btn-primary');
     const oldText = saveBtn.innerText;
     
     saveBtn.innerText = 'Enviando...';
@@ -250,9 +148,8 @@ window.masterProposalManager = {
       }
       
       showToast(`Proposta cadastrada! ID: ${proposal.id}`, 'success');
-      this.closeModal();
       this.init();
-
+      
       // Atualiza a lista na UI se o objeto Proposals existir
       if (window.Proposals?.renderAdminList) {
         await window.Proposals.renderAdminList();

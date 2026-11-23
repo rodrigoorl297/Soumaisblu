@@ -3,12 +3,16 @@
    ========================================================== */
 
 /** Faixas de comissão do parceiro (valor líquido = valor bruto × rate). */
-const PARTNER_COMMISSION_TIERS = {
+/* Guard contra re-declaração quando partners.js é carregado mais de uma vez (script estático + ensureScript). */
+if (typeof window.PARTNER_COMMISSION_TIERS === 'undefined') {
+window.PARTNER_COMMISSION_TIERS = {
   diamante: { label: 'Diamante', rate: 0.925, pct: 92.5 },
   gold: { label: 'Gold', rate: 0.85, pct: 85 },
   silver: { label: 'Silver', rate: 0.75, pct: 75 },
   bronze: { label: 'Bronze', rate: 0.60, pct: 60 },
 };
+} // end guard PARTNER_COMMISSION_TIERS
+const PARTNER_COMMISSION_TIERS = window.PARTNER_COMMISSION_TIERS;
 const PARTNER_COMMISSION_TIER_DEFAULT = 'bronze';
 
 const PartnerPerms = {

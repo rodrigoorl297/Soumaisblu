@@ -2,6 +2,10 @@
  * mural-upload-fix — POST cru fatiado (WAF zera multipart/POST grande).
  * Também cobre anexos de proposta: FormData some (UPLOAD_ERR_NO_TMP_DIR).
  */
+/**
+ * mural-upload-fix — POST cru fatiado (WAF zera multipart/POST grande).
+ * Também cobre anexos de proposta: FormData some (UPLOAD_ERR_NO_TMP_DIR).
+ */
 (function () {
   const CHUNK = 12000;
 

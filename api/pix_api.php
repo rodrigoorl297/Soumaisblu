@@ -42,10 +42,15 @@ if (!is_file($configPath)) {
 
 require_once $configPath;
 
+$__cutoverPix = dirname(__DIR__) . '/config.cutover.local.php';
+if (is_file($__cutoverPix)) {
+    require_once $__cutoverPix;
+}
+
 /* config.db.local.php só para MySQL (PIX_DB_BACKEND=mysql). Modo Supabase não carrega MySQL. */
 $__pixDbBackendEarly = defined('PIX_DB_BACKEND') && trim((string) PIX_DB_BACKEND) !== ''
     ? strtolower(trim((string) PIX_DB_BACKEND))
-    : 'supabase';
+    : 'mysql';
 if ($__pixDbBackendEarly === 'mysql') {
     $dbConfigPath = dirname(__DIR__) . '/config.db.local.php';
     if (is_file($dbConfigPath)) {
@@ -1101,8 +1106,8 @@ function pix_db_backend(): string
     if (defined('PIX_DB_BACKEND') && trim((string) PIX_DB_BACKEND) !== '') {
         return strtolower(trim((string) PIX_DB_BACKEND));
     }
-    /* Padrão do projeto: saques e PIX gravam no Supabase (mesmo banco do painel). */
-    return 'supabase';
+    /* Cutover: saques no MySQL Locaweb. */
+    return 'mysql';
 }
 
 function pix_withdrawal_repository(): object

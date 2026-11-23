@@ -1,3 +1,20 @@
+
+/* Horário de Brasília disponível para os módulos de propostas e cadastro. */
+(function (root) {
+  if (typeof root.nowBrazilSql !== 'function') {
+    root.nowBrazilSql = function (date) {
+      let source = date === undefined ? new Date() : (date instanceof Date ? date : new Date(date));
+      if (Number.isNaN(source.getTime())) source = new Date();
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+      }).formatToParts(source);
+      const part = name => parts.find(p => p.type === name)?.value || '00';
+      return part('year')+'-'+part('month')+'-'+part('day')+' '+part('hour')+':'+part('minute')+':'+part('second');
+    };
+  }
+  if (typeof root.todayBrazilYmd !== 'function') root.todayBrazilYmd = function () { return root.nowBrazilSql().slice(0,10); };
+})(typeof window !== 'undefined' ? window : globalThis);
 // Atualiza label com nome do arquivo e botão de visualização
 function updateFileLabel(inputId, labelId) {
   const input = document.getElementById(inputId);
@@ -20,6 +37,8 @@ window.Clients = {
   _searchDebounce: null,
   _partnerSearchDebounce: null,
   _employeeListCache: null,
+  _clientsLayoutBound: false,
+  _clientsResizeTimer: null,
 
   _getSearchQuery: function(inputId) {
     const el = document.getElementById(inputId || 'clientSearch');
@@ -90,11 +109,102 @@ window.Clients = {
 
   init: function() {
     this._bindCpfLookup();
+    this._ensureClientsTopbarTools();
     const empSearch = document.getElementById('employeeClientSearch');
     if (empSearch && !empSearch.dataset.bound) {
       empSearch.dataset.bound = '1';
       empSearch.addEventListener('input', () => this._repaintEmployeeList());
     }
+  },
+
+  /**
+   * _isClientsMobileLayout — celular/tablet: busca e botão ficam no page-header da seção.
+   */
+  _isClientsMobileLayout: function() {
+    try {
+      return (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
+        || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    } catch (_) {
+      return (window.innerWidth || 0) <= 900;
+    }
+  },
+
+  /**
+   * _ensureClientsTopbarTools — busca e Novo Cliente; no desktop sobem para o topbar ao lado de Minha Conta.
+   */
+  _ensureClientsTopbarTools: function() {
+    const sec = document.getElementById('secClients');
+    if (!sec) return;
+
+    let tools = document.getElementById('clientsTopbarTools')
+      || sec.querySelector('.clients-header-actions');
+    if (!tools) return;
+    tools.id = 'clientsTopbarTools';
+    tools.classList.add('clients-header-actions');
+
+    const searchBar = tools.querySelector('.search-bar');
+    if (searchBar) {
+      searchBar.classList.add('clients-search-bar--wide');
+      searchBar.style.width = '';
+      searchBar.style.maxWidth = '';
+    }
+
+    this._bindClientsResponsiveLayout();
+    this._syncClientsToolsPlacement();
+  },
+
+  /**
+   * _syncClientsTopbarToolsVisibility — mostra ferramentas no topbar só na seção Clientes.
+   */
+  _syncClientsTopbarToolsVisibility: function() {
+    const tools = document.getElementById('clientsTopbarTools');
+    if (!tools) return;
+    const sec = document.getElementById('secClients');
+    const active = !!(sec && sec.classList.contains('active'));
+    tools.hidden = !active;
+    tools.style.display = active ? '' : 'none';
+    document.body.classList.toggle('clients-tools-active', active);
+  },
+
+  /**
+   * _syncClientsToolsPlacement — desktop: topbar; mobile: volta ao page-header da seção.
+   */
+  _syncClientsToolsPlacement: function() {
+    const tools = document.getElementById('clientsTopbarTools')
+      || document.querySelector('.clients-header-actions');
+    const sec = document.getElementById('secClients');
+    if (!tools || !sec) return;
+    const pageHeader = sec.querySelector('.page-header');
+    const mobile = this._isClientsMobileLayout();
+    let topbarActions = document.querySelector('.topbar .topbar-actions, header.topbar .topbar-actions');
+    if (!mobile && topbarActions) {
+      const anchor = topbarActions.querySelector('.minha-conta-topbar')
+        || topbarActions.querySelector('button[onclick*="openMinhaConta"]')
+        || topbarActions.querySelector('button[onclick*="Auth.logout"]');
+      if (tools.parentElement !== topbarActions) {
+        if (anchor) topbarActions.insertBefore(tools, anchor);
+        else topbarActions.prepend(tools);
+      }
+      pageHeader?.classList.add('clients-page-header--tools-in-topbar');
+    } else if (pageHeader) {
+      if (tools.parentElement !== pageHeader) pageHeader.appendChild(tools);
+      pageHeader.classList.remove('clients-page-header--tools-in-topbar');
+    }
+    this._syncClientsTopbarToolsVisibility();
+  },
+
+  /**
+   * _bindClientsResponsiveLayout — reage ao redimensionar (mobile ↔ desktop).
+   */
+  _bindClientsResponsiveLayout: function() {
+    if (this._clientsLayoutBound) return;
+    this._clientsLayoutBound = true;
+    window.addEventListener('resize', () => {
+      clearTimeout(this._clientsResizeTimer);
+      this._clientsResizeTimer = setTimeout(() => {
+        this._syncClientsToolsPlacement();
+      }, 120);
+    });
   },
 
   _setCpfStatus: function(msg, type) {
@@ -136,6 +246,38 @@ window.Clients = {
     return `Este cliente${quem} já está cadastrado no sistema. O CPF não pode ser cadastrado novamente.`;
   },
 
+  _showClientModal: function() {
+    const modal = document.getElementById('clientModal');
+    if (!modal) return false;
+    if (typeof openModal === 'function') {
+      openModal('clientModal');
+      return true;
+    }
+    modal.classList.add('open');
+    modal.style.display = 'flex';
+    modal.style.opacity = '1';
+    modal.style.visibility = 'visible';
+    modal.style.pointerEvents = 'auto';
+    modal.style.zIndex = '999999';
+    document.documentElement.classList.add('modal-open');
+    document.body.classList.add('modal-open');
+    return true;
+  },
+
+  _hideClientModal: function() {
+    if (typeof closeModal === 'function') {
+      closeModal('clientModal');
+      return;
+    }
+    const modal = document.getElementById('clientModal');
+    if (!modal) return;
+    modal.classList.remove('open');
+    modal.style.display = '';
+    modal.style.opacity = '';
+    modal.style.visibility = '';
+    modal.style.pointerEvents = '';
+  },
+
   _setCpfDupBlocked: function(blocked) {
     const modal = document.getElementById('clientModal');
     if (modal) {
@@ -160,8 +302,10 @@ window.Clients = {
     };
 
     cpfEl.addEventListener('input', () => {
-      // Máscara em si já é aplicada pela delegação data-mask="cpf" (ui.js).
       const digits = cpfEl.value.replace(/\D/g, '');
+      if (typeof formatPixKey === 'function' && digits.length <= 11) {
+        cpfEl.value = formatPixKey('cpf', digits);
+      }
       if (digits.length < 11) {
         this._setCpfDupBlocked(false);
         this._setCpfStatus(digits.length ? 'Digite os 11 dígitos do CPF para buscar os dados.' : '', 'muted');
@@ -178,6 +322,7 @@ window.Clients = {
     const map = {
       clientCpf: client.cpf,
       clientName: client.name,
+      clientRg: client.rg,
       clientPhone1: client.phone1,
       clientPhone2: client.phone2,
       clientEmail: client.email,
@@ -191,8 +336,8 @@ window.Clients = {
       const val = map[id];
       if (!el || val == null || String(val).trim() === '') return;
       if (onlyEmpty && String(el.value || '').trim() !== '') return;
-      if (id === 'clientCpf' && typeof formatCPF === 'function') {
-        el.value = formatCPF(val);
+      if (id === 'clientCpf' && typeof formatPixKey === 'function') {
+        el.value = formatPixKey('cpf', String(val).replace(/\D/g, ''));
       } else {
         el.value = val;
       }
@@ -230,9 +375,7 @@ window.Clients = {
         }, onlyEmpty);
         if (!onlyEmpty) {
           const rgEl = document.getElementById('clientRg');
-          if (rgEl && local.rg) {
-            rgEl.value = typeof formatRG === 'function' ? formatRG(local.rg) : local.rg;
-          }
+          if (rgEl && local.rg) rgEl.value = local.rg;
         }
         // Cadastro novo + CPF já no sistema → trava (anti má-fé / mesmo vendedor).
         if (!isEdit) {
@@ -246,23 +389,23 @@ window.Clients = {
         this._setCpfStatus('Cliente já cadastrado — dados carregados do sistema.', 'success');
         return;
       }
-    } catch (_) { /* segue FonteData */ }
+    } catch (_) { /* segue Nova TI */ }
 
     this._setCpfDupBlocked(false);
 
-    if (typeof FonteData === 'undefined') {
+    if (typeof NovaTI === 'undefined') {
       this._setCpfStatus('CPF disponível — preencha os dados do cliente.', 'muted');
       return;
     }
 
-    this._setCpfStatus('Consultando FonteData…', 'muted');
-    const res = await FonteData.lookupCpf(cpf);
+    this._setCpfStatus('Consultando Nova TI…', 'muted');
+    const res = await NovaTI.lookupCpf(cpf);
     if (!res.ok) {
       this._setCpfStatus(res.error || 'Não foi possível consultar o CPF.', 'warning');
       return;
     }
     this._applyFonteDataToForm(res.client, onlyEmpty);
-    this._setCpfStatus('Dados preenchidos automaticamente (FonteData). Revise antes de salvar.', 'success');
+    this._setCpfStatus('Dados preenchidos automaticamente (Nova TI). Revise antes de salvar.', 'success');
     if (typeof showToast === 'function') {
       showToast('Dados do CPF carregados. Confira nome, telefone e endereço.', 'success', 5000);
     }
@@ -292,7 +435,9 @@ window.Clients = {
       if (modal) {
         delete modal.dataset.editCpf;
         delete modal.dataset.cpfDupBlocked;
-        modal.classList.add('open');
+        if (!this._showClientModal()) {
+          alert("Erro: O formulário de cliente não foi encontrado.");
+        }
       } else {
         alert("Erro: O formulário de cliente não foi encontrado.");
       }
@@ -550,7 +695,7 @@ window.Clients = {
     if (modal) {
       modal.dataset.editCpf = digits;
       delete modal.dataset.cpfDupBlocked;
-      modal.classList.add('open');
+      this._showClientModal();
     }
     this._setCpfStatus('Edição — documentos só são obrigatórios em cadastro novo.', 'muted');
     this._bindCpfLookup();
@@ -683,6 +828,19 @@ window.Clients = {
         }
       }
 
+      // Vendedor: endereço textual obrigatório ao salvar cadastro do cliente.
+      // Backoffice/supervisor+ podem salvar sem (correção de ficha).
+      {
+        const sess = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+        const role = String(sess?.role || '').trim().toLowerCase();
+        const isVendor = role === 'vendedor' || role === 'employee' || role === 'funcionario';
+        const addrVal = String(document.getElementById('clientAddress')?.value || '').trim();
+        if (isVendor && addrVal.length < 8) {
+          alert('Endereço completo é obrigatório para vendedores.');
+          return;
+        }
+      }
+
       // Change button text
       const saveBtn = document.querySelector('#clientModal .btn-primary');
       let oldText = 'Salvar Cliente';
@@ -727,11 +885,11 @@ window.Clients = {
         fatherName: document.getElementById('clientFather').value,
         father_name: document.getElementById('clientFather').value,
         documents: documents,
-        updatedAt: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
+        updatedAt: nowBrazilSql(),
+        updated_at: nowBrazilSql(),
       };
       if (!isEdit) {
-        const now = new Date().toISOString();
+        const now = nowBrazilSql();
         clientData.created_at = now;
         // Impede DB.save de “atualizar” um CPF existente quando a checagem prévia falhar.
         clientData.__createOnly = true;
@@ -777,7 +935,7 @@ window.Clients = {
 
       if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
       this._notify('Cliente salvo com sucesso!', 'success');
-      document.getElementById('clientModal').classList.remove('open');
+      this._hideClientModal();
       if (typeof invalidateClientsListCache === 'function') invalidateClientsListCache();
       if (typeof renderClientsTable === 'function') await renderClientsTable(true);
       else await this.renderEmployeeList();

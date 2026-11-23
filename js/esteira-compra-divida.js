@@ -125,14 +125,14 @@
   }
 
   /**
-   * findProposalsNav — acha o botão “Gestão de Propostas” no menu GESTÃO
+   * findProposalsNav — acha o botão “Gestão Compra de Dívida” (ex.: Gestão de Propostas) no menu GESTÃO
    * (id pode ser navManageProposals ou navProposals).
    */
   function findProposalsNav() {
     return document.getElementById('navManageProposals')
       || document.getElementById('navProposals')
       || document.querySelector('[data-section="secManageProposals"]')
-      || [...document.querySelectorAll('.sidebar-nav .nav-label')].find((el) => /Gest[aã]o de Propostas/i.test(el.textContent || ''))?.closest('button');
+      || [...document.querySelectorAll('.sidebar-nav .nav-label')].find((el) => /Gest[aã]o (?:Compra de D[ií]vida|de Propostas)/i.test(el.textContent || ''))?.closest('button');
   }
 
   /** Ícone documento — mesmo estilo dos itens de GESTÃO. */
@@ -232,6 +232,7 @@
   async function fillVendorSelect() {
     const sel = document.getElementById('cd_vendedor');
     if (!sel) return;
+    if (sel.getAttribute('aria-readonly') === 'true') return; /* travado no vendedor logado: não sobrescrever */
     let list = [];
     try {
       if (typeof DB !== 'undefined' && typeof DB.getVendorsForSelect === 'function') {
@@ -249,6 +250,7 @@
       const existing = [...new Set(_boRows.map((p) => p.vendorName || p.vendor_name).filter(Boolean))];
       list = existing.map((name) => ({ id: name, name }));
     }
+    if (sel.getAttribute('aria-readonly') === 'true') return; /* travou enquanto carregava: mantém o vendedor logado */
     const cur = sel.value;
     sel.innerHTML = `<option value="">Selecione o vendedor...</option>` +
       list.map((v) => {
@@ -482,7 +484,38 @@
     <div id="cd_cliente_info" style="min-height:16px;"></div>
   </div>
 
-
+  <div class="cd-field">
+    <label for="cd_endereco">Endereço do cliente</label>
+    <input type="text" id="cd_endereco" class="form-control" autocomplete="street-address" maxlength="500" placeholder="Rua, número, complemento, bairro, cidade e CEP"/>
+  </div>
+  <div class="cd-field col-full">
+    <label>Dados bancários do cliente</label>
+    <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Informe a conta do cliente que receberá o crédito.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px;">
+      <div class="cd-field">
+        <label for="cd_banco_conta">Banco da conta</label>
+        <input type="text" id="cd_banco_conta" class="form-control" maxlength="120" placeholder="Nome ou código do banco do cliente"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_agencia">Agência</label>
+        <input type="text" id="cd_agencia" class="form-control" maxlength="20" placeholder="Agência com dígito, se houver"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_conta">Número da conta</label>
+        <input type="text" id="cd_conta" class="form-control" maxlength="40" placeholder="Número da conta com dígito"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_tipo_conta">Tipo de conta</label>
+        <select id="cd_tipo_conta" class="form-control">
+          <option value="">Selecione o tipo de conta...</option>
+          <option value="corrente">Conta corrente</option>
+          <option value="poupanca">Conta poupança</option>
+          <option value="salario">Conta salário</option>
+          <option value="pagamento">Conta de pagamento</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
   <!-- Situação Beneficiário -->
   <div class="cd-field">
@@ -552,41 +585,6 @@
     <label for="cd_anexo_2">Anexo / Documento 2 <span style="font-size:10px;color:#64748b;font-weight:600;text-transform:none;">(opcional)</span></label>
     <input type="file" id="cd_anexo_2" class="form-control" accept="image/*,.pdf" style="font-size:12px;padding:8px 10px;height:42px;"/>
     <div style="font-size:11px;color:#64748b;">Contrato, extrato, termo ou comprovante (PDF ou foto)</div>
-  </div>
-
-
-
-  <div class="cd-field">
-    <label for="cd_endereco">Endereço do cliente</label>
-    <input type="text" id="cd_endereco" class="form-control" autocomplete="street-address" maxlength="500" placeholder="Rua, número, complemento, bairro, cidade e CEP"/>
-  </div>
-  <div class="cd-field col-full">
-    <label>Dados bancários do cliente</label>
-    <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Informe a conta do cliente que receberá o crédito.</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px;">
-      <div class="cd-field">
-        <label for="cd_banco_conta">Banco da conta</label>
-        <input type="text" id="cd_banco_conta" class="form-control" maxlength="120" placeholder="Nome ou código do banco do cliente"/>
-      </div>
-      <div class="cd-field">
-        <label for="cd_agencia">Agência</label>
-        <input type="text" id="cd_agencia" class="form-control" maxlength="20" placeholder="Agência com dígito, se houver"/>
-      </div>
-      <div class="cd-field">
-        <label for="cd_conta">Número da conta</label>
-        <input type="text" id="cd_conta" class="form-control" maxlength="40" placeholder="Número da conta com dígito"/>
-      </div>
-      <div class="cd-field">
-        <label for="cd_tipo_conta">Tipo de conta</label>
-        <select id="cd_tipo_conta" class="form-control">
-          <option value="">Selecione o tipo de conta...</option>
-          <option value="corrente">Conta corrente</option>
-          <option value="poupanca">Conta poupança</option>
-          <option value="salario">Conta salário</option>
-          <option value="pagamento">Conta de pagamento</option>
-        </select>
-      </div>
-    </div>
   </div>
 
   <!-- Observação -->
@@ -859,6 +857,11 @@ ${cdModalStyles()}
     }
   }
 
+  /**
+   * boFilteredRows — aplica busca/vendedor/status/período na lista BO.
+   * Filtro status vazio (padrão): esconde Cancelado — senão o “Apagar” parece
+   * que não funciona (ficha só muda pra Cancelado e continua na tela).
+   */
   function boFilteredRows(rows) {
     const st = document.getElementById('cd_bo_status_filter')?.value || '';
     const vendor = document.getElementById('cd_bo_vendor')?.value || '';
@@ -867,7 +870,11 @@ ${cdModalStyles()}
     const from = document.getElementById('cd_bo_from')?.value || '';
     const to = document.getElementById('cd_bo_to')?.value || '';
     let out = rows.slice();
-    if (st && st !== 'todos') out = out.filter((p) => String(p.status || p.statusOp || '') === st);
+    if (!st) {
+      out = out.filter((p) => !/cancel/i.test(String(p.status || p.statusOp || '')));
+    } else if (st !== 'todos') {
+      out = out.filter((p) => String(p.status || p.statusOp || '') === st);
+    }
     if (vendor) out = out.filter((p) => String(p.vendorName || p.vendor_name || '') === vendor);
     if (q) {
       out = out.filter((p) => {
@@ -970,7 +977,7 @@ ${cdModalStyles()}
             <td>${esc(fmtDay(dt.criacao))}${dt.digitacao ? `<div class="text-muted" style="font-size:11px;">Digitação: ${esc(fmtDay(dt.digitacao))}</div>` : ''}</td>
             <td><select class="form-control" id="cd_st_${id}" style="min-width:150px;"
               onchange="EsteiraCompraDivida.saveStatus('${id}')">
-              <option value="${cur}" selected>${cur}</option>${optsHtml((cat().STATUS_BO || []).filter((status) => status !== cur))}
+              <option value="${cur}">${cur}</option>${statusOpts}
             </select></td>
             <td>${esc(fmtDay(dt.pagamento))}</td>
             <td>${cdActionsHtml(p)}</td>

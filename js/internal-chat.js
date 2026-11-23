@@ -541,15 +541,9 @@
   g.InternalChat = InternalChat;
 
   function boot() {
-    const tryInit = () => {
-      const s = _sessionUser();
-      if (!s?.id) {
-        setTimeout(tryInit, 600);
-        return;
-      }
-      InternalChat.init().catch((e) => console.warn('[InternalChat]', e));
-    };
-    tryInit();
+    // Chat interno (FAB laranja) desligado — piloto ConsigBot no lugar.
+    // Para reativar: remova este return e o CSS .ichat-fab { display:none }.
+    return;
   }
 
   if (document.readyState === 'loading') {

@@ -35,7 +35,6 @@
 .dp-period-switch button[aria-pressed="true"] { background:#123862; color:white; box-shadow:0 2px 5px #12386220; }
 @media(max-width:600px) { .dp-period-controls { width:100%; } .dp-period-switch { flex:1; } .dp-period-switch button { flex:1; padding:10px; } }
 
-
 /* Mobile: campos legíveis e ações que cabem em telas estreitas. */
 @media (max-width: 600px) {
   .dp-panel input, .dp-panel select, .dp-panel textarea { font-size: 16px; min-width: 0; }

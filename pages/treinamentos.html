@@ -9,41 +9,23 @@
   <script>window.SOUBLU_TREINAMENTOS_PAGE = true;</script>
   <script>window.SOUBLU_SKIP_BACK_TRAP = true;</script>
   <script charset="UTF-8" src="../js/base-path.js?v=trn-quiz4"></script>
-  <script charset="UTF-8" src="../js/db-connect.js?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/db-connect.js?v=dbg-guard1"></script>
   <title>Treinamentos · SOU+BLU</title>
   <meta name="description" content="Plataforma de Treinamentos - SOU+BLU"/>
-  <!-- LMS_BUILD=trn-quiz13-final-cachebust-7e786d -->
-  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
-  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <!-- LMS_BUILD=trn-rodrigo-exempt1 -->
+  <link rel="icon" href="../images/logo.png?v=blu1" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png?v=blu1"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
   <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
-  <link rel="stylesheet" href="../css/global.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/layout.css?v=logo-new1"/>
-  <link rel="stylesheet" href="../css/colors-orange.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/trainings.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/training-tracks.css?v=trn-quiz4"/>
+  <link rel="stylesheet" href="../css/global.css?v=sim-fab2"/>
+  <link rel="stylesheet" href="../css/layout.css?v=prop-topbar1"/><link rel="stylesheet" href="../css/brand-blu.css?v=blu2"/>
+  <link rel="stylesheet" href="../css/colors-orange.css"/>
+  <link rel="stylesheet" href="../css/trainings.css?v=trn-quiz4"/>
+  <link rel="stylesheet" href="../css/training-tracks.css?v=trn-quiz4"/><link rel="stylesheet" href="../css/bootstrap-bridge.css?v=prop-cfg-pro2"/>
 </head>
-<body class="treinamentos-app">
-  <script>
-    if (/[?&]embed=1/.test(location.search) && window.top !== window.self) {
-      document.body.classList.add('trn-embedded');
-    }
-  </script>
-  <style>
-    body.trn-embedded { background: transparent; }
-    body.trn-embedded #sidebar,
-    body.trn-embedded .topbar { display: none !important; }
-    body.trn-embedded .main-area { margin-left: 0 !important; background: transparent; }
-    .trn-embed-tabs { display: none; }
-    body.trn-embedded .trn-embed-tabs { display: flex; gap: 8px; flex-wrap: wrap; padding: 16px 24px 0; }
-    .trn-embed-tab {
-      border: 1px solid var(--color-border, #e2e8f0); background: #fff; color: var(--color-text, #14233a);
-      border-radius: 999px; padding: 7px 16px; font-size: 13px; font-weight: 700; cursor: pointer;
-    }
-    .trn-embed-tab.active { background: var(--sidebar-bg, #0B2545); border-color: transparent; color: #fff; }
-  </style>
+<body class="treinamentos-app trn-no-sidebar">
   <!-- Loader -->
   <div id="globalLoader" class="loader-overlay">
     <div class="loader-spinner"></div>
@@ -55,60 +37,37 @@
   <button id="menuToggle" style="display:none;"></button>
 
   <div class="app-layout" id="appLayout" style="display:none;">
-    <nav class="sidebar" id="sidebar">
-      <div class="sidebar-brand">
-        <div class="sidebar-logo"><img src="../images/logo-sidebar.png" width="32" height="32" alt="SOU+BLU"/></div><img class="sidebar-wordmark" src="../images/blu-logo-new.png" width="155" height="34" alt="Sou+blu"/>
-        <span class="sidebar-title">SOU <span>+ BLU</span></span>
-      </div>
-      <div class="sidebar-nav">
-        <span class="sidebar-section-label">Treinamentos</span>
-        <button type="button" class="nav-item" id="trnNavCatalogo" onclick="trnGoTab('tab-catalog')" title="Catálogo de cursos">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path></svg></span><span class="nav-label">Catálogo</span>
-        </button>
-        <button type="button" class="nav-item" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado" style="display:none;">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg></span><span class="nav-label">Trilhas</span>
-        </button>
-        <button type="button" class="nav-item trainings-manage-nav" id="trnNavGestao" onclick="trnGoTab('tab-gestao')" style="display:none;">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span><span class="nav-label">Gestão</span>
-        </button>
-        <button type="button" class="nav-item trainings-rh-nav" id="trnNavNotas" onclick="trnGoTab('tab-notas')" style="display:none;">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span><span class="nav-label">Notas RH</span>
-        </button>
-        <div class="sidebar-divider"></div>
-        <span class="sidebar-section-label">Sistema</span>
-        <button type="button" class="nav-item" onclick="navigateBack()" title="Voltar ao painel">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg></span><span class="nav-label">Voltar ao Painel</span>
-        </button>
-      </div>
-      <div class="sidebar-footer">
-        <div class="sidebar-user">
-          <div class="avatar avatar-sm" id="userAvatar" style="flex-shrink:0;font-size:13px;font-weight:800;">?</div>
-          <div class="sidebar-user-info">
-            <div class="sidebar-user-name" id="userName">–</div>
-            <div class="sidebar-user-role" id="userRole">Colaborador</div>
-          </div>
-        </div>
-        <button type="button" class="btn-logout" onclick="Auth.logout()"><span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span><span class="nav-label">Sair</span></button>
-        <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Recolher menu">⇄</button>
-      </div>
-    </nav>
-
     <div class="main-area" id="mainArea">
 
-      <header class="topbar">
-        <span class="topbar-title" id="trnTopbarSection">Treinamentos</span>
-        <div class="topbar-actions">
-          <button type="button" class="btn btn-ghost btn-sm" onclick="Auth.logout()">Sair</button>
+      <!-- ── Topbar (Clube-style) ── -->
+      <header class="topbar trn-topbar">
+        <div class="trn-topbar-left">
+          <button type="button" class="trn-back-btn" onclick="navigateBack()" title="Voltar ao painel">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+            <span>Voltar</span>
+          </button>
+          <span class="trn-topbar-brand">SOU+BLU Treinamentos</span>
+          <span class="trn-topbar-section" id="trnTopbarSection"></span>
+        </div>
+        <div class="trn-topbar-actions">
+          <button type="button" class="trn-nav-btn" id="trnNavCatalogo" onclick="trnGoTab('tab-catalog')" title="Catálogo de cursos">Catálogo</button>
+          <button type="button" class="trn-nav-btn" id="trnNavTrilhas" onclick="trnGoTab('tab-trilhas')" title="Trilhas de aprendizado">Trilhas</button>
+          <button type="button" class="trn-gestao-btn trainings-manage-nav" id="trnNavGestao" onclick="trnGoTab('tab-gestao')" style="display:none;">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            Gestão
+          </button>
+          <button type="button" class="trn-nav-btn trainings-rh-nav" id="trnNavNotas" onclick="trnGoTab('tab-notas')" style="display:none;">Notas RH</button>
+          <div class="trn-topbar-user">
+            <div class="trn-topbar-avatar" id="userAvatar">?</div>
+            <div>
+              <div class="trn-topbar-user-name" id="userName">–</div>
+              <div class="trn-topbar-user-role" id="userRole">Colaborador</div>
+            </div>
+          </div>
         </div>
       </header>
 
       <!-- ── Page content ── -->
-      <nav class="trn-embed-tabs" aria-label="Seções de treinamentos">
-        <button type="button" class="trn-embed-tab" data-trn-tab="tab-catalog" onclick="trnGoTab('tab-catalog')">Catálogo</button>
-        <button type="button" class="trn-embed-tab trainings-manage-nav" data-trn-tab="tab-gestao" onclick="trnGoTab('tab-gestao')" style="display:none;">Gestão</button>
-        <button type="button" class="trn-embed-tab trainings-rh-nav" data-trn-tab="tab-notas" onclick="trnGoTab('tab-notas')" style="display:none;">Notas RH</button>
-      </nav>
-
       <main class="page-content" id="trnPageContent">
 
         <!-- ═══ TAB: Catálogo de Cursos ═══ -->
@@ -148,17 +107,17 @@
 
   <!-- Scripts -->
   <script charset="UTF-8" src="../js/security-guard.js"></script>
-  <script charset="UTF-8" src="../js/config.js?v=rl429fix1"></script>
-  <script charset="UTF-8" src="../js/ui.js?v=20260811_fix_modal_zindex_v11"></script>
-  <script charset="UTF-8" src="../js/db.js?v=nomes-caps1?v=trn-quiz4"></script>
+  <script charset="UTF-8" src="../js/config.js?v=storage-20261110"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=storage-20261110"></script>
+  <script charset="UTF-8" src="../js/db.js?v=dbg-guard1"></script>
   <script charset="UTF-8" src="../js/auth.js?v=trn-quiz4"></script>
-  <script charset="UTF-8" src="../js/trainings.js?v=20260811_fix_upload_cover_v14"></script>
+  <script charset="UTF-8" src="../js/trainings.js?v=no-trn-alert1"></script>
   <script charset="UTF-8" src="../js/training-tracks.js?v=trn-quiz4"></script>
   <script>
     /* ── Tab labels for topbar section ── */
     const _TAB_LABELS = {
-      'tab-catalog': 'Treinamentos',
-      'tab-meus':    'Treinamentos',
+      'tab-catalog': '',
+      'tab-meus':    '',
       'tab-trilhas': 'Trilhas',
       'tab-gestao':  'Gestão',
       'tab-notas':   'Notas RH',
@@ -195,16 +154,13 @@
       // Update nav button active state
       Object.values(_TAB_NAV_IDS).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.classList.remove('active');
+        if (el) el.classList.remove('is-active');
       });
       const activeNavId = _TAB_NAV_IDS[tabId];
       if (activeNavId) {
         const activeNav = document.getElementById(activeNavId);
-        if (activeNav) activeNav.classList.add('active');
+        if (activeNav) activeNav.classList.add('is-active');
       }
-      document.querySelectorAll('[data-trn-tab]').forEach(el => {
-        el.classList.toggle('active', el.dataset.trnTab === tabId);
-      });
 
       if (tabId === 'tab-catalog') LMS.renderCatalog();
       if (tabId === 'tab-trilhas' && window.TrainingTracks) TrainingTracks.renderTracks('tracksRoot');
@@ -566,9 +522,16 @@
         try { const p = JSON.parse(str); return p && typeof p === 'object'; } catch { return false; }
       },
 
+      /**
+       * _getFinalQuestions — perguntas da prova geral do curso.
+       * Fonte: content_body.final_quiz / final_questions OU coluna questions do treinamento
+       * (o editor de gestão grava a "Prova Final" em tr.questions).
+       */
       _getFinalQuestions(tr) {
         const course = this._parseCourse(tr);
-        const raw = course?.final_quiz?.questions || course?.final_questions || [];
+        const fromCourse = course?.final_quiz?.questions || course?.final_questions || [];
+        const fromRow = Array.isArray(tr?.questions) ? tr.questions : [];
+        const raw = (fromCourse && fromCourse.length) ? fromCourse : fromRow;
         return (raw || []).map((q) => this._normQuestion(q)).filter(Boolean);
       },
 
@@ -640,45 +603,18 @@
         return { q, options, correct };
       },
 
+      /**
+       * _getModuleQuestions — só usa perguntas do módulo.
+       * Não redistribui tr.questions (prova final) entre módulos — isso sumia a prova geral.
+       */
       _getModuleQuestions(tr, modIdx, module, modules) {
         const modQs = (module?.questions || []).map(q => this._normQuestion(q)).filter(Boolean);
-        if (modQs.length) {
-          // #region agent log
-          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'using module.questions',data:{modIdx,count:modQs.length,firstQ:(modQs[0]&&modQs[0].q||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          return modQs;
-        }
-        const all = (tr?.questions || []).map(q => this._normQuestion(q)).filter(Boolean);
-        if (!all.length || !modules?.length) {
-          // #region agent log
-          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'no questions available',data:{modIdx,courseQ:all.length,modules:(modules||[]).length},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          return [];
-        }
-        const n = modules.length;
-        // Distribui o banco entre os módulos; se sobrar pouco, cada um usa o banco inteiro.
-        if (all.length < n) {
-          // #region agent log
-          fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'course bank smaller than modules — reuse all',data:{modIdx,courseQ:all.length,n,firstQ:(all[0]&&all[0].q||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-          // #endregion
-          return all.slice();
-        }
-        const perMod = Math.floor(all.length / n);
-        const extra = all.length % n;
-        let start = 0;
-        for (let i = 0; i < modIdx; i++) start += perMod + (i < extra ? 1 : 0);
-        const count = perMod + (modIdx < extra ? 1 : 0);
-        const slice = all.slice(start, start + count);
-        const out = slice.length ? slice : all.slice();
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'C',location:'treinamentos.html:_getModuleQuestions',message:'split course questions',data:{modIdx,courseQ:all.length,n,start,count,outCount:out.length,firstQ:(out[0]&&out[0].q||'').slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return out;
+        return modQs;
       },
 
       _courseHasQuizzes(tr, modules) {
         const mods = modules || this._getModules(tr);
-        if ((tr?.questions || []).length) return true;
+        if (this._getFinalQuestions(tr).length) return true;
         return mods.some((m) => (m.questions || []).length > 0);
       },
 
@@ -748,6 +684,104 @@
         return score != null ? Number(score) : null;
       },
 
+      /**
+       * _findResumePosition — primeira aula ou prova pendente no curso.
+       * Ordem: aulas do módulo → prova do módulo → próximo módulo → prova geral.
+       */
+      _findResumePosition(tr, userId) {
+        const modules = this._getModules(tr);
+        for (let mi = 0; mi < modules.length; mi++) {
+          const lessons = modules[mi].lessons || [];
+          for (let li = 0; li < lessons.length; li++) {
+            if (!this.isLessonComplete(tr.id, userId, mi, li)) {
+              return { view: 'lesson', moduleIdx: mi, lessonIdx: li, quizModuleIdx: null };
+            }
+          }
+          const qs = this._getModuleQuestions(tr, mi, modules[mi], modules);
+          if (qs.length && !this._isModuleQuizComplete(tr, userId, mi)) {
+            return {
+              view: 'quiz',
+              moduleIdx: mi,
+              lessonIdx: Math.max(0, lessons.length - 1),
+              quizModuleIdx: mi,
+            };
+          }
+        }
+        const finalQs = this._getFinalQuestions(tr);
+        if (finalQs.length && this._isFinalQuizUnlocked(tr, userId) && !this._isFinalQuizComplete(tr, userId)) {
+          const lastMi = Math.max(0, modules.length - 1);
+          const lastLi = Math.max(0, (modules[lastMi]?.lessons?.length || 1) - 1);
+          return { view: 'quiz', moduleIdx: lastMi, lessonIdx: lastLi, quizModuleIdx: 'final' };
+        }
+        return { view: 'lesson', moduleIdx: 0, lessonIdx: 0, quizModuleIdx: null };
+      },
+
+      /**
+       * _hasMoreLearningAhead — ainda há aula/prova à frente da posição atual.
+       * Usado para habilitar o botão "Próxima" sem pular provas de módulo.
+       */
+      _hasMoreLearningAhead(tr, userId, mi, li) {
+        const modules = this._getModules(tr);
+        const lessons = modules[mi]?.lessons || [];
+        if (li < lessons.length - 1) return true;
+        const qs = this._getModuleQuestions(tr, mi, modules[mi], modules);
+        if (qs.length && !this._isModuleQuizComplete(tr, userId, mi)) return true;
+        for (let m = mi + 1; m < modules.length; m++) {
+          const modLessons = modules[m].lessons || [];
+          if (modLessons.some((_, lIdx) => !this.isLessonComplete(tr.id, userId, m, lIdx))) return true;
+          const mqs = this._getModuleQuestions(tr, m, modules[m], modules);
+          if (mqs.length && !this._isModuleQuizComplete(tr, userId, m)) return true;
+        }
+        const finalQs = this._getFinalQuestions(tr);
+        return !!(finalQs.length && this._isFinalQuizUnlocked(tr, userId) && !this._isFinalQuizComplete(tr, userId));
+      },
+
+      /**
+       * _advanceFromCurrentLesson — após concluir a última aula do módulo, abre a prova
+       * antes de ir para o próximo módulo.
+       */
+      _advanceFromCurrentLesson(opts = {}) {
+        const tr = this._currentTraining;
+        if (!tr || !this._userId) return;
+        const modules = this._getModules(tr);
+        const mi = this._currentModuleIdx;
+        const li = this._currentLessonIdx;
+        const lessons = modules[mi]?.lessons || [];
+
+        if (li < lessons.length - 1) {
+          this._goToLesson(mi, li + 1);
+          return;
+        }
+
+        const qs = this._getModuleQuestions(tr, mi, modules[mi], modules);
+        if (qs.length && !this._isModuleQuizComplete(tr, this._userId, mi)) {
+          if (typeof showToast === 'function' && opts.toastQuiz) {
+            showToast('Agora responda a prova deste módulo para continuar.', 'info', 5000);
+          }
+          this._openModuleQuiz(mi);
+          return;
+        }
+
+        if (mi + 1 < modules.length) {
+          this._goToLesson(mi + 1, 0);
+          return;
+        }
+
+        const finalQs = this._getFinalQuestions(tr);
+        if (finalQs.length && this._isFinalQuizUnlocked(tr, this._userId) && !this._isFinalQuizComplete(tr, this._userId)) {
+          if (typeof showToast === 'function' && opts.toastQuiz) {
+            showToast('Responda a prova geral para concluir o curso.', 'info', 5000);
+          }
+          this._openFinalQuiz();
+          return;
+        }
+
+        this._renderPlayer();
+        if (typeof showToast === 'function' && opts.toastQuiz) {
+          showToast('Aula concluída.', 'success');
+        }
+      },
+
       _esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
       },
@@ -780,14 +814,7 @@
 
         const cat = this._currentCategory === 'mural' ? 'all' : this._currentCategory;
         this._currentCategory = cat;
-        const isPassed = tr => !!this._getAttempt(tr.id)?.passed;
-        let filtered;
-        if (cat === 'concluidos') {
-          filtered = all.filter(isPassed);
-        } else {
-          const active = all.filter(t => !isPassed(t));
-          filtered = cat === 'all' ? active : active.filter(t => t.category === cat);
-        }
+        const filtered = cat === 'all' ? all : all.filter(t => t.category === cat);
 
         let totalCourses = all.length, completed = 0, inProgress = 0, pending = 0;
         for (const tr of all) {
@@ -814,7 +841,7 @@
                 <div class="trn-metric-label">Em andamento</div>
                 <div class="trn-metric-value">${inProgress}</div>
               </div>
-              <div class="trn-metric is-ok" role="button" tabindex="0" style="cursor:pointer;" onclick="LMS.filterCategory('concluidos')">
+              <div class="trn-metric is-ok">
                 <div class="trn-metric-label">Concluídos</div>
                 <div class="trn-metric-value">${completed}</div>
               </div>
@@ -830,13 +857,10 @@
               <button type="button" class="trn-filter ${cat === 'video_vendas' ? 'active' : ''}" onclick="LMS.filterCategory('video_vendas')">Vendas</button>
               <button type="button" class="trn-filter ${cat === 'curso_institucional' ? 'active' : ''}" onclick="LMS.filterCategory('curso_institucional')">Institucionais</button>
               <button type="button" class="trn-filter ${cat === 'regimento' ? 'active' : ''}" onclick="LMS.filterCategory('regimento')">Regimento</button>
-              <button type="button" class="trn-filter ${cat === 'concluidos' ? 'active' : ''}" onclick="LMS.filterCategory('concluidos')">Concluídos${completed ? ` (${completed})` : ''}</button>
             </div>`;
 
         if (!filtered.length) {
-          html += cat === 'concluidos'
-            ? '<div class="trn-empty"><p>Você ainda não concluiu nenhum curso</p></div>'
-            : '<div class="trn-empty"><p>Nenhum curso nesta categoria</p></div>';
+          html += '<div class="trn-empty"><p>Nenhum curso nesta categoria</p></div>';
         } else {
           html += '<div class="trn-hub" aria-label="Catálogo de cursos">';
           for (const tr of filtered) {
@@ -933,22 +957,12 @@
         }
 
         this._currentTraining = tr;
-        this._currentModuleIdx = 0;
-        this._currentLessonIdx = 0;
-        this._playerView = 'lesson';
-        this._quizModuleIdx = null;
         this._userId = user.id;
-
-        for (let mi = 0; mi < modules.length; mi++) {
-          for (let li = 0; li < (modules[mi].lessons || []).length; li++) {
-            if (!this.isLessonComplete(tr.id, user.id, mi, li)) {
-              this._currentModuleIdx = mi;
-              this._currentLessonIdx = li;
-              mi = modules.length;
-              break;
-            }
-          }
-        }
+        const resume = this._findResumePosition(tr, user.id);
+        this._currentModuleIdx = resume.moduleIdx;
+        this._currentLessonIdx = resume.lessonIdx;
+        this._playerView = resume.view;
+        this._quizModuleIdx = resume.quizModuleIdx;
 
         this._renderPlayer();
       },
@@ -1004,16 +1018,12 @@
           lessonTitle = lesson?.title || 'Aula';
           lessonDesc = lesson?.description || tr.description || '';
 
-          const totalLessons = modules.reduce((sum, m) => sum + (m.lessons?.length || 0), 0);
-          let flatIdx = 0;
-          for (let i = 0; i < mi; i++) flatIdx += (modules[i].lessons?.length || 0);
-          flatIdx += li;
-          const isFirst = flatIdx === 0;
-          const isLast = flatIdx >= totalLessons - 1;
+          const hasMore = this._hasMoreLearningAhead(tr, userId, mi, li);
+          const isFirst = mi === 0 && li === 0;
           const isComplete = this.isLessonComplete(tr.id, userId, mi, li);
           navHtml = `
             <button class="lms-nav-btn" onclick="LMS._prevLesson()" ${isFirst ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>← Anterior</button>
-            <button class="lms-nav-btn btn-next" onclick="LMS._nextLesson()" ${isLast ? 'disabled style="opacity:.4;cursor:not-allowed;"' : ''}>Próxima →</button>
+            <button class="lms-nav-btn btn-next" onclick="LMS._nextLesson()" ${hasMore ? '' : 'disabled style="opacity:.4;cursor:not-allowed;"'}>Próxima →</button>
             <button class="lms-nav-btn btn-complete ${isComplete ? 'completed' : ''}" onclick="LMS._markComplete()">
               ${isComplete ? '✓ Concluída' : '☐ Marcar como concluída'}
             </button>`;
@@ -1024,13 +1034,18 @@
         modules.forEach((mod, modIdx) => {
           const lessons = mod.lessons || [];
           const doneLessons = lessons.filter((_, lIdx) => this.isLessonComplete(tr.id, userId, modIdx, lIdx)).length;
+          const modQuestions = this._getModuleQuestions(tr, modIdx, mod, modules);
+          const hasModQuiz = modQuestions.length > 0;
+          const quizDone = hasModQuiz && this._isModuleQuizComplete(tr, userId, modIdx);
+          const modTotal = lessons.length + (hasModQuiz ? 1 : 0);
+          const modDone = doneLessons + (quizDone ? 1 : 0);
           const isOpen = inFinalQuiz ? false : (inQuiz ? modIdx === this._quizModuleIdx : modIdx === mi);
           sidebarHtml += `
             <div class="lms-module ${isOpen ? 'open' : ''}" data-module="${modIdx}">
               <div class="lms-module-header" onclick="LMS._toggleModule(${modIdx})">
                 <span class="lms-module-chevron">▶</span>
                 <span class="lms-module-name">${this._esc(mod.title || 'Módulo ' + (modIdx + 1))}</span>
-                <span class="lms-module-progress">${doneLessons}/${lessons.length}</span>
+                <span class="lms-module-progress">${modDone}/${modTotal}</span>
               </div>
               <div class="lms-lessons-list">
                 ${lessons.map((l, lIdx) => {
@@ -1169,21 +1184,29 @@
       _nextLesson() {
         const modules = this._getModules(this._currentTraining);
         let mi = this._currentModuleIdx, li = this._currentLessonIdx;
-        li++;
-        if (li >= (modules[mi]?.lessons?.length || 0)) {
-          mi++;
-          li = 0;
-          if (mi >= modules.length) return;
+        const lessons = modules[mi]?.lessons || [];
+        if (li < lessons.length - 1) {
+          this._goToLesson(mi, li + 1);
+          return;
         }
-        this._goToLesson(mi, li);
+        this._advanceFromCurrentLesson({ toastQuiz: true });
       },
 
       _markComplete() {
         const tr = this._currentTraining;
         if (!tr || !this._userId) return;
-        this.setLessonComplete(tr.id, this._userId, this._currentModuleIdx, this._currentLessonIdx);
-        this._persistLessonProgress(tr.id, this._userId);
-        this._renderPlayer();
+        const mi = this._currentModuleIdx;
+        const li = this._currentLessonIdx;
+        const wasComplete = this.isLessonComplete(tr.id, this._userId, mi, li);
+        this.setLessonComplete(tr.id, this._userId, mi, li);
+        this._persistLessonProgress(tr.id, this._userId).then(() => {
+          this._checkCourseCompletion(tr, this._userId);
+        }).catch(() => {});
+        if (!wasComplete) {
+          this._advanceFromCurrentLesson({ toastQuiz: true });
+        } else {
+          this._renderPlayer();
+        }
       },
 
       _openModuleQuiz(modIdx) {
@@ -1241,6 +1264,22 @@
 
         if (score >= passing) {
           if (typeof showToast === 'function') showToast(`Prova aprovada! Nota: ${score}%`, 'success');
+          await this._checkCourseCompletion(tr, userId);
+          this._playerView = 'lesson';
+          this._quizModuleIdx = null;
+          const nextMod = modIdx + 1;
+          if (nextMod < modules.length) {
+            this._currentModuleIdx = nextMod;
+            this._currentLessonIdx = 0;
+          } else {
+            const finalQs = this._getFinalQuestions(tr);
+            if (finalQs.length && this._isFinalQuizUnlocked(tr, userId) && !this._isFinalQuizComplete(tr, userId)) {
+              this._playerView = 'quiz';
+              this._quizModuleIdx = 'final';
+            }
+          }
+          this._renderPlayer();
+          return;
         } else {
           if (typeof showToast === 'function') showToast(`Nota: ${score}% — mínimo ${passing}%. Você pode tentar novamente.`, 'warning');
           const p = this.getProgress(tr.id, userId);
@@ -1250,11 +1289,6 @@
           this._renderPlayer();
           return;
         }
-
-        await this._checkCourseCompletion(tr, userId);
-        this._playerView = 'lesson';
-        this._quizModuleIdx = null;
-        this._renderPlayer();
       },
 
       _openFinalQuiz() {
@@ -1353,9 +1387,7 @@
           totalScore += this._finalQuizScore(tr, userId) || 0;
         }
 
-        if (!quizCount) return;
-
-        const avgScore = Math.round(totalScore / quizCount);
+        const avgScore = quizCount ? Math.round(totalScore / quizCount) : 100;
         const passed = avgScore >= (tr.passing_score || 70);
         // #region agent log
         fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7e786d'},body:JSON.stringify({sessionId:'7e786d',runId:'pre-fix',hypothesisId:'D',location:'treinamentos.html:_checkCourseCompletion',message:'course completion saved',data:{quizCount,avgScore,passed,hasFinal:!!finalQs.length},timestamp:Date.now()})}).catch(()=>{});
@@ -1528,6 +1560,8 @@
         } catch {}
         const all = await DB.getTrainings({ partnerRootId: root, activeOnly: true });
         return all.filter(t => {
+          if (typeof Trainings !== 'undefined' && Trainings.isTrainingExemptForUser
+            && Trainings.isTrainingExemptForUser(t.id, user)) return false;
           const roles = t.audience_roles || ['*'];
           if (roles.includes('*')) return true;
           const ur = String(user.role || '').trim().toLowerCase();
@@ -1559,7 +1593,6 @@
 
       if (loader) loader.style.display = 'none';
       if (layout) layout.style.display = '';
-      if (typeof initSidebarToggle === 'function') initSidebarToggle();
 
       // Fill topbar user info
       try {
@@ -1595,8 +1628,7 @@
         await LMS.renderCatalog();
         // Highlight catalog nav
         const catNav = document.getElementById('trnNavCatalogo');
-        if (catNav) catNav.classList.add('active');
-        document.querySelector('[data-trn-tab="tab-catalog"]')?.classList.add('active');
+        if (catNav) catNav.classList.add('is-active');
       } catch (e) {
         console.error('[Treinamentos] catalog:', e);
         const root = document.getElementById('catalogRoot');

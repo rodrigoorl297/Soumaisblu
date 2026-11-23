@@ -54,14 +54,29 @@ function openModal(id) {
   document.documentElement.classList.add('modal-open');
   document.body.classList.add('modal-open');
 }
+function _resetOverlayInline(el) {
+  if (!el || !el.style) return;
+  el.style.display = '';
+  el.style.opacity = '';
+  el.style.visibility = '';
+  el.style.pointerEvents = '';
+  el.style.zIndex = '';
+}
 function closeModal(id) {
   const el = document.getElementById(id);
   if (el) {
     el.classList.remove('open');
-    el.style.display = 'none';
-    el.style.opacity = '0';
-    el.style.visibility = 'hidden';
-    el.style.pointerEvents = 'none';
+    _resetOverlayInline(el);
+  }
+  // Fecha proposta: libera trava que impedia abrir outra sem F5
+  if (id === 'manageProposalModal' || id === 'employeeProposalModal') {
+    try {
+      if (window.Proposals) {
+        window.Proposals._openModalBusy = false;
+        window.Proposals._modalLoadToken = (window.Proposals._modalLoadToken || 0) + 1;
+      }
+    } catch (_) { /* noop */ }
+    try { if (typeof hideLoading === 'function') hideLoading(); } catch (_) { /* noop */ }
   }
   if (!document.querySelector('.modal-overlay.open')) {
     document.documentElement.classList.remove('modal-open');
@@ -70,12 +85,34 @@ function closeModal(id) {
 }
 /** Fecha overlays/loaders fantasma que bloqueiam cliques no painel. */
 function unlockUiOverlays() {
-  document.querySelectorAll('.modal-overlay.open').forEach((el) => el.classList.remove('open'));
+  try { clearTimeout(window.__soubluLoaderTimer); } catch (_) { /* noop */ }
+  document.querySelectorAll('.modal-overlay').forEach((el) => {
+    el.classList.remove('open');
+    _resetOverlayInline(el);
+  });
   document.documentElement.classList.remove('modal-open');
   document.body.classList.remove('modal-open');
+  try { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; } catch (_) { /* noop */ }
   document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
-  const loader = document.getElementById('globalLoader');
-  if (loader) loader.style.display = 'none';
+  const finDrawer = document.getElementById('finPropDrawerOverlay');
+  if (finDrawer) finDrawer.classList.remove('open');
+  document.querySelectorAll('.loader-overlay, #globalLoader').forEach((el) => {
+    el.classList.add('is-hidden');
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
+  });
+  document.querySelectorAll('.nav-overlay').forEach((el) => {
+    el.setAttribute('aria-hidden', 'true');
+  });
+  document.body.classList.remove('nav-open');
+  document.getElementById('sidebar')?.classList.remove('open');
+  // Escape cancela carga de proposta em andamento (evita modal “aparecer depois”)
+  try {
+    if (window.Proposals) {
+      window.Proposals._openModalBusy = false;
+      window.Proposals._modalLoadToken = (window.Proposals._modalLoadToken || 0) + 1;
+    }
+  } catch (_) { /* noop */ }
 }
 window.openModal = openModal;
 window.closeModal = closeModal;
@@ -190,6 +227,10 @@ function canSouBluManagePoints(u) {
 }
 
 function userUsesMoneyWallet(u) {
+  /* Conta corrente em R$ (cc_money_active) — saque em reais, fora da regra de faixa/dia 20–30. */
+  if (u && typeof DB !== 'undefined' && typeof DB.isCcMoneyActive === 'function' && DB.isCcMoneyActive(u)) {
+    return true;
+  }
   return isUserInPartnerNetworkSync(u);
 }
 
@@ -290,6 +331,66 @@ function _escAttr(s) {
 }
 
 /** Normaliza URL de foto/arquivo (Supabase, uploads local, base64). */
+function _photoPathFromServeUrl(url) {
+  try {
+    const u = new URL(String(url || ''), _siteBaseUrl() + '/');
+    if (!/\/api\/file\.php$/i.test(u.pathname)) return '';
+    return decodeURIComponent(u.searchParams.get('path') || '').replace(/^\/+/, '');
+  } catch (_) {
+    return '';
+  }
+}
+
+/** Supabase Storage saiu do ar no cutover Locaweb: sem fallback remoto (fotos ficam em /uploads). */
+function _supabasePublicFromPath(path) {
+  return '';
+}
+
+/** Cache de fotos que já falharam nesta sessão (evita 404 repetido no console). */
+function _markBrokenPhoto(url) {
+  const u = String(url || '').trim();
+  if (!u) return;
+  try {
+    const key = 'soublu_broken_photos';
+    const arr = JSON.parse(sessionStorage.getItem(key) || '[]');
+    if (!arr.includes(u)) {
+      arr.push(u);
+      if (arr.length > 300) arr.splice(0, arr.length - 300);
+      sessionStorage.setItem(key, JSON.stringify(arr));
+    }
+  } catch (_) { /* noop */ }
+}
+
+function _isBrokenPhoto(url) {
+  const u = String(url || '').trim();
+  if (!u) return true;
+  try {
+    const arr = JSON.parse(sessionStorage.getItem('soublu_broken_photos') || '[]');
+    return arr.includes(u);
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * __soubluAvatarErr — fallback: file.php → Supabase público → iniciais.
+ * Evita 404 em loop e mostra avatar com letras quando a foto não existe.
+ */
+window.__soubluAvatarErr = function soubluAvatarErr(img) {
+  if (!img) return;
+  const alt = String(img.dataset.altSrc || '').trim();
+  if (alt && !img.dataset.altTried) {
+    img.dataset.altTried = '1';
+    img.src = alt;
+    return;
+  }
+  _markBrokenPhoto(img.src);
+  if (alt) _markBrokenPhoto(alt);
+  const name = img.dataset.avatarName || '';
+  const size = (img.className.match(/\bavatar-\S+/) || [])[0] || '';
+  img.outerHTML = `<div class="avatar ${size}" style="background:${avatarColor(name)}">${getInitials(name)}</div>`;
+};
+
 function resolvePhotoUrl(photo) {
   const raw = String(photo || '').trim();
   if (!raw) return '';
@@ -304,33 +405,50 @@ function resolvePhotoUrl(photo) {
     try {
       const u = new URL(raw, base + '/');
       const p = u.searchParams.get('path');
-      if (p) return toFilePhp(decodeURIComponent(p));
+      if (p) {
+        const resolved = toFilePhp(decodeURIComponent(p));
+        return _isBrokenPhoto(resolved) ? '' : resolved;
+      }
     } catch (_) { /* segue */ }
-    return /^https?:\/\//i.test(raw) ? raw : `${base}${raw.startsWith('/') ? raw : '/' + raw}`;
+    const abs = /^https?:\/\//i.test(raw) ? raw : `${base}${raw.startsWith('/') ? raw : '/' + raw}`;
+    return _isBrokenPhoto(abs) ? '' : abs;
   }
   if (/^https?:\/\//i.test(raw)) {
+    /* Bucket público Supabase: carrega direto no browser (não passa pelo proxy file.php). */
+    if (/supabase\.co\/storage\/v1\/object\/public\//i.test(raw)) {
+      return _isBrokenPhoto(raw) ? '' : raw;
+    }
     if (/supabase\.co\/storage/i.test(raw)) {
       const m = raw.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/?#]+)\/([^?#]+)/i);
-      if (m) return toFilePhp(m[1] + '/' + m[2]);
+      if (m) {
+        const resolved = toFilePhp(m[1] + '/' + m[2]);
+        return _isBrokenPhoto(resolved) ? '' : resolved;
+      }
     }
     const up = raw.match(/\/uploads\/([^?#]+)/i);
-    if (up) return toFilePhp(up[1]);
-    return raw;
+    if (up) {
+      const resolved = toFilePhp(up[1]);
+      return _isBrokenPhoto(resolved) ? '' : resolved;
+    }
+    return _isBrokenPhoto(raw) ? '' : raw;
   }
   const rel = raw.replace(/^\.\//, '').replace(/^\//, '');
   if (/^uploads\//i.test(rel)) {
-    return toFilePhp(rel.replace(/^uploads\//i, ''));
+    const resolved = toFilePhp(rel.replace(/^uploads\//i, ''));
+    return _isBrokenPhoto(resolved) ? '' : resolved;
   }
   const storageBuckets = 'profile-photos|product-images|partner-docs|ticket-docs|sonhos|mural|misc|proposal-attachments|finance-docs|tim-docs|contestacao-docs|whatsapp-media';
   if (new RegExp(`^(${storageBuckets})/`, 'i').test(rel)) {
-    return toFilePhp(rel);
+    const resolved = toFilePhp(rel);
+    return _isBrokenPhoto(resolved) ? '' : resolved;
   }
   /* Foto de perfil salva só com nome do arquivo / userId/img_… */
   if (/^[a-zA-Z0-9_-]+\/[^/]+\.(jpe?g|png|gif|webp)$/i.test(rel)) {
-    return toFilePhp(`profile-photos/${rel}`);
+    const resolved = toFilePhp(`profile-photos/${rel}`);
+    return _isBrokenPhoto(resolved) ? '' : resolved;
   }
   if (typeof window.soubluAsset === 'function') return window.soubluAsset(rel);
-  return raw;
+  return _isBrokenPhoto(raw) ? '' : raw;
 }
 window.resolvePhotoUrl = resolvePhotoUrl;
 window.resolveFileUrl = resolvePhotoUrl;
@@ -346,6 +464,106 @@ async function verifyFileServeUrl(serveUrl) {
   } catch (_) { /* noop */ }
   return '';
 }
+
+/* ── Visualizador de documentos na própria página (sem abrir nova aba) ── */
+function _docViewerIsDocUrl(href) {
+  const h = String(href || '');
+  if (!h || /^(javascript|mailto|tel):/i.test(h)) return false;
+  return /\/api\/file\.php|supabase\.co\/storage|\/uploads\/|\.(pdf|png|jpe?g|gif|webp)(?:[?#]|$)|^blob:|^data:(?:application\/pdf|image\/)/i.test(h);
+}
+
+function _docViewerIsImage(url, name) {
+  const s = String(name || '') + ' ' + String(url || '').split('#')[0];
+  return /\.(png|jpe?g|gif|webp|bmp|svg)(?:[?&\s%]|$)/i.test(s) || /^data:image\//i.test(String(url || ''));
+}
+
+function closeDocViewer() {
+  const ov = document.getElementById('globalDocViewer');
+  if (!ov) return;
+  ov.style.display = 'none';
+  const body = ov.querySelector('[data-docviewer-body]');
+  if (body) body.innerHTML = '';
+  document.documentElement.style.overflow = ov.dataset.prevOverflow || '';
+}
+
+/* www.soumaisblu.com.br x soumaisblu.com.br: o iframe só carrega na MESMA origem (X-Frame-Options SAMEORIGIN). */
+function _docViewerSameOrigin(url) {
+  try {
+    const u = new URL(url, location.href);
+    const strip = (h) => h.replace(/^www\./i, '');
+    if (u.origin !== location.origin && strip(u.hostname) === strip(location.hostname)) {
+      return location.origin + u.pathname + u.search + u.hash;
+    }
+    return u.href;
+  } catch (_) {
+    return url;
+  }
+}
+
+function openDocViewer(url, name) {
+  const src = _docViewerSameOrigin(String(url || '').trim());
+  if (!src) return;
+  let ov = document.getElementById('globalDocViewer');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'globalDocViewer';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:2147483000;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:16px;';
+    ov.innerHTML =
+      '<div style="background:var(--color-surface,#fff);color:var(--color-text,#111);width:min(1100px,100%);height:min(92vh,100%);border-radius:12px;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);">' +
+        '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--color-border,#ddd);">' +
+          '<strong data-docviewer-title style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px;">Documento</strong>' +
+          '<a data-docviewer-ext href="#" target="_blank" rel="noopener noreferrer" data-no-viewer class="btn btn-outline btn-sm" style="text-decoration:none;width:auto;flex:0 0 auto;margin:0;">Nova aba</a>' +
+          '<button type="button" data-docviewer-close class="btn btn-primary btn-sm" style="width:auto;flex:0 0 auto;margin:0;">Fechar ✕</button>' +
+        '</div>' +
+        '<div data-docviewer-body style="flex:1;min-height:0;background:#525659;display:flex;align-items:center;justify-content:center;overflow:auto;"></div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    ov.addEventListener('click', (ev) => { if (ev.target === ov) closeDocViewer(); });
+    ov.querySelector('[data-docviewer-close]').addEventListener('click', closeDocViewer);
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && ov.style.display !== 'none') { ev.stopPropagation(); closeDocViewer(); }
+    }, true);
+  }
+  const title = String(name || '').trim() || decodeURIComponent((src.split('?')[0].split('/').pop() || 'Documento'));
+  ov.querySelector('[data-docviewer-title]').textContent = title;
+  ov.querySelector('[data-docviewer-ext]').href = src;
+  const body = ov.querySelector('[data-docviewer-body]');
+  body.innerHTML = '';
+  if (_docViewerIsImage(src, name)) {
+    const img = document.createElement('img');
+    img.src = src;
+    img.alt = title;
+    img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;display:block;';
+    body.appendChild(img);
+  } else {
+    const fr = document.createElement('iframe');
+    fr.src = src;
+    fr.title = title;
+    fr.style.cssText = 'width:100%;height:100%;border:0;background:#fff;';
+    body.appendChild(fr);
+  }
+  if (ov.style.display === 'none' || !ov.style.display) ov.dataset.prevOverflow = document.documentElement.style.overflow || '';
+  document.documentElement.style.overflow = 'hidden';
+  ov.style.display = 'flex';
+}
+window.openDocViewer = openDocViewer;
+window.closeDocViewer = closeDocViewer;
+
+/* Links de anexo com target=_blank (PDF, imagem, file.php, /uploads) abrem no visualizador.
+   Ctrl/Shift/clique do meio continuam abrindo nova aba. */
+document.addEventListener('click', (ev) => {
+  if (ev.defaultPrevented || ev.button !== 0 || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.altKey) return;
+  const a = ev.target && ev.target.closest ? ev.target.closest('a[href]') : null;
+  if (!a || a.hasAttribute('download') || a.hasAttribute('data-no-viewer')) return;
+  if (String(a.getAttribute('target') || '').toLowerCase() !== '_blank') return;
+  if (/openAttachmentUrl/.test(a.getAttribute('onclick') || '')) return;
+  if (!_docViewerIsDocUrl(a.href)) return;
+  ev.preventDefault();
+  ev.stopPropagation();
+  openDocViewer(a.href, (a.getAttribute('title') || a.textContent || '').trim().replace(/^[^\w\u00C0-\u017F]+/, ''));
+}, true);
 
 async function openAttachmentUrl(rawUrl) {
   let url = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(rawUrl) : String(rawUrl || '').trim();
@@ -375,16 +593,7 @@ async function openAttachmentUrl(rawUrl) {
   } else if (/supabase\.co\/storage/i.test(url)) {
     url = `${_siteBaseUrl()}/api/file.php?fetch_url=${encodeURIComponent(url)}`;
   }
-  const opened = window.open(url, '_blank', 'noopener,noreferrer');
-  if (!opened) {
-    const a = document.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-  }
+  openDocViewer(url);
 }
 window.openAttachmentUrl = openAttachmentUrl;
 window.verifyFileServeUrl = verifyFileServeUrl;
@@ -583,28 +792,32 @@ window.filterSouBluInternalUsers = filterSouBluInternalUsers;
 window.canSouBluManagePoints = canSouBluManagePoints;
 const SOUBLU_TZ = 'America/Sao_Paulo';
 
+/**
+ * _parseSouBluDate — interpreta datas do sistema sempre em horário de Brasília.
+ * Strings sem fuso (MySQL) = parede BRT; com Z/offset = instante convertido na exibição.
+ */
 function _parseSouBluDate(iso) {
   if (iso == null || iso === '') return null;
   if (iso instanceof Date) return Number.isNaN(iso.getTime()) ? null : iso;
   const s = String(iso).trim();
   if (!s) return null;
-  // Já com fuso (Z ou ±hh:mm)
+  // Já com fuso (Z ou ±hh:mm) — instante absoluto
   if (/Z$/i.test(s) || /[+-]\d{2}:?\d{2}$/.test(s)) {
     const d = new Date(s);
     return Number.isNaN(d.getTime()) ? null : d;
   }
-  // MySQL "YYYY-MM-DD HH:mm:ss" / ISO sem fuso:
-  // legado pode ser UTC ou parede BRT — escolhe a interpretação mais próxima de agora
+  // Só data (YYYY-MM-DD) — meio-dia BRT evita virar dia anterior
+  const dm = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dm) {
+    const d = new Date(`${dm[1]}-${dm[2]}-${dm[3]}T12:00:00-03:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  // MySQL / ISO sem fuso — sempre horário de Brasília (padrão do sistema)
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
   if (m) {
     const base = `${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6] || '00'}`;
-    const asSp = new Date(`${base}-03:00`);
-    const asUtc = new Date(`${base}Z`);
-    if (Number.isNaN(asSp.getTime()) && Number.isNaN(asUtc.getTime())) return null;
-    if (Number.isNaN(asSp.getTime())) return asUtc;
-    if (Number.isNaN(asUtc.getTime())) return asSp;
-    const now = Date.now();
-    return Math.abs(asUtc.getTime() - now) < Math.abs(asSp.getTime() - now) ? asUtc : asSp;
+    const d = new Date(`${base}-03:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
   }
   const d = new Date(s);
   return Number.isNaN(d.getTime()) ? null : d;
@@ -653,6 +866,8 @@ function formatDayTime(iso) {
 }
 window._parseSouBluDate = _parseSouBluDate;
 window.SOUBLU_TZ = SOUBLU_TZ;
+window.formatDate = formatDate;
+window.formatDateTime = formatDateTime;
 window.formatTime = formatTime;
 window.formatDayTime = formatDayTime;
 function timeAgo(iso) {
@@ -710,10 +925,37 @@ window.statCardHtml = statCardHtml;
 window.statKpiHtml = statKpiHtml;
 
 function avatarHtml(name,size='',photo='') {
-  const src = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(photo) : photo;
-  if(src) {
-    const safe = String(src).replace(/"/g, '&quot;');
-    return `<img src="${safe}" class="avatar ${size}" style="object-fit:cover;border-radius:50%;" loading="lazy" onerror="this.outerHTML='<div class=\\'avatar ${size}\\' style=\\'background:${avatarColor(name)}\\'>${getInitials(name)}</div>'">`;
+  let src = typeof resolvePhotoUrl === 'function' ? resolvePhotoUrl(photo) : photo;
+  let altSrc = '';
+  const raw = String(photo || '').trim();
+  const profilePath = (() => {
+    const fromSrc = _photoPathFromServeUrl(src);
+    if (fromSrc && /^profile-photos\//i.test(fromSrc)) return fromSrc;
+    if (/^profile-photos\//i.test(raw)) return raw.replace(/^\/+/, '');
+    if (/^[a-zA-Z0-9_-]+\/[^/]+\.(jpe?g|png|gif|webp)$/i.test(raw)) return `profile-photos/${raw}`;
+    const supaM = raw.match(/\/storage\/v1\/object\/public\/(profile-photos\/[^?#]+)/i);
+    if (supaM) return supaM[1];
+    return '';
+  })();
+  if (profilePath) {
+    const supa = _supabasePublicFromPath(profilePath);
+    const local = `${_siteBaseUrl()}/api/file.php?path=${encodeURIComponent(profilePath)}`;
+    if (supa) {
+      src = _isBrokenPhoto(supa) ? '' : supa;
+      altSrc = _isBrokenPhoto(local) ? '' : local;
+    } else {
+      /* Disco Locaweb primeiro — URL antiga do Supabase no cadastro não abre mais. */
+      src = _isBrokenPhoto(local) ? '' : local;
+    }
+  } else if (src) {
+    const path = _photoPathFromServeUrl(src);
+    altSrc = path ? _supabasePublicFromPath(path) : '';
+    if (altSrc && _isBrokenPhoto(altSrc)) altSrc = '';
+  }
+  if (src && !_isBrokenPhoto(src)) {
+    const safe = _escAttr(src);
+    const altAttr = altSrc && altSrc !== src ? ` data-alt-src="${_escAttr(altSrc)}"` : '';
+    return `<img src="${safe}" data-avatar-name="${_escAttr(name)}" class="avatar ${size}" style="object-fit:cover;border-radius:50%;" loading="lazy" decoding="async"${altAttr} onerror="window.__soubluAvatarErr&&window.__soubluAvatarErr(this)">`;
   }
   return `<div class="avatar ${size}" style="background:${avatarColor(name)}">${getInitials(name)}</div>`;
 }
@@ -847,26 +1089,42 @@ function canViewRankingSalesValues(user) {
 }
 window.canViewRankingSalesValues = canViewRankingSalesValues;
 
-/** Só vendedor participa do ranking de vendas. */
-function participatesInVendorRanking(role) {
-  return String(role || '').toLowerCase() === 'vendedor';
-}
-
-/** Colaboradores que aparecem no ranking (vendedor + employee de campo). Parceiros e rede ficam de fora. */
-/** Usuários fora do time de vendas (T.I./dono) — nunca aparecem no ranking. */
-const RANKING_EXCLUDED_NAMES = ['plinio'];
-
-function isRankingExcludedUser(user) {
-  const first = String(user && user.name || '')
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .trim().toLowerCase().split(/\s+/)[0];
-  return !!first && RANKING_EXCLUDED_NAMES.includes(first);
-}
-
-function isRankingParticipant(userOrRole) {
+/**
+ * isVendorSellerUser — vende como vendedor mesmo com cargo de backoffice/sup.
+ * Vale para role vendedor/employee ou permissions.canVender (Fabiana, Beatriz).
+ */
+function isVendorSellerUser(userOrRole) {
   if (userOrRole && typeof userOrRole === 'object') {
-    if (userOrRole.active === false) return false;
-    if (isRankingExcludedUser(userOrRole)) return false;
+    const r = String(userOrRole.role || '').toLowerCase();
+    if (r === 'vendedor' || r === 'employee') return true;
+    const p = (userOrRole.permissions && typeof userOrRole.permissions === 'object')
+      ? userOrRole.permissions
+      : {};
+    return p.canVender === true;
+  }
+  const r = String(userOrRole || '').toLowerCase();
+  return r === 'vendedor' || r === 'employee';
+}
+window.isVendorSellerUser = isVendorSellerUser;
+
+/** Ranking de vendas: vendedor, employee ou backoffice com canVender. */
+function participatesInVendorRanking(userOrRole) {
+  return isVendorSellerUser(userOrRole);
+}
+
+/** Colaboradores que aparecem no ranking (vendedor + employee de campo). Parceiros e rede ficam de fora.
+ *  @param {object|string} userOrRole
+ *  @param {{ includeInactive?: boolean }} [opts] — includeInactive=true mantém inativos (vendas/fechamento).
+ */
+function isRankingParticipant(userOrRole, opts) {
+  const rankingRole=String(typeof userOrRole==='object' ? userOrRole?.role : userOrRole||'').trim().toLowerCase();
+  if (String(userOrRole?.id||'')==='umt7ab7yqx1yf4' || ['desenvolvedor','desenvolvimento','developer','dev','ti'].includes(rankingRole)) return false;
+
+  if (userOrRole && typeof userOrRole === 'object') {
+    const includeInactive = !!(opts && opts.includeInactive);
+    if (!includeInactive && (userOrRole.active === false || userOrRole.active === 0 || userOrRole.active === '0')) {
+      return false;
+    }
     if (isUserInPartnerNetworkSync(userOrRole)) return false;
     return isRankingParticipant(userOrRole.role);
   }
@@ -946,9 +1204,115 @@ function formatTransactionMetaLine(metaRaw) {
 window.confirm = function() { return true; };
 function confirmAction(msg, cb) { cb(); }
 
+function isNarrowLayout() {
+  try { return window.matchMedia('(max-width: 900px)').matches; }
+  catch (_) { return (window.innerWidth || 0) <= 900; }
+}
+function isSoubluMobile() {
+  try {
+    return isNarrowLayout() || window.matchMedia('(pointer: coarse)').matches;
+  } catch (_) {
+    return isNarrowLayout();
+  }
+}
+function closeMobileNav() {
+  document.body.classList.remove('nav-open');
+  document.getElementById('sidebar')?.classList.remove('open');
+  const ov = document.getElementById('navOverlay');
+  if (ov) ov.setAttribute('aria-hidden', 'true');
+  const ham = document.getElementById('navHamburger');
+  if (ham) ham.setAttribute('aria-expanded', 'false');
+}
+function openMobileNav() {
+  document.body.classList.add('nav-open');
+  document.getElementById('sidebar')?.classList.add('open');
+  const ov = document.getElementById('navOverlay');
+  if (ov) ov.setAttribute('aria-hidden', 'false');
+  const ham = document.getElementById('navHamburger');
+  if (ham) ham.setAttribute('aria-expanded', 'true');
+}
+function toggleMobileNav() {
+  if (document.body.classList.contains('nav-open')) closeMobileNav();
+  else openMobileNav();
+}
+window.isNarrowLayout = isNarrowLayout;
+window.isSoubluMobile = isSoubluMobile;
+window.closeMobileNav = closeMobileNav;
+window.openMobileNav = openMobileNav;
+window.toggleMobileNav = toggleMobileNav;
+
 function initSidebarToggle() {
-  const sb=document.getElementById('sidebar'),ma=document.getElementById('mainArea'),btn=document.getElementById('sidebarToggle');
-  if(!sb||!ma)return; btn?.addEventListener('click',()=>{sb.classList.toggle('collapsed');ma.classList.toggle('collapsed');});
+  const sb = document.getElementById('sidebar');
+  if (!sb) return;
+  const ma = document.getElementById('mainArea')
+    || document.querySelector('.main-area')
+    || document.querySelector('.main-content');
+
+  let ov = document.getElementById('navOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'navOverlay';
+    ov.className = 'nav-overlay';
+    ov.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(ov);
+  }
+  if (!ov.dataset.navWired) {
+    ov.dataset.navWired = '1';
+    ov.addEventListener('click', () => closeMobileNav());
+  }
+const topbar = document.querySelector('#mainArea > .topbar, .main-area > .topbar, .main-content > .topbar, .topbar');
+  let ham = document.getElementById('navHamburger');
+  if (!ham && topbar) {
+    ham = document.createElement('button');
+    ham.type = 'button';
+    ham.id = 'navHamburger';
+    ham.className = 'nav-hamburger';
+    ham.setAttribute('aria-label', 'Abrir menu');
+    ham.setAttribute('aria-expanded', 'false');
+    ham.setAttribute('aria-controls', 'sidebar');
+    ham.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>';
+    topbar.insertBefore(ham, topbar.firstChild);
+  }
+  if (ham && !ham.dataset.navWired) {
+    ham.dataset.navWired = '1';
+    ham.addEventListener('click', (e) => {
+      e.preventDefault();
+      toggleMobileNav();
+    });
+  }
+
+  const btn = document.getElementById('sidebarToggle');
+  if (btn && !btn.dataset.navWired) {
+    btn.dataset.navWired = '1';
+    btn.addEventListener('click', () => {
+      if (isNarrowLayout()) {
+        closeMobileNav();
+        return;
+      }
+      sb.classList.toggle('collapsed');
+      ma?.classList.toggle('collapsed');
+    });
+  }
+
+  if (!window.__soubluNavEscWired) {
+    window.__soubluNavEscWired = true;
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && document.body.classList.contains('nav-open')) closeMobileNav();
+    });
+    window.addEventListener('resize', () => {
+      if (!isNarrowLayout()) closeMobileNav();
+    });
+  }
+
+  // Financeiro / leads: fechar gaveta ao escolher item do menu
+  if (!sb.dataset.navCloseWired) {
+    sb.dataset.navCloseWired = '1';
+    sb.addEventListener('click', (e) => {
+      const item = e.target.closest('.nav-item, a.nav-item, button.nav-item');
+      if (!item || !isNarrowLayout()) return;
+      setTimeout(() => closeMobileNav(), 0);
+    });
+  }
 }
 function initNav() { document.querySelectorAll('[data-section]').forEach(wireNavButton); }
 function wireNavButton(b) {
@@ -964,6 +1328,22 @@ function navigateTo(id) {
   const nav=document.querySelector(`[data-section="${id}"]`); nav?.classList.add('active');
   const title=nav?.querySelector('.nav-label')?.textContent||'';
   const tb=document.getElementById('topbarTitle'); if(tb&&title)tb.textContent=title;
+  if (isNarrowLayout()) closeMobileNav();
+try {
+    if (window.Proposals) {
+      if (id === 'secManageProposals') Proposals._ensureProposalManageToolbar?.();
+      Proposals._syncProposalToolsPlacement?.();
+      Proposals._syncProposalTopbarToolsVisibility?.();
+    }
+    if (window.Clients) {
+      if (id === 'secClients') Clients._ensureClientsTopbarTools?.();
+      Clients._syncClientsToolsPlacement?.();
+      Clients._syncClientsTopbarToolsVisibility?.();
+    }
+    if (window.SalesRanking?.syncRankingTopbarVisibility) {
+      SalesRanking.syncRankingTopbarVisibility();
+    }
+  } catch (_) { /* noop */ }
 }
 function updateCartBadge(n){const b=document.getElementById('cartBadge');if(!b)return;b.textContent=n;b.style.display=n>0?'inline':'none';}
 function togglePassword(id,btn){const i=document.getElementById(id);if(!i)return;i.type=i.type==='password'?'text':'password';btn.textContent=i.type==='password'?'👁':'🙈';}
@@ -972,6 +1352,8 @@ function fileToBase64(file){return new Promise((res,rej)=>{const r=new FileReade
 const _UPLOAD_DOC_BUCKETS = new Set([
   'partner-docs', 'ticket-docs', 'tim-docs', 'contestacao-docs', 'finance-docs',
   'rh-demissao', 'rh-justificativa', 'rh-docs', 'monitoria-atendimento', 'partner-nf',
+  /* mural/sonhos: image_url é VARCHAR curto — não pode cair no fallback base64. */
+  'mural', 'sonhos',
 ]);
 
 function _isInlineAttachmentUrl(url) {
@@ -1009,7 +1391,11 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
         body: fd,
       });
       const data = await res.json().catch(() => ({}));
-      if (res.ok && data.url) return data.url;
+      if (res.ok && data.url) {
+        /* Grava caminho relativo (profile-photos/…) — mais estável que URL absoluta file.php. */
+        const rel = String(data.caminho || data.path || '').replace(/^\/uploads\//, '').replace(/^\//, '');
+        return rel || data.url;
+      }
       const errMsg = data.error || `HTTP ${res.status}`;
       console.warn('[uploadImage hostinger]', bucket, errMsg);
       if (_UPLOAD_DOC_BUCKETS.has(bucket)) {
@@ -1036,7 +1422,7 @@ async function uploadImage(file, bucket = 'product-images', subPath = '') {
         body: file,
       });
       if (res.ok) {
-        return `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${supabasePath}`;
+        return `${bucket}/${supabasePath}`;
       }
       console.warn('[uploadImage]', bucket, res.status, await res.text().catch(() => ''));
     } catch (e) {
@@ -1062,7 +1448,7 @@ function renderAdminSidebar(user) {
       fundador: 'Fundador', master: 'Master', desenvolvedor: 'Desenvolvimento',
       gerente: 'Gerente', gerencia: 'Gerência', admin: 'Administrador',
       financeiro: 'Financeiro', financial: 'Financeiro', supervisor: 'Supervisor',
-      sup_backoffice: 'Sup. Backoffice', backoffice: 'Backoffice', rh: 'RH',
+      sup_backoffice: 'Sup. Backoffice', estrategico: 'Estratégico', backoffice: 'Backoffice', rh: 'RH',
       operacional: 'Operacional', juridico: 'Jurídico', diretoria: 'Diretoria',
       ouvidoria: 'Ouvidoria', parceiro: 'Parceiro', vendedor: 'Vendedor', portaria: 'Portaria',
     };
@@ -1072,18 +1458,18 @@ function renderAdminSidebar(user) {
   const photo = typeof resolvePhotoUrl === 'function'
     ? resolvePhotoUrl(user.photo_url || user.photo || '')
     : String(user.photo_url || user.photo || '').trim();
-  if (photo) {
+  if (photo && !_isBrokenPhoto(photo)) {
     av.style.background = 'transparent';
     av.textContent = '';
     av.innerHTML = `<img alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;">`;
     const img = av.querySelector('img');
     if (img) {
+      const path = _photoPathFromServeUrl(photo);
+      const altSrc = path ? _supabasePublicFromPath(path) : '';
+      if (altSrc && altSrc !== photo) img.dataset.altSrc = altSrc;
+      img.dataset.avatarName = user.name || '';
       img.src = photo;
-      img.onerror = () => {
-        av.innerHTML = '';
-        av.style.background = avatarColor(user.name);
-        av.textContent = getInitials(user.name);
-      };
+      img.onerror = () => window.__soubluAvatarErr && window.__soubluAvatarErr(img);
     }
   } else {
     av.innerHTML = '';
@@ -1095,7 +1481,7 @@ function renderAdminSidebar(user) {
 window.renderAdminSidebar = renderAdminSidebar;
 
 /* Loader global */
-function showLoading(msg='Carregando...') {
+function showLoading(msg='Carregando...', opts = {}) {
   let el = document.getElementById('globalLoader');
   if (!el) {
     el = document.createElement('div');
@@ -1104,13 +1490,29 @@ function showLoading(msg='Carregando...') {
     el.innerHTML = `<div class="loader-spinner"></div><p class="loader-text"></p>`;
     document.body.appendChild(el);
   }
+  el.classList.remove('is-hidden');
   el.style.display = 'flex';
+  el.style.pointerEvents = 'all';
   const p = el.querySelector('.loader-text, p');
   if (p && msg) p.textContent = msg;
+  try { clearTimeout(window.__soubluLoaderTimer); } catch (_) { /* noop */ }
+  /* Save/anexo pode passar de 22s — timeout maior evita “Demorou demais” falso. */
+  const maxMs = Math.max(8000, Number(opts.maxMs) || 60000);
+  window.__soubluLoaderTimer = setTimeout(() => {
+    hideLoading();
+    if (typeof showToast === 'function') {
+      showToast('Demorou demais para carregar. Tente de novo.', 'warning', 5000);
+    }
+  }, maxMs);
 }
 function hideLoading() {
+  try { clearTimeout(window.__soubluLoaderTimer); } catch (_) { /* noop */ }
   const el = document.getElementById('globalLoader');
-  if (el) el.style.display = 'none';
+  if (el) {
+    el.classList.add('is-hidden');
+    el.style.display = 'none';
+    el.style.pointerEvents = 'none';
+  }
 }
 window.showLoading = showLoading;
 window.hideLoading = hideLoading;
@@ -1121,35 +1523,6 @@ function formatPixKey(type, value) {
   if(type==='phone') return value.replace(/\D/g,'').replace(/(\d{2})(\d{5})(\d{4})/,'($1) $2-$3');
   return value;
 }
-
-/* Máscaras de CPF e RG — formatam progressivamente enquanto a pessoa digita
-   (em vez de só aplicar pontos/traço quando o campo estiver completo). */
-function formatCPF(value) {
-  const d = String(value || '').replace(/\D/g, '').slice(0, 11);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `${d.slice(0, 3)}.${d.slice(3)}`;
-  if (d.length <= 9) return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6)}`;
-  return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-}
-function formatRG(value) {
-  // RG aceita dígito verificador "X" no final (regra comum a vários estados).
-  const v = String(value || '').toUpperCase().replace(/[^0-9X]/g, '').slice(0, 9);
-  if (v.length <= 2) return v;
-  if (v.length <= 5) return `${v.slice(0, 2)}.${v.slice(2)}`;
-  if (v.length <= 8) return `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5)}`;
-  return `${v.slice(0, 2)}.${v.slice(2, 5)}.${v.slice(5, 8)}-${v.slice(8)}`;
-}
-window.formatCPF = formatCPF;
-window.formatRG = formatRG;
-
-// Aplica a máscara certa a qualquer campo marcado com data-mask="cpf"/"rg",
-// inclusive campos criados dinamicamente (delegação no document).
-document.addEventListener('input', (e) => {
-  const t = e.target;
-  const mask = t?.dataset?.mask;
-  if (mask === 'cpf') t.value = formatCPF(t.value);
-  else if (mask === 'rg') t.value = formatRG(t.value);
-});
 
 
 /* Rótulos de colunas para leitura das listas como cartões no celular. */
@@ -1189,6 +1562,29 @@ if (document.readyState === 'loading') {
 } else {
   initMobileTableCards();
 }
+
+
+/* Ocultar somente o menu Clube Benefícios — autorizado por Plínio em 23/11/2026. */
+(function () {
+  const selector = '#navClubeBeneficios, .benefits-clube-nav, .sidebar [data-section="secClubeBeneficios"], .sidebar a[href*="clube-beneficios"]';
+  function start() {
+    const style = document.createElement('style');
+    style.id = 'soublu-hide-clube-menu';
+    style.textContent = selector + '{display:none!important;}';
+    if (!document.getElementById(style.id)) document.head.appendChild(style);
+    function hide() {
+      document.querySelectorAll(selector).forEach(element => element.remove());
+      const section = document.getElementById('secClubeBeneficios');
+      if (section?.classList.contains('active')) {
+        section.classList.remove('active');
+        if (typeof navigateTo === 'function') navigateTo(document.getElementById('secDashboard') ? 'secDashboard' : 'secInicio');
+      }
+    }
+    hide();
+    new MutationObserver(hide).observe(document.body, {childList:true,subtree:true});
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',start); else start();
+})();
 
 /* Módulo de chamados descontinuado: remove apenas as entradas de navegação. */
 (function () {

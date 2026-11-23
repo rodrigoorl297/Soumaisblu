@@ -57,18 +57,6 @@
     return MOTIVOS.find(m => m.value === v)?.label || v || '—';
   }
 
-  function _ctDbgLog(location, message, data, hypothesisId) {
-    const payload = {
-      sessionId: '97c411',
-      location,
-      message,
-      data: data || {},
-      timestamp: Date.now(),
-      hypothesisId: hypothesisId || 'contestacao-nav',
-      runId: 'contestacao-nav-fix-v1',
-    };
-}
-
   async function scopeFilter() {
     const root = window.PARTNER_ROOT_ID;
     if (root) return { partnerRootId: root };
@@ -116,7 +104,7 @@
       if (navBtn && !navBtn.dataset.navWired) {
         navBtn.dataset.navWired = '1';
         navBtn.addEventListener('click', () => {
-if (typeof window.navigateTo === 'function') window.navigateTo('secContestacao');
+          if (typeof window.navigateTo === 'function') window.navigateTo('secContestacao');
           else if (typeof navigateTo === 'function') navigateTo('secContestacao');
           this.render();
         });

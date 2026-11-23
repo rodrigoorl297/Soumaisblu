@@ -21,7 +21,7 @@ function _profileRoleLabel(role) {
   const map = {
     fundador: 'Fundador', master: 'Master', desenvolvedor: 'Desenvolvimento / TI',
     gerente: 'Gerente', financeiro: 'Financeiro', financial: 'Financeiro',
-    supervisor: 'Supervisor', sup_backoffice: 'Sup. Backoffice', backoffice: 'Backoffice',
+    supervisor: 'Supervisor', sup_backoffice: 'Sup. Backoffice', estrategico: 'Estratégico', backoffice: 'Backoffice',
     rh: 'RH', operacional: 'Operacional', parceiro: 'Parceiro',
     vendedor: 'Vendas', employee: 'Funcionário',
   };
@@ -214,6 +214,16 @@ window.saveProfileName = saveProfileName;
 window.saveProfileEmail = saveProfileEmail;
 
 async function openWithdrawalModal() {
+  if (typeof DB !== 'undefined' && typeof DB.isAccountBlocked === 'function') {
+    const who = window.currentUser;
+    if (who && DB.isAccountBlocked(who)) {
+      const motive = typeof DB.formatAccountBlockMotive === 'function' ? DB.formatAccountBlockMotive(who) : '';
+      showToast(motive
+        ? 'Conta bloqueada (' + motive + '). O bloqueio impede só o saque.'
+        : 'Conta bloqueada. O bloqueio impede só o saque.', 'warning', 7000);
+      return;
+    }
+  }
   if (typeof ensureWithdrawalFlowDom === 'function') await ensureWithdrawalFlowDom();
   currentUser = await resolveEmployeeUser();
   if (typeof userCanSacarPix === 'function') {
@@ -669,8 +679,8 @@ async function _renderPropDashboard(proposals) {
 
 async function saveShowPoints(val) {
   if (typeof isUserInPartnerNetworkSync === 'function' && isUserInPartnerNetworkSync(currentUser)) return;
-  const role = currentUser?.role || Auth.getSession()?.role || '';
-  if (typeof participatesInVendorRanking === 'function' && !participatesInVendorRanking(role)) return;
+  if (typeof participatesInVendorRanking === 'function'
+    && !participatesInVendorRanking(currentUser || Auth.getSession() || {})) return;
   await DB.updateUser(currentUser.id, { show_points: val });
   currentUser = await resolveEmployeeUser();
   if (currentUser) currentUser.show_points = val;

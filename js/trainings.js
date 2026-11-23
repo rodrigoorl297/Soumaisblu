@@ -152,6 +152,121 @@
     return roles.map(x => String(x).trim().toLowerCase()).includes(ur);
   }
 
+  /** Exceções só para usuários específicos (não afeta os demais). */
+  const USER_TRAINING_EXEMPTIONS = {
+    fund_rodrigo: ['trnmsozbp6skj3lj'], // TREINAMENTO TÉCNICO DE PROCESSOS — retirado só do Rodrigo
+  };
+  const EMAIL_TRAINING_EXEMPTIONS = {
+    'rodrigo.orlando@soublu.com': ['trnmsozbp6skj3lj'],
+  };
+
+  /** Cargos de gestão: não disparam popup de pendência no login (criam/gerenciam treinamentos). */
+  const SKIP_PENDING_ALERT_ROLES = new Set([
+    'fundador', 'master', 'desenvolvedor', 'rh', 'financeiro', 'financial',
+    'diretoria', 'juridico', 'ouvidoria',
+  ]);
+
+  function isTrainingExemptForUser(trainingId, user) {
+    const tid = String(trainingId || '');
+    if (!tid) return false;
+    const uid = String(user?.id || '').trim();
+    if (uid) {
+      const byId = USER_TRAINING_EXEMPTIONS[uid];
+      if (byId && byId.map(String).includes(tid)) return true;
+    }
+    const email = String(user?.email || '').trim().toLowerCase();
+    if (email) {
+      const byEmail = EMAIL_TRAINING_EXEMPTIONS[email];
+      if (byEmail && byEmail.map(String).includes(tid)) return true;
+    }
+    return false;
+  }
+
+  function shouldSkipPendingAlert(user) {
+    const r = String(user?.role || sessionRole() || '').trim().toLowerCase();
+    return SKIP_PENDING_ALERT_ROLES.has(r);
+  }
+
+  function coercePassedFlag(v) {
+    if (v === true || v === 1 || v === '1' || v === 'true') return true;
+    if (v === false || v === 0 || v === '0' || v === 'false' || v == null || v === '') return false;
+    return !!v;
+  }
+
+  function trainingPassed(att) {
+    if (!att) return false;
+    if (coercePassedFlag(att.passed)) return true;
+    const st = String(att.status || '').toLowerCase();
+    return st === 'passed' || st === 'aprovado' || st === 'concluido' || st === 'concluído'
+      || st === 'completo' || st === 'completed';
+  }
+
+  /** Já concluiu (aprovado no LMS/prova) — não notificar de novo. */
+  function trainingDoneForNotify(att, training) {
+    if (trainingPassed(att)) return true;
+    if (!att) return false;
+    const passScore = Number(training?.passing_score) || 70;
+    const score = Number(att.score);
+    if (Number.isFinite(score) && score >= passScore) return true;
+
+    const st = String(att.status || '').toLowerCase();
+    // Reprovação de prova (com nota) continua pendente. Penalidade de prazo NÃO apaga quem já fez o conteúdo.
+    if ((st === 'failed' || st === 'reprovado') && Number.isFinite(score) && score < passScore) return false;
+
+    const lp = att.lesson_progress;
+    if (!lp || typeof lp !== 'object') return false;
+    const pct = Number(lp.percent);
+    if (!(pct >= 100)) return false;
+    const completed = (lp.completed && typeof lp.completed === 'object' && !Array.isArray(lp.completed))
+      ? lp.completed
+      : {};
+    const scoresObj = (lp.module_quiz_scores && typeof lp.module_quiz_scores === 'object')
+      ? lp.module_quiz_scores
+      : {};
+    const scores = Object.values(scoresObj).map(Number).filter(Number.isFinite);
+    const quizDone = Object.keys(completed).filter((k) => /^quiz_\d+$/i.test(k) && completed[k]);
+    const finalDone = !!(completed.quiz_final === true || completed.quiz_final === 1 || completed.quiz_final === 'true');
+
+    if (finalDone || quizDone.length) {
+      if (scores.length) {
+        const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+        if (avg < passScore) return false;
+      }
+      return true;
+    }
+    // 100% das aulas = concluiu (prova extra cadastrada depois não desfaz)
+    return true;
+  }
+
+  async function maybeHealPassedAttempt(att, training, userId) {
+    if (!att || !training?.id || !userId) return att;
+    if (trainingPassed(att)) return att;
+    if (!trainingDoneForNotify(att, training)) return att;
+    const passScore = Number(training.passing_score) || 70;
+    const scoresObj = att.lesson_progress?.module_quiz_scores || {};
+    const scores = Object.values(scoresObj).map(Number).filter(Number.isFinite);
+    let score = Number(att.score);
+    if (!Number.isFinite(score) && scores.length) {
+      score = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    }
+    if (!Number.isFinite(score)) score = 100;
+    if (score < passScore) return att;
+    try {
+      const saved = await DB.saveTrainingAttempt({
+        training_id: training.id,
+        user_id: userId,
+        score,
+        passed: true,
+        status: 'passed',
+        completed_at: att.completed_at || new Date().toISOString(),
+      });
+      return saved || { ...att, passed: true, status: 'passed', score };
+    } catch (e) {
+      console.warn('[Trainings] heal passed:', e);
+      return { ...att, passed: true, status: 'passed', score };
+    }
+  }
+
   async function partnerRootForUser(user) {
     if (!user?.id) return null;
     if (String(user.role || '').toLowerCase() === 'parceiro') return user.id;
@@ -161,7 +276,7 @@
   async function trainingsForUser(user, category) {
     const root = await partnerRootForUser(user);
     const all = await DB.getTrainings({ partnerRootId: root, activeOnly: true, category });
-    return all.filter(t => audienceMatch(t, user));
+    return all.filter(t => audienceMatch(t, user) && !isTrainingExemptForUser(t.id, user));
   }
 
   function statusLabel(st, passed, deadline) {
@@ -177,6 +292,7 @@
   const Trainings = {
     canManage,
     canRhReport,
+    isTrainingExemptForUser,
 
     /** Penaliza quem não concluiu no prazo (uma vez por treinamento). */
     async applyDeadlinesForUser(user) {
@@ -189,6 +305,7 @@
         const att = await DB.getTrainingAttempt(tr.id, user.id);
         if (att?.passed || att?.status === 'penalized') continue;
         if (att?.status === 'passed') continue;
+        if (trainingPassed(att) || trainingDoneForNotify(att, tr)) continue;
         await DB.saveTrainingAttempt({
           ...(att || {}),
           training_id: tr.id,
@@ -214,17 +331,28 @@
       if (!uid) return 0;
       const user = await DB.getUser(uid).catch(() => null);
       if (!user) return 0;
+      if (shouldSkipPendingAlert(user)) {
+        document.querySelectorAll('#trainingsBadge, .trainings-badge').forEach(b => {
+          b.textContent = '0';
+          b.style.display = 'none';
+        });
+        try { await this.syncTrainingBlockForUser(user, []); } catch (_) { /* noop */ }
+        return 0;
+      }
       await this.applyDeadlinesForUser(user);
       const list = await trainingsForUser(user);
-      let pending = 0;
+      const pendingList = [];
       for (const tr of list) {
-        const att = await DB.getTrainingAttempt(tr.id, uid);
-        if (!att?.passed) pending++;
+        let att = await DB.getTrainingAttempt(tr.id, uid);
+        att = await maybeHealPassedAttempt(att, tr, uid);
+        if (!trainingDoneForNotify(att, tr)) pendingList.push({ tr, att });
       }
+      const pending = pendingList.length;
       document.querySelectorAll('#trainingsBadge, .trainings-badge').forEach(b => {
         b.textContent = pending;
         b.style.display = pending > 0 ? 'inline' : 'none';
       });
+      try { await this.syncTrainingBlockForUser(user, pendingList); } catch (_) { /* noop */ }
       return pending;
     },
 
@@ -340,10 +468,7 @@
       if (!root) return;
       const s = Auth.getSession();
       const partnerRoot = window.PARTNER_ROOT_ID || (s?.role === 'parceiro' ? s.id : await DB.getPartnerRootForUser(s.id));
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'post-fix',hypothesisId:'E',location:'trainings.js:renderAdminManage:beforePurge',message:'before legacy purge',data:{href:String(location.href||'')},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (window.TrainingTracks?.purgeLegacySeedCourses) {
+if (window.TrainingTracks?.purgeLegacySeedCourses) {
         await TrainingTracks.purgeLegacySeedCourses().catch(() => null);
       }
       const tab = this._adminTab || 'treinamentos';
@@ -394,10 +519,7 @@
       }
       const list = await DB.getTrainings({ partnerRootId: partnerRoot });
       this._allTrainings = list || [];
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'D',location:'trainings.js:renderAdminManage:list',message:'admin conteúdos list',data:{n:(list||[]).length,ids:(list||[]).slice(0,10).map(t=>({id:t.id,title:t.title})),online:!!(typeof DB!=='undefined'&&DB.online),partnerRoot:partnerRoot||null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      body.innerHTML = `<div class="card card-padded"><div class="table-wrap"><table class="data-table"><thead><tr>
+body.innerHTML = `<div class="card card-padded"><div class="table-wrap"><table class="data-table"><thead><tr>
         <th>Título</th><th>Categoria</th><th>Tipo</th><th>Prazo</th><th>Nota mín.</th><th>Penalidade</th><th>Ativo</th><th></th>
       </tr></thead><tbody id="trainingsAdminTbody"></tbody></table></div></div>`;
       const tb = document.getElementById('trainingsAdminTbody');
@@ -666,7 +788,10 @@
           this.renderModulesEditor(legacyLessons.length ? [{ title: tr.title || 'Módulo 1: Introdução', lessons: legacyLessons }] : []);
         }
 
-        this.renderQuestionEditor(tr.questions || []);
+        const finalQs = (Array.isArray(tr.questions) && tr.questions.length)
+          ? tr.questions
+          : (courseJson?.final_quiz?.questions || courseJson?.final_questions || []);
+        this.renderQuestionEditor(finalQs);
         openModal('trainingModal');
       } catch (e) {
         alert('Erro ao carregar treinamento: ' + (e.message || e));
@@ -1173,10 +1298,16 @@
         });
       });
 
+      // content_body.final_quiz espelha a prova final — o player LMS lê daqui (e de questions).
       const coursePayload = {
         type: 'course',
         title: document.getElementById('trnTitle').value.trim(),
         modules: modules,
+        final_quiz: {
+          title: 'Perguntas Gerais',
+          questions: questions,
+        },
+        final_questions: questions,
       };
 
       const row = {
@@ -1215,38 +1346,22 @@
     },
 
     async remove(id) {
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'A',location:'trainings.js:remove:entry',message:'remove called',data:{id:String(id||''),hasDB:typeof DB!=='undefined',hasDelete:typeof DB?.deleteTraining==='function',scriptProbe:(document.querySelector('script[src*=\"trainings.js\"]')||{}).src||''},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (!id) {
+if (!id) {
         showToast('ID do treinamento inválido.', 'error');
         return;
       }
       const okConfirm = confirm('Excluir este treinamento e todas as notas?');
-      // #region agent log
-      fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'B',location:'trainings.js:remove:confirm',message:'confirm result',data:{id:String(id),okConfirm:!!okConfirm},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (!okConfirm) return;
+if (!okConfirm) return;
       showLoading('Excluindo...');
       try {
         await DB.deleteTraining(id);
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'C',location:'trainings.js:remove:afterDelete',message:'deleteTraining returned',data:{id:String(id)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        const still = await DB.getTraining(id, { bypassCache: true }).catch(() => null);
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'D',location:'trainings.js:remove:verify',message:'post-delete getTraining',data:{id:String(id),stillExists:!!still,stillTitle:still?.title||null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        if (still) {
+const still = await DB.getTraining(id, { bypassCache: true }).catch(() => null);
+if (still) {
           throw new Error('O servidor não removeu o registro. Tente novamente ou avise o suporte.');
         }
         showToast('Treinamento excluído.', 'success');
         await this.renderAdminManage();
-        // #region agent log
-        const rows = [...document.querySelectorAll('#trainingsAdminTabBody tr')].map(tr => (tr.querySelector('td')||{}).textContent||'').slice(0,8);
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'E',location:'trainings.js:remove:afterRender',message:'list after renderAdminManage',data:{id:String(id),rowTitles:rows},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        if (document.getElementById('trainingsRoot')) await this.renderEmployee();
+if (document.getElementById('trainingsRoot')) await this.renderEmployee();
         if (document.getElementById('catalogRoot') && window.LMS?.renderCatalog) {
           await LMS.renderCatalog().catch(() => null);
         }
@@ -1254,10 +1369,7 @@
           await TrainingTracks.renderTracks('tracksRoot').catch(() => null);
         }
       } catch (e) {
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'pre-fix',hypothesisId:'C',location:'trainings.js:remove:catch',message:'remove error',data:{id:String(id),err:String(e&&e.message||e)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        console.error('[Trainings] remove:', e);
+console.error('[Trainings] remove:', e);
         showToast('Erro ao excluir: ' + (e.message || e), 'error');
       } finally {
         hideLoading();
@@ -1350,46 +1462,71 @@
       const list = await trainingsForUser(user);
       const pending = [];
       for (const tr of list) {
-        const att = await DB.getTrainingAttempt(tr.id, user.id);
-        if (!att?.passed) pending.push({ tr, att });
+        let att = await DB.getTrainingAttempt(tr.id, user.id);
+        att = await maybeHealPassedAttempt(att, tr, user.id);
+        if (!trainingDoneForNotify(att, tr)) pending.push({ tr, att });
       }
       return pending;
     },
 
+    /**
+     * Sincroniza bloqueio 001 (treinamentos obrigatórios).
+     * Não aplica bloqueio automático — pendência só avisa no login.
+     * Se já estiver 001, libera. Não altera bloqueios manuais 002–005.
+     */
+    async syncTrainingBlockForUser(user) {
+      if (!user?.id) return false;
+      const canClear = typeof DB.clearAccountBlock === 'function';
+      const canLegacy = typeof DB.setTrainingBlock === 'function';
+      if (!canClear && !canLegacy) return false;
+
+      const applySessionFlags = (blocked, code) => {
+        try {
+          user.training_block = !!blocked;
+          user.account_block_active = !!blocked;
+          user.account_block_code = blocked ? (code || '001') : null;
+          const s = Auth.getSession?.();
+          if (s && String(s.id) === String(user.id)) {
+            s.training_block = !!blocked;
+            s.account_block_active = !!blocked;
+            s.account_block_code = blocked ? (code || '001') : null;
+            if (typeof Auth.setSession === 'function') Auth.setSession(s);
+          }
+        } catch (_) { /* noop */ }
+      };
+
+      const lead = await DB.getUser(user.id).catch(() => user);
+      const code = typeof DB.getAccountBlockCode === 'function'
+        ? DB.getAccountBlockCode(lead || user)
+        : null;
+
+      if (code && code !== '001') return true;
+
+      const cur001 = code === '001' || DB.isTrainingBlocked?.(lead || user);
+      if (!cur001) {
+        applySessionFlags(false, null);
+        return false;
+      }
+
+      try {
+        if (canClear) await DB.clearAccountBlock(user.id, { unlockCode: '001', by: 'system-trainings' });
+        else if (canLegacy) await DB.setTrainingBlock(user.id, false);
+        applySessionFlags(false, null);
+      } catch (e) {
+        console.warn('[Trainings] syncTrainingBlock:', e);
+      }
+      return false;
+    },
+
+    /**
+     * checkPendingOnLogin — popup "Treinamentos pendentes" no login.
+     * DESLIGADO (set/2026): o aviso ficou meses após o pessoal concluir; não reabrir.
+     */
     async checkPendingOnLogin() {
-      const cfg = window.__ADMIN_NAV_CFG__;
-      if (cfg && cfg.canTreinamentos === false) return;
-      const flag = sessionStorage.getItem('soublu_trn_login_alert');
-      if (flag === '1') return;
-      const user = await Auth.getCurrentUser().catch(() => null);
-      if (!user) return;
-      const pending = await this.getPendingForUser(user);
-      sessionStorage.setItem('soublu_trn_login_alert', '1');
-      if (!pending.length) return;
-      await this.updateBadge();
-      const items = pending.slice(0, 8).map(({ tr }) =>
-        `<li style="margin:6px 0;">${esc(tr.title)}${tr.category === 'obrigatorio' ? ' <span class="badge badge-warning">Obrigatório</span>' : ''}</li>`
-      ).join('');
-      const more = pending.length > 8 ? `<p class="text-muted" style="font-size:13px;margin-top:8px;">+ ${pending.length - 8} outro(s)</p>` : '';
-      if (!document.getElementById('trainingPendingModal')) {
-        document.body.insertAdjacentHTML('beforeend', `
-<div class="modal-overlay" id="trainingPendingModal"><div class="modal" style="max-width:480px;"><div class="modal-header">
-  <h3>Treinamentos pendentes</h3><button type="button" class="modal-close" onclick="closeModal('trainingPendingModal')"></button></div>
-<div class="modal-body">
-  <p style="font-size:14px;margin:0 0 12px;">Você tem <strong>${pending.length}</strong> treinamento(s) não concluído(s). Acesse a área de Treinamentos para realizar.</p>
-  <ul id="trainingPendingList" style="padding-left:20px;margin:0;">${items}</ul>${more}
-</div><div class="modal-footer">
-  <button type="button" class="btn btn-ghost" onclick="closeModal('trainingPendingModal')">Depois</button>
-  <button type="button" class="btn btn-primary" onclick="Trainings.goToTrainingsFromAlert()">Ir para Treinamentos</button>
-</div></div></div>`);
-      } else {
-        const ul = document.getElementById('trainingPendingList');
-        if (ul) ul.innerHTML = items;
-      }
-      openModal('trainingPendingModal');
-      if (typeof showToast === 'function') {
-        showToast(`${pending.length} treinamento(s) pendente(s).`, 'warning', 7000);
-      }
+      try {
+        if (typeof closeModal === 'function') closeModal('trainingPendingModal');
+        document.getElementById('trainingPendingModal')?.remove();
+      } catch (_) { /* noop */ }
     },
 
     goToTrainingsFromAlert() {

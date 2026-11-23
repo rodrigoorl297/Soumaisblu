@@ -362,8 +362,7 @@ try {
 
 if ($action === 'list' || $action === 'due') {
     try {
-        /* days=0 liberado para teste imediato do pós-venda */
-        $days = max(0, min(30, (int) ($_GET['days'] ?? ($jsonBody['days'] ?? 3))));
+        $days = max(1, min(30, (int) ($_GET['days'] ?? ($jsonBody['days'] ?? 3))));
         $limit = max(1, min(500, (int) ($_GET['limit'] ?? ($jsonBody['limit'] ?? 200))));
         $onlyWithPhone = !isset($_GET['require_phone']) || (string) $_GET['require_phone'] !== '0';
 

@@ -12,6 +12,14 @@
   align-items: center;
   justify-content: center;
   background: var(--color-bg);
+  pointer-events: all;
+}
+/* Escondido de verdade — sem isso o overlay invisível come os cliques dos botões */
+.loader-overlay.is-hidden {
+  display: none !important;
+  pointer-events: none !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
 }
 .loader-spinner {
   width: 48px;
@@ -90,7 +98,6 @@ body.leads-app .app-layout .nav-item.active {
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
-  box-shadow: 1px 0 2px rgba(15, 23, 42, 0.04), 8px 0 24px -6px rgba(15, 23, 42, 0.10);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -107,7 +114,7 @@ body.leads-app .app-layout .nav-item.active {
   display: flex;
   align-items: center;
   gap: 12px;
-  border-bottom: 1px solid rgba(0,0,0,0.07);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .sidebar-header .logo-icon {
@@ -120,7 +127,7 @@ body.leads-app .app-layout .nav-item.active {
   justify-content: center;
   font-size: 20px;
   flex-shrink: 0;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12), 0 4px 12px -2px rgba(95, 138, 0, 0.35);
+  box-shadow: 0 4px 16px rgba(249, 115, 22, 0.35);
 }
 
 .sidebar-header .logo-text {
@@ -132,17 +139,6 @@ body.leads-app .app-layout .nav-item.active {
 
 .sidebar-header .logo-text span {
   color: var(--brand-accent-blu);
-}
-
-/* Logo horizontal (blu-logo-new) no lugar do ícone + texto "SOU + BLU". */
-.sidebar-header:has(.sidebar-wordmark) { justify-content: center; }
-.sidebar-header:has(.sidebar-wordmark) .logo-icon { display: none; }
-.sidebar .sidebar-header .sidebar-wordmark {
-  display: block;
-  height: auto;
-  max-height: 34px;
-  width: auto;
-  max-width: 100%;
 }
 
 .sidebar-nav {
@@ -219,7 +215,7 @@ body.leads-app .app-layout .nav-item.active {
 
 .sidebar-footer {
   padding: 16px 14px;
-  border-top: 1px solid rgba(0,0,0,0.07);
+  border-top: 1px solid rgba(255,255,255,0.06);
 }
 
 .sidebar-user {
@@ -678,7 +674,7 @@ body.leads-app .app-layout .nav-item.active {
   height: 100%;
   min-height: 12px;
   border-radius: 999px;
-  background: linear-gradient(90deg, var(--color-accent, #C5FF00), #C5FF00);
+  background: linear-gradient(90deg, var(--color-accent, #f97316), #fb923c);
   transition: width .3s ease;
 }
 .progress-fill.danger {
@@ -969,17 +965,40 @@ body.leads-app .app-layout .nav-item.active {
     transform: translateX(-100%);
     width: 280px;
   }
-  .sidebar.open {
+  .sidebar.open,
+  body.nav-open .sidebar {
     transform: translateX(0);
   }
-  .main-content {
-    margin-left: 0;
+  .main-content,
+  body.leads-app:not(.leads-employee) .app-layout .main-content,
+  body.leads-app .app-layout .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100%;
   }
   .topbar {
     padding: 0 16px;
+    gap: 8px;
+  }
+  .topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+  }
+  .topbar-left h1,
+  #pageTitle {
+    font-size: 16px;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .page-content {
     padding: 20px 16px;
+    max-width: 100%;
+    overflow-x: hidden;
   }
   .stats-grid {
     grid-template-columns: 1fr;
@@ -1006,6 +1025,29 @@ body.leads-app .app-layout .nav-item.active {
   }
   .column-mapper {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Financeiro / leads: gaveta alinhada ao admin até 900px */
+@media (max-width: 900px) {
+  body.leads-app:not(.leads-employee) .app-layout .sidebar,
+  body.leads-app .app-layout .sidebar {
+    width: min(280px, 88vw);
+    min-width: 0;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    z-index: 200;
+  }
+  body.leads-app.nav-open .app-layout .sidebar,
+  body.leads-app .app-layout .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.28);
+  }
+  body.leads-app:not(.leads-employee) .app-layout .main-content,
+  body.leads-app .app-layout .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+    max-width: 100%;
   }
 }
 

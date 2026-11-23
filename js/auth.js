@@ -162,11 +162,9 @@ const Auth = {
 
   _sessionFromUser(user, loginAt) {
     const role = String(user.role || '').trim().toLowerCase();
-    let permissions = user.permissions || {};
-    if (typeof permissions === 'string') {
-      try { permissions = JSON.parse(permissions); } catch (_) { permissions = {}; }
-    }
-    if (!permissions || typeof permissions !== 'object' || Array.isArray(permissions)) permissions = {};
+    const permissions = (user.permissions && typeof user.permissions === 'object')
+      ? user.permissions
+      : {};
     return {
       id: user.id,
       role,

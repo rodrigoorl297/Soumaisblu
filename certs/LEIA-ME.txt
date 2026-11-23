@@ -1,5 +1,0 @@
-﻿Coloque aqui os certificados Efi (produÃ§Ã£o):
-  - efipay-producao.p12
-  - cacert.pem (opcional, para SSL no Windows)
-
-NÃ£o compartilhe esta pasta publicamente.

@@ -59,8 +59,22 @@ final class EfiPayPixAutomatico
                 'mock' => true,
             ];
         }
-$res = $this->client->requestNoBody('POST', '/v2/locrec');
-$this->assertOk($res, 201, 'criar location Pix Automático');
+        // #region agent log
+        pix_auto_dbg_log('EfiPayPixAutomatico.php:createLocation', 'POST /v2/locrec sem body', [
+            'endpoint' => '/v2/locrec',
+            'client_build' => self::CLIENT_BUILD,
+            'body' => null,
+        ], 'locrec-empty-body', 'post-fix-v2');
+        // #endregion
+        $res = $this->client->requestNoBody('POST', '/v2/locrec');
+        // #region agent log
+        pix_auto_dbg_log('EfiPayPixAutomatico.php:createLocation:response', 'locrec response', [
+            'http_code' => (int) ($res['http_code'] ?? 0),
+            'body_preview' => substr((string) ($res['body'] ?? ''), 0, 300),
+            'client_build' => self::CLIENT_BUILD,
+        ], 'locrec-empty-body', 'post-fix-v2');
+        // #endregion
+        $this->assertOk($res, 201, 'criar location Pix Automático');
         $data = $this->decode($res['body']);
         return is_array($data) ? $data : [];
     }
@@ -87,7 +101,14 @@ $this->assertOk($res, 201, 'criar location Pix Automático');
                 'mock' => true,
             ];
         }
-$res = $this->client->request('POST', '/v2/rec', $payload);
+        // #region agent log
+        pix_auto_dbg_log('EfiPayPixAutomatico.php:createRecurrence', 'payload calendario', [
+            'dataInicial' => $payload['calendario']['dataInicial'] ?? null,
+            'dataFinal' => $payload['calendario']['dataFinal'] ?? null,
+            'client_build' => self::CLIENT_BUILD,
+        ], 'rec-data-inicial', 'post-fix');
+        // #endregion
+        $res = $this->client->request('POST', '/v2/rec', $payload);
         $this->assertOk($res, 201, 'criar recorrência Pix Automático');
         $data = $this->decode($res['body']);
         return is_array($data) ? $data : [];
@@ -123,7 +144,13 @@ $res = $this->client->request('POST', '/v2/rec', $payload);
             ];
         }
         $res = $this->client->request('POST', '/v2/solicrec', $payload);
-$this->assertOk($res, 201, 'criar solicitação de confirmação');
+        // #region agent log
+        pix_auto_dbg_log('EfiPayPixAutomatico.php:createSolicRec', 'http response', [
+            'http_code' => (int) ($res['http_code'] ?? 0),
+            'body_preview' => substr((string) ($res['body'] ?? ''), 0, 400),
+        ], 'H1-H5-http', 'push-debug');
+        // #endregion
+        $this->assertOk($res, 201, 'criar solicitação de confirmação');
         $data = $this->decode($res['body']);
         return is_array($data) ? $data : [];
     }

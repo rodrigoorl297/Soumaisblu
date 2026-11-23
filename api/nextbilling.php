@@ -9,7 +9,7 @@ declare(strict_types=1);
  * POST ?action=click2call  JSON { src, dst, user_id }  (teste manual)
  * POST ?action=save_config JSON { server?, device_id?, call_mode?, src_ramal?, user_id }
  *
- * Modo softphone (MicroSIP): abre a discagem no softphone (URI sip:) — áudio no headset.
+ * Modo softphone (MicroSIP): o browser abre sip:NUMERO na conta registrada (sem @IP).
  * Modo cellphone: Click2Call clássico (toca celular → depois destino).
  *
  * Auth: header X-API-Key = API_INTERNAL_KEY
@@ -123,6 +123,20 @@ function nb_digits(string $v): string
     return preg_replace('/\D+/', '', $v) ?? '';
 }
 
+function nb_log(string $event, array $ctx = []): void
+{
+    unset($ctx['token'], $ctx['key'], $ctx['api_key'], $ctx['apikey']);
+    error_log('[nextbilling] ' . $event . ' ' . json_encode($ctx, JSON_UNESCAPED_UNICODE));
+}
+
+function nb_is_manager(?array $user): bool
+{
+    $role = strtolower((string) ($user['role'] ?? ''));
+    return in_array($role, [
+        'master', 'fundador', 'gerente', 'gerencia', 'desenvolvedor', 'admin',
+    ], true);
+}
+
 /** Normaliza telefone BR para Click2Call (DDD + número, 10–11 dígitos). */
 function nb_normalize_phone(string $raw): string
 {
@@ -228,17 +242,22 @@ function nb_fetch_lead(PDO $pdo, string $leadId): ?array
     $stmt = $pdo->prepare($sql);
     $stmt->execute([$leadId]);
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
-    if ($row && !isset($row['phone2'])) {
-        $row['phone2'] = '';
+    if (!$row) {
+        return null;
     }
-    // phone2 é gravado em extra_data.phone2 pelo import (não existe coluna própria)
-    if ($row && trim((string) $row['phone2']) === '' && !empty($row['extra_data'])) {
-        $extra = is_array($row['extra_data']) ? $row['extra_data'] : json_decode((string) $row['extra_data'], true);
-        if (is_array($extra) && !empty($extra['phone2'])) {
-            $row['phone2'] = (string) $extra['phone2'];
+    if (!isset($row['phone2']) || trim((string) $row['phone2']) === '') {
+        $extra = $row['extra_data'] ?? null;
+        if (is_string($extra) && $extra !== '') {
+            $decoded = json_decode($extra, true);
+            $extra = is_array($decoded) ? $decoded : [];
+        }
+        if (is_array($extra)) {
+            $row['phone2'] = trim((string) ($extra['phone2'] ?? ''));
+        } else {
+            $row['phone2'] = '';
         }
     }
-    return $row ?: null;
+    return $row;
 }
 
 function nb_click2call(string $src, string $dst, int $deviceId): array
@@ -339,6 +358,11 @@ try {
         if ($method !== 'POST') {
             soublu_json(['ok' => false, 'error' => 'Use POST'], 405);
         }
+        $actorId = trim((string) ($body['user_id'] ?? ''));
+        $actor = $actorId !== '' ? nb_fetch_user(soublu_pdo(), $actorId) : null;
+        if (!$actor || !nb_is_manager($actor)) {
+            soublu_json(['ok' => false, 'error' => 'Apenas master/fundador/gerente pode alterar a telefonia.'], 403);
+        }
         $settings = nb_read_settings();
         $serverIn = trim((string) ($body['server'] ?? ''));
         if ($serverIn !== '') {
@@ -410,10 +434,9 @@ try {
             soublu_json(['ok' => false, 'error' => 'Usuário não encontrado'], 404);
         }
 
-        $src = '';
-        $dst = '';
-        $leadId = trim((string) ($body['lead_id'] ?? ''));
+        $src = nb_resolve_src($user, (string) ($body['src'] ?? ''));
         $mode = nb_call_mode();
+        $leadId = trim((string) ($body['lead_id'] ?? ''));
 
         if ($leadId !== '') {
             $lead = nb_fetch_lead($pdo, $leadId);
@@ -439,7 +462,7 @@ try {
             }
             $dst = nb_normalize_phone($dstRaw);
             if ($dst === '') {
-                soublu_json(['ok' => false, 'error' => 'Lead sem telefone válido'], 422);
+                soublu_json(['ok' => false, 'error' => 'Lead sem telefone válido (DDD + número).'], 422);
             }
         } else {
             $dst = nb_normalize_phone((string) ($body['dst'] ?? ''));
@@ -448,27 +471,26 @@ try {
             }
         }
 
-        // MicroSIP: discagem direta no softphone (áudio no headset).
-        if ($mode === 'softphone') {
-            $host = nb_server() !== '' ? (parse_url(nb_server(), PHP_URL_HOST) ?: '') : '';
-            // sip:NUMERO — MicroSIP usa a conta Online (ex.: blu-209)
-            $dialUri = 'sip:' . $dst;
-            $dialUriHost = ($host !== '') ? ('sip:' . $dst . '@' . $host) : $dialUri;
+        $forceOriginate = !empty($body['originate']) || !empty($body['force_click2call']);
+        if ($mode === 'softphone' && !$forceOriginate) {
+            nb_log('sip_dial', [
+                'user_id' => $userId,
+                'lead_id' => $leadId !== '' ? $leadId : null,
+                'src' => $src !== '' ? $src : null,
+                'dst' => $dst,
+            ]);
             soublu_json([
                 'ok' => true,
-                'message' => 'Abrindo discagem no MicroSIP. Confirme/atenda no softphone.',
+                'message' => 'MicroSIP discando o número na conta registrada (sem @IP).',
                 'method' => 'sip',
-                'dial_uri' => $dialUri,
-                'dial_uri_host' => $dialUriHost,
+                'src' => $src,
                 'dst' => $dst,
-                'src' => nb_default_ramal() ?: null,
                 'call_mode' => $mode,
-                'device_id' => nb_device_id() ?: null,
+                'dial_uri' => 'sip:' . $dst,
                 'lead_id' => $leadId !== '' ? $leadId : null,
             ]);
         }
 
-        // Celular: Click2Call clássico (2 pernas).
         if (!nb_configured()) {
             soublu_json([
                 'ok' => false,
@@ -480,15 +502,24 @@ try {
         if ($deviceId <= 0) {
             soublu_json(['ok' => false, 'error' => 'device_id não configurado.'], 422);
         }
-        $src = nb_resolve_src($user, (string) ($body['src'] ?? ''));
         if ($src === '') {
-            soublu_json([
-                'ok' => false,
-                'error' => 'Cadastre seu telefone no perfil para usar o Click2Call.',
-            ], 422);
+            $msg = $mode === 'softphone'
+                ? 'Cadastre seu ramal/telefone no perfil ou configure o ramal no modal Telefonia.'
+                : 'Cadastre seu telefone no perfil para usar o Click2Call.';
+            soublu_json(['ok' => false, 'error' => $msg], 422);
         }
 
         $result = nb_click2call($src, $dst, $deviceId);
+        nb_log('click2call', [
+            'ok' => $result['ok'],
+            'user_id' => $userId,
+            'lead_id' => $leadId !== '' ? $leadId : null,
+            'src' => $src,
+            'dst' => $dst,
+            'device_id' => $deviceId,
+            'error' => $result['ok'] ? null : ($result['error'] ?: 'fail'),
+            'http' => $result['http'],
+        ]);
         if (!$result['ok']) {
             soublu_json([
                 'ok' => false,
@@ -499,7 +530,9 @@ try {
         }
         soublu_json([
             'ok' => true,
-            'message' => 'Ligação iniciada. Atenda seu telefone; em seguida o destino será chamado.',
+            'message' => $mode === 'softphone'
+                ? 'Ligando… atenda o MicroSIP; em seguida o lead será chamado.'
+                : 'Ligando… atenda seu celular; em seguida o lead será chamado.',
             'method' => 'click2call',
             'src' => $src,
             'dst' => $dst,
