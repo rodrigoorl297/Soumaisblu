@@ -39,7 +39,7 @@ class ReleaseTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         (self.root / "deploy").mkdir()
-        (self.root / "deploy/initial-production-ref").write_text(BASE)
+        (self.root / "deploy/current-production-ref").write_text(BASE)
         self.root_patch = patch.object(release, "ROOT", self.root)
         self.root_patch.start()
         self.blob_patch = patch.object(release, "blob", side_effect=lambda ref, p: b"old" if ref == BASE else b"new")
