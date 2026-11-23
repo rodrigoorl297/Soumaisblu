@@ -8341,3 +8341,39 @@ document.addEventListener('keydown', (e) => {
   window.addEventListener('resize',close);window.addEventListener('scroll',function(event){if(active && !active.menu.contains(event.target))close();},true);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
 })();
+
+/* Gestão de Propostas: mesma linguagem visual da Gestão de Crédito. */
+(function () {
+  const style = document.createElement('style');
+  style.id = 'proposals-credit-layout-20261123';
+  style.textContent = `
+#secManageProposals .proposals-credit-layout{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:separate;border-spacing:0;font-family:inherit;}
+#secManageProposals .proposals-credit-layout th{background:#f3f6fb;color:#7f93ad;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.035em;padding:16px 12px;line-height:1.5;text-align:left;border-bottom:1px solid #dce5f1;}
+#secManageProposals .proposals-credit-layout td{font-size:13px;line-height:1.7;font-weight:400;padding:22px 12px;vertical-align:middle;overflow-wrap:anywhere;white-space:normal;border-bottom:1px solid #e1e8f2;background:#fff;color:#163a60;}
+#secManageProposals .proposals-credit-layout tbody tr:nth-child(even) td{background:#f8fafd;}
+#secManageProposals .proposals-credit-layout tbody tr:hover td{background:#fff7f0;}
+#secManageProposals .proposals-credit-layout td:first-child strong{font-weight:600;font-size:12px;}
+#secManageProposals .proposals-credit-layout td:nth-child(3)>div{font-size:11px!important;line-height:1.6;color:#8092a8!important;}
+#secManageProposals .proposals-credit-layout td[data-col=valor],#secManageProposals .proposals-credit-layout td[data-col=valorFinal]{font-variant-numeric:tabular-nums;font-size:12px;}
+#secManageProposals .proposals-credit-layout td[data-col=valorFinal] strong{font-weight:600;color:#163a60!important;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge{--status-dot:#4b8dc3;display:inline-flex!important;align-items:center;gap:9px;width:100%;max-width:190px;min-height:40px;box-sizing:border-box;padding:10px 12px!important;border:1px solid #d5e1f2!important;border-radius:10px!important;background:#f3f7fd!important;color:#234b76!important;font-family:inherit;font-size:10px!important;font-weight:500!important;line-height:1.5;white-space:normal!important;overflow-wrap:normal;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge:before{content:'';display:block;flex:0 0 6px;width:6px;height:6px;border-radius:50%;background:var(--status-dot);}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge-success{--status-dot:#11ab80;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge-warning{--status-dot:#efaa36;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge-danger{--status-dot:#ef6571;}
+#secManageProposals .proposals-credit-layout .client-actions{display:flex;flex-wrap:nowrap!important;align-items:center;justify-content:flex-end;gap:6px;}
+#secManageProposals .proposals-credit-layout .client-actions button,#secManageProposals .proposals-credit-layout .client-actions a{display:inline-flex;align-items:center;justify-content:center;width:32px;height:34px;min-width:30px;padding:6px!important;border-radius:10px!important;border:1px solid #dce5f1;background:#fff;box-shadow:none;}
+#secManageProposals .proposals-credit-layout .client-actions button:hover{background:#eaf2fc;border-color:#adc4df;}
+@media(min-width:1101px){#secManageProposals .proposals-credit-layout :is(th,td):nth-child(1){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(2){width:9%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(3){width:12%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(4){width:9%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(5){width:9%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(6){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(7){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(8){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(9){width:10%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(10){width:10%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(11){width:6%;}#secManageProposals .proposals-credit-layout :is(th,td):last-child{width:7%;}}
+@media(min-width:1101px) and (max-width:1450px){#secManageProposals .proposals-credit-layout td,#secManageProposals .proposals-credit-layout th{padding:18px 7px;font-size:11px;}#secManageProposals .proposals-credit-layout .client-actions{gap:3px;}#secManageProposals .proposals-credit-layout .client-actions button{min-width:25px;width:27px;height:30px;padding:4px!important;}}
+@media(max-width:1100px){#secManageProposals .proposals-credit-layout td{font-size:12px;padding:12px;}#secManageProposals .proposals-credit-layout td[data-col=status]>.badge{min-height:40px;}#secManageProposals .prop-mobile-card{border:1px solid #dce5f1;border-radius:14px;box-shadow:none;padding:18px;background:#fff;}#secManageProposals .prop-mobile-card__actions{gap:8px;}}
+`;
+  document.head.appendChild(style);
+  function apply() {
+    const body = document.getElementById('manageProposalsTbody');
+    const table = body?.closest('table');
+    if (!table) return;
+    table.classList.add('proposals-credit-layout');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',apply); else apply();
+})();

@@ -1189,3 +1189,15 @@ if (document.readyState === 'loading') {
 } else {
   initMobileTableCards();
 }
+
+/* Módulo de chamados descontinuado: remove apenas as entradas de navegação. */
+(function () {
+  function hideRetiredTickets() {
+    if (document.getElementById('soublu-retired-tickets')) return;
+    const style=document.createElement('style');
+    style.id='soublu-retired-tickets';
+    style.textContent='#navManageTickets,#navTickets,.sidebar [data-section="secManageTickets"],.sidebar [data-section="secTickets"]{display:none!important;}';
+    document.head.appendChild(style);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hideRetiredTickets);else hideRetiredTickets();
+})();

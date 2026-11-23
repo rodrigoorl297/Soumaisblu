@@ -22,7 +22,7 @@ assert.equal(engine.zeroException({...exception,bancoDigitado:'AMIGOZ'}),true);
 assert.equal(engine.zeroException({...exception,entidade:'GOV SP'}),true);
 assert.equal(engine.calculate({...exception,bancoDigitado:'',entidade:''},[]).amount,0);
 assert.equal(engine.zeroException({...exception,tabela:'OUTRA'}),false);
-const catalogContext={window:{addEventListener(){}},console,document:{readyState:"loading",addEventListener(){}}};vm.createContext(catalogContext);vm.runInContext(fs.readFileSync('js/proposals.js','utf8'),catalogContext);
+const catalogContext={window:{addEventListener(){}},console,document:{readyState:"loading",addEventListener(){},createElement(){return {};},head:{appendChild(){}}}};vm.createContext(catalogContext);vm.runInContext(fs.readFileSync('js/proposals.js','utf8'),catalogContext);
 const catalog=catalogContext.window.Proposals;
 const entry=catalog._TABELA_GROUPS.find(g=>g.group==='EXCECAO').items.find(i=>i.value===exception.tabela);
 assert.equal(entry.empresa,0);assert.equal(entry.vendedor,0);assert.equal(catalog._tabelaPct[exception.tabela],0);
