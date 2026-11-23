@@ -78,13 +78,18 @@ No browser, `window.SOUBLU_CONFIG` (injetado nos HTMLs) define URLs/flags; o `js
 - `financeiro` / `rh` / `diretoria` — módulos específicos  
 A visibilidade de menus (ex.: Gestão de Crédito, Pendências) depende do role e de flags no JS.
 ---
-## Deploy
-Produção costuma ir por **chunk deploy** (`api/chunk-deploy.php` + scripts `_deploy-*.js`) por causa de limite/WAF (~5 KB por chunk).
-Depois de alterar JS/HTML, **suba a versão** no `?v=` do `<script>` / CSS para quebrar cache (Ctrl+F5 no cliente).
-```bash
-# exemplo
-node _deploy-pend-resolve.js
-```
+## Publicação controlada
+
+O fluxo oficial é **branch -> PR revisado -> main -> GitHub Actions manual -> Locaweb**.
+Não usar scripts antigos de chunk/remote-deploy no fluxo normal. Eles permanecem no histórico apenas por compatibilidade com a exportação do servidor e não são incluídos no allowlist de publicação.
+
+- [Roteiro para toda a equipe](docs/ROTEIRO-REPOSITORIO-E-PUBLICACAO.md)
+- [Estado real da configuração e pendências](docs/ESTADO-DA-CONFIGURACAO.md)
+- [Regras de contribuição](CONTRIBUTING.md)
+- `deploy/production-baseline.json`: hashes e origem dos arquivos reconciliados.
+
+A ativação dos segredos e da proteção remota exige um administrador. Não confundir workflows preparados com produção automática já habilitada.
+
 ---
 ## Comentários de manutenção
 Ao criar/alterar regra importante no JS, documente no código (JSDoc em PT): **o que é**, **o que faz**, **por que existe**. Ver `.cursor/rules/comentarios-manutencao.mdc`.

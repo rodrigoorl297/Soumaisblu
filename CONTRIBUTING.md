@@ -1,44 +1,35 @@
-# Como contribuir no SOU+BLU
+# Contribuir no SOU+BLU
 
-## Regras
+Leia primeiro [o roteiro completo](docs/ROTEIRO-REPOSITORIO-E-PUBLICACAO.md) e [o estado da configuração](docs/ESTADO-DA-CONFIGURACAO.md).
 
-1. **Nada direto na `main`.** Todo commit entra numa branch e vira Pull Request.
-2. **Integração às quintas-feiras** (horário de Brasília). Os PRs prontos e com a esteira verde são integrados na quinta.
-3. **Exceção: extrema necessidade.** Problema em produção que não pode esperar → rótulo `urgente` no PR, com o motivo na descrição. Aí ele pode entrar em qualquer dia.
+## Fluxo obrigatório
 
-## Nome das branches
-
-| Tipo | Exemplo |
-|---|---|
-| Funcionalidade | `feat/gestao-credito-filtro` |
-| Correção | `fix/upload-anexo-proposta` |
-| Urgente em produção | `hotfix/login-429` |
-| Ajuste visual | `style/dashboard-grafico` |
-
-## Fluxo
-
-```bash
-git checkout main && git pull
-git checkout -b fix/nome-curto
-# ...alterações...
-git add -A && git commit -m "fix: descrição curta"
-git push -u origin fix/nome-curto
-# abrir o Pull Request para a main no GitHub
+```powershell
+git switch main
+git pull --ff-only
+git switch -c fix/descricao-curta
+# implementar e revisar
+python tools/bump_assets.py
+python tools/validate_repo.py
+python -m unittest discover -s tests -p "test_release.py" -v
+git add caminho/dos/arquivos
+git diff --cached
+git commit -m "fix: problema corrigido e comportamento final"
+git push -u origin fix/descricao-curta
 ```
 
-## Esteira (GitHub Actions)
+Abra PR para main usando o template. É necessária revisão; integre preferencialmente por squash após os testes. Integração usual às quintas; antecipação somente em incidente extremo autorizado pelo Plínio. Não usar `git add -A` sem revisar dados e segredos.
 
-Roda em todo push e em todo PR:
+## Proibições
 
-- **CI** (`.github/workflows/ci.yml`): sintaxe de todos os `.js`/`.php`, testes de `tests/` (PHP, Node e de tela com Playwright + Edge) e bloqueio de credenciais no Git.
-- **Janela de integração** (`.github/workflows/janela-integracao.yml`): só fica verde na quinta-feira ou com o rótulo `urgente`.
+Nada direto na main, force push, credenciais no código, sincronização destrutiva de public_html, cópia integral do repositório por FTP ou SQL no deploy. Uma publicação não deve mexer nos uploads nem nas configurações privadas.
 
-## Configuração no GitHub (uma vez, feita por um admin do repositório)
+## Verificação
 
-Em **Settings → Branches → Add branch ruleset** (ou *Branch protection rule*) para `main`:
+A CI executa sintaxe JS/PHP, padrões de credenciais, testes de release, comissões, dados bancários e exportação diária. Não equivale a uma suíte completa de navegador; a validação visual permanece obrigatória no PR.
 
-- Exigir Pull Request antes de integrar
-- Exigir as checagens: `Sintaxe JS/PHP e credenciais`, `Testes (Node e PHP)`, `Testes de tela (Playwright + Edge)` e `Quinta-feira ou urgente`
-- Bloquear push direto e force push
+## Publicação e emergência
 
-E criar o rótulo `urgente` em **Issues → Labels**.
+Use o workflow manual `Publicar na Locaweb`; primeiro `plan`, depois `publish`, com autorização registrada e segredos do ambiente production. Retorno: `rollback` da release mais recente. Não usar publicação direta como atalho de revisão. Uma exceção deve conter a autorização, o responsável, os arquivos afetados, o backup e a validação posterior.
+
+Para o bloqueio técnico da main, o administrador deve importar `deploy/main-ruleset.json`. O hook local em `.githooks/pre-push` é auxiliar e pode ser instalado com `git config core.hooksPath .githooks`; não substitui a proteção remota.

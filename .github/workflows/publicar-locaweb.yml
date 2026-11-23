@@ -1,0 +1,79 @@
+name: Publicar na Locaweb
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Planejar sem publicar, publicar ou reverter a ultima release
+        type: choice
+        options: [plan, publish, rollback]
+        default: plan
+      base_sha:
+        description: SHA completo atualmente publicado; vazio usa o SHA inicial documentado
+        type: string
+        default: ''
+      release_id:
+        description: Somente para rollback; ID exibido na publicacao anterior
+        type: string
+        default: ''
+      authorization:
+        description: Para publish/rollback, informe a URL da autorizacao do Plinio (issue/PR)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: locaweb-producao
+  cancel-in-progress: false
+jobs:
+  plan:
+    if: inputs.mode == 'plan'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Gerar plano sem acesso ao servidor
+        env:
+          BASE_SHA: ${{ inputs.base_sha }}
+        run: python3 tools/locaweb_release.py plan --offline --base "$BASE_SHA" --target "$GITHUB_SHA" | tee -a "$GITHUB_STEP_SUMMARY"
+  production:
+    if: inputs.mode != 'plan'
+    runs-on: ubuntu-24.04
+    environment: production
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Conferir autorizacao e branch
+        env:
+          AUTHORIZATION: ${{ inputs.authorization }}
+          MODE: ${{ inputs.mode }}
+          ENABLED: ${{ vars.LOCAWEB_DEPLOY_ENABLED }}
+        run: |
+          test "$GITHUB_REF" = refs/heads/main || { echo 'Publicacao somente da main revisada'; exit 1; }
+          test "$ENABLED" = true || { echo 'Administrador deve concluir a configuracao e habilitar LOCAWEB_DEPLOY_ENABLED'; exit 1; }
+          case "$AUTHORIZATION" in
+            https://github.com/rodrigoorl297/Soumaisblu/issues/*|https://github.com/rodrigoorl297/Soumaisblu/pull/*) ;;
+            *) echo 'Informe uma issue ou PR com autorizacao explicita do Plinio'; exit 1 ;;
+          esac
+          test "$MODE" = publish -o "$MODE" = rollback
+      - name: Validar codigo e testes
+        run: |
+          python3 tools/validate_repo.py
+          python3 -m unittest discover -s tests -p 'test_release.py' -v
+          node tests/credit-bank-fields.test.cjs
+          node tests/commission-engine.test.cjs
+      - name: Publicar com comparacao, backup e verificacao
+        env:
+          LOCAWEB_FTP_HOST: ${{ secrets.LOCAWEB_FTP_HOST }}
+          LOCAWEB_FTP_USER: ${{ secrets.LOCAWEB_FTP_USER }}
+          LOCAWEB_FTP_PASSWORD: ${{ secrets.LOCAWEB_FTP_PASSWORD }}
+          LOCAWEB_FTP_PORT: ${{ vars.LOCAWEB_FTP_PORT }}
+          LOCAWEB_WEBROOT: ${{ vars.LOCAWEB_WEBROOT }}
+          LOCAWEB_BACKUP_ROOT: ${{ vars.LOCAWEB_BACKUP_ROOT }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          RELEASE_ID: ${{ inputs.release_id }}
+          MODE: ${{ inputs.mode }}
+        run: python3 tools/locaweb_release.py "$MODE" --base "$BASE_SHA" --target "$GITHUB_SHA" --release-id "$RELEASE_ID" | tee -a "$GITHUB_STEP_SUMMARY"
