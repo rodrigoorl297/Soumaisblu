@@ -135,6 +135,7 @@
     "js/clients.js",
     "js/clube-beneficios.js",
     "js/commission-engine.js",
+    "js/config.js",
     "js/consigbot.js",
     "js/conta-bloqueio-saque.js",
     "js/conta-corrente.js",

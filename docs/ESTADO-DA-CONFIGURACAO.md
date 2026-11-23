@@ -6,7 +6,7 @@
 - HTML/JS/CSS/assets públicos recuperados por HTTP; fonte PHP recuperada por exportação autenticada api.zip do WebFTP.
 - Commit base: f77fa421ff0dd37f0be8e6fcc754e3be648a71bf. Referência em deploy/initial-production-ref.
 - Regras, CODEOWNERS, template, ruleset para importação, hook local auxiliar, CI e workflow manual FTPS.
-- Allowlist de 245 caminhos de runtime; manutenção, dados, uploads e configurações privadas bloqueados.
+- Allowlist de 246 caminhos de runtime; manutenção, dados, uploads e configurações privadas bloqueados.
 - Comparação de bytes, backup fora da raiz pública, verificação após envio e retorno da última release.
 
 ## Limites da reconciliação

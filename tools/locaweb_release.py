@@ -18,7 +18,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 STATE = ".soublu-release.json"
 MAX_BYTES = 16 * 1024 * 1024
-BLOCKED = re.compile(r"(?:^|/)(?:uploads|storage|certs|scratch|node_modules|\.git)(?:/|$)|(?:^|/)(?:config\.|\.env)|(?:^|/)(?:migrate-|repair-|purge-|debug-|probe-|test[_-])|(?:remote-deploy|chunk-deploy|server-inventory|upload_test)\.php$", re.I)
+BLOCKED = re.compile(r"(?:^|/)(?:uploads|storage|certs|scratch|node_modules|\.git)(?:/|$)|(?:^|/)config\.[^/]*\.local\.(?:php|json)$|(?:^|/)\.env(?:\.|$)|(?:^|/)(?:migrate-|repair-|purge-|debug-|probe-|test[_-])|(?:remote-deploy|chunk-deploy|server-inventory|upload_test)\.php$", re.I)
 
 
 def git(*args):

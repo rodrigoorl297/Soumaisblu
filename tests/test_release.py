@@ -53,7 +53,7 @@ class ReleaseTest(unittest.TestCase):
     def test_no_data_or_maintenance_upload(self):
         for path in ["uploads/client.pdf", "storage/cache.php", "config.db.local.php", "../index.html", "api/purge-users.php", "api/remote-deploy.php", "api/chunk-deploy.php", "api/server-inventory.php", "C:\\foo.js", "/js/db.js"]:
             self.assertFalse(release.safe_path(path), path)
-        for path in ["js/db.js", "pages/admin.html", "api/upload.php", "css/global.css"]:
+        for path in ["js/db.js", "js/config.js", "pages/admin.html", "api/upload.php", "css/global.css"]:
             self.assertTrue(release.safe_path(path), path)
 
     def test_backups_must_be_outside_public_root(self):
