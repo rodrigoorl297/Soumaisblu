@@ -1,3 +1,5 @@
+(function(){if(document.getElementById('soublu-ranking-standings-style'))return;const style=document.createElement('style');style.id='soublu-ranking-standings-style';style.textContent="/* Ranking local: classificação abaixo do pódio. */\n.rk-standings-card { background:var(--color-surface); border:1px solid var(--color-border); border-radius:16px; overflow:hidden; }\n.rk-standings-heading { display:flex; justify-content:space-between; align-items:center; gap:16px; padding:20px 22px; border-bottom:1px solid var(--color-border); }\n.rk-standings-heading h3 { margin:0 0 4px; font-size:17px; color:#102d50; }\n.rk-standings-heading p { margin:0; font-size:12px; color:#64748b; }\n.rk-standings-heading>span { border-radius:20px; background:#f1f5f9; padding:6px 12px; font-size:11px; color:#52657c; white-space:nowrap; }\n.rk-standings { width:100%; border-collapse:collapse; font-size:13px; }\n.rk-standings th { padding:13px 18px; background:#f7f9fc; color:#64748b; font-size:10px; text-transform:uppercase; letter-spacing:.06em; font-weight:700; text-align:left; }\n.rk-standings td { padding:13px 18px; border-top:1px solid #edf1f6; vertical-align:middle; }\n.rk-standings tbody tr:hover { background:#f8fafc; }\n.rk-standings tbody tr.is-me { background:#f6fce9; box-shadow:inset 3px 0 #79a600; }\n.rk-standings__position { width:76px; color:#64748b; font-weight:800; font-size:15px; font-variant-numeric:tabular-nums; }\n.rk-standings__position span { font-size:11px; margin-left:1px; }\n.rk-standings__identity { display:flex; align-items:center; gap:12px; }\n.rk-standings__identity>div:last-child { min-width:0; }\n.rk-standings__identity .avatar { width:38px; height:38px; flex-shrink:0; font-size:13px; }\n.rk-standings .rk-row__name { white-space:normal; line-height:1.35; font-size:12px; }\n.rk-standings .rk-row__dept { margin-top:3px; font-size:11px; color:#7a8ba1; }\n.rk-standings :is(td,th).rk-standings__number { text-align:right; width:110px; font-variant-numeric:tabular-nums; }\n.rk-standings__number strong { font-size:17px; color:#14385d; }\n.rk-standings__total { color:#52657c; }\n.rk-standings__conversion { width:150px; }\n.rk-standings__conversion strong { font-size:12px; font-variant-numeric:tabular-nums; color:#4f6b00; }\n.rk-conversion-track { display:block; height:5px; max-width:110px; margin-top:7px; border-radius:8px; overflow:hidden; background:#edf2e4; }\n.rk-conversion-track i { display:block; height:100%; background:#83b500; border-radius:inherit; }\n.rk-standings__sales { text-align:right; white-space:nowrap; font-weight:700; color:#14385d; font-variant-numeric:tabular-nums; }\n.rk-standings__sales small { display:block; font-size:10px; font-weight:400; }\n.rk-standings .rk-row__ahead { margin-top:5px; font-size:11px; }\n.rk-standings .rk-add { white-space:nowrap; }\n@media(max-width:1000px) { .rk-standings :is(th,td) { padding:12px 10px; } .rk-standings__tier { display:none; } .rk-standings th:has(+th:last-child) { white-space:normal; } }\n@media(max-width:760px) {\n  .rk-standings, .rk-standings tbody { display:block; }\n  .rk-standings thead { display:none; }\n  .rk-standings tbody tr { display:grid; grid-template-columns:45px repeat(3,minmax(0,1fr)); align-items:center; gap:14px 12px; padding:16px; border-top:1px solid #edf1f6; }\n  .rk-standings td { border:0; padding:0; width:auto!important; min-width:0; }\n  .rk-standings__person { grid-column:2/-1; }\n  .rk-standings__number { text-align:left!important; }\n  .rk-standings td::before { content:attr(data-label); display:block; margin-bottom:6px; font-size:10px; color:#64748b; font-weight:500; }\n  .rk-standings__position::before, .rk-standings__person::before { display:none!important; }\n  .rk-standings td[data-label=\"Pagas\"] { grid-column:2; }\n  .rk-standings__sales { grid-column:2/4; text-align:left; }\n  .rk-standings-heading { padding:16px; }\n  .rk-standings__conversion { min-width:0; }\n  .rk-conversion-track { width:100%; }\n}\n";document.head.appendChild(style);})();
+(function(){if(document.getElementById('soublu-ranking-local-style'))return;const style=document.createElement('style');style.id='soublu-ranking-local-style';style.textContent="/* ===== RANKING DE VENDAS — pódio + lista compacta ===== */\n.ranking-list.rk { gap: 0; }\n\n.rk-empty {\n  padding: 28px 16px;\n  text-align: center;\n  color: var(--color-text-muted);\n}\n\n.rk-kpis {\n  display: grid;\n  grid-template-columns: repeat(4, minmax(0, 1fr));\n  gap: 12px;\n  margin-bottom: 20px;\n}\n.rk-kpi {\n  display: flex;\n  flex-direction: column;\n  gap: 4px;\n  padding: 12px 14px;\n  background: var(--color-surface-2);\n  border-radius: var(--radius-md);\n}\n.rk-kpi span {\n  font-size: 11px;\n  font-weight: 700;\n  letter-spacing: 0.04em;\n  text-transform: uppercase;\n  color: var(--color-text-muted);\n}\n.rk-kpi strong {\n  font-family: var(--font-display);\n  font-size: 20px;\n  font-weight: 900;\n  color: var(--color-text);\n  font-variant-numeric: tabular-nums;\n}\n\n/* Pódio: 2º · 1º · 3º */\n.rk-podium {\n  display: grid;\n  grid-template-columns: repeat(3, minmax(0, 1fr));\n  align-items: end;\n  gap: 14px;\n  margin-bottom: 20px;\n}\n.rk-podium__card {\n  --rk-medal: #8c9aa8;\n  --rk-tint: rgba(140, 154, 168, 0.10);\n  position: relative;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  text-align: center;\n  min-width: 0;\n  padding: 22px 14px 16px;\n  background: linear-gradient(180deg, var(--rk-tint) 0%, var(--color-surface) 70%);\n  border: 1.5px solid var(--color-border);\n  border-top: 4px solid var(--rk-medal);\n  border-radius: var(--radius-lg);\n  transition: box-shadow var(--transition), transform var(--transition);\n}\n.rk-podium__card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }\n.rk-podium__card--1 { order: 2; --rk-medal: #F5B301; --rk-tint: rgba(245, 179, 1, 0.14); padding-top: 30px; padding-bottom: 24px; }\n.rk-podium__card--2 { order: 1; }\n.rk-podium__card--3 { order: 3; --rk-medal: #c17f5a; --rk-tint: rgba(193, 127, 90, 0.12); }\n.rk-podium__card.is-me { border-color: var(--color-accent); }\n\n.rk-podium__medal {\n  position: absolute;\n  top: -14px;\n  left: 50%;\n  transform: translateX(-50%);\n  min-width: 34px;\n  height: 28px;\n  padding: 0 10px;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  border-radius: 999px;\n  background: var(--rk-medal);\n  color: #fff;\n  font-family: var(--font-display);\n  font-size: 13px;\n  font-weight: 900;\n  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);\n}\n.rk-podium__avatar .avatar {\n  box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px var(--rk-medal);\n}\n.rk-podium__avatar .avatar { width: 80px; height: 80px; font-size: 26px; }\n.rk-podium__card--1 .rk-podium__avatar .avatar { width: 96px; height: 96px; font-size: 32px; }\n\n/* Fotos do ranking: maiores, rosto enquadrado (retratos costumam ter o rosto no topo) */\n.rk img.avatar {\n  object-fit: cover;\n  object-position: center 25%;\n  background: var(--color-surface-2);\n  image-rendering: auto;\n}\n.rk-row .avatar { width: 42px; height: 42px; font-size: 14px; }\n.rk-row img.avatar { box-shadow: 0 0 0 1px var(--color-border); }\n.rk-podium__name {\n  margin-top: 12px;\n  max-width: 100%;\n  font-size: 13px;\n  font-weight: 800;\n  line-height: 1.3;\n  color: var(--color-text);\n  display: -webkit-box;\n  -webkit-line-clamp: 2;\n  -webkit-box-orient: vertical;\n  overflow: hidden;\n}\n.rk-podium__dept { margin-top: 2px; font-size: 11px; color: var(--color-text-muted); }\n.rk-podium__value {\n  margin-top: 12px;\n  font-family: var(--font-display);\n  font-size: 30px;\n  font-weight: 900;\n  line-height: 1;\n  color: var(--color-primary);\n  font-variant-numeric: tabular-nums;\n}\n.rk-podium__card--1 .rk-podium__value { font-size: 46px; color: #B98600; }\n.rk-podium__card--3 .rk-podium__value { font-size: 26px; }\n.rk-podium__card--2 .rk-podium__avatar .avatar,\n.rk-podium__card--3 .rk-podium__avatar .avatar { width: 72px; height: 72px; font-size: 24px; }\n.rk-podium__card--2, .rk-podium__card--3 { opacity: 0.97; }\n.rk-podium__card--1 { box-shadow: 0 10px 30px -12px rgba(245, 179, 1, 0.45); }\n.rk-podium__card--1 .rk-podium__name { font-size: 15px; }\n.rk-podium__value small { display: block; margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--color-text-muted); }\n.rk-podium__label { margin-top: 4px; font-size: 12px; color: var(--color-text-muted); }\n.rk-podium__conv {\n  margin-top: 10px;\n  padding: 3px 10px;\n  border-radius: 999px;\n  background: rgba(16, 185, 129, 0.12);\n  color: var(--color-success);\n  font-size: 11px;\n  font-weight: 800;\n}\n.rk-podium__tier { margin-top: 10px; }\n.rk-podium__card .rk-add { margin-top: 12px; }\n\n/* Lista (4º em diante) */\n.rk-rows {\n  border: 1px solid var(--color-border);\n  border-radius: var(--radius-lg);\n  overflow: hidden;\n}\n.rk-row {\n  display: grid;\n  grid-template-columns: 32px 42px minmax(0, 1fr) minmax(0, 1.2fr) auto auto auto;\n  align-items: center;\n  gap: 14px;\n  padding: 10px 16px;\n  background: var(--color-surface);\n  border-bottom: 1px solid var(--color-border);\n  transition: background var(--transition);\n}\n.rk-row:last-child { border-bottom: none; }\n.rk-row:hover { background: var(--color-surface-2); }\n.rk-row.is-me { background: var(--color-primary-light); box-shadow: inset 3px 0 0 var(--color-accent); }\n\n.rk-row__pos {\n  font-family: var(--font-display);\n  font-size: 15px;\n  font-weight: 900;\n  text-align: center;\n  color: var(--color-text-muted);\n  font-variant-numeric: tabular-nums;\n}\n.rk-row__pos--1 { color: #F5B301; }\n.rk-row__pos--2 { color: #8c9aa8; }\n.rk-row__pos--3 { color: #c17f5a; }\n.rk-row__who { min-width: 0; }\n.rk-row__name {\n  font-size: 13px;\n  font-weight: 700;\n  color: var(--color-text);\n  white-space: nowrap;\n  overflow: hidden;\n  text-overflow: ellipsis;\n}\n.rk-row__dept { font-size: 11px; color: var(--color-text-muted); }\n.rk-row__ahead {\n  font-size: 13px;\n  color: var(--color-text-muted);\n  line-height: 1.35;\n  min-width: 0;\n}\n.rk-row__ahead strong { font-weight: 900; color: var(--color-text); }\n.rk-row__conv {\n  min-width: 48px;\n  text-align: right;\n  font-size: 13px;\n  font-weight: 800;\n  color: var(--color-success);\n  font-variant-numeric: tabular-nums;\n}\n.rk-row__conv small { display: block; font-size: 10px; font-weight: 600; color: var(--color-text-muted); }\n.rk-row__metric { min-width: 90px; text-align: right; }\n.rk-row__metric strong {\n  display: block;\n  font-family: var(--font-display);\n  font-size: 16px;\n  font-weight: 900;\n  color: var(--color-text);\n  font-variant-numeric: tabular-nums;\n}\n.rk-row__metric strong small { font-size: 10px; font-weight: 600; color: var(--color-text-muted); }\n.rk-row__metric span { font-size: 11px; color: var(--color-text-muted); }\n\n.rk-me-badge {\n  display: inline-block;\n  margin-left: 4px;\n  padding: 1px 7px;\n  border-radius: 999px;\n  background: var(--color-accent);\n  color: #1a1a1a;\n  font-size: 10px;\n  font-weight: 800;\n  vertical-align: middle;\n}\n\n@media (max-width: 900px) {\n  .rk-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n}\n@media (max-width: 640px) {\n  .rk-podium { grid-template-columns: 1fr; align-items: stretch; }\n  .rk-podium__card--1, .rk-podium__card--2, .rk-podium__card--3 { order: 0; }\n  .rk-row {\n    grid-template-columns: 26px 42px minmax(0, 1fr) auto;\n    gap: 10px;\n    padding: 10px 12px;\n  }\n  .rk-row__conv, .rk-row__tier { display: none; }\n  .rk-row__ahead { grid-column: 3 / -1; grid-row: 2; }\n  .rk-row .rk-add { grid-column: 3 / -1; justify-self: start; }\n}\n\n/* Coroa + brilho do líder */\n.rk-podium__avatar { position: relative; }\n.rk-crown {\n  position: absolute;\n  top: -20px;\n  left: 50%;\n  width: 34px;\n  height: 22px;\n  transform: translateX(-50%) rotate(-8deg);\n  fill: #F5B301;\n  filter: drop-shadow(0 2px 3px rgba(185, 134, 0, 0.45));\n  z-index: 1;\n}\n.rk-podium__card--1 .rk-podium__avatar .avatar {\n  box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px #F5B301, 0 0 22px 4px rgba(245, 179, 1, 0.45);\n  animation: rkGlow 3.2s ease-in-out infinite;\n}\n@keyframes rkGlow {\n  0%, 100% { box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px #F5B301, 0 0 16px 2px rgba(245, 179, 1, 0.30); }\n  50%      { box-shadow: 0 0 0 3px var(--color-surface), 0 0 0 5px #F5B301, 0 0 26px 6px rgba(245, 179, 1, 0.55); }\n}\n.rk-podium__card--1 { padding-top: 38px; }\n\n/* \"Faltam X\" do vendedor logado */\n.rk-gap {\n  display: inline-block;\n  margin-top: 6px;\n  padding: 3px 10px;\n  border-radius: 999px;\n  background: rgba(74, 127, 255, 0.12);\n  color: var(--color-accent-dark);\n  font-size: 11px;\n  font-weight: 700;\n  white-space: normal;\n}\n.rk-gap strong { font-weight: 900; }\n.rk-gap--lead { background: rgba(245, 179, 1, 0.16); color: #B98600; }\n.rk-podium__card .rk-gap { margin-top: 10px; }\n\n/* Animação só na primeira abertura */\n.rk--anim .rk-kpi { animation: rkFade 0.4s ease both; }\n.rk--anim .rk-podium__card { animation: rkRise 0.55s cubic-bezier(.2, .8, .2, 1) backwards; }\n.rk--anim .rk-podium__card--3 { animation-delay: 0.05s; }\n.rk--anim .rk-podium__card--2 { animation-delay: 0.15s; }\n.rk--anim .rk-podium__card--1 { animation-delay: 0.28s; }\n.rk--anim .rk-podium__card--1 .rk-crown { animation: rkCrown 0.5s 0.75s cubic-bezier(.3, 1.6, .5, 1) backwards; }\n.rk--anim .rk-rows { animation: rkFade 0.4s 0.3s ease both; }\n@keyframes rkFade { from { opacity: 0; } to { opacity: 1; } }\n@keyframes rkRise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }\n@keyframes rkCrown {\n  from { opacity: 0; transform: translateX(-50%) translateY(-10px) rotate(-30deg) scale(0.4); }\n  to   { opacity: 1; transform: translateX(-50%) rotate(-8deg) scale(1); }\n}\n@media (prefers-reduced-motion: reduce) {\n  .rk *, .rk--anim * { animation: none !important; }\n}\n\n/* Período em botões (segmentado) */\n.rk-seg {\n  display: inline-flex;\n  padding: 3px;\n  gap: 2px;\n  background: var(--color-surface-2);\n  border: 1px solid var(--color-border);\n  border-radius: 10px;\n  min-height: 40px;\n}\n.rk-seg__btn {\n  padding: 0 14px;\n  border: 0;\n  border-radius: 8px;\n  background: transparent;\n  color: var(--color-text-muted);\n  font: inherit;\n  font-size: 13px;\n  font-weight: 700;\n  cursor: pointer;\n  white-space: nowrap;\n  transition: background var(--transition), color var(--transition), box-shadow var(--transition);\n}\n.rk-seg__btn:hover { color: var(--color-text); }\n.rk-seg__btn.is-active {\n  background: var(--color-surface);\n  color: var(--color-primary);\n  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);\n}\n.rk-seg__btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }\n@media (max-width: 640px) {\n  .rk-seg { display: flex; }\n  .rk-seg__btn { flex: 1; padding: 0 8px; }\n}\n";document.head.appendChild(style);})();
 /* Ranking de vendas — classificação (faixas) + filtros Status e Fase */
 
 window.SalesRanking = {
@@ -366,17 +368,14 @@ window.SalesRanking = {
     const funnel = this._aggregateFunnel(users, scoped, vendorIndex, usersByName);
     const reportTotal = dashTotal;
     const orphanRow = this._buildOrphanReportRow(filtered, users, vendorIndex, usersByName);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'rank-sync3',hypothesisId:'H4',location:'sales-ranking.js:report',message:'ranking report totals',data:{period:this._filters.period,billing:this._filters.billing||'total',propCount:filtered.length,reportTotal,rankedTotal,orphanTotal:orphanRow?.faturamento??0,dashCachedTotal:window._dashBillingTotal??null,vendors:rows.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-
-    const reportRows = rows.map((row, i) => {
+const reportRows = rows.map((row, i) => {
       const f = funnel[row.user.id] || { count: 0, bruto: 0, efetivado: 0, cobranca: 0, cancelado: 0 };
       return {
         pos: i + 1,
-        name: row.user.name || '—',
+        name: (row.user.name || '—') + (row.user.active === false || row.user.active === 0 ? ' (inativo)' : ''),
         department: row.user.department || '—',
         matricula: row.user.matricula || '—',
+        inactive: row.user.active === false || row.user.active === 0,
         tier: row.tier?.label || 'Abaixo FAIXA1',
         qtd: row.count || 0,
         faturamento: row.total || 0,
@@ -650,10 +649,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
         orphanTotal += this._proposalChartAmount(p);
       }
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'rank-sync3',hypothesisId:'H4-H5',location:'sales-ranking.js:prepare',message:'ranking vs dashboard totals',data:{period:this._filters.period,billing:this._filters.billing||'total',rawCount:rawProps.length,filteredCount:filtered.length,dashTotal,rankedTotal,orphanCount,orphanTotal,dashCachedTotal:window._dashBillingTotal??null,dashCachedCount:window._dashPropCount??null},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    return { users, vendorIndex, usersByName, userIds, rawProps, filtered, scoped, rows, dashTotal, dashTotalBruto, rankedTotal, orphanCount, orphanTotal };
+return { users, vendorIndex, usersByName, userIds, rawProps, filtered, scoped, rows, dashTotal, dashTotalBruto, rankedTotal, orphanCount, orphanTotal };
   },
 
   _buildOrphanReportRow(filtered, users, vendorIndex, usersByName) {
@@ -694,7 +690,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     };
   },
 
-  /** Ranking dos funcionários (employee.html) — sem filtros master; valor = soma das pagas. */
+  /** Ranking dos funcionários (employee.html) — sem filtros master nem valores em R$. */
   async _renderPublicRanking(listId, opts = {}) {
     const users = await this._loadAllRankingVendors();
     const vendorIndex = this._buildVendorIndex(users);
@@ -702,10 +698,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     const rawProps = await this._loadProposals({ force: true, skipDashCache: true, fullList: true });
     const allProps = this._scopeProposals(rawProps, userIds, vendorIndex, null, false);
     const rows = this._aggregateByPaidAndProposals(users, allProps, vendorIndex, null, false);
-    // #region agent log
-    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'rank-emp-fix',hypothesisId:'H-public',location:'sales-ranking.js:public-rank',message:'public ranking rendered',data:{listId,vendors:users.length,rows:rows.length,props:allProps.length},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
-    this._renderList(listId, rows, {
+this._renderList(listId, rows, {
       viewerId: opts.viewerId || '',
       viewer: opts.viewer || null,
       showSalesAmount: false,
@@ -748,7 +741,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     if (summary) summary.style.display = '';
   },
 
-  /** Esconde filtros/resumo e o card vazio (barra branca) para quem não é master. */
+  /** Esconde filtros/resumo e o card vazio na página (filtros ficam no modal Configurações). */
   _hideRankingToolbar(filtersId, summaryId) {
     const filters = document.getElementById(filtersId);
     const summary = document.getElementById(summaryId);
@@ -771,8 +764,14 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     } catch (e) {
       console.warn('[SalesRanking] users:', e);
     }
+    /* Inclui inativos: vendas já feitas devem entrar no fechamento/ranking. */
     return (users || [])
-      .filter(u => typeof isRankingParticipant === 'function' && isRankingParticipant(u))
+      .filter(u => {
+        const role=this._norm(u.role),department=this._norm(u.department);
+        return !['desenvolvedor','desenvolvimento','developer','dev','ti'].includes(role)
+          && !['desenvolvimento','ti','t.i.','tecnologia','tecnologia da informacao'].includes(department);
+      })
+      .filter(u => typeof isRankingParticipant === 'function' && isRankingParticipant(u, { includeInactive: true }))
       .filter(u => typeof isUserInPartnerNetworkSync !== 'function' || !isUserInPartnerNetworkSync(u));
   },
 
@@ -795,43 +794,26 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
   _aggregate(users, proposals, vendorIndex, usersByName, masterMode = true) {
     const billing = this._filters.billing || 'total';
     const byVendor = {};
-    let _dbgAmt = null;
     proposals.forEach(p => {
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, masterMode);
       if (!vid) return;
-      if (!byVendor[vid]) byVendor[vid] = { total: 0, bruto: 0, count: 0 };
+      if (!byVendor[vid]) byVendor[vid] = { total: 0, bruto: 0, count: 0, paidCount: 0 };
       const amt = this._proposalChartAmount(p, billing);
       const bruto = this._proposalGrossAmount(p);
-      if (!_dbgAmt && amt > 0) {
-        _dbgAmt = {
-          id: p.id || p.numero,
-          valor: p.valor,
-          valorFinal: p.valorFinal ?? p.valor_final,
-          used: amt,
-          bruto,
-          billing,
-          created: p.createdAt || p.created_at,
-        };
-      }
       byVendor[vid].total += amt;
       byVendor[vid].bruto += bruto;
       byVendor[vid].count += 1;
+      if (this._isPaidProposal(p)) byVendor[vid].paidCount += 1;
     });
-    // #region agent log
-    if (_dbgAmt) {
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'rank-final',hypothesisId:'amt-date',location:'sales-ranking.js:aggregate',message:'ranking amount sample',data:_dbgAmt,timestamp:Date.now()})}).catch(()=>{});
-    }
-    // #endregion
-
-    return (users || [])
+return (users || [])
       .map(u => {
-        const agg = byVendor[u.id] || { total: 0, bruto: 0, count: 0 };
+        const agg = byVendor[u.id] || { total: 0, bruto: 0, count: 0, paidCount: 0 };
         return {
           user: u,
           total: agg.total,
           bruto: agg.bruto,
           count: agg.count,
-          paidCount: 0,
+          paidCount: agg.paidCount,
           tier: this._tierForSales(agg.total),
         };
       })
@@ -839,33 +821,30 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
       .sort((a, b) => b.total - a.total || b.count - a.count);
   },
 
-  /** Ranking público: ordenado pelo valor das pagas (R$), com pagas + total de propostas (sem pontos ou faixas). */
+  /** Ranking público: pagas + total de propostas (sem R$, pontos ou faixas). */
   _aggregateByPaidAndProposals(users, proposals, vendorIndex, usersByName, masterMode = false) {
     const byVendor = {};
     (proposals || []).forEach(p => {
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, masterMode);
       if (!vid) return;
-      if (!byVendor[vid]) byVendor[vid] = { paidCount: 0, count: 0, total: 0 };
+      if (!byVendor[vid]) byVendor[vid] = { paidCount: 0, count: 0 };
       byVendor[vid].count += 1;
-      if (this._isPaidProposal(p)) {
-        byVendor[vid].paidCount += 1;
-        byVendor[vid].total += this._proposalChartAmount(p, 'pagas');
-      }
+      if (this._isPaidProposal(p)) byVendor[vid].paidCount += 1;
     });
 
     return (users || [])
       .map(u => {
-        const agg = byVendor[u.id] || { paidCount: 0, count: 0, total: 0 };
+        const agg = byVendor[u.id] || { paidCount: 0, count: 0 };
         return {
           user: u,
-          total: agg.total,
+          total: 0,
           count: agg.count,
           paidCount: agg.paidCount,
           tier: null,
         };
       })
       .filter(r => r.count > 0)
-      .sort((a, b) => b.total - a.total || b.paidCount - a.paidCount || b.count - a.count);
+      .sort((a, b) => b.paidCount - a.paidCount || b.count - a.count);
   },
 
   _prefixForList(listId) {
@@ -879,6 +858,10 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     this._filters.fase = document.getElementById(`salesRankFase${prefix}`)?.value || '';
   },
 
+  /**
+   * _renderFiltersUI — filtros/exportação só no modal Configurações (topbar).
+   * Não monta mais a toolbar duplicada na página.
+   */
   _renderFiltersUI(containerId, listId, opts = {}) {
     const box = document.getElementById(containerId);
     if (!box) return;
@@ -979,6 +962,9 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     }
   },
 
+  /**
+   * _renderSummary — não exibe mais resumo na página (só no modal/relatório).
+   */
   _renderSummary(summaryId, rows, proposals, opts = {}) {
     const el = document.getElementById(summaryId);
     if (!el) return;
@@ -1021,21 +1007,215 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     el.textContent = parts.join(' · ');
   },
 
+  /**
+   * _ensureRankingTopbarConfig — botão Configurações no topbar (atalho de exportação).
+   */
+  _ensureRankingTopbarConfig(opts = {}) {
+    const topbarActions = document.querySelector('.topbar .topbar-actions, header.topbar .topbar-actions');
+    if (!topbarActions) return;
+
+    let tools = document.getElementById('rankManageTopbarTools');
+    if (!tools) {
+      tools = document.createElement('div');
+      tools.id = 'rankManageTopbarTools';
+      tools.className = 'rank-manage-header-actions';
+      const cfgBtn = document.createElement('button');
+      cfgBtn.type = 'button';
+      cfgBtn.id = 'btnRankManageConfig';
+      cfgBtn.className = 'btn btn-outline btn-sm';
+      cfgBtn.textContent = '⚙ Configurações';
+      cfgBtn.title = 'Filtros e relatório do ranking';
+      cfgBtn.onclick = () => this.openRankingConfigModal();
+      tools.appendChild(cfgBtn);
+      const anchor = topbarActions.querySelector('.minha-conta-topbar')
+        || topbarActions.querySelector('button[onclick*="openMinhaConta"]')
+        || topbarActions.querySelector('button[onclick*="Auth.logout"]');
+      if (anchor) topbarActions.insertBefore(tools, anchor);
+      else topbarActions.prepend(tools);
+    }
+
+    const show = !!opts.showMasterDetails && !!document.getElementById('secRanking')?.classList.contains('active');
+    tools.hidden = !show;
+    tools.style.display = show ? '' : 'none';
+    document.body.classList.toggle('rank-manage-tools-active', show);
+
+    this._rankExportCtx = {
+      viewer: opts.viewer,
+      prefix: opts.prefix || 'Admin',
+      listId: opts.listId || 'adminRankingList',
+    };
+    this._ensureRankingConfigModal();
+  },
+
+  /** Modal Configurações do ranking — filtros + exportação (visual sóbrio). */
+  _ensureRankingConfigModal() {
+    let modal = document.getElementById('rankConfigModal');
+    /* Troca layout antigo (hero/cards) pelo modal profissional. */
+    if (modal && modal.dataset.ui !== 'pro1') {
+      modal.remove();
+      modal = null;
+    }
+    if (modal) return;
+
+    const billingOpts = (this.BILLING_OPTIONS || [])
+      .map((o) => `<option value="${o.v}">${o.l || o.v}</option>`).join('');
+    const statusOpts = ['', ...(this.STATUS_OPTIONS || [])]
+      .map((s) => `<option value="${s}">${s || 'Todos os status'}</option>`).join('');
+
+    modal = document.createElement('div');
+    modal.className = 'modal-overlay';
+    modal.id = 'rankConfigModal';
+    modal.dataset.ui = 'pro1';
+    modal.innerHTML = `
+      <div class="modal rank-config-modal">
+        <div class="modal-header">
+          <h3>Configurações do ranking</h3>
+          <button type="button" class="modal-close" onclick="SalesRanking.closeRankingConfigModal()" aria-label="Fechar"></button>
+        </div>
+        <div class="modal-body">
+          <p class="rank-config-lead">Defina os filtros e baixe o relatório com os mesmos números do ranking.</p>
+          <div class="rank-config-grid">
+            <div class="form-group">
+              <label for="rankCfgPeriod">Período</label>
+              <select id="rankCfgPeriod" class="form-control">
+                <option value="month">Este mês</option>
+                <option value="last_month">Mês anterior</option>
+                <option value="all">Todo o período</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="rankCfgBilling">Faturamento</label>
+              <select id="rankCfgBilling" class="form-control">${billingOpts}</select>
+            </div>
+            <div class="form-group">
+              <label for="rankCfgStatus">Status</label>
+              <select id="rankCfgStatus" class="form-control">${statusOpts}</select>
+            </div>
+          </div>
+          <div class="rank-config-actions">
+            <button type="button" class="btn btn-outline btn-sm" id="rankCfgApplyFilters">Aplicar filtros</button>
+          </div>
+          <hr class="rank-config-sep"/>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label>Exportar relatório</label>
+          </div>
+          <div class="rank-config-exports">
+            <button type="button" class="btn btn-primary btn-sm" id="rankCfgExportHtml">Gerar relatório (HTML)</button>
+            <button type="button" class="btn btn-outline btn-sm" id="rankCfgExportCsv">CSV</button>
+            <button type="button" class="btn btn-outline btn-sm" id="rankCfgExportXlsx">Excel</button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" onclick="SalesRanking.closeRankingConfigModal()">Fechar</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+
+    document.getElementById('rankCfgApplyFilters')?.addEventListener('click', () => {
+      this.applyRankingConfigFilters({ close: false });
+    });
+    const run = (fmt) => {
+      /* Aplica filtros no estado; exportReport recalcula os dados. */
+      this.applyRankingConfigFilters({ close: false, skipRender: true });
+      const ctx = this._rankExportCtx || {};
+      this.exportReport(fmt, { viewer: ctx.viewer, prefix: ctx.prefix || 'Admin' });
+      this.closeRankingConfigModal();
+      /* Atualiza a lista na tela com os filtros usados no relatório. */
+      this.applyRankingConfigFilters({ close: false });
+    };
+    document.getElementById('rankCfgExportHtml')?.addEventListener('click', () => run('html'));
+    document.getElementById('rankCfgExportCsv')?.addEventListener('click', () => run('csv'));
+    document.getElementById('rankCfgExportXlsx')?.addEventListener('click', () => run('xlsx'));
+  },
+
+  /**
+   * _fillRankingConfigModal — preenche selects do modal com this._filters.
+   */
+  _fillRankingConfigModal() {
+    const f = this._filters || {};
+    const set = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v == null ? '' : String(v);
+    };
+    set('rankCfgPeriod', f.period || 'month');
+    set('rankCfgBilling', f.billing || 'total');
+    set('rankCfgStatus', f.status || '');
+  },
+
+  /**
+   * applyRankingConfigFilters — lê filtros do modal, sincroniza a página e atualiza o ranking.
+   */
+  applyRankingConfigFilters(opts = {}) {
+    const period = document.getElementById('rankCfgPeriod')?.value || 'month';
+    const billing = document.getElementById('rankCfgBilling')?.value || 'total';
+    const status = document.getElementById('rankCfgStatus')?.value || '';
+    const fase = document.getElementById('rankCfgFase')?.value || '';
+    this._filters.period = period;
+    this._filters.billing = billing;
+    this._filters.status = status;
+    this._filters.fase = fase;
+
+    const ctx = this._rankExportCtx || {};
+    const prefix = ctx.prefix || 'Admin';
+    const listId = ctx.listId || 'adminRankingList';
+    const syncSel = (id, v) => {
+      const el = document.getElementById(id);
+      if (el) el.value = v;
+    };
+    syncSel(`salesRankPeriod${prefix}`, period);
+    syncSel(`salesRankBilling${prefix}`, billing);
+    syncSel(`salesRankStatus${prefix}`, status);
+if (!opts.skipRender) {
+      if (listId === 'adminRankingList' && typeof renderAdminRanking === 'function') {
+        renderAdminRanking();
+      } else if (listId === 'rankingList' && typeof renderRanking === 'function') {
+        renderRanking();
+      } else if (typeof this.renderAdmin === 'function' && listId === 'adminRankingList') {
+        void this.renderAdmin();
+      }
+    }
+    if (opts.close) this.closeRankingConfigModal();
+  },
+
+  openRankingConfigModal() {
+    this._ensureRankingConfigModal();
+    this._fillRankingConfigModal();
+if (typeof openModal === 'function') openModal('rankConfigModal');
+    else document.getElementById('rankConfigModal')?.classList.add('open');
+  },
+
+  closeRankingConfigModal() {
+    if (typeof closeModal === 'function') closeModal('rankConfigModal');
+    else document.getElementById('rankConfigModal')?.classList.remove('open');
+  },
+
+  /** Atualiza visibilidade do botão Configurações do ranking no topbar. */
+  syncRankingTopbarVisibility() {
+    const tools = document.getElementById('rankManageTopbarTools');
+    if (!tools) return;
+    const active = !!document.getElementById('secRanking')?.classList.contains('active');
+    const can = this._canViewSalesAmount(typeof Auth !== 'undefined' ? Auth.getSession() : null);
+    const show = active && can;
+    tools.hidden = !show;
+    tools.style.display = show ? '' : 'none';
+    document.body.classList.toggle('rank-manage-tools-active', show);
+  },
+
   _esc(s) {
     return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   },
 
-  /** Ajusta o subtítulo da seção conforme o modo (público = pagas/propostas). */
   _setRankingSubtitle(listId, publicRank) {
     const p = document.getElementById(listId)?.closest('.section')?.querySelector('.page-header p');
     if (!p) return;
     if (!p.dataset.defaultText) p.dataset.defaultText = p.textContent;
     p.textContent = publicRank
-      ? 'Classificação pelo valor das propostas pagas — desempate por pagas e total de propostas'
+      ? 'Classificação por propostas pagas — desempate pelo total de propostas'
       : p.dataset.defaultText;
   },
 
   _renderList(listId, rows, opts = {}) {
+    rows=rows.filter(r=>String(r.user?.id||'')!=='umt7ab7yqx1yf4' && !['desenvolvedor','desenvolvimento','developer','dev','ti'].includes(this._norm(r.user?.role)));
     const box = document.getElementById(listId);
     if (!box) return;
     const viewerId = opts.viewerId || '';
@@ -1060,7 +1240,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       return;
     }
 
-    const metric = (r) => ((showSales || publicRank) ? (r.total || 0) : (r.count || 0));
+    const metric = (r) => (showSales ? (r.total || 0) : publicRank ? (r.paidCount || 0) : (r.count || 0));
     const totalPaid = rows.reduce((s, r) => s + (r.paidCount || 0), 0);
     const totalCount = rows.reduce((s, r) => s + (r.count || 0), 0);
     const totalSales = rows.reduce((s, r) => s + (r.total || 0), 0);
@@ -1088,13 +1268,13 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     // Valor principal + legenda de cada vendedor
     const main = (r) => {
       if (showSales) return { value: salesText(r), label: `${r.count} proposta(s)` };
-      if (publicRank) return { value: this._fmtSales(r.total || 0), label: `${r.paidCount || 0} paga(s) de ${r.count || 0} proposta(s)` };
+      if (publicRank) return { value: String(r.paidCount || 0), label: `${r.paidCount || 0} paga(s) de ${r.count || 0} proposta(s)` };
       return { value: String(r.count || 0), label: 'proposta(s)' };
     };
 
     // Quanto falta para passar quem está logo acima (ou vantagem do líder)
     const fmtGap = (v) => {
-      if (showSales || publicRank) return this._fmtSales(v);
+      if (showSales) return this._fmtSales(v);
       const n = Math.max(1, Math.ceil(v));
       return `${n} proposta${n === 1 ? '' : 's'}`;
     };
@@ -1108,7 +1288,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
           : `<div class="rk-gap">Empatado com o 2º lugar — não deixe passar!</div>`;
       }
       const diff = metric(rows[i - 1]) - metric(r);
-      const need = (showSales || publicRank) ? Math.max(diff, 0.01) : diff + 1;
+      const need = showSales ? Math.max(diff, 0.01) : diff + 1;
       return `<div class="rk-gap">Faltam <strong>${fmtGap(need)}</strong> para passar o ${i}º lugar</div>`;
     };
 
@@ -1118,7 +1298,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       const up = rows[i - 1];
       if (!up) return '';
       const diff = metric(up) - metric(r);
-      const need = (showSales || publicRank) ? Math.max(diff, 0.01) : diff + 1;
+      const need = showSales ? Math.max(diff, 0.01) : diff + 1;
       return `<div class="rk-row__ahead">Faltam <strong>${fmtGap(need)}</strong> para o ${i}º lugar</div>`;
     };
 
@@ -1126,7 +1306,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
     const summaryHtml = publicRank
       ? `<div class="rk-kpis">
           ${kpi('Vendedores', rows.length)}
-          ${kpi('Valor pago', this._fmtSales(totalSales))}
+          ${kpi('Total de propostas', totalCount)}
           ${kpi('Propostas pagas', `${totalPaid} de ${totalCount}`)}
           ${kpi('Conversão geral', `${totalCount ? Math.round((totalPaid / totalCount) * 100) : 0}%`)}
         </div>`
@@ -1161,29 +1341,23 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       }).join('')}</div>`
       : '';
 
-    // Demais posições
+    // Classificação abaixo do pódio: colunas alinhadas e comparação direta.
+    const hasActions = !publicRank && opts.allowAddPoints;
     const restHtml = rows.slice(podiumCount).map((r, idx) => {
-      const i = idx + podiumCount;
-      const e = r.user;
-      const isMe = viewerId && e.id === viewerId;
-      const m = main(r);
-      const posCls = i < 3 ? ` rk-row__pos--${i + 1}` : '';
-      return `<div class="rk-row${isMe ? ' is-me' : ''}">
-        <div class="rk-row__pos${posCls}">${i + 1}</div>
-        ${avatar(e, 'avatar-sm')}
-        <div class="rk-row__who">
-          <div class="rk-row__name" title="${esc(e.name)}">${esc(e.name)}${isMe ? ' ' + meBadge : ''}</div>
-          <div class="rk-row__dept">${dept(e)}</div>
-        </div>
-        ${aheadHint(i)}
-        ${publicRank ? `<div class="rk-row__conv" title="Conversão (pagas / propostas)">${conv(r)}%<small>conv.</small></div>` : ''}
-        ${showSales ? `<div class="rk-row__tier">${tierBadge(r)}</div>` : ''}
-        <div class="rk-row__metric"><strong>${m.value}</strong><span>${m.label}</span></div>
-        ${addBtn(e)}
-      </div>`;
+      const i = idx + podiumCount, e = r.user, isMe = viewerId && e.id === viewerId;
+      const percentage = Math.max(0, Math.min(100, conv(r)));
+      return `<tr class="${isMe ? 'is-me' : ''}">
+        <td class="rk-standings__position" data-label="Posição">${i + 1}<span>º</span></td>
+        <td class="rk-standings__person" data-label="Vendedor"><div class="rk-standings__identity">${avatar(e, 'avatar-sm')}<div><div class="rk-row__name" title="${esc(e.name)}">${esc(e.name)}${isMe ? ' ' + meBadge : ''}</div><div class="rk-row__dept">${dept(e)}</div>${isMe ? aheadHint(i) : ''}</div></div></td>
+        <td class="rk-standings__number" data-label="Pagas"><strong>${r.paidCount || 0}</strong></td>
+        <td class="rk-standings__number rk-standings__total" data-label="Total de propostas">${r.count || 0}</td>
+        <td class="rk-standings__conversion" data-label="Conversão"><strong>${percentage}%</strong><span class="rk-conversion-track" role="meter" aria-label="Conversão de ${esc(e.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}"><i style="width:${percentage}%"></i></span></td>
+        ${showSales ? `<td class="rk-standings__sales" data-label="Faturamento">${salesText(r)}</td><td class="rk-standings__tier" data-label="Faixa">${tierBadge(r)}</td>` : ''}
+        ${hasActions ? `<td class="rk-standings__actions" data-label="Ações">${addBtn(e)}</td>` : ''}
+      </tr>`;
     }).join('');
-
-    box.innerHTML = `${summaryHtml}${podiumHtml}${restHtml ? `<div class="rk-rows">${restHtml}</div>` : ''}`;
+    const standings = restHtml ? `<div class="rk-standings-card"><div class="rk-standings-heading"><div><h3>Classificação geral</h3><p>${podiumCount ? 'Do 4º lugar em diante' : 'Resultados dos vendedores'}</p></div><span>${rows.length - podiumCount} vendedores</span></div><table class="rk-standings"><thead><tr><th scope="col">Posição</th><th scope="col">Vendedor</th><th scope="col" class="rk-standings__number">Pagas</th><th scope="col" class="rk-standings__number">Total de propostas</th><th scope="col">Conversão</th>${showSales ? '<th scope="col" class="rk-standings__number">Faturamento</th><th scope="col" class="rk-standings__tier">Faixa</th>' : ''}${hasActions ? '<th scope="col">Ações</th>' : ''}</tr></thead><tbody>${restHtml}</tbody></table></div>` : '';
+    box.innerHTML = `${summaryHtml}${podiumHtml}${standings}`;
   },
 
   async renderAdmin() {
@@ -1211,7 +1385,7 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
         showSalesAmount,
         rankMode: 'master',
       });
-      return;
+return;
     }
 
     this._filters = { period: 'all', status: '', fase: '', billing: 'total' };

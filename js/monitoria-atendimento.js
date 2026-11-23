@@ -489,7 +489,7 @@ const MonitoriaAtendimento = (() => {
     }
     showLoading('Carregando monitoria...');
     try {
-      await ensureSchema();
+      // A tabela já existe no servidor; o carregamento não executa migrações.
       await reload();
       const s = Auth.getSession();
       const nameEl = document.getElementById('monUserName');

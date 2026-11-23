@@ -68,6 +68,7 @@ $consultaParam = trim((string) ($_GET['consulta'] ?? ''));
 
 $cnpjEndpoints = [
     'consulta-cnpj-receita',
+    'cadastro-pj-plus',
     'score-credito-quod',
     'ccd-pj',
 ];
@@ -107,6 +108,7 @@ function fontedata_query_param_for(string $endpoint): ?string
     static $map = [
         'ccd-pf' => 'cpf',
         'ccd-pj' => 'cnpj',
+        'cadastro-pj-plus' => 'cnpj',
         'cadastro-rf-pf' => 'cpf',
         'dados-cadastrais-basicos' => 'cpf',
         'cadastro-pf-basica' => 'cpf',

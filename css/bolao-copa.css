@@ -128,17 +128,17 @@
   font-weight: 800;
 }
 .bolao-pick-chip.bolao-pick-partner {
-  background: #F7FFE0;
-  border-color: #C5FF00;
-  color: #4F6B00;
+  background: #fff7ed;
+  border-color: #fb923c;
+  color: #c2410c;
   font-weight: 900;
 }
 .bolao-row-partner td {
-  background: #F7FFE0;
+  background: #fff7ed;
 }
 .bolao-name-partner {
   font-weight: 800;
-  color: #4F6B00;
+  color: #c2410c;
 }
 .bolao-tag-partner {
   display: inline-block;
@@ -156,8 +156,8 @@
   margin-left: 8px;
   padding: 2px 8px;
   border-radius: 6px;
-  background: #EEFFC2;
-  color: #4F6B00;
+  background: #ffedd5;
+  color: #c2410c;
   font-weight: 700;
   font-size: 12px;
 }

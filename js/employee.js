@@ -58,6 +58,19 @@ async function _requireDB(maxWaitMs = 9000) {
   return null;
 }
 
+/**
+ * _employeeCanUseVendorTools — mostra Propostas/Simulação/Clientes no painel do colaborador.
+ * vendedor/employee; backoffice/supervisor/sup_backoffice; ou canVender/canProposta (Beatriz).
+ */
+function _employeeCanUseVendorTools(user) {
+  const r = String(user?.role || '').toLowerCase();
+  if (['vendedor', 'employee', 'backoffice', 'master', 'supervisor', 'sup_backoffice'].includes(r)) {
+    return true;
+  }
+  const p = (user?.permissions && typeof user.permissions === 'object') ? user.permissions : {};
+  return p.canVender === true || p.canProposta === true;
+}
+
 /** Parceiro/equipe: sem loja, pedidos da loja, reuniões nem ranking */
 function _applyPartnerEmployeeUI() {
   const hideNav = ['secStore', 'secOrders', 'secMeetings', 'secRanking'];
@@ -78,7 +91,7 @@ function _applyPartnerEmployeeUI() {
   });
 
   const role = currentUser?.role;
-  const showProp = ['vendedor', 'backoffice'].includes(role);
+  const showProp = _employeeCanUseVendorTools(currentUser);
   const navProp = document.getElementById('navProposals');
   const navSim = document.getElementById('navSimulacao');
   if (navProp) navProp.style.display = showProp ? '' : 'none';
@@ -302,6 +315,24 @@ _redirectPortariaToAdmin();
 if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
       BolaoCopa.applyNavVisibility();
     }
+    /* Clube de Benefícios desativado: mantém o botão/seção ocultos no employee. */
+    if (typeof window.isClubeBeneficiosEnabled === 'function' && !window.isClubeBeneficiosEnabled()) {
+      document.querySelectorAll(
+        '.benefits-clube-nav, #navClubeBeneficios, #secClubeBeneficios, a[href*="clube-beneficios"]'
+      ).forEach((el) => {
+        el.style.display = 'none';
+        el.setAttribute('hidden', 'hidden');
+      });
+      document.querySelectorAll('.sidebar-nav .nav-label').forEach((el) => {
+        if (/Clube Benef[ií]cios/i.test(el.textContent || '')) {
+          const btn = el.closest('button, a');
+          if (btn) {
+            btn.style.display = 'none';
+            btn.setAttribute('hidden', 'hidden');
+          }
+        }
+      });
+    }
     _applyEmployeeLeadsNav(currentUser);
     if (currentUser.role === 'portaria') _applyPortariaEmployeeUI();
 
@@ -353,7 +384,7 @@ if (window.BolaoCopa && typeof BolaoCopa.applyNavVisibility === 'function') {
     }
 
     // Permissões para Propostas (área completa do colaborador; modo perfil não usa)
-    if (!window.__PERFIL_MODE__ && ['vendedor', 'backoffice', 'master', 'supervisor'].includes(currentUser.role)) {
+    if (!window.__PERFIL_MODE__ && _employeeCanUseVendorTools(currentUser)) {
        const btnProp = document.getElementById('navProposals');
        if (btnProp) btnProp.style.display = '';
        const btnSim = document.getElementById('navSimulacao');

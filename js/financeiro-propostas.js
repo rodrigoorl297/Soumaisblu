@@ -39,6 +39,7 @@
   function canView() {
     const sess = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (!sess || window.PARTNER_ROOT_ID) return false;
+    if (typeof Auth.hasFinanceiroInternoAccess === 'function') return Auth.hasFinanceiroInternoAccess(sess);
     return ['master', 'fundador', 'gerente', 'financeiro', 'financial', 'rh', 'diretoria'].includes(String(sess.role || '').toLowerCase());
   }
 
@@ -423,7 +424,6 @@
     },
 
     async _preencherBaixaComissao(proposal, prefix = 'fpd') {
-      if(window.CommissionEngine) await CommissionEngine.show(proposal,document.getElementById(`${prefix}ValorComissao`)?.closest('form') || document.getElementById(`${prefix}ValorComissao`)?.parentElement);
       const set = (id, v) => { const el = document.getElementById(id); if (el && v) el.value = v; };
       set(`${prefix}ComissaoRecebida`, proposal.comissaoRecebida || proposal.comissao_recebida || '');
       set(`${prefix}AptoComissao`, proposal.comissaoElegivel || proposal.comissao_elegivel || '');
@@ -474,6 +474,7 @@
       this._drawerAptoOverride = !!(proposal.comissaoElegivel || proposal.comissao_elegivel);
       this.onDivergenciaChange(prefix);
       this._updateAptoComissao(prefix);
+      await window.NeoCommissionReady;
       const commissionInput=document.getElementById(`${prefix}ValorComissao`);
       if(commissionInput){const zero=!!window.CommissionEngine?.zeroException(proposal);commissionInput.readOnly=zero;if(zero){commissionInput.value='0';commissionInput.title='NCDT_096-999_EXCECAO: empresa e vendedor com comissão de 0%.';}else commissionInput.title='';}
 
@@ -678,11 +679,11 @@
       if (!root || !canView()) return;
 
       root.innerHTML = `<div class="card card-padded" style="text-align:center;padding:40px 24px;">
-        <h3 style="margin:0 0 10px;font-weight:800;">Operações integradas à Gestão de Propostas</h3>
+        <h3 style="margin:0 0 10px;font-weight:800;">Operações integradas à Gestão Compra de Dívida</h3>
         <p class="text-muted" style="margin:0 0 20px;font-size:14px;max-width:520px;margin-left:auto;margin-right:auto;">
           Baixa de comissão, emissão de prejuízo e débito ao parceiro estão no painel de cada proposta — abas <strong>Dados · Comissão · Prejuízo · Débito Parceiro · Histórico</strong>.
         </p>
-        <button type="button" class="btn btn-primary" onclick="FinanceiroBoot.openSection('secManageProposals')">Abrir Gestão de Propostas</button>
+        <button type="button" class="btn btn-primary" onclick="FinanceiroBoot.openSection('secManageProposals')">Abrir Gestão Compra de Dívida</button>
       </div>`;
     },
 
@@ -739,6 +740,7 @@
         return;
       }
 
+      await window.NeoCommissionReady;
       const zeroException = !!window.CommissionEngine?.zeroException(p);
       const rawValor = zeroException ? '0' : val(`${prefix}ValorComissao`);
       const valorComissao = rawValor !== '' && rawValor != null ? Number(rawValor) : null;
@@ -1251,10 +1253,14 @@
 
     async openProposalDrawer(id, tab = 'comissao') {
       if (!canView()) return;
+      if (this._drawerBusy) return;
+      this._drawerBusy = true;
       this.ensureDrawer();
       showLoading('Carregando proposta...');
       try {
-        const raw = await DB.getProposal(id);
+        const raw = (typeof DB.getProposal === 'function')
+          ? await DB.getProposal(id, { lite: true })
+          : await DB.getProposal(id);
         if (!raw) {
           showToast('Proposta não encontrada.', 'warning');
           return;
@@ -1270,7 +1276,9 @@
         document.getElementById('finPropDrawerOverlay')?.classList.add('open');
       } catch (e) {
         showToast(e.message || 'Erro ao abrir proposta.', 'error');
+        if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
       } finally {
+        this._drawerBusy = false;
         hideLoading();
       }
     },
@@ -1278,6 +1286,8 @@
     closeDrawer() {
       document.getElementById('finPropDrawerOverlay')?.classList.remove('open');
       this._drawerProposal = null;
+      this._drawerBusy = false;
+      if (typeof hideLoading === 'function') hideLoading();
     },
 
     async switchDrawerTab(tab) {

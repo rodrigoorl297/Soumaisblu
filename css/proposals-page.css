@@ -3,7 +3,7 @@
 .page-content:has(> #secManageProposals.active) { min-width: 0; }
 #secManageProposals { min-width: 0; max-width: 100%; }
 #secManageProposals .proposal-page-header { display: flex; flex-direction: column; align-items: stretch; gap: 24px; margin-bottom: 22px; }
-#secManageProposals .proposal-eyebrow { display: block; color: #648000; font-size: 11px; font-weight: 800; letter-spacing: .14em; margin-bottom: 8px; }
+#secManageProposals .proposal-eyebrow { display: block; color: var(--color-accent-dark); font-size: 11px; font-weight: 800; letter-spacing: .14em; margin-bottom: 8px; }
 #secManageProposals .page-header-text h2 { color: #102d50; font-size: clamp(24px, 2.1vw, 32px); letter-spacing: -.035em; margin: 0 0 8px; }
 #secManageProposals .proposal-page-description { color: #64748b; font-size: 14px; margin: 0; }
 #secManageProposals .proposal-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; background: #fff; border: 1px solid #dfe7ef; border-radius: 16px; padding: 20px; box-shadow: 0 3px 12px #14325304; }
@@ -87,4 +87,16 @@
   #secManageProposals .proposal-date-filter input { width: 100% !important; min-width: 0; }
   #secManageProposals .proposal-toolbar > .btn { flex: 1 1 calc(50% - 10px); }
   #secManageProposals .proposals-list-card table.data-table tbody tr { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
+
+
+/* Mobile: proposta como ficha para leitura sem rolagem lateral. */
+@media (max-width: 600px) {
+  #secManageProposals .proposals-list-card table.data-table tbody tr { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px; }
+  #secManageProposals .proposals-list-card table.data-table tbody td { min-width: 0 !important; max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+  #secManageProposals .proposal-toolbar { padding: 10px; }
+  #secManageProposals .proposal-toolbar .btn { min-height: 44px; }
+  #secManageProposals .proposal-date-filter { flex-direction: column; gap: 10px; }
+  #secManageProposals .proposal-date-filter input { font-size: 16px; min-height: 44px; }
+  #secManageProposals .td-proposal-actions .btn { min-width: 44px; min-height: 44px; }
 }

@@ -24,8 +24,6 @@ let _dragResumeId = null;
 
 const _KANBAN_STAGES = ['triagem', 'entrevista', 'contratado', 'recusado'];
 const _RECUSADO_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-/* Depois de 4 dias em "Contratado", o cartão some da coluna e entra no link "Ver todos os contratados". */
-const _CONTRATADO_CARD_TTL_MS = 4 * 24 * 60 * 60 * 1000;
 
 const _JUSTIF_TIPO = {
   atestado: 'Atestado médico',
@@ -104,6 +102,7 @@ const _DEMISSAO_AVISO = {
   aviso_previo_trabalhado: 'Aviso prévio trabalhado',
   aviso_previo_dispensado: 'Aviso prévio dispensado',
   aviso_previo_indenizado: 'Aviso prévio indenizado',
+  demissao_imediata: 'Demissão imediata',
   sem_aviso: 'Sem aviso prévio',
   pedido_imediato: 'Pedido de demissão imediato',
   justa_causa: 'Justa causa',
@@ -542,38 +541,6 @@ function _applyResumeStageChange(resume, stage) {
   } else {
     resume.recusado_at = null;
   }
-  if (stage === 'contratado') {
-    if (prev !== 'contratado') _stampContratadoAt(resume.id);
-  } else if (prev === 'contratado') {
-    _clearContratadoAt(resume.id);
-  }
-}
-
-/* Carimbo de "entrou em Contratado" guardado no navegador (não depende de coluna nova no banco). */
-function _contratadoStampKey(id) {
-  return `rh_contratado_at_${id}`;
-}
-function _stampContratadoAt(id) {
-  if (!id) return;
-  try { localStorage.setItem(_contratadoStampKey(id), String(Date.now())); } catch (_) { /* noop */ }
-}
-function _clearContratadoAt(id) {
-  if (!id) return;
-  try { localStorage.removeItem(_contratadoStampKey(id)); } catch (_) { /* noop */ }
-}
-function _contratadoEnteredAt(r) {
-  if (_resumeStage(r) !== 'contratado' || !r.id) return null;
-  try {
-    const raw = localStorage.getItem(_contratadoStampKey(r.id));
-    if (!raw) return null;
-    const ts = Number(raw);
-    return Number.isNaN(ts) ? null : new Date(ts);
-  } catch (_) { return null; }
-}
-function _isContratadoOld(r) {
-  const entered = _contratadoEnteredAt(r);
-  if (!entered) return false;
-  return (Date.now() - entered.getTime()) >= _CONTRATADO_CARD_TTL_MS;
 }
 
 async function purgeExpiredRecusados() {
@@ -618,7 +585,7 @@ function _bindKanbanDnD() {
       const prevStage = _resumeStage(resume);
       if (prevStage === stage) return;
 
-      /* Move otimista: o card já pula de coluna na hora do drop, sem esperar o servidor. */
+      // Move otimista: o card já pula de coluna na hora do drop, sem esperar o servidor.
       _applyResumeStageChange(resume, stage);
       renderKanban();
 
@@ -627,29 +594,13 @@ function _bindKanbanDnD() {
         if (typeof showToast === 'function') showToast('Estágio atualizado.', 'success');
       } catch (err) {
         console.error('[kanban]', err);
-        /* Falhou no servidor: desfaz a troca visual e volta o card pra coluna original. */
+        // Falhou no servidor: desfaz a troca visual e volta o card pra coluna original.
         _applyResumeStageChange(resume, prevStage);
         renderKanban();
         alert('Não foi possível salvar o estágio do candidato.');
       }
     });
   });
-}
-
-function _resumeCardHtml(r, stage) {
-  return `
-    <div class="kanban-card stage-${stage}" draggable="true" data-id="${_esc(r.id)}">
-      <div style="font-weight:800;font-size:14px;margin-bottom:4px;">${_esc(r.nome || 'Sem nome')}</div>
-      <div style="font-size:12px;color:var(--color-text-muted);">${_esc(r.vaga || 'Vaga não informada')}</div>
-      <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">${_esc(r.protocolo || '')}</div>
-      ${r.data_entrevista ? `<div style="font-size:11px;margin-top:4px;">Entrevista: ${_fmtDate(r.data_entrevista)}</div>` : ''}
-      ${stage === 'recusado' ? _recusadoExpiryHint(r) : ''}
-      <div class="card-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
-        <button type="button" class="btn btn-xs btn-outline" onclick="editCurriculo('${_esc(r.id)}')">Editar</button>
-        <button type="button" class="btn btn-xs btn-danger" onclick="excluirCurriculo('${_esc(r.id)}')">Excluir</button>
-      </div>
-    </div>
-  `;
 }
 
 function renderKanban() {
@@ -664,24 +615,19 @@ function renderKanban() {
       col.innerHTML = '<div class="text-muted" style="font-size:12px;padding:8px;">Nenhum candidato</div>';
       return;
     }
-
-    let visibleItems = items;
-    let oldCount = 0;
-    if (stage === 'contratado') {
-      /* Primeira vez que um contratado aparece nesta sessão: carimba "entrou agora" (evita sumir de imediato). */
-      items.forEach(r => { if (!_contratadoEnteredAt(r)) _stampContratadoAt(r.id); });
-      visibleItems = items.filter(r => !_isContratadoOld(r));
-      oldCount = items.length - visibleItems.length;
-    }
-
-    const oldLinkHtml = oldCount > 0
-      ? `<button type="button" class="kanban-card" style="width:100%;text-align:center;cursor:pointer;background:var(--color-accent-light,#F7FFE0);border:1px dashed var(--color-accent-dark,#4F6B00);font-weight:700;font-size:13px;color:var(--color-accent-dark,#4F6B00);" onclick="abrirTodosContratados()">Ver todos os contratados (${oldCount})</button>`
-      : '';
-
-    col.innerHTML = (visibleItems.length
-      ? visibleItems.map(r => _resumeCardHtml(r, stage)).join('')
-      : '<div class="text-muted" style="font-size:12px;padding:8px;">Nenhum candidato recente</div>'
-    ) + oldLinkHtml;
+    col.innerHTML = items.map(r => `
+      <div class="kanban-card stage-${stage}" draggable="true" data-id="${_esc(r.id)}">
+        <div style="font-weight:800;font-size:14px;margin-bottom:4px;">${_esc(r.nome || 'Sem nome')}</div>
+        <div style="font-size:12px;color:var(--color-text-muted);">${_esc(r.vaga || 'Vaga não informada')}</div>
+        <div style="font-size:11px;color:var(--color-text-muted);margin-top:4px;">${_esc(r.protocolo || '')}</div>
+        ${r.data_entrevista ? `<div style="font-size:11px;margin-top:4px;">Entrevista: ${_fmtDate(r.data_entrevista)}</div>` : ''}
+        ${stage === 'recusado' ? _recusadoExpiryHint(r) : ''}
+        <div class="card-actions" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;">
+          <button type="button" class="btn btn-xs btn-outline" onclick="editCurriculo('${_esc(r.id)}')">Editar</button>
+          <button type="button" class="btn btn-xs btn-danger" onclick="excluirCurriculo('${_esc(r.id)}')">Excluir</button>
+        </div>
+      </div>
+    `).join('');
 
     col.querySelectorAll('.kanban-card[draggable]').forEach(card => {
       card.addEventListener('dragstart', e => {
@@ -696,18 +642,6 @@ function renderKanban() {
       });
     });
   });
-}
-
-/** Lista completa de contratados (os que já passaram do prazo de 4 dias na coluna), num modal à parte. */
-function abrirTodosContratados() {
-  const body = document.getElementById('contratadosListBody');
-  if (body) {
-    const items = (window._allResumes || []).filter(r => _resumeStage(r) === 'contratado');
-    body.innerHTML = items.length
-      ? items.map(r => _resumeCardHtml(r, 'contratado')).join('')
-      : '<div class="text-muted" style="padding:12px;text-align:center;">Nenhum contratado.</div>';
-  }
-  _openRhModal('contratadosListModal');
 }
 
 /* ── Justificativa ── */
@@ -1650,7 +1584,6 @@ const _rhOpsExports = {
   reloadRhOpsData,
   openFolhaPagamento,
   renderKanban,
-  abrirTodosContratados,
   openJustificativaModal,
   salvarJustificativa,
   editJustificativa,

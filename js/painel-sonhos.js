@@ -584,6 +584,15 @@ const PainelSonhos = (() => {
   }
 
   async function _uploadAvisoImage(file, userId) {
+    const sub = String(userId || 'user').replace(/[^a-zA-Z0-9_-]/g, '_');
+    try {
+      if (typeof window.soubluRawUpload === 'function') {
+        const url = await window.soubluRawUpload(file, 'mural', sub);
+        if (url && String(url).length <= 500) return String(url);
+      }
+    } catch (e) {
+      console.warn('[PainelSonhos] raw aviso:', e && e.message ? e.message : e);
+    }
     if (typeof uploadImage !== 'function') return null;
     try {
       /* Sem fallback base64: image_url é VARCHAR(500) no MySQL. */
@@ -662,7 +671,7 @@ const PainelSonhos = (() => {
       try {
         const uploaded = await _uploadAvisoImage(_avisoImageFile, user.id);
         if (!uploaded) {
-          showToast('Não foi possível enviar a imagem do aviso.', 'error');
+          showToast('Não foi possível enviar a imagem. Tente de novo.', 'error');
           return;
         }
         imageUrl = uploaded;

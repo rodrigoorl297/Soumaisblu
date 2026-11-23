@@ -126,12 +126,31 @@ final class CreditProposalRepository
     }
 }
 
+/**
+ * soublu_credit_proposal_backend — escolhe MySQL Locaweb ou PG legado.
+ * CREDIT_DB_BACKEND=mysql usa MySQL quando a tabela já tem linhas (cutover).
+ * Se o MySQL ainda estiver vazio, continua no Supabase para não sumir crédito no meio da cópia.
+ */
 function soublu_credit_proposal_backend(): string
 {
     static $backend = null;
     if (is_string($backend)) {
         return $backend;
     }
+    $forced = defined('CREDIT_DB_BACKEND') ? strtolower(trim((string) CREDIT_DB_BACKEND)) : '';
+    if ($forced === 'mysql') {
+        try {
+            soublu_ensure_credit_proposals_table(soublu_pdo());
+            $n = (int) soublu_pdo()->query('SELECT COUNT(*) FROM credit_proposals')->fetchColumn();
+            if ($n > 0) {
+                $backend = 'mysql-credit_proposals';
+                return $backend;
+            }
+        } catch (Throwable $e) {
+            error_log('[credito] MySQL cutover: ' . $e->getMessage());
+        }
+    }
+    /* MySQL vazio ou flag ausente: lê o PG legado enquanto a cópia não terminou. */
     soublu_credit_proposal_load_supabase();
     if (function_exists('soublu_supabase_legacy_configured') && soublu_supabase_legacy_configured()) {
         try {

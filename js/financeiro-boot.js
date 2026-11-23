@@ -1,7 +1,6 @@
 /* SOU+BLU — Boot do módulo Financeiro */
 (function () {
   const SECTION_LABELS = {
-    secFinanceWorkbook: 'Cadastros e parâmetros financeiros',
     secContaCorrenteGestao: 'Gestão de conta',
     secWithdrawals: 'Saque PIX',
     secBalance: 'Gerenciador de pontos',
@@ -27,8 +26,8 @@
 
   function sectionsUrl() {
     const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
-      ? 'financeiro-sections.html?v=prop-date2'
-      : 'pages/financeiro-sections.html?v=prop-date2';
+      ? 'financeiro-sections.html?v=fin-clean1'
+      : 'pages/financeiro-sections.html?v=fin-clean1';
     return typeof Auth !== 'undefined' && Auth.resolveHref
       ? Auth.resolveHref(rel)
       : rel;
@@ -43,11 +42,7 @@
     const wrap = document.createElement('div');
     wrap.innerHTML = html;
     wrap.querySelectorAll('.section, section.section').forEach(el => host.appendChild(el));
-    // Evita ids duplicados: alguns modais (ex.: manageProposalModal) já existem no shell (admin.html).
-    wrap.querySelectorAll('.modal-overlay').forEach(el => {
-      if (el.id && document.getElementById(el.id)) return;
-      document.body.appendChild(el);
-    });
+    wrap.querySelectorAll('.modal-overlay').forEach(el => document.body.appendChild(el));
     host.dataset.loaded = '1';
     tagFinSections();
   }
@@ -150,8 +145,6 @@
   }
 
   function initModules() {
-    window.FinanceWorkbook?.init();
-    if (window.MarketplaceBlu?.init) MarketplaceBlu.init();
     if (window.FornecedorFinanceiro?.init) FornecedorFinanceiro.init();
     if (window.PrestadorServicos?.init) PrestadorServicos.init();
     if (window.ContaCorrente?.init) ContaCorrente.init();
@@ -201,8 +194,7 @@
     if (isFinInjectedAdminNav(el)) return false;
     if (el.dataset.tab === 'inicio') return true;
     if (el.dataset.section) return true;
-    if (el.id === 'navFinVoltar' || el.id === 'navFinFolha' || el.id === 'navFinFolhaGerar') return true;
-    if (el.id === 'navWhatsApp' || el.getAttribute('data-wa-external') === '1') return true;
+    if (el.id === 'navFinVoltar') return true;
     if (el.getAttribute('onclick')?.includes('Auth.logout')) return true;
     if (el.classList.contains('fin-nav-black-bar') && el.getAttribute('role') === 'presentation') return true;
     if (el.classList.contains('nav-section-label')) return true;
@@ -224,80 +216,18 @@
     });
     const blackBars = nav.querySelectorAll('a.fin-nav-black-bar[data-section]');
     blackBars.forEach((el) => { el.style.display = ''; });
-    applyInicioNavVisibility();
   }
 
-
-  /** Seção/aba atualmente aberta no Financeiro (ex.: Esteira de Crédito + aba). */
-  function currentFinNavState() {
-    if (window._finNavIntent) {
-      return { section: window._finNavIntent.section || '', tab: window._finNavIntent.tab || '' };
-    }
-    const active = document.querySelector('#finPageContent .section.active');
-    return { section: active?.id || '', tab: window._finLastTab || '' };
-  }
-
-  /** URL de volta ao Financeiro reabrindo a mesma seção/aba (usa o ?section=&tab= já suportado por FinanceiroPage.boot()). */
-  function financeiroReturnHref() {
-    const base = (typeof Auth !== 'undefined' && typeof Auth.financeiroPageHrefFresh === 'function')
-      ? Auth.financeiroPageHrefFresh()
-      : 'financeiro.html';
-    try {
-      const u = new URL(base, window.location.href);
-      const { section, tab } = currentFinNavState();
-      if (section) u.searchParams.set('section', section);
-      if (tab) u.searchParams.set('tab', tab);
-      return u.href;
-    } catch (_) {
-      return base;
-    }
-  }
-
-  /** Absolute Folha URL — never bare relative against <base href=".../pages/"> (avoids /pages/pages/...). */
   function folhaPagamentoHref() {
-    let base = '';
-    try {
-      if (typeof window.soubluPage === 'function') {
-        const u = new URL(window.soubluPage('folha-pagamento.html'));
-        u.searchParams.set('_r', Date.now().toString(36));
-        base = u.href;
-      }
-    } catch (_) { /* fall through */ }
-    if (!base && typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHrefFresh === 'function') {
-      base = Auth.folhaPagamentoPageHrefFresh();
+    if (typeof Auth !== 'undefined' && Auth.folhaPagamentoPageHref) {
+      return Auth.folhaPagamentoPageHref();
     }
-    if (!base && typeof Auth !== 'undefined' && typeof Auth.pageHrefFresh === 'function') {
-      base = Auth.pageHrefFresh('folha-pagamento.html');
-    }
-    if (!base && typeof Auth !== 'undefined' && typeof Auth.folhaPagamentoPageHref === 'function') {
-      try {
-        const u = new URL(Auth.folhaPagamentoPageHref());
-        u.searchParams.set('_r', Date.now().toString(36));
-        base = u.href;
-      } catch (_) {
-        base = Auth.folhaPagamentoPageHref();
-      }
-    }
-    if (!base) {
-      const inPages = /\/pages(\/|$)/i.test(String(location.pathname || '').replace(/\\/g, '/'));
-      const rel = inPages ? 'folha-pagamento.html' : 'pages/folha-pagamento.html';
-      try {
-        const u = new URL(rel, window.location.href);
-        u.searchParams.set('_r', Date.now().toString(36));
-        base = u.href;
-      } catch (_) {
-        base = rel;
-      }
-    }
-    // Leva a seção/aba atual do Financeiro para o botão Voltar da Folha
-    // reabrir exatamente a mesma tela (ex.: Esteira de Crédito continua aberta).
-    try {
-      const u = new URL(base, window.location.href);
-      u.searchParams.set('back', financeiroReturnHref());
-      return u.href;
-    } catch (_) {
-      return base;
-    }
+    const rel = (typeof Auth !== 'undefined' && Auth._isInPagesDir && Auth._isInPagesDir())
+      ? 'folha-pagamento.html'
+      : 'pages/folha-pagamento.html';
+    return typeof Auth !== 'undefined' && Auth.resolveHref
+      ? Auth.resolveHref(rel)
+      : rel;
   }
 
   function isFinanceiroOnlyUser() {
@@ -307,32 +237,6 @@
     const s = Auth.getSession();
     const r = String(s?.role || '').toLowerCase();
     return r === 'financeiro' || r === 'financial';
-  }
-
-  function hubShowsSonhos() {
-    const role = Auth.getSession()?.role;
-    if (window.PainelSonhos && typeof PainelSonhos.eligibleOnHub === 'function') {
-      return PainelSonhos.eligibleOnHub(role);
-    }
-    return false;
-  }
-
-  /** First meaningful Financeiro module (sidebar after Painel Inicial). */
-  function defaultFinanceiroSection() {
-    return 'secPrestadorServicos';
-  }
-
-  function applyInicioNavVisibility() {
-    const show = hubShowsSonhos();
-    document.querySelectorAll('#finSidebarNav [data-tab="inicio"], #navFinInicio').forEach((el) => {
-      el.style.display = show ? '' : 'none';
-      if (!show) el.classList.remove('active');
-    });
-    const tabInicio = document.getElementById('tab-inicio');
-    if (tabInicio && !show) {
-      tabInicio.style.display = 'none';
-      tabInicio.classList.remove('active');
-    }
   }
 
   function wireSidebar() {
@@ -356,31 +260,25 @@
     });
 
     nav.querySelectorAll('#navFinFolha, #navFinFolhaGerar').forEach(el => {
-      const href = folhaPagamentoHref();
-      if (el.tagName === 'A') {
-        el.setAttribute('href', href);
-        el.setAttribute('data-folha-href', '1');
-      }
       el.addEventListener('click', (e) => {
         e.preventDefault();
-        e.stopPropagation();
-        window.location.assign(folhaPagamentoHref());
+        window.location.href = folhaPagamentoHref();
       });
     });
 
     const voltar = document.getElementById('navFinVoltar');
     if (voltar) {
-      /* Financeiro também volta ao Painel Master (admin). */
-      voltar.style.display = '';
-      const label = document.getElementById('navFinVoltarLabel');
-      if (label && isFinanceiroOnlyUser()) label.textContent = 'Painel Master';
-      voltar.addEventListener('click', (e) => {
-        e.preventDefault();
-        const href = typeof Auth.adminPageHrefFresh === 'function'
-          ? Auth.adminPageHrefFresh()
-          : (typeof Auth.adminPageHref === 'function' ? Auth.adminPageHref() : 'admin.html');
-        window.location.replace(href);
-      });
+      if (isFinanceiroOnlyUser()) {
+        voltar.style.display = 'none';
+      } else {
+        voltar.addEventListener('click', (e) => {
+          e.preventDefault();
+          const href = typeof Auth.adminPageHrefFresh === 'function'
+            ? Auth.adminPageHrefFresh()
+            : (typeof Auth.adminPageHref === 'function' ? Auth.adminPageHref() : 'admin.html');
+          window.location.replace(href);
+        });
+      }
     }
   }
 
@@ -393,7 +291,6 @@
     }
 
     const renders = {
-      secFinanceWorkbook: () => window.FinanceWorkbook?.load?.(),
       secWithdrawals: () => (typeof renderWithdrawalsTable === 'function' ? renderWithdrawalsTable() : Promise.resolve()),
       secBalance: async () => {
         if (typeof populateBalanceSelect === 'function') await populateBalanceSelect();
@@ -406,8 +303,6 @@
         }
         if (window.Proposals?.renderAdminList) await Proposals.renderAdminList();
       },
-      secMarketplaceManage: () => window.MarketplaceBlu?.renderCatalogAdmin?.(),
-      secMarketplaceOrders: () => window.MarketplaceBlu?.renderOrdersAdmin?.(),
       secFornecedorFinanceiro: () => window.FornecedorFinanceiro?.render?.(),
       secPrestadorServicos: () => window.PrestadorServicos?.render?.(),
       secFiscalParceiro: () => window.FiscalParceiro?.render?.(),
@@ -435,7 +330,7 @@
           }
           return;
         }
-if (!window.PartnerOps?.renderPanel) {
+        if (!window.PartnerOps?.renderPanel) {
           if (box) {
             box.innerHTML = '<div class="card card-padded" style="text-align:center;padding:32px;color:var(--color-text-muted);">Módulo PartnerOps não carregado. Recarregue a página (Ctrl+F5).</div>';
           }
@@ -483,10 +378,6 @@ if (!window.PartnerOps?.renderPanel) {
   }
 
   function showInicioPanel() {
-    if (!hubShowsSonhos()) {
-      void FinanceiroBoot.openSection(defaultFinanceiroSection());
-      return;
-    }
     const inicio = document.getElementById('tab-inicio');
     const modulos = document.getElementById('tab-modulos');
     if (modulos) { modulos.classList.remove('active'); modulos.style.display = 'none'; }
@@ -514,7 +405,6 @@ if (!window.PartnerOps?.renderPanel) {
       }
       ensureFinanceiroSidebarVisible();
       applyFinanceiroPartnerNavVisibility();
-      applyInicioNavVisibility();
       wireBalanceForm();
       if (typeof wirePartnerBalanceForm === 'function') wirePartnerBalanceForm();
       wireSidebar();
@@ -522,7 +412,7 @@ if (!window.PartnerOps?.renderPanel) {
     },
 
     async openSection(sectionId, opts) {
-      let tab = typeof opts === 'string' ? opts : (opts?.tab || '');
+      const tab = typeof opts === 'string' ? opts : (opts?.tab || '');
       const proposalId = typeof opts === 'object' ? opts?.proposalId : '';
 
       if (sectionId === 'secFinPropostas') {
@@ -537,13 +427,8 @@ if (!window.PartnerOps?.renderPanel) {
       }
 
       if (!sectionId) {
-        if (hubShowsSonhos()) {
-          showInicioPanel();
-          return;
-        }
-        sectionId = defaultFinanceiroSection();
-        tab = '';
-        window._finLastTab = '';
+        showInicioPanel();
+        return;
       }
       showModulePanel(sectionId);
       await renderSection(sectionId, tab);

@@ -80,8 +80,71 @@ function soublu_ensure_leads_tables(?PDO $pdo = null): array
         /* ignore */
     }
 
+    // CPF em CHAR/VARCHAR — coluna numérica (BIGINT/DOUBLE) come zeros à esquerda e à direita.
+    try {
+        $st = $pdo->query("SHOW COLUMNS FROM `leads` LIKE 'cpf'");
+        $col = $st ? $st->fetch(PDO::FETCH_ASSOC) : null;
+        $type = strtolower((string) ($col['Type'] ?? ''));
+        if ($col && $type !== '' && !str_contains($type, 'char') && !str_contains($type, 'text')) {
+            $pdo->exec('ALTER TABLE `leads` MODIFY COLUMN `cpf` VARCHAR(14) NULL');
+            $applied[] = 'leads.cpf_varchar';
+        }
+    } catch (Throwable $e) {
+        /* best-effort — sem ALTER o POST ainda grava string se a coluna já for texto */
+    }
+
+    // Colunas da mesa de leads — sem completed_at o PATCH de status falha e o lead “volta” pendente.
+    $leadCols = [
+        'completed_at' => "ADD COLUMN `completed_at` DATETIME NULL",
+        'notes' => "ADD COLUMN `notes` TEXT NULL",
+        'phone2' => "ADD COLUMN `phone2` VARCHAR(32) NULL",
+        'extra_data' => "ADD COLUMN `extra_data` LONGTEXT NULL",
+    ];
+    foreach ($leadCols as $name => $ddl) {
+        try {
+            $st = $pdo->query("SHOW COLUMNS FROM `leads` LIKE " . $pdo->quote($name));
+            if ($st && $st->fetch()) {
+                continue;
+            }
+            $pdo->exec('ALTER TABLE `leads` ' . $ddl);
+            $applied[] = 'leads.' . $name;
+        } catch (Throwable $e) {
+            /* best-effort */
+        }
+    }
+
     $done = true;
     return $applied;
+}
+
+/**
+ * soublu_leads_normalize_cpf — CPF só com dígitos, 11 posições, sempre string.
+ * Evita json_encode number e coluna INT, que cortam zeros (ex.: ...00 no final).
+ */
+function soublu_leads_normalize_cpf(mixed $value): string
+{
+    if ($value === null || $value === '') {
+        return '';
+    }
+    if (is_int($value)) {
+        $digits = (string) abs($value);
+    } elseif (is_float($value)) {
+        $digits = sprintf('%.0f', abs($value));
+    } else {
+        $s = trim((string) $value);
+        if (preg_match('/e[+\-]?\d+/i', $s)) {
+            $digits = sprintf('%.0f', abs((float) $s));
+        } else {
+            $digits = preg_replace('/\D+/', '', $s) ?? '';
+        }
+    }
+    if (strlen($digits) > 11) {
+        $digits = substr($digits, -11);
+    }
+    if (strlen($digits) >= 9 && strlen($digits) < 11) {
+        $digits = str_pad($digits, 11, '0', STR_PAD_LEFT);
+    }
+    return $digits;
 }
 
 function soublu_ensure_leads_indexes(?PDO $pdo = null): void

@@ -5,25 +5,26 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <script charset="UTF-8" src="../js/base-path.js"></script>
   <script>window.SOUBLU_SKIP_BACK_TRAP = true;</script>
-  <script charset="UTF-8" src="../js/db-connect.js?v=1781813000"></script>
+  <script charset="UTF-8" src="../js/db-connect.js?v=dbg-guard1"></script>
   <title>Gerenciador de RH · SOU+BLU</title>
   <meta name="description" content="Painel de RH completo SOU+BLU"/>
-  <link rel="icon" href="../images/logo.png" type="image/png" sizes="32x32"/>
-  <link rel="apple-touch-icon" href="../images/logo.png"/>
+  <link rel="icon" href="../images/logo.png?v=blu1" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="../images/logo.png?v=blu1"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="../css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
   <link rel="stylesheet" href="../css/variables.css?v=bs-tokens1"/>
-  <link rel="stylesheet" href="../css/global.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/colors-orange.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/leads.css?v=logo-new1"/>
-  <link rel="stylesheet" href="../css/layout.css?v=tb-detail1"/>
-  <link rel="stylesheet" href="../css/store.css?v=rk-ahead2"/>
+  <link rel="stylesheet" href="../css/global.css?v=credstatus1795118383"/>
+  <link rel="stylesheet" href="../css/colors-orange.css"/>
+  <link rel="stylesheet" href="../css/leads.css"/>
+  <link rel="stylesheet" href="../css/layout.css?v=photo-wa1"/><link rel="stylesheet" href="../css/brand-blu.css?v=blu2"/>
+  <link rel="stylesheet" href="../css/store.css"/>
   <link rel="stylesheet" href="../css/withdrawal.css"/>
-  <link rel="stylesheet" href="../css/painel-sonhos.css?v=c5ff1"/>
+  <link rel="stylesheet" href="../css/painel-sonhos.css?v=mural-ciencia1"/>
     <!-- SheetJS lazy: carregado só na exportação -->
-  <link rel="stylesheet" href="../css/rh-modules.css?v=c5ff1"/>
-  <link rel="stylesheet" href="../css/folha-pagamento.css?v=3"/>
+  <link rel="stylesheet" href="../css/rh-modules.css?v=carreira2"/>
+  <link rel="stylesheet" href="../css/rh-carreira.css?v=carreira4"/>
+  <link rel="stylesheet" href="../css/folha-pagamento.css?v=3"/><link rel="stylesheet" href="../css/bootstrap-bridge.css?v=prop-cfg-pro2"/>
   <!-- estilos RH em css/layout.css -->
 </head>
 <body class="leads-app">
@@ -38,9 +39,9 @@
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="logo-icon rh-brand-logo">
-          <img data-soublu-logo="images/logo.png" src="../images/logo.png" width="40" height="40" alt="SOU+BLU"/>
+          <img data-soublu-logo="images/logo.png?v=blu1" src="../images/logo.png?v=blu1" width="40" height="40" alt="SOU+BLU"/>
         </div>
-        <img class="sidebar-wordmark" src="../images/blu-logo-new.png" width="155" height="34" alt="Sou+blu"/>
+        <div class="logo-text">SOU <span>+ BLU</span></div>
       </div>
 
       <nav class="sidebar-nav">
@@ -76,10 +77,10 @@
         <a class="nav-item rh-mgmt-only" data-tab="funcionario" onclick="switchTab('funcionario')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span> Cadastrar Funcionário
         </a>
-        <a class="nav-item rh-mgmt-only" data-tab="justificativa" onclick="switchTab('justificativa')">
-          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg></span> Justificativa de Falta
+        <a class="nav-item rh-photos-nav" data-tab="fotos_equipe" onclick="switchTab('fotos_equipe')" style="display: none">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg></span> Fotos da Equipe
         </a>
-        <a class="nav-item rh-mgmt-only" data-tab="punicao" onclick="switchTab('punicao')">
+<a class="nav-item rh-mgmt-only" data-tab="punicao" onclick="switchTab('punicao')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg></span> Registro Punição
         </a>
         <a class="nav-item rh-mgmt-only" data-tab="demissao" onclick="switchTab('demissao')">
@@ -98,6 +99,9 @@
         </a>
         <a class="nav-item rh-mgmt-only" data-tab="vagas" onclick="switchTab('vagas')">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"></rect><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"></path><line x1="12" y1="12" x2="12" y2="16"></line><line x1="10" y1="14" x2="14" y2="14"></line></svg></span> Vagas
+        </a>
+        <a class="nav-item rh-mgmt-only" data-tab="carreira" onclick="switchTab('carreira')">
+          <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline><polyline points="16 7 22 7 22 13"></polyline></svg></span> Trilha de Carreira
         </a>
         <a class="nav-item rh-mgmt-only" data-tab="ranking" onclick="openRhRankingTab()">
           <span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"></circle><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"></path></svg></span> Ranking Vendas
@@ -243,9 +247,13 @@
           <div class="card">
             <div class="table-wrap">
               <table class="data-table">
-                <thead>
+                <thead id="resume_list_thead">
                   <tr>
-                    <th>Protocolo</th><th>Nome</th><th>CPF</th><th>Vaga</th><th>Ações</th>
+                    <th class="sortable-th" data-sort-field="protocolo" onclick="sortResumeList('protocolo')">Protocolo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th sort-asc" data-sort-field="nome" onclick="sortResumeList('nome')">Nome<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="cpf" onclick="sortResumeList('cpf')">CPF<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="vaga" onclick="sortResumeList('vaga')">Vaga<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="resume_list_body">
@@ -272,9 +280,15 @@
           <div class="card">
             <div class="table-wrap">
               <table class="data-table">
-                <thead>
+                <thead id="job_list_thead">
                   <tr>
-                    <th>Protocolo</th><th>Cargo</th><th>CBO</th><th>Descrição CBO</th><th>Departamento</th><th>Insalubre</th><th>Ações</th>
+                    <th class="sortable-th" data-sort-field="protocolo" onclick="sortJobList('protocolo')">Protocolo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th sort-asc" data-sort-field="cargo" onclick="sortJobList('cargo')">Cargo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="cbo" onclick="sortJobList('cbo')">CBO<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="cbo_descricao" onclick="sortJobList('cbo_descricao')">Descrição CBO<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="departamento" onclick="sortJobList('departamento')">Departamento<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="insalubre" onclick="sortJobList('insalubre')">Insalubre<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="job_list_body">
@@ -301,13 +315,20 @@
           <div class="card">
             <div class="table-wrap">
               <table class="data-table">
-                <thead>
+                <thead id="employee_list_thead">
                   <tr>
-                    <th>Funcionário / CPF</th><th>Cargo</th><th>Departamento</th><th>Supervisor</th><th>Admissão</th><th>Status</th><th>Medidas Disciplinares</th><th>Ações</th>
+                    <th>Foto</th>
+                    <th class="sortable-th sort-asc" data-sort-field="nome" onclick="sortEmployeeList('nome')">Funcionário / CPF<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="cargo" onclick="sortEmployeeList('cargo')">Cargo<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="departamento" onclick="sortEmployeeList('departamento')">Departamento<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="supervisor" onclick="sortEmployeeList('supervisor')">Supervisor<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="data_admissao" onclick="sortEmployeeList('data_admissao')">Admissão<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th class="sortable-th" data-sort-field="status" onclick="sortEmployeeList('status')">Status<span class="sort-arrow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg></span></th>
+                    <th>Medidas Disciplinares</th><th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="employee_list_body">
-                  <tr><td colspan="6" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+                  <tr><td colspan="9" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
                 </tbody>
               </table>
             </div>
@@ -316,7 +337,32 @@
         </div>
       </div>
 
-      <!-- ═══ ABA: Feedbacks ═══ -->
+      
+      <!-- ═══ ABA: Fotos da Equipe (Sup. Backoffice) ═══ -->
+      <div class="tab-content" id="tab-fotos_equipe" style="display:none;">
+        <div class="page-content">
+          <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+            <div class="page-header-text">
+              <h2 style="font-weight:800;font-size:24px;margin-bottom:4px;">Fotos da Equipe</h2>
+              <p class="text-muted" style="font-size:14px;">Clique na foto de um colaborador para trocá-la.</p>
+            </div>
+          </div>
+          <div class="card">
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr><th>Foto</th><th>Nome</th><th>Departamento</th></tr>
+                </thead>
+                <tbody id="team_photos_list_body">
+                  <tr><td colspan="3" class="text-center text-muted">Nenhum registro encontrado.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <input type="file" id="rhMemberPhotoInput" accept="image/*" style="display: none" onchange="_rhUploadMemberPhoto(this)" />
+<!-- ═══ ABA: Feedbacks ═══ -->
       <div class="tab-content" id="tab-feedback" style="display:none;">
         <div class="page-content">
           <div class="page-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
@@ -344,6 +390,13 @@
           <div id="rhVagasRoot">
             <div class="text-muted text-center" style="padding:24px;">Carregando vagas...</div>
           </div>
+        </div>
+      </div>
+
+      <!-- ═══ ABA: Trilha de Carreira ═══ -->
+      <div class="tab-content" id="tab-carreira" style="display:none;">
+        <div id="rhCarreiraRoot">
+          <div class="text-muted text-center" style="padding:24px;">Carregando trilha de carreira...</div>
         </div>
       </div>
 
@@ -1229,46 +1282,30 @@
                 </div>
               </div>
 
-              <div class="section-title-bar">Clube de Benefícios</div>
-              <div class="form-grid">
-                <div class="form-group">
-                  <label for="emp_limite_clube">Limite liberado (R$)</label>
-                  <input type="number" class="form-control" id="emp_limite_clube" min="0" step="0.01" placeholder="0,00" />
-                  <small class="text-muted" style="font-size:11px;">Valor de crédito aprovado no Clube de Benefícios (substitui a solicitação pelo funcionário).</small>
-                  <input type="hidden" id="emp_clube_limite_id" />
-                </div>
-              </div>
-
-              <div style="margin-top: 15px;">
-                <label style="font-weight:700; font-size:13px; display:block; margin-bottom:10px;">Atribuir Permissões Específicas:</label>
-                <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap:10px; background:#f9fafb; padding:16px; border-radius:8px; border:1px solid #e5e7eb;">
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canMasterPanel" /> Painel Master</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canSaques" /> Aprovar Saques PIX</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canCadFunc" /> Cadastrar Funcionários</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canProposta" /> Acessar Propostas</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canClientes" /> Acessar Clientes</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canPartnerOpsHub" /> Gestão de Parceiros</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRanking" /> Ranking de Vendas</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canLoja" /> Loja de Prêmios</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canSimulacao" /> Simulação de Troco</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canChamados" /> Gerenciar Chamados</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canSupervisorPanel" /> Painel Supervisor</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canPartnerDashboard" /> Dashboard de Parceiro</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canLeadsManager" /> Gerenciador de Leads</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canTreinamentos" /> Plataforma de Treinamentos</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer; display:none;"><input type="checkbox" id="perm_canTimIndicacao" /> Indicação TIM</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer; display:none;"><input type="checkbox" id="perm_canTimEsteira" /> Esteira TIM</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canContestacao" /> Contestações</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canFiscalParceiro" /> Fechamento Fiscal</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canMarketplaceBlu" /> Marketplace BLU</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canFornecedorFinanceiro" /> Fornecedores Financeiros</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canContaCorrente" /> Conta Corrente</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRHMonitoria" /> Monitoria de Atendimento</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRHGestao" /> Gestão de RH (Punições/Faltas)</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canRHFolha" /> Gerar Folha de Pagamento</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canPainelSonhos" /> Painel de Sonhos</label>
-                  <label class="flex items-center" style="gap:8px; font-size:13px; cursor:pointer;"><input type="checkbox" id="perm_canMeuExtrato" /> Acessar Meu Saldo/Extrato</label>
-                </div>
+                            <div class="section-title-bar">Atribuir Permissões Específicas</div>
+              <div class="rh-perm-grid">
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canMasterPanel" /> Painel Master</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canSaques" /> Aprovar Saques PIX</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canCadFunc" /> Cadastrar Funcionários</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canProposta" /> Acessar Propostas</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canVender" /> Também vende (ranking/roleta de vendedor)</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canClientes" /> Acessar Clientes</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canPartnerOpsHub" /> Gestão de Parceiros</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canRanking" /> Ranking de Vendas</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canLoja" /> Loja de Prêmios</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canSimulacao" /> Simulação de Troco</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canChamados" /> Gerenciar Chamados</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canSupervisorPanel" /> Painel Supervisor</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canPartnerDashboard" /> Dashboard de Parceiro</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canLeadsManager" /> Gerenciador de Leads</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canTreinamentos" /> Plataforma de Treinamentos</label>
+                  <label class="rh-perm-item is-hidden"><input type="checkbox" id="perm_canTimIndicacao" /> Indicação TIM</label>
+                  <label class="rh-perm-item is-hidden"><input type="checkbox" id="perm_canTimEsteira" /> Esteira TIM</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canContestacao" /> Contestações</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canFiscalParceiro" /> Fechamento Fiscal</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canMarketplaceBlu" /> Marketplace BLU</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canFornecedorFinanceiro" /> Fornecedores Financeiros</label>
+                  <label class="rh-perm-item"><input type="checkbox" id="perm_canContaCorrente" /> Conta Corrente</label>
               </div>
 
               <div class="section-title-bar">Anexos e Contrato (Opcionais)</div>
@@ -1534,23 +1571,7 @@
       </div>
     </div>
   </div>
-
-  <!-- Modal Justificativa: pages/rh-justificativa-section.html (rh-justificativa-boot.js) -->
-
-  <!-- MODAL: Todos os Contratados (esteira seletiva — cartões com +4 dias em "Contratado") -->
-  <div class="modal-overlay" id="contratadosListModal">
-    <div class="modal" style="max-width:640px;">
-      <div class="modal-header">
-        <h3>Todos os Contratados</h3>
-        <button type="button" class="modal-close" onclick="closeModalRH('contratadosListModal')" aria-label="Fechar"></button>
-      </div>
-      <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
-        <div id="contratadosListBody"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- MODAL: Registro Punição -->
+<!-- MODAL: Registro Punição -->
   <div class="modal-overlay" id="punicaoModal">
     <div class="modal" style="max-width:780px;">
       <div class="modal-header">
@@ -1946,26 +1967,27 @@
   </div>
 
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
-  <script charset="UTF-8" src="../js/config.js?v=rl429fix1"></script>
-  <script charset="UTF-8" src="../js/db.js?v=nomes-caps1"></script>
-  <script charset="UTF-8" src="../js/fontedata.js?v=4"></script>
-  <script charset="UTF-8" src="../js/auth.js?v=bira-chamada1"></script>
-  <script charset="UTF-8" src="../js/ui.js?v=rank-excl1"></script>
-  <script charset="UTF-8" src="../js/partners-ui.js?v=neg-bal1"></script>
+  <script charset="UTF-8" src="../js/config.js?v=storage-20261110"></script>
+  <script charset="UTF-8" src="../js/db.js?v=brclock1795116682"></script>
+  <script charset="UTF-8" src="../js/novati.js?v=nv-cpf1"></script>
+  <script charset="UTF-8" src="../js/fontedata.js?v=nv-cpf1"></script>
+  <script charset="UTF-8" src="../js/auth.js?v=estrategico1"></script>
+  <script charset="UTF-8" src="../js/ui.js?v=storage-20261110"></script>
+  <script charset="UTF-8" src="../js/partners-ui.js?v=bea-geany1"></script>
   <script charset="UTF-8" src="../js/partners.js?v=97c411tier1"></script>
+  <script charset="UTF-8" src="../js/partner-comissao-tabela.js?v=pct1"></script>
   <script charset="UTF-8" src="../js/cbo.js?v=1"></script>
-  <script charset="UTF-8" src="../js/sales-ranking.js?v=rk-valor1"></script>
+  <script charset="UTF-8" src="../js/sales-ranking.js?v=nav-rank-cfg1"></script>
   <script charset="UTF-8" src="../js/folha-pagamento.js?v=xlsx-lazy1"></script>
   <script charset="UTF-8" src="../js/rh-relatorios.js?v=rel-nof1"></script>
-  <script charset="UTF-8" src="../js/painel-sonhos.js?v=user-photo1"></script>
-  <script charset="UTF-8" src="../js/withdrawal-rules.js?v=irpf189-2"></script>
+  <script charset="UTF-8" src="../js/painel-sonhos.js?v=mural-pub1"></script>
+  <script charset="UTF-8" src="../js/withdrawal-rules.js?v=futuros-db1"></script>
   <script charset="UTF-8" src="../js/withdrawal-flow.js?v=wd-modal1"></script>
-  <script charset="UTF-8" src="../js/profile.js?v=bill-upd1"></script>
+  <script charset="UTF-8" src="../js/profile.js?v=bea-fab2"></script>
   <script charset="UTF-8" src="../js/rh-feedback.js?v=2"></script>
   <script charset="UTF-8" src="../js/rh-vagas.js?v=vagas1"></script>
-  <script charset="UTF-8" src="../js/rh-ui.js?v=neg-bal1"></script>
-  <script charset="UTF-8" src="../js/rh-manager.js?v=fabiana-detach1"></script>
-  <script charset="UTF-8" src="../js/rh-ops.js?v=contratados-cor1"></script>
-  <script charset="UTF-8" src="../js/rh-justificativa-boot.js?v=justif-bs1"></script>
-<script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
+  <script charset="UTF-8" src="../js/rh-carreira.js?v=carreira5"></script>
+  <script charset="UTF-8" src="../js/rh-manager.js?v=rh-clean1"></script>
+  <script charset="UTF-8" src="../js/rh-ops.js?v=photo-wa1"></script>
+  <script src="../js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

@@ -1,19 +1,71 @@
 window.Tickets = {
-  // Departamentos e assuntos sempre em ordem alfabética.
-  departments: ['Desenvolvimento', 'Financeiro', 'Gerência', 'Operacional', 'Ouvidoria', 'RH', 'Supervisão', 'T.I.'],
+  departments: ['Financeiro', 'RH', 'Operacional', 'Supervisão', 'Gerência', 'Ouvidoria', 'Desenvolvimento', 'TI'],
   subjects: {
-    'Desenvolvimento': ['Acesso e permissões', 'Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Outros'],
-    'Financeiro': ['Alteração dados bancários', 'Contestação pontuação', 'Representação de pagamentos'],
-    'Gerência': ['Escalonamento', 'Outros assuntos', 'Solicitação'],
-    'Operacional': ['Atuação proposta', 'Averbação proposta', 'Cancelamento proposta', 'Dúvidas', 'Representação pagamento', 'Solicitação Boleto', 'Solicitação de novo contato', 'Solicitação link chamada vídeo', 'Solicitação novo link', 'Status proposta'],
-    'Ouvidoria': ['Sugestão'], //somente sugestões agora
-    'RH': ['Alteração de dados', 'Atestado médico', 'Pedido de demissão'], //sem contracheque e outros assuntos
-    'Supervisão': ['Fechamento', 'Justificativa de Falta', 'Parcial 12:00', 'Solicitação Treinamento'],
-    'T.I.': ['Outros', 'Problema de conexão', 'Reparo em máquinas', 'Solicitação de periféricos'],
+    'Financeiro': ['Alteração dados bancários', 'Representação de pagamentos', 'Contestação pontuação', 'Outros assuntos'],
+    'RH': ['Contra cheque', 'Atestado médico', 'Alteração de dados', 'Pedido de demissão', 'Outros assuntos'],
+    'Operacional': ['Dúvidas', 'Status proposta', 'Atuação proposta', 'Cancelamento proposta', 'Representação pagamento', 'Solicitação Boleto', 'Averbação proposta', 'Solicitação novo link', 'Solicitação de novo contato', 'Solicitação link chamada vídeo'],
+    'Supervisão': ['Solicitação Treinamento', 'Justificativa de Falta', 'Parcial 12:00', 'Fechamento'],
+    'Gerência': ['Solicitação', 'Escalonamento', 'Outros assuntos'],
+    'Ouvidoria': ['Sugestão', 'Reclamação'],
+    'Desenvolvimento': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Outros'],
+    'TI': ['Bug ou erro na plataforma', 'Nova funcionalidade / melhoria', 'Acesso e permissões', 'Suporte técnico', 'Outros']
   },
   _attachmentViewerCache: [],
   _lastAttachmentBlobUrl: null,
   _actionsWired: false,
+  _replyAudioCtx: null,
+  _replyAudioUnlocked: false,
+
+  /**
+   * _unlockReplyAudio — desbloqueia Web Audio no primeiro clique (política do navegador).
+   */
+  _unlockReplyAudio() {
+    if (this._replyAudioUnlocked) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      this._replyAudioCtx = this._replyAudioCtx || new Ctx();
+      if (this._replyAudioCtx.state === 'suspended') this._replyAudioCtx.resume();
+      const osc = this._replyAudioCtx.createOscillator();
+      const gain = this._replyAudioCtx.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(this._replyAudioCtx.destination);
+      osc.start();
+      osc.stop(this._replyAudioCtx.currentTime + 0.01);
+      this._replyAudioUnlocked = true;
+    } catch (_) { /* noop */ }
+  },
+
+  /**
+   * _playReplySentSound — feedback sonoro ao enviar resposta no chamado.
+   */
+  _playReplySentSound() {
+    try {
+      this._unlockReplyAudio();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      this._replyAudioCtx = this._replyAudioCtx || new Ctx();
+      const ctx = this._replyAudioCtx;
+      if (ctx.state === 'suspended') ctx.resume();
+      const now = ctx.currentTime;
+      const notes = [523.25, 659.25];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const t0 = now + i * 0.12;
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.14, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.2);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.22);
+      });
+    } catch (_) { /* noop */ }
+  },
 
   _ticketDbgLog(location, message, data, hypothesisId) {
     const payload = {
@@ -53,21 +105,55 @@ if (id) this.openTicketDetail(id);
   },
 
   init: function() {
+    /**
+     * Segurança de UI (fechar para perfis não autorizados):
+     * mesmo que alguém tente abrir por rota/estado antigo, a seção e modal fecham.
+     */
+    const allowed = !!this._canAccessRestrictedTickets();
+    const secTickets = document.getElementById('secTickets');
+    if (secTickets && !allowed) {
+      secTickets.style.display = 'none';
+      secTickets.classList.remove('active');
+    }
+    const secManageTickets = document.getElementById('secManageTickets');
+    if (secManageTickets && !allowed) secManageTickets.style.display = 'none';
+    const modal = document.getElementById('manageTicketModal');
+    if (modal && !allowed) {
+      modal.classList.remove('open');
+      modal.style.display = 'none';
+      modal.style.opacity = '0';
+      modal.style.visibility = 'hidden';
+    }
+    if (!allowed) return;
+
+    // Guarda referência da UI antes de qualquer alias em Tickets.openModal.
+    this._uiOpenModal = typeof window.openModal === 'function' ? window.openModal : null;
+    this._uiCloseModal = typeof window.closeModal === 'function' ? window.closeModal : null;
+    this._replyBusy = false;
     this.populateDepts();
     this._bindTicketActions();
+    if (!this._replyAudioUnlockBound) {
+      this._replyAudioUnlockBound = true;
+      const unlock = () => this._unlockReplyAudio();
+      document.addEventListener('click', unlock, { once: true, capture: true });
+      document.addEventListener('keydown', unlock, { once: true, capture: true });
+    }
   },
 
-  /** Perfis que podem abrir chamado (não só vendedor/backoffice na área employee). */
+  /**
+   * _canAccessRestrictedTickets — regra central dos chamados.
+   * Usa allowlist de Auth.canAccessChamados (Eli, Flávia, Paulo, Gabryelle financeiro).
+   */
+  _canAccessRestrictedTickets: function() {
+    if (typeof Auth !== 'undefined' && typeof Auth.canAccessChamados === 'function') {
+      return !!Auth.canAccessChamados();
+    }
+    return false;
+  },
+
+  /** Perfis que podem abrir chamado (restrito por regra de gestão). */
   canOpenTickets: function() {
-    const s = typeof Auth !== 'undefined' && Auth.getSession ? Auth.getSession() : null;
-    if (!s) return false;
-    const role = String(s.role || '').toLowerCase();
-    return [
-      'vendedor', 'employee', 'backoffice', 'supervisor', 'sup_backoffice',
-      'gerencia', 'gerente', 'master', 'fundador', 'financeiro', 'financial',
-      'rh', 'operacional', 'juridico', 'diretoria', 'ouvidoria', 'desenvolvedor', 'admin',
-      'portaria', 'parceiro',
-    ].includes(role);
+    return this._canAccessRestrictedTickets();
   },
 
   /** Rede parceira: só chamados abertos pela própria equipe. */
@@ -97,6 +183,7 @@ if (id) this.openTicketDetail(id);
   },
 
   _canSeeAllTickets: function() {
+    if (!this._canAccessRestrictedTickets()) return false;
     if (typeof Auth !== 'undefined' && typeof Auth.canSeeAllTickets === 'function') {
       return !!Auth.canSeeAllTickets();
     }
@@ -245,12 +332,21 @@ if (id) this.openTicketDetail(id);
     };
   },
 
+  /**
+   * _isValidAttachmentUrl — aceita HTTP, data URL, /uploads/ e caminho relativo de storage
+   * (ex.: ticket-docs/TKT-…/arquivo.jpeg gravado pelo upload.php).
+   */
   _isValidAttachmentUrl: function(url) {
     if (!url || typeof url !== 'string') return false;
     const u = url.trim();
-    if (u.length < 12) return false;
+    if (u.length < 8) return false;
     if (/^data:(image|application)\//i.test(u)) return u.length > 50;
-    return /^https?:\/\//i.test(u) || u.startsWith('/uploads/');
+    if (/^https?:\/\//i.test(u) || u.startsWith('/uploads/') || /^uploads\//i.test(u)) return true;
+    const buckets = 'profile-photos|product-images|partner-docs|ticket-docs|sonhos|mural|misc|proposal-attachments|finance-docs|tim-docs|contestacao-docs|whatsapp-media|rh-docs|rh-justificativa|rh-demissao|monitoria-atendimento|partner-nf';
+    if (new RegExp(`^(?:\\.?/)?(?:uploads/)?(?:${buckets})/`, 'i').test(u)) return true;
+    /* Proxy file.php já montado */
+    if (/(?:file|attachment-proxy)\.php/i.test(u)) return true;
+    return false;
   },
 
   _isImageUrl: function(url, name) {
@@ -263,20 +359,32 @@ if (id) this.openTicketDetail(id);
     return /\.(zip|rar|7z|doc|docx|xls|xlsx|ppt|pptx)(\?|$)/i.test(blob);
   },
 
+  /**
+   * _resolveAttachmentUrl — transforma caminho relativo em URL pública (file.php).
+   */
   _resolveAttachmentUrl: function(url) {
     if (!url) return '';
     const u = String(url).trim();
     if (u.startsWith('data:')) return u;
-    if (typeof resolvePhotoUrl === 'function') return resolvePhotoUrl(u);
+    if (typeof resolvePhotoUrl === 'function') {
+      const resolved = resolvePhotoUrl(u);
+      if (resolved) return resolved;
+    }
     if (/^https?:\/\//i.test(u)) return u;
     const base = typeof window !== 'undefined' && window.location?.origin ? window.location.origin : '';
     if (u.startsWith('/')) return base + u;
+    /* Relativo sem resolver: monta file.php direto. */
+    if (base && /^(ticket-docs|partner-docs|tim-docs|contestacao-docs|finance-docs|profile-photos|product-images|proposal-attachments)\//i.test(u)) {
+      return `${base}/api/file.php?path=${encodeURIComponent(u)}`;
+    }
     return u;
   },
 
   _dataUrlToBlobUrl: function(dataUrl) {
     const parts = String(dataUrl).split(',');
     if (parts.length < 2) throw new Error('data URL inválida');
+    // Evita travar a UI com atob síncrono em anexos grandes.
+    if (parts[1].length > 180000) throw new Error('data URL grande demais');
     const mime = (parts[0].match(/data:([^;]+)/) || [])[1] || 'application/octet-stream';
     const bin = atob(parts[1]);
     const arr = new Uint8Array(bin.length);
@@ -286,10 +394,35 @@ if (id) this.openTicketDetail(id);
 
   _toDisplayUrl: function(url) {
     if (!url) return '';
-    if (String(url).startsWith('data:')) {
-      try { return this._dataUrlToBlobUrl(url); } catch { return url; }
+    const raw = String(url);
+    if (raw.startsWith('data:')) {
+      // Não materializa base64 gigante na thread (congela o Chrome).
+      if (raw.length > 200000) return '';
+      try { return this._dataUrlToBlobUrl(raw); } catch { return ''; }
     }
     return this._resolveAttachmentUrl(url);
+  },
+
+  /** Remove base64 embutido do thread antes do PATCH (payload leve). */
+  _compactThreadForSave(thread) {
+    if (!Array.isArray(thread)) return [];
+    return thread.map((msg) => {
+      const m = { ...(msg || {}) };
+      const strip = (u) => {
+        const s = String(u || '');
+        if (s.startsWith('data:') && s.length > 8000) return '';
+        return s;
+      };
+      if (m.attachment) m.attachment = strip(m.attachment);
+      if (m.url) m.url = strip(m.url);
+      if (Array.isArray(m.attachments)) {
+        m.attachments = m.attachments.map((a) => {
+          if (!a || typeof a !== 'object') return a;
+          return { ...a, url: strip(a.url) };
+        }).filter((a) => a && a.url);
+      }
+      return m;
+    });
   },
 
   _revokeAttachmentBlobUrl: function() {
@@ -342,6 +475,10 @@ if (id) this.openTicketDetail(id);
       return;
     }
     const displayUrl = this._toDisplayUrl(url);
+    if (!displayUrl) {
+      alert('Não foi possível abrir o anexo. Peça reenvio ou tente baixar de novo.');
+      return;
+    }
     this._revokeAttachmentBlobUrl();
     if (displayUrl !== url && String(displayUrl).startsWith('blob:')) {
       this._lastAttachmentBlobUrl = displayUrl;
@@ -363,12 +500,14 @@ if (id) this.openTicketDetail(id);
     const label = name || 'Anexo';
     const idx = this._cacheAttachment(url, label);
     const resolved = this._resolveAttachmentUrl(url);
-    const safeResolved = resolved.replace(/"/g, '&quot;');
     const safeLabel = this._escAttr(label);
-    const preferDownload = this._isDownloadPreferred(url, label);
+    const isData = String(url || '').startsWith('data:');
+    // Nunca injeta data:URL grande no DOM (trava o Chrome na esteira).
+    const preferDownload = isData || this._isDownloadPreferred(url, label);
     const btnText = preferDownload ? 'Baixar' : 'Ver anexo';
     let preview = '';
-    if (this._isImageUrl(url, label)) {
+    if (!isData && this._isImageUrl(url, label) && resolved && resolved.length < 2000) {
+      const safeResolved = resolved.replace(/"/g, '&quot;');
       preview = `<div style="margin-top:8px;"><img src="${safeResolved}" alt="${safeLabel}" style="max-width:100%;max-height:220px;border-radius:8px;border:1px solid var(--color-border);cursor:pointer;object-fit:contain;" onclick="Tickets.openAttachment(${idx})" title="Clique para ampliar"/></div>`;
     }
     return `${preview}<div style="margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="Tickets.openAttachment(${idx})">${btnText}${label && label !== 'Anexo' ? ': ' + safeLabel : ''}</button></div>`;
@@ -444,10 +583,10 @@ if (id) this.openTicketDetail(id);
       targetDept: dept,
       subject: subject,
       status: 'aberto',
-      createdAt: new Date().toISOString(),
-      created_at: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      createdAt: nowBrazilSql(),
+      created_at: nowBrazilSql(),
+      updatedAt: nowBrazilSql(),
+      updated_at: nowBrazilSql(),
       thread: [
         {
           senderName: user.name,
@@ -456,7 +595,7 @@ if (id) this.openTicketDetail(id);
           attachment: first?.url || null,
           attachmentName: first?.name || '',
           attachments,
-          date: new Date().toISOString()
+          date: nowBrazilSql()
         }
       ]
     };
@@ -480,6 +619,10 @@ alert("Erro ao abrir chamado: " + e.message);
   renderEmployeeList: async function() {
     const listEl = document.getElementById('ticketsList');
     if (!listEl) return;
+    if (!this._canAccessRestrictedTickets()) {
+      listEl.innerHTML = '<p>Chamados disponível apenas para usuários autorizados.</p>';
+      return;
+    }
     this.populateDepts();
 
     const user = Auth.getSession();
@@ -521,6 +664,11 @@ alert("Erro ao abrir chamado: " + e.message);
   },
 
   renderAdminList: async function() {
+    if (!this._canAccessRestrictedTickets()) {
+      const sec = document.getElementById('secManageTickets');
+      if (sec) sec.style.display = 'none';
+      return;
+    }
     this.ensureOpenTicketPanel();
     const portariaOnly = this._isPortariaOnly();
     const navLbl = document.querySelector('#navManageTickets .nav-label');
@@ -570,8 +718,61 @@ alert("Erro ao abrir chamado: " + e.message);
 
     filteredTickets.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
 
+    const mobileList = (typeof window.isSoubluMobile === 'function' && window.isSoubluMobile())
+      || (window.matchMedia && window.matchMedia('(max-width: 900px)').matches);
+    const listLimit = mobileList ? 60 : filteredTickets.length;
+    const visible = filteredTickets.slice(0, listLimit);
+
+    const tableWrap = tbody.closest('.table-wrap') || tbody.closest('.card');
+    let mobileHost = document.getElementById('manageTicketsMobileList');
+    if (!mobileHost && tableWrap?.parentElement) {
+      mobileHost = document.createElement('div');
+      mobileHost.id = 'manageTicketsMobileList';
+      mobileHost.className = 'mobile-list-cards';
+      const insertBefore = tbody.closest('.table-wrap') || tbody.closest('table');
+      if (insertBefore?.parentElement) insertBefore.parentElement.insertBefore(mobileHost, insertBefore);
+      else tableWrap.parentElement.insertBefore(mobileHost, tableWrap);
+    }
+    const wrapEl = tbody.closest('.table-wrap') || tbody.closest('table');
+    if (mobileHost) mobileHost.style.display = mobileList ? 'block' : 'none';
+    if (wrapEl) wrapEl.style.display = mobileList ? 'none' : '';
+
+    if (mobileList && mobileHost) {
+      let cards = '';
+      visible.forEach(t => {
+        let statusColor = '#3b82f6';
+        if (t.status === 'em_andamento') statusColor = '#f59e0b';
+        if (t.status === 'resolvido') statusColor = '#10b981';
+        let statusText = t.status === 'em_andamento' ? 'Em Andamento' :
+          t.status === 'resolvido' ? 'Resolvido' : 'Aberto';
+        cards += `
+          <article class="mobile-list-card">
+            <div class="mobile-list-card__head">
+              <div>
+                <strong>#${this._escHtml(t.id)}</strong>
+                <div class="mobile-list-card__meta">${this._escHtml(t.openedByName)} (${this._escHtml(t.openedByDept || 'N/A')})</div>
+              </div>
+              <span style="background:${statusColor};color:#fff;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;">${statusText}</span>
+            </div>
+            <div class="mobile-list-card__body">
+              <div><strong>${this._escHtml(t.targetDept)}</strong> — ${this._escHtml(t.subject)}</div>
+              <div class="mobile-list-card__muted">${formatDate(t.createdAt)}</div>
+            </div>
+            <div class="mobile-list-card__actions">
+              <button type="button" class="btn btn-primary btn-sm" data-ticket-open="${this._escAttr(t.id)}" style="min-width:120px;">Tratar</button>
+            </div>
+          </article>`;
+      });
+      if (filteredTickets.length > visible.length) {
+        cards += `<p class="mobile-list-card__muted" style="text-align:center;padding:8px;">Mostrando ${visible.length} de ${filteredTickets.length} chamados.</p>`;
+      }
+      mobileHost.innerHTML = cards;
+      tbody.innerHTML = '';
+      return;
+    }
+
     let html = '';
-    filteredTickets.forEach(t => {
+    visible.forEach(t => {
       let statusColor = '#3b82f6';
       if(t.status === 'em_andamento') statusColor = '#f59e0b';
       if(t.status === 'resolvido') statusColor = '#10b981';
@@ -592,6 +793,9 @@ alert("Erro ao abrir chamado: " + e.message);
         </tr>
       `;
     });
+    if (mobileList && filteredTickets.length > visible.length) {
+      html += `<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:14px;font-size:13px;">Mostrando ${visible.length} de ${filteredTickets.length} chamados (lista limitada no celular).</td></tr>`;
+    }
     tbody.innerHTML = html;
   },
 
@@ -648,7 +852,7 @@ try {
     if (ticket.thread?.length) {
       ticket.thread.forEach(msg => {
         const attHtml = this._attachmentsHtml(msg);
-        const isSelf = String(msg.senderName || '').trim().toUpperCase() === String(user.name || '').trim().toUpperCase();
+        const isSelf = (msg.senderName === user.name);
         const align = isSelf 
           ? 'align-self: flex-end; background: #d9fdd3; border-radius: 8px 0 8px 8px; margin-left: 20%;' 
           : 'align-self: flex-start; background: #ffffff; border-radius: 0 8px 8px 8px; margin-right: 20%;';
@@ -680,92 +884,141 @@ try {
       alert('Modal de chamados não encontrado.');
       return;
     }
-    const showUiModal = typeof window.openModal === 'function'
-      ? window.openModal
-      : (typeof openModal === 'function' ? openModal : null);
-    if (showUiModal) showUiModal('manageTicketModal');
-    else modal.classList.add('open');
+    // Abre o modal da UI diretamente — NÃO usar Tickets.openModal (evita recursão).
+    const uiOpen = this._uiOpenModal
+      || (typeof window.openModal === 'function' && window.openModal !== Tickets.openModal ? window.openModal : null)
+      || (typeof openModal === 'function' && openModal !== Tickets.openModal ? openModal : null);
+    if (uiOpen) uiOpen('manageTicketModal');
+    else {
+      modal.classList.add('open');
+      modal.style.display = 'flex';
+      modal.style.opacity = '1';
+      modal.style.visibility = 'visible';
+    }
 } catch (err) {
       console.error('[Tickets.openTicketDetail]', err);
 alert('Não foi possível abrir o chamado. Tente atualizar a página (Ctrl+Shift+R).');
     }
   },
 
+  /** Alias seguro: só abre detalhe se receber id de chamado. */
   openModal(id) {
+    if (!id || id === 'manageTicketModal') return;
     return this.openTicketDetail(id);
   },
 
   reply: async function() {
+    if (this._replyBusy) return;
+    this._replyBusy = true;
+
     const user = Auth.getSession();
-    const id = document.getElementById('manageTicketId').value;
-    const ticket = this._normTicket(await DB.get('tickets', id));
-    if (!ticket) return;
-
-    const replyText = document.getElementById('manageTicketReply').value;
-    let newStatus = ticket.status;
-    if (document.getElementById('manageTicketStatus')) {
-      newStatus = document.getElementById('manageTicketStatus').value;
-    }
-    const replyFilesEl = document.getElementById('manageTicketFiles');
-    const hasFiles = !!(replyFilesEl?.files?.length);
-
-    if (!replyText && !hasFiles && newStatus === ticket.status) {
-      alert("Digite uma resposta, anexe arquivo(s) ou altere o status.");
-      return;
-    }
-
-    const becameResolved = String(ticket.status || '').toLowerCase() !== 'resolvido'
-      && String(newStatus || '').toLowerCase() === 'resolvido';
-
-    ticket.status = newStatus;
-    ticket.updatedAt = new Date().toISOString();
-    ticket.updated_at = ticket.updatedAt;
-
-    if (replyText || hasFiles) {
-      let attachments = [];
-      if (hasFiles) {
-        try {
-          attachments = await this._uploadTicketFiles(replyFilesEl.files, ticket.id);
-        } catch (e) {
-          alert(e.message || 'Erro ao anexar arquivo.');
-          return;
-        }
-      }
-      const first = attachments[0] || null;
-      ticket.thread = ticket.thread || [];
-      ticket.thread.push({
-        senderName: user.name,
-        senderRole: user.role,
-        message: replyText || (attachments.length ? '(anexo)' : ''),
-        attachment: first?.url || null,
-        attachmentName: first?.name || '',
-        attachments,
-        date: new Date().toISOString()
-      });
+    const id = document.getElementById('manageTicketId')?.value;
+    const replyBtn = document.querySelector('#manageTicketModal button[onclick*="Tickets.reply"]');
+    if (replyBtn) {
+      replyBtn.disabled = true;
+      replyBtn.style.opacity = '0.6';
+      replyBtn.style.pointerEvents = 'none';
     }
 
     try {
-      await DB.save('tickets', ticket);
+      if (!id) {
+        alert('Chamado não identificado. Feche e abra novamente.');
+        return;
+      }
+      const ticket = this._normTicket(await DB.get('tickets', id));
+      if (!ticket) {
+        alert('Chamado não encontrado.');
+        return;
+      }
+
+      const replyText = (document.getElementById('manageTicketReply')?.value || '').trim();
+      let newStatus = ticket.status;
+      if (document.getElementById('manageTicketStatus')) {
+        newStatus = document.getElementById('manageTicketStatus').value;
+      }
+      const replyFilesEl = document.getElementById('manageTicketFiles');
+      const hasFiles = !!(replyFilesEl?.files?.length);
+
+      if (!replyText && !hasFiles && newStatus === ticket.status) {
+        alert('Digite uma resposta, anexe arquivo(s) ou altere o status.');
+        return;
+      }
+
+      const becameResolved = String(ticket.status || '').toLowerCase() !== 'resolvido'
+        && String(newStatus || '').toLowerCase() === 'resolvido';
+
+      ticket.status = newStatus;
+      ticket.updatedAt = nowBrazilSql();
+      ticket.updated_at = ticket.updatedAt;
+      ticket.thread = this._compactThreadForSave(ticket.thread || []);
+
+      if (replyText || hasFiles) {
+        let attachments = [];
+        if (hasFiles) {
+          attachments = await this._uploadTicketFiles(replyFilesEl.files, ticket.id);
+        }
+        const first = attachments[0] || null;
+        ticket.thread.push({
+          senderName: user.name,
+          senderRole: user.role,
+          message: replyText || (attachments.length ? '(anexo)' : ''),
+          attachment: first?.url || null,
+          attachmentName: first?.name || '',
+          attachments,
+          date: nowBrazilSql()
+        });
+      }
+
+      const savePromise = DB.save('tickets', ticket);
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Tempo esgotado ao salvar. Tente novamente.')), 20000);
+      });
+      await Promise.race([savePromise, timeoutPromise]);
+
+      if (replyText || hasFiles) {
+        this._playReplySentSound();
+      }
+
+      // Roleta não pode travar a esteira — roda em background.
       if (becameResolved && ticket.employee_id && typeof DB.applyRouletteCriteriaReward === 'function') {
-        await DB.applyRouletteCriteriaReward(ticket.employee_id, 'chamado_resolvido', {
+        void DB.applyRouletteCriteriaReward(ticket.employee_id, 'chamado_resolvido', {
           ticket_id: ticket.id,
           by_user: user?.id || 'sistema_chamados',
         }).catch(() => null);
       }
+
+      if (typeof closeModal === 'function') closeModal('manageTicketModal');
+      else {
+        const modalEl = document.getElementById('manageTicketModal');
+        if (modalEl) {
+          modalEl.classList.remove('open');
+          modalEl.style.display = 'none';
+        }
+      }
+      if (typeof unlockUiOverlays === 'function') unlockUiOverlays();
+      if (replyFilesEl) replyFilesEl.value = '';
+
       alert('Chamado atualizado!');
-    } catch(e) {
-      alert("Erro ao salvar resposta: " + e.message);
-      return;
-    }
 
-    document.getElementById('manageTicketModal').classList.remove('open');
-    if (replyFilesEl) replyFilesEl.value = '';
-
-    if (document.getElementById('manageTicketsTbody')) {
-      this.renderAdminList();
-    }
-    if (document.getElementById('ticketsList')) {
-      this.renderEmployeeList();
+      // Refresh da lista fora do caminho crítico.
+      void Promise.resolve().then(async () => {
+        try {
+          if (document.getElementById('manageTicketsTbody')) await this.renderAdminList();
+          if (document.getElementById('ticketsList')) await this.renderEmployeeList();
+        } catch (e) {
+          console.warn('[Tickets] refresh após reply:', e);
+        }
+      });
+    } catch (e) {
+      console.error('[Tickets.reply]', e);
+      alert('Erro ao salvar resposta: ' + (e.message || e));
+    } finally {
+      this._replyBusy = false;
+      if (replyBtn) {
+        replyBtn.disabled = false;
+        replyBtn.style.opacity = '';
+        replyBtn.style.pointerEvents = '';
+      }
     }
   }
 };

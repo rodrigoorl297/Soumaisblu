@@ -2,6 +2,67 @@
 (function (g) {
   'use strict';
 
+  /**
+   * _clubeEnabled — lê SOUBLU_CONFIG.CLUBE_BENEFICIOS_ENABLED (desligado por padrão).
+   * Quando false, some o menu e as páginas standalone redirecionam para o painel.
+   */
+  function _clubeEnabled() {
+    if (typeof g.isClubeBeneficiosEnabled === 'function') return !!g.isClubeBeneficiosEnabled();
+    const cfg = g.SOUBLU_CONFIG || {};
+    return cfg.CLUBE_BENEFICIOS_ENABLED === true || cfg.CLUBE_BENEFICIOS_ENABLED === 1 || cfg.CLUBE_BENEFICIOS_ENABLED === '1';
+  }
+
+  /** _hideClubeUi — oculta botões/seções do Clube no painel atual. */
+  function _hideClubeUi() {
+    document.querySelectorAll(
+      '.benefits-clube-nav, #navClubeBeneficios, .benefits-admin-nav, #navGestaoBeneficios, #secClubeBeneficios, #secGestaoBeneficios, #rhClubeBeneficiosBlock, .clube-beneficios-feature'
+    ).forEach((el) => {
+      el.style.display = 'none';
+      el.setAttribute('hidden', 'hidden');
+    });
+    document.querySelectorAll('.sidebar-nav .nav-label, .nav-label').forEach((el) => {
+      if (/Clube Benef[ií]cios|Gest[aã]o Benef[ií]cios/i.test(el.textContent || '')) {
+        const btn = el.closest('button, a');
+        if (btn) {
+          btn.style.display = 'none';
+          btn.setAttribute('hidden', 'hidden');
+        }
+      }
+    });
+  }
+
+  /** _redirectAwayFromClube — sai das páginas standalone do Clube para o home do perfil. */
+  function _redirectAwayFromClube() {
+    try {
+      const dest = (typeof Auth !== 'undefined' && Auth.defaultAppHref)
+        ? Auth.defaultAppHref()
+        : '/pages/admin.html';
+      g.location.replace(dest);
+    } catch (_) {
+      g.location.replace('/pages/admin.html');
+    }
+  }
+
+  if (!_clubeEnabled()) {
+    const stub = {
+      init() { _hideClubeUi(); return Promise.resolve(); },
+      bootStandalone() { _hideClubeUi(); _redirectAwayFromClube(); return Promise.resolve(); },
+      enabled: false,
+    };
+    g.BeneficiosClube = stub;
+    if (typeof document !== 'undefined') {
+      const run = () => {
+        _hideClubeUi();
+        if (/\/(clube-beneficios|admin-beneficios)\.html/i.test(g.location.pathname || '')) {
+          _redirectAwayFromClube();
+        }
+      };
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+      else run();
+    }
+    return;
+  }
+
   let currentUser = null;
   let currentLimit = null;
   let orderMode = 'entrega';
@@ -441,10 +502,7 @@
         } catch (e) {
           console.warn('[Clube] re-vincular limite:', e?.message || e);
         }
-        // #region agent log
-        fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-selfheal',hypothesisId:'L-H2',location:'clube-beneficios.js:_findLimitRowSelfHeal',message:'limite re-vinculado do cadastro RH para o login',data:{userId:currentUser?.id||null,rhId,limitId:row.id},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-        return row;
+return row;
       }
     }
     return null;
@@ -456,10 +514,7 @@
     try {
       const vouchers = await supaReq('GET', 'beneficios_vouchers', null, `?employee_id=eq.${currentUser.id}&order=created_at.desc&limit=500`);
       const row = await _findLimitRowSelfHeal();
-      // #region agent log
-      fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'clube-load',hypothesisId:'H4',location:'clube-beneficios.js:loadUserData',message:'clube load limite',data:{userId:currentUser?.id||null,hasRow:!!row,aprovado:row?parseFloat(row.limite_aprovado)||0:null,status:row?.status||null,employee_id:row?.employee_id||null},timestamp:Date.now()})}).catch(()=>{});
-      // #endregion
-      if (row && (parseFloat(row.limite_aprovado) || 0) > 0) {
+if (row && (parseFloat(row.limite_aprovado) || 0) > 0) {
         currentLimit = await _reconcileLimitRow(row, vouchers);
       } else {
         currentLimit = null;

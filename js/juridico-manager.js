@@ -63,6 +63,10 @@ async function switchTab(tabId) {
     punicao: 'Registro de Punições',
     demissao: 'Demissões',
   };
+  if (tabId === 'conta') {
+    if (typeof showToast === 'function') showToast('Use o perfil no painel principal para editar a conta.', 'info');
+    return;
+  }
   document.getElementById('pageTitle').textContent = titles[tabId] || 'Painel do Jurídico';
 
   if (tabId === 'contestacao') {

@@ -789,10 +789,8 @@ async function updateDistPreview() {
       `;
     } else {
       const weeks = parseInt(document.getElementById('weeksInput').value) || 1;
-      const plan = LeadsDB._buildDistributionPlan(pool, [..._selectedEmployees], weeks);
-      const perWeek = Math.max(0, ...plan.weeklyAssignments.map(row => row.total_leads));
-      // Até 60/semana → tudo no 1º dia (mesa recebe a cota na hora)
-      const perDay = plan.dailyTarget;
+      const perWeek = Math.ceil(perEmployee / weeks);
+      // Chegam hoje = cota da 1ª semana (não divide por 5: 100 não vira meta 20)
       const partnerLabel = isPartners
         ? (document.getElementById('distPartnerSelect')?.selectedOptions?.[0]?.textContent || 'Parceiro')
         : '';
@@ -806,7 +804,8 @@ async function updateDistPreview() {
         ${remainder > 0 ? `<div class="dist-summary-item"><span class="label">Excedente (${remainder})</span><span class="value">Distribuído entre os primeiros</span></div>` : ''}
         <div class="dist-summary-item"><span class="label">Semanas</span><span class="value">${weeks}</span></div>
         <div class="dist-summary-item"><span class="label">Leads por semana</span><span class="value" style="color:var(--color-accent);font-size:18px;">${perWeek.toLocaleString('pt-BR')}</span></div>
-        <div class="dist-summary-item"><span class="label">Meta diária</span><span class="value" style="color:var(--color-success);font-size:18px;">${perDay}${perWeek <= 60 ? ' (tudo hoje)' : ''}</span></div>
+        <div class="dist-summary-item"><span class="label">Chegam hoje</span><span class="value" style="color:var(--color-success);font-size:18px;">${perWeek.toLocaleString('pt-BR')}</span></div>
+        ${weeks > 1 ? `<div class="dist-summary-item"><span class="label">Demais semanas</span><span class="value">resto nas próximas ${weeks - 1}</span></div>` : ''}
       `;
     }
 
@@ -868,8 +867,8 @@ async function confirmDistribute() {
       const verb = redistribute ? 'redistribuídos' : 'distribuídos';
       _showAlert('distBatchInfo', 'success',
         isPartners
-          ? `✅ ${result.distributed.toLocaleString('pt-BR')} leads ${verb} para ${_selectedEmployees.size} vendedores de ${_esc(partnerName)}. Meta diária: ${result.dailyTarget}.`
-          : `✅ ${result.distributed.toLocaleString('pt-BR')} leads ${verb} entre ${_selectedEmployees.size} funcionários! Meta diária: ${result.dailyTarget} leads.`,
+          ? `✅ ${result.distributed.toLocaleString('pt-BR')} leads ${verb} para ${_selectedEmployees.size} vendedores de ${_esc(partnerName)}. Chegam hoje: ${result.dailyTarget} por pessoa.`
+          : `✅ ${result.distributed.toLocaleString('pt-BR')} leads ${verb} entre ${_selectedEmployees.size} funcionários. Chegam hoje: ${result.dailyTarget} por pessoa.`,
         true
       );
       window._distRedistributeMode = false;

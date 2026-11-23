@@ -230,6 +230,90 @@
         "taxa": 0.0299,
         "tabela": "NCDT_096-299_318661",
         "coeficiente": 0.0318661932
+      },
+      {
+        "value": "FUTURO_SIAPE_CCCB_96X_NCDT_999_0",
+        "label": "FUTURO SIAPE CC-CB 96X NCDT_096-999_EXCECAO — 0%",
+        "pct": 0,
+        "taxa": 0.0999,
+        "tabela": "NCDT_096-999_EXCECAO"
+      }
+    ]
+  },
+  {
+    "group": "NEO — PREF CURITIBA",
+    "items": [
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_459_36",
+        "label": "NCDT_072-459_478787 — 36%",
+        "pct": 0.36,
+        "taxa": 0.0459,
+        "tabela": "NCDT_072-459_478787",
+        "coeficiente": 0.0478787163
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_439_33",
+        "label": "NCDT_072-439_460750 — 33%",
+        "pct": 0.33,
+        "taxa": 0.0439,
+        "tabela": "NCDT_072-439_460750",
+        "coeficiente": 0.0460750567
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_419_30",
+        "label": "NCDT_072-419_442899 — 30%",
+        "pct": 0.3,
+        "taxa": 0.0419,
+        "tabela": "NCDT_072-419_442899",
+        "coeficiente": 0.044289969
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_399_27",
+        "label": "NCDT_072-399_425248 — 27%",
+        "pct": 0.27,
+        "taxa": 0.0399,
+        "tabela": "NCDT_072-399_425248",
+        "coeficiente": 0.0425248919
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_379_24",
+        "label": "NCDT_072-379_407813 — 24%",
+        "pct": 0.24,
+        "taxa": 0.0379,
+        "tabela": "NCDT_072-379_407813",
+        "coeficiente": 0.040781326
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_359_18",
+        "label": "NCDT_072-359_390608 — 18%",
+        "pct": 0.18,
+        "taxa": 0.0359,
+        "tabela": "NCDT_072-359_390608",
+        "coeficiente": 0.039060829
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_339_15",
+        "label": "NCDT_072-339_373650 — 15%",
+        "pct": 0.15,
+        "taxa": 0.0339,
+        "tabela": "NCDT_072-339_373650",
+        "coeficiente": 0.0373650096
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_319_9",
+        "label": "NCDT_072-319_356955 — 9%",
+        "pct": 0.09,
+        "taxa": 0.0319,
+        "tabela": "NCDT_072-319_356955",
+        "coeficiente": 0.0356955195
+      },
+      {
+        "value": "NEO_PREFCURITIBA_NCDT_299_3",
+        "label": "NCDT_072-299_340540 — 3%",
+        "pct": 0.03,
+        "taxa": 0.0299,
+        "tabela": "NCDT_072-299_340540",
+        "coeficiente": 0.0340540446
       }
     ]
   },
@@ -319,11 +403,15 @@
    * apply — troca os grupos FUTURO no catálogo da proposta e recarrega os selects.
    */
   function apply(P) {
-    if (!P || P.__futuroTab3) return !!P;
-    P.__futuroTab3 = true;
+    if (!P || P.__futuroTab7) return !!P;
+    P.__futuroTab7 = true;
     var cur = Array.isArray(P._TABELA_GROUPS) ? P._TABELA_GROUPS.slice() : [];
+    // Remove grupos FUTURO e o bloco NCDT/PREF CURITIBA (evita duplicar no overlay).
     cur = cur.filter(function (g) {
-      return String(g.group || '').indexOf('FUTURO —') !== 0;
+      var name = String(g.group || '');
+      if (name.indexOf('FUTURO —') === 0) return false;
+      if (name === 'NCDT' || name === 'NEO — PREF CURITIBA') return false;
+      return true;
     });
     P._TABELA_GROUPS = cur.concat(GROUPS);
     P._tabelaPct = P._tabelaPct || {};
@@ -342,7 +430,9 @@
       S.TABELAS.forEach(function (t) { seen[t.id] = true; });
       GROUPS.forEach(function (g) {
         (g.items || []).forEach(function (i) {
+          // EXCECAO (NCDT_096-999_EXCECAO) vem do banco sem coeficiente — não simula.
           if (seen[i.value] || i.coeficiente == null) return;
+          if (/EXCEC/i.test(String(i.value || '') + String(i.tabela || '') + String(i.label || ''))) return;
           S.TABELAS.push({
             grupo: g.group,
             id: i.value,

@@ -40,13 +40,7 @@
     }
 
     const monitorBtn = document.getElementById('waPageMonitorBtn');
-    if (monitorBtn && typeof Auth !== 'undefined' && Auth.monitoramentoPageHref) {
-      if (Auth.canAccessMonitoriaAtendimento?.()) {
-        monitorBtn.href = Auth.monitoramentoPageHref();
-      } else {
-        monitorBtn.style.display = 'none';
-      }
-    }
+    if (monitorBtn) monitorBtn.style.display = 'none';
 
     const userLine = document.getElementById('waPageUserLine');
     if (userLine) {

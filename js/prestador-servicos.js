@@ -6,8 +6,8 @@
     inativo: { label: 'Inativo', cls: 'badge-muted' },
   };
 
-  let _anexoPending = { contrato: null, compliance: null, rg_cpf: null, nota_fiscal: null };
-  let _anexoUrls = { contrato: '', compliance: '', rg_cpf: '', nota_fiscal: '' };
+  let _anexoPending = { contrato: null, compliance: null, rg_cpf: null };
+  let _anexoUrls = { contrato: '', compliance: '', rg_cpf: '' };
 
   function esc(s) {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
@@ -31,6 +31,7 @@
   function canManage() {
     const s = typeof Auth !== 'undefined' ? Auth.getSession() : null;
     if (!s || window.PARTNER_ROOT_ID) return false;
+    if (typeof Auth.hasFinanceiroInternoAccess === 'function') return Auth.hasFinanceiroInternoAccess(s);
     return ['master', 'fundador', 'gerente', 'financeiro', 'financial'].includes(String(s.role || '').toLowerCase());
   }
 
@@ -48,14 +49,13 @@
   }
 
   function _resetAnexos(urls = {}) {
-    _anexoPending = { contrato: null, compliance: null, rg_cpf: null, nota_fiscal: null };
+    _anexoPending = { contrato: null, compliance: null, rg_cpf: null };
     _anexoUrls = {
       contrato: urls.contrato || '',
       compliance: urls.compliance || '',
       rg_cpf: urls.rg_cpf || '',
-      nota_fiscal: urls.nota_fiscal || '',
     };
-    ['contrato', 'compliance', 'rg_cpf', 'nota_fiscal'].forEach((k) => {
+    ['contrato', 'compliance', 'rg_cpf'].forEach((k) => {
       const input = document.getElementById(`prestador_anexo_${k}`);
       if (input) input.value = '';
       _setAnexoStatus(k, _anexoUrls[k] ? 'Arquivo anexado' : 'Nenhum arquivo');
@@ -134,10 +134,9 @@
   async function _uploadPrestadorAnexos(protocolo) {
     const out = { ..._anexoUrls };
     const sub = String(protocolo || 'ps').replace(/[^a-zA-Z0-9_-]/g, '_');
-    for (const kind of ['contrato', 'compliance', 'rg_cpf', 'nota_fiscal']) {
+    for (const kind of ['contrato', 'compliance', 'rg_cpf']) {
       const file = _anexoPending[kind];
       if (!file) continue;
-      out[kind] = "";
       if (typeof uploadImage === 'function') {
         try {
           const url = await uploadImage(file, 'rh-demissao', `prestadores/${sub}/${kind}`);
@@ -149,7 +148,6 @@
       if (!out[kind] && typeof fileToBase64 === 'function') {
         try { out[kind] = await fileToBase64(file); } catch (_) { /* noop */ }
       }
-      if (!out[kind]) throw new Error("Não foi possível anexar o arquivo: " + file.name);
     }
     return out;
   }
@@ -323,7 +321,6 @@
             <input type="file" id="prestador_anexo_rg_cpf" accept=".pdf,.jpg,.jpeg,.png,.webp" style="position:absolute;width:1px;height:1px;opacity:0;" onchange="onPrestadorAnexoPick('rg_cpf', this)"/>
           </div>
         </div>
-        <div class="form-group"><label>Nota fiscal</label><span id="prestador_anexo_nota_fiscal_status">Nenhum arquivo</span><input type="file" id="prestador_anexo_nota_fiscal" accept=".pdf,.jpg,.jpeg,.png" onchange="onPrestadorAnexoPick('nota_fiscal', this)"></div>
         <div class="flex gap-md mt-lg">
           <button type="button" class="btn btn-ghost" onclick="closeModal('prestadorServicosModal')">Cancelar</button>
           <button type="submit" class="btn btn-primary btn-lg" style="flex:1;">Salvar</button>
@@ -375,7 +372,6 @@
           <td><span class="badge ${st.cls}">${st.label}</span>${rec}</td>
           <td style="white-space:nowrap;">
             <button type="button" class="btn btn-ghost btn-sm" onclick="PrestadorServicos.openModal('${esc(r.id)}')">Editar</button>
-            <button type="button" class="btn btn-outline btn-sm" onclick="PrestadorServicos.account('${esc(r.id)}')">Acesso do prestador</button>
           </td>
         </tr>`;
       }).join('');
@@ -386,20 +382,6 @@
         <tbody>${rows}</tbody></table></div></div>`;
     },
 
-    async account(id) {
-      if(!canManage())return;
-      if(!DB.online)return alert('O acesso do prestador precisa do banco MySQL configurado.');
-      try {
-        await FinanceAccess.ensure();
-        const users=(await DB.getAllUsers()).filter(u=>u.role==='prestador' && u.active!==false);
-        const supplier=await DB.getFinanceSupplier(id);
-        const overlay=document.createElement('div');overlay.className='modal-overlay active';overlay.style.cssText='display:flex;z-index:9999';
-        overlay.innerHTML=`<div class="modal"><h3>Acesso de ${esc(supplier.name)}</h3><p>Login vinculado: ${esc(supplier.linked_user_id||'Nenhum')}</p><form data-link><label>Login existente <select name="user_id"><option value="">Sem vínculo</option>${users.map(u=>`<option value="${esc(u.id)}">${esc(u.name)} — ${esc(u.email)}</option>`).join('')}</select></label><button>Salvar vínculo</button></form><hr><form data-new><h4>Criar login com perfil prestador</h4><label>E-mail <input type="email" name="email" required autocomplete="off"></label><label>Senha inicial <input type="password" name="password" minlength="8" maxlength="128" required autocomplete="new-password"></label><button>Criar acesso</button></form><p role="status"></p><button type="button" data-close>Fechar</button></div>`;
-        document.body.append(overlay);overlay.querySelector('[name=user_id]').value=supplier.linked_user_id||'';
-        overlay.querySelector('[data-close]').onclick=()=>overlay.remove();
-        for(const form of overlay.querySelectorAll('form'))form.onsubmit=async e=>{e.preventDefault();const button=form.querySelector('button');button.disabled=true;try{await FinanceAccess.request(form.hasAttribute('data-new')?'supplier_account':'supplier_link',{supplier_id:id,...Object.fromEntries(new FormData(form))});if(typeof _cacheDel==='function'){_cacheDel('finance_suppliers');_cacheDel('users');}DB.clearAllUsersCache?.();form.reset();overlay.querySelector('[role=status]').textContent='Acesso salvo. O prestador pode entrar pelo login do SOU+BLU.';}catch(error){overlay.querySelector('[role=status]').textContent=error.message;}finally{button.disabled=false;}};
-      } catch(e){alert(e.message);}
-    },
     async openModal(id) {
       this.ensureModals();
       const form = document.getElementById('form-prestador');
@@ -454,7 +436,6 @@
     },
 
     async save(event) {
-      if (!canManage()) throw new Error("Sem permissão para cadastrar prestadores.");
       event?.preventDefault();
       const id = document.getElementById('prestador_id').value;
       const isNew = !id;
@@ -517,7 +498,6 @@
   };
 
   PrestadorServicos.processAutomations = async function() {
-    if (!canManage()) return;
     try {
       const todayStr = new Date().toISOString().slice(0, 10);
       const list = await DB.getFinanceSuppliers().catch(() => []);
@@ -572,7 +552,7 @@
           };
 
           const wd = {
-            id: 'ps-' + row.id + '-' + row.data_pagamento,
+            id: DB._genId('wd'),
             employee_id: creatorId,
             notes: JSON.stringify(wdMeta),
             amount: (typeof DB !== 'undefined' && DB._moneyAmt) ? DB._moneyAmt(row.valor_pago) : parseFloat(row.valor_pago),

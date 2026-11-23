@@ -21,17 +21,10 @@ function soublu_file_mime(string $file): string
     $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
     return match ($ext) {
         'pdf' => 'application/pdf',
-        'ppt' => 'application/vnd.ms-powerpoint',
-        'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'doc' => 'application/msword',
-        'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'xls' => 'application/vnd.ms-excel',
-        'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'jpg', 'jpeg' => 'image/jpeg',
         'png' => 'image/png',
         'gif' => 'image/gif',
         'webp' => 'image/webp',
-        'zip' => 'application/zip',
         'mp3' => 'audio/mpeg',
         'ogg' => 'audio/ogg',
         'm4a', 'aac' => 'audio/mp4',
@@ -39,21 +32,6 @@ function soublu_file_mime(string $file): string
         'webm' => 'audio/webm',
         default => 'application/octet-stream',
     };
-}
-
-/** Força download com nome amigável quando ?download=1&name=arquivo.zip */
-function soublu_file_maybe_attachment_header(): void
-{
-    if (!isset($_GET['download']) || (string) $_GET['download'] !== '1') {
-        return;
-    }
-    $name = basename(str_replace(["\0", '\\'], '', trim((string) ($_GET['name'] ?? 'anexo'))));
-    if ($name === '' || $name === '.' || $name === '..') {
-        $name = 'anexo';
-    }
-    $ascii = preg_replace('/[^\x20-\x7E]/', '_', $name) ?: 'anexo';
-    $ascii = str_replace(['"', '\\', ';'], '', $ascii);
-    header('Content-Disposition: attachment; filename="' . $ascii . '"');
 }
 
 function soublu_file_serve_bytes(string $body, string $mime, string $source): void
@@ -64,7 +42,6 @@ function soublu_file_serve_bytes(string $body, string $mime, string $source): vo
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Origin: *');
     header('X-Served-From: ' . $source);
-    soublu_file_maybe_attachment_header();
     echo $body;
     exit;
 }
@@ -81,7 +58,6 @@ function soublu_file_serve_local(string $file, string $source = 'local'): void
     header('X-Content-Type-Options: nosniff');
     header('Access-Control-Allow-Origin: *');
     header('X-Served-From: ' . $source);
-    soublu_file_maybe_attachment_header();
     readfile($file);
     exit;
 }
@@ -719,34 +695,10 @@ function soublu_attach_extract_rel(mixed $val): string
     if (preg_match('~^proposal-attachments/~i', $s)) {
         return ltrim($s, '/');
     }
-    if (preg_match('~^(?:partner-docs|ticket-docs|tim-docs|contestacao-docs|finance-docs|profile-photos|product-images|sonhos|misc|rh-demissao|rh-justificativa|rh-docs|monitoria-atendimento|partner-nf|whatsapp-media)/~i', $s)) {
+    if (preg_match('~^(?:partner-docs|ticket-docs|tim-docs|contestacao-docs|finance-docs|profile-photos|product-images|sonhos|misc|rh-demissao|rh-justificativa|rh-docs|partner-nf|whatsapp-media)/~i', $s)) {
         return ltrim(str_replace('\\', '/', $s), '/');
     }
     return '';
-}
-
-/**
- * Garante meta.attachments como mapa string→URL (nunca lista JSON []).
- *
- * @return array<string, mixed>
- */
-function soublu_partner_attachments_coerce_map(mixed $attachments): array
-{
-    if (!is_array($attachments) || $attachments === [] || array_is_list($attachments)) {
-        return [];
-    }
-    $out = [];
-    foreach ($attachments as $key => $val) {
-        if (!is_string($key) || $key === '_consultas') {
-            continue;
-        }
-        if (is_string($val) && $val !== '') {
-            $out[$key] = $val;
-        } elseif (is_array($val) && !empty($val['url'])) {
-            $out[$key] = (string) $val['url'];
-        }
-    }
-    return $out;
 }
 
 /**
@@ -756,7 +708,6 @@ function soublu_partner_attachments_coerce_map(mixed $attachments): array
  */
 function soublu_partner_attachments_normalize_for_api(array $attachments, string $uploadDir = '', bool $repair = false): array
 {
-    $attachments = soublu_partner_attachments_coerce_map($attachments);
     if ($attachments === []) {
         return $attachments;
     }
@@ -769,14 +720,7 @@ function soublu_partner_attachments_normalize_for_api(array $attachments, string
             continue;
         }
         $valStr = is_string($val) ? $val : (is_array($val) ? (string) ($val['url'] ?? '') : '');
-        if ($valStr === '') {
-            unset($attachments[$key]);
-            continue;
-        }
-        if (str_starts_with($valStr, 'data:') || str_starts_with($valStr, 'blob:')) {
-            if ($repair) {
-                unset($attachments[$key]);
-            }
+        if ($valStr === '' || str_starts_with($valStr, 'data:') || str_starts_with($valStr, 'blob:')) {
             continue;
         }
 

@@ -1,3 +1,27 @@
+
+/* Horário de Brasília disponível para os módulos de propostas e cadastro. */
+(function (root) {
+  if (typeof root.nowBrazilSql !== 'function') {
+    root.nowBrazilSql = function (date) {
+      let source = date === undefined ? new Date() : (date instanceof Date ? date : new Date(date));
+      if (Number.isNaN(source.getTime())) source = new Date();
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+      }).formatToParts(source);
+      const part = name => parts.find(p => p.type === name)?.value || '00';
+      return part('year')+'-'+part('month')+'-'+part('day')+' '+part('hour')+':'+part('minute')+':'+part('second');
+    };
+  }
+  if (typeof root.todayBrazilYmd !== 'function') root.todayBrazilYmd = function () { return root.nowBrazilSql().slice(0,10); };
+})(typeof window !== 'undefined' ? window : globalThis);
+
+// Carrega a regra de comissão sem alterar os arquivos HTML publicados.
+(function(){
+  if(window.CommissionEngine || window.NeoCommissionReady)return;
+  const url=new URL('commission-engine.js?v=neo-20261106',document.currentScript.src);
+  window.NeoCommissionReady=new Promise(resolve=>{const script=document.createElement('script');script.src=url.href;script.onload=()=>resolve(true);script.onerror=()=>resolve(false);document.head.appendChild(script);});
+})();
 window.Proposals = {
   /** Limite por anexo de proposta (alinhado com api/upload.php). */
   PROPOSAL_MAX_FILE_MB: 50,
@@ -1539,7 +1563,7 @@ window.Proposals = {
     {
       group: "NEO — GOV PR RCC",
       items: [
-        { value: "NCDT_096-999_EXCECAO", label: "NCDT_096-999_EXCECAO — Empresa 0% / Vendedor 0%", pct: 1, empresa: 0, vendedor: 0 },
+
         { value: "NEO_GOVPR_RCC_399_100", label: "NEO GOV PR RCC TX 3,99 — 100%", pct: 1.0 },
         { value: "NEO_GOVPR_RCC_379_80", label: "NEO GOV PR RCC TX 3,79 — 80%", pct: 0.8 },
         { value: "NEO_GOVPR_RCC_359_65", label: "NEO GOV PR RCC TX 3,59 — 65%", pct: 0.65 },
@@ -1693,6 +1717,20 @@ window.Proposals = {
       ],
     },
     {
+      group: "NEO — PREF CURITIBA",
+      items: [
+        { value: "NEO_PREFCURITIBA_NCDT_459_36", label: "NCDT_072-459_478787 — 36%", pct: 0.36 },
+        { value: "NEO_PREFCURITIBA_NCDT_439_33", label: "NCDT_072-439_460750 — 33%", pct: 0.33 },
+        { value: "NEO_PREFCURITIBA_NCDT_419_30", label: "NCDT_072-419_442899 — 30%", pct: 0.3 },
+        { value: "NEO_PREFCURITIBA_NCDT_399_27", label: "NCDT_072-399_425248 — 27%", pct: 0.27 },
+        { value: "NEO_PREFCURITIBA_NCDT_379_24", label: "NCDT_072-379_407813 — 24%", pct: 0.24 },
+        { value: "NEO_PREFCURITIBA_NCDT_359_18", label: "NCDT_072-359_390608 — 18%", pct: 0.18 },
+        { value: "NEO_PREFCURITIBA_NCDT_339_15", label: "NCDT_072-339_373650 — 15%", pct: 0.15 },
+        { value: "NEO_PREFCURITIBA_NCDT_319_9", label: "NCDT_072-319_356955 — 9%", pct: 0.09 },
+        { value: "NEO_PREFCURITIBA_NCDT_299_3", label: "NCDT_072-299_340540 — 3%", pct: 0.03 },
+      ],
+    },
+    {
       group: "FUTURO — GOV AM RCC 96X",
       items: [
         { value: "FUTURO_GOVAM_RCC_96X_CB_390_85", label: "FUTURO GOV AM RCC 96X TX 3,90 — 85%", pct: 0.85 },
@@ -1724,11 +1762,11 @@ window.Proposals = {
         { value: "FUTURO_AERONAUTICA_EMP_96X_EMP_190_12", label: "FUTURO AERONAUTICA EMP 96X TX 1,90 — 12%", pct: 0.12 },
       ],
     },
+    { group: "EXCECAO", items: [{ value: "NCDT_096-999_EXCECAO", label: "TABELA_EXCECAO — sem comissão", pct: 0, empresa: 0, vendedor: 0 }] },
   ],
 
   _tabelaPct: {
-    // Fator do valor da operação; as comissões da exceção são zero.
-    "NCDT_096-999_EXCECAO": 1,
+    "NCDT_096-999_EXCECAO": 0,
     AMIGOZ_GOVMG_RCC_450_100: 1.0,
     AMIGOZ_GOVMG_RCC_425_85: 0.85,
     AMIGOZ_GOVMG_RCC_399_65: 0.65,
@@ -1846,6 +1884,25 @@ window.Proposals = {
     FUTURO_SIAPE_CCCB_96X_NCDT_319_9: 0.09,
     FUTURO_SIAPE_CCCB_96X_NCDT_309_6: 0.06,
     FUTURO_SIAPE_CCCB_96X_NCDT_299_3: 0.03,
+    NEO_PREFCURITIBA_NCDT_459_36: 0.36,
+    NEO_PREFCURITIBA_NCDT_439_33: 0.33,
+    NEO_PREFCURITIBA_NCDT_419_30: 0.3,
+    NEO_PREFCURITIBA_NCDT_399_27: 0.27,
+    NEO_PREFCURITIBA_NCDT_379_24: 0.24,
+    NEO_PREFCURITIBA_NCDT_359_18: 0.18,
+    NEO_PREFCURITIBA_NCDT_339_15: 0.15,
+    NEO_PREFCURITIBA_NCDT_319_9: 0.09,
+    NEO_PREFCURITIBA_NCDT_299_3: 0.03,
+    // alias das chaves antigas (72X SIAPE) — mantém % se já tiver sido gravado
+    FUTURO_SIAPE_CCCB_72X_NCDT_459_36: 0.36,
+    FUTURO_SIAPE_CCCB_72X_NCDT_439_33: 0.33,
+    FUTURO_SIAPE_CCCB_72X_NCDT_419_30: 0.3,
+    FUTURO_SIAPE_CCCB_72X_NCDT_399_27: 0.27,
+    FUTURO_SIAPE_CCCB_72X_NCDT_379_24: 0.24,
+    FUTURO_SIAPE_CCCB_72X_NCDT_359_18: 0.18,
+    FUTURO_SIAPE_CCCB_72X_NCDT_339_15: 0.15,
+    FUTURO_SIAPE_CCCB_72X_NCDT_319_9: 0.09,
+    FUTURO_SIAPE_CCCB_72X_NCDT_299_3: 0.03,
     FUTURO_GOVAM_RCC_96X_CB_390_85: 0.85,
     FUTURO_GOVAM_RCC_96X_CB_360_70: 0.7,
     FUTURO_GOVAM_RCC_96X_CB_330_60: 0.6,
@@ -1915,7 +1972,9 @@ window.Proposals = {
   },
 
   _tabelaLabel: function(code) {
+    if (code === 'NCDT_096-999_EXCECAO') return 'TABELA_EXCECAO — sem comissão';
     if (!code) return '';
+    if (this._isTabelaExcecao(code)) return `${code} — sem coeficiente`;
     for (const g of this._TABELA_GROUPS) {
       const hit = g.items.find(i => i.value === code);
       if (hit) return hit.label;
@@ -1929,9 +1988,9 @@ window.Proposals = {
 
   _tabelaSelectHtml: function(selected) {
     let html = '<option value="">— Aguardando análise —</option>';
-    for (const g of this._TABELA_GROUPS) {
+    for (const g of [...this._TABELA_GROUPS.filter(g => g.group !== 'EXCECAO'), ...this._TABELA_GROUPS.filter(g => g.group === 'EXCECAO')]) {
       html += `<optgroup label="${g.group}">`;
-      html += g.items.map(i => {
+      html += g.items.filter(i => i.value === 'NCDT_096-999_EXCECAO' || selected === i.value || !this._isTabelaExcecao(i.value)).map(i => {
         const sel = selected === i.value ? ' selected' : '';
         return `<option value="${this._escAttr(i.value)}"${sel}>${this._escHtml(i.label)}</option>`;
       }).join('');
@@ -3780,6 +3839,9 @@ delete parsed[k];
     const checkedKeys = new Set();
     let firstServeUrl = '';
     let checkFailed = false;
+    /* true quando file.php respondeu 404 real (arquivo sumiu do disco e do Supabase). */
+    let sawMissing = false;
+    this._lastViewerMissing = false;
     for (const u of candidates) {
       if (/file\.php/i.test(u)) {
         if (!firstServeUrl) firstServeUrl = u;
@@ -3788,6 +3850,7 @@ delete parsed[k];
         checkedKeys.add(key);
         const verified = await this._verifyAttachmentServeUrl(u);
         if (verified) return verified;
+        if (verified === false) sawMissing = true;
         if (verified === null) {
           /* Checagem falhou/expirou no servidor: não é "arquivo inexistente".
              O file.php completo tem mais fallbacks (variantes, list, /uploads) — abre direto. */
@@ -3800,10 +3863,13 @@ delete parsed[k];
         return String(u).replace(/ /g, '%20');
       }
     }
+    if (sawMissing && !checkFailed) {
+      this._lastViewerMissing = true;
+      return '';
+    }
     if (firstServeUrl && (checkFailed || !requireVerified)) return firstServeUrl;
     return requireVerified ? '' : (candidates[0] || displayUrl || '');
   },
-
   _hasProposalAttachments: function(att) {
     const parsed = this._parseAttachments(att);
     return Object.keys(parsed || {}).some((k) => {
@@ -3963,36 +4029,13 @@ delete parsed[k];
       || (/soumaisblu\.com\.br\/uploads\//i.test(s) && !/file\.php/i.test(s));
   },
 
-  /** Reenvia anexos que estavam no disco Locaweb para o Supabase ao salvar a proposta. */
+  /**
+   * _migrateLocawebAttachmentsToSupabase — no-op no cutover.
+   * Anexos ficam no disco Locaweb; não reenvia para o Storage legado.
+   */
   _migrateLocawebAttachmentsToSupabase: async function(proposalId, att) {
-    const out = { ...att };
-    const jobs = [];
-    Object.keys(out).forEach((k) => {
-      if (this._isAttachmentMetaKey(k)) return;
-      const v = out[k];
-      if (typeof v !== 'string' || !this._isLocawebProposalUploadUrl(v)) return;
-      if (this._attachmentAlreadyOnStorage(out, k)) return;
-      jobs.push((async () => {
-        try {
-          const res = await fetch(v.replace(/ /g, '%20'), { cache: 'no-store' });
-          if (!res.ok) {
-            console.warn('[Proposals] arquivo Locaweb ausente, reenvie manualmente:', k, v);
-            return;
-          }
-          const blob = await res.blob();
-          const nome = out[k + '_nome'] || `${k}`;
-          const file = new File([blob], nome, { type: blob.type || 'application/octet-stream' });
-          const uploaded = await (window.DB || DB).uploadProposalFile(file, proposalId, k);
-          if (uploaded && (uploaded.caminho || uploaded.url)) {
-            this._applyProposalUploadResult(out, k, uploaded, nome);
-          }
-        } catch (e) {
-          console.warn('[Proposals] migrar anexo Locaweb→Supabase', k, e);
-        }
-      })());
-    });
-    await Promise.all(jobs);
-    return out;
+    void proposalId;
+    return att && typeof att === 'object' ? att : {};
   },
 
   _uploadPendingDataAttachments: async function(proposalId, att) {
@@ -4158,14 +4201,25 @@ delete parsed[k];
     try {
       finalUrl = await this._resolveWorkingViewerUrl(initialUrl, urls, raw, caminho, isPdf);
     } catch (_) { /* keep the fallback for non-PDF attachments */ }
+    if (!finalUrl && this._lastViewerMissing) {
+      const missingMsg = 'Esse anexo n\u00e3o est\u00e1 mais no servidor (arquivo antigo que n\u00e3o veio na migra\u00e7\u00e3o). Pe\u00e7a para o vendedor reenviar e anexe de novo.';
+      if (typeof showToast === 'function') showToast(missingMsg, 'warning', 7000);
+      else alert(missingMsg);
+      return;
+    }
     if (!finalUrl) {
+      const cItem = typeof cacheIdxOrUrl === 'number' ? this._attachmentViewerCache?.[cacheIdxOrUrl] : null;
+      if (cItem && cItem.key && cItem.pid && window.confirm('Esse arquivo n\u00e3o existe mais no servidor. Quer enviar o documento novamente?')) {
+        this.reuploadAttachment(cacheIdxOrUrl, null);
+        return;
+      }
       const message = 'PDF indispon\u00edvel. Confira se o documento foi anexado e tente novamente.';
       if (typeof showToast === 'function') showToast(message, 'warning');
       else alert(message);
       return;
     }
 
-
+    if (typeof window._docViewerSameOrigin === 'function') finalUrl = window._docViewerSameOrigin(finalUrl);
     const viewerUrls = urls.map((url) => this._fileProxyFromSupabaseUrl(url) || url);
     const fallbackChain = this._attachmentFallbackChain(viewerUrls, finalUrl);
     const fbAttrs = this._attachmentFallbackAttrs(fallbackChain);
@@ -4230,19 +4284,34 @@ delete parsed[k];
 
   _isPdfUrl: function(url, nome) {
     if (!url) return false;
-    if (String(url).startsWith('data:application/pdf')) return true;
-    const ref = ((nome || '') + ' ' + String(url).split('?')[0]).toLowerCase();
-    return /\.pdf(\?|$)/i.test(ref);
+    const u = String(url);
+    if (u.startsWith('data:application/pdf')) return true;
+    let q = '';
+    try { q = decodeURIComponent((u.match(/[?&](?:path|fetch_url)=([^&#]+)/i) || [])[1] || ''); } catch (_) { /* noop */ }
+    /* Nome e URL separados: "arquivo.pdf .../file.php" juntos nunca terminavam em .pdf. */
+    return [nome || '', u.split(/[?#]/)[0], q].some((s) => /\.pdf$/i.test(String(s).trim()));
   },
 
   _guessAttachmentKind: function(url, nome) {
     if (this._isImageUrl(url, nome)) return 'image';
     if (this._isPdfUrl(url, nome)) return 'pdf';
     const ref = ((nome || '') + ' ' + String(url || '').split('?')[0]).toLowerCase();
-    if (/\.(mp4|webm|ogv|mov|m4v|avi|mkv)(\?|$)/i.test(ref)) return 'video';
-    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)(\?|$)/i.test(ref)) return 'audio';
-    if (/\.(txt|csv|json|xml|html?|md|log|yml|yaml)(\?|$)/i.test(ref)) return 'text';
+    if (/\.(mp4|webm|ogv|mov|m4v|avi|mkv)(\?|\s|$)/i.test(ref)) return 'video';
+    if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)(\?|\s|$)/i.test(ref)) return 'audio';
+    if (/\.(txt|csv|json|xml|html?|md|log|yml|yaml)(\?|\s|$)/i.test(ref)) return 'text';
     return 'other';
+  },
+
+  _openAttachmentHere: function(btn) {
+    const body = btn && btn.closest ? btn.closest('#attachmentViewerBody') : null;
+    const src = btn ? btn.getAttribute('data-src') : '';
+    if (!body || !src) return;
+    const fr = document.createElement('iframe');
+    fr.src = src;
+    fr.title = btn.getAttribute('data-name') || 'Anexo';
+    fr.style.cssText = 'width:100%;height:70vh;border:0;border-radius:8px;background:#fff;';
+    body.innerHTML = '';
+    body.appendChild(fr);
   },
 
   _renderAttachmentViewerBody: function(kind, displayUrl, name, fbAttrStr, onErr) {
@@ -4264,10 +4333,10 @@ delete parsed[k];
     return `<div style="padding:32px 24px;text-align:center;">
       <div style="font-size:52px;line-height:1;margin-bottom:16px;">📎</div>
       <p style="font-weight:600;margin-bottom:8px;word-break:break-word;">${safeName}</p>
-      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:20px;">Este tipo de arquivo não pode ser exibido aqui. Baixe ou abra em nova aba.</p>
+      <p style="font-size:13px;color:var(--color-text-muted);margin-bottom:20px;">Não deu pra identificar o tipo do arquivo. Tente abrir aqui mesmo ou em nova aba.</p>
       <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-        <a href="${safeDisplay}" download="${safeNameAttr}" class="btn btn-primary" style="text-decoration:none;">Baixar</a>
         <button type="button" class="btn btn-outline" onclick="window.open('${safeDisplay}','_blank','noopener,noreferrer')">Abrir em nova aba</button>
+        <button type="button" class="btn btn-primary" data-src="${safeDisplay}" data-name="${safeNameAttr}" onclick="Proposals._openAttachmentHere(this)">Abrir aqui mesmo</button>
       </div>
     </div>`;
   },
@@ -4504,6 +4573,11 @@ delete parsed[k];
     return p?.vendorId || p?.vendor_id || p?.employee_id || '';
   },
 
+  _canManageAllProposals: function(user) {
+    const session = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
+    return session?.permissions?.canManageAllProposals === true;
+  },
+
   _ownsProposal: function(proposal, user) {
     if (!proposal || !user?.id) return false;
     if (typeof DB._matchProposalToVendor === 'function' && DB._matchProposalToVendor(proposal, user)) return true;
@@ -4659,11 +4733,40 @@ delete parsed[k];
       .replace(/[\s-]+/g, '_');
   },
 
+  /**
+   * _canPickVendor — quem pode trocar o vendedor da proposta.
+   * Backoffice/sup_backoffice, gerente e master/fundador/dev. Supervisor de vendas não.
+   */
   _canPickVendor: function(role) {
     const r = this._normProposalManageRole(role);
-    // Gerente/gerência sempre pode trocar o vendedor da proposta (pedido explícito).
-    if (r === 'gerente' || r === 'gerencia') return true;
-    return this._isSupervisorOrAbove(role);
+    return [
+      'backoffice', 'sup_backoffice',
+      'gerente', 'gerencia',
+      'master', 'fundador', 'desenvolvedor',
+    ].includes(r);
+  },
+
+  /**
+   * _readVendorTransferJustify — texto obrigatório ao passar venda.
+   */
+  _readVendorTransferJustify: function() {
+    return String(document.getElementById('managePropVendorJustify')?.value || '').trim();
+  },
+
+  /**
+   * _syncVendorJustifyVisibility — mostra justificativa só se o select mudou do vendedor atual.
+   */
+  _syncVendorJustifyVisibility: function(origVid) {
+    const sel = document.getElementById('managePropVendor');
+    const wrap = document.getElementById('managePropVendorJustifyWrap');
+    if (!wrap) return;
+    const cur = String(sel?.value || '').trim();
+    const changed = !!(cur && cur !== String(origVid || '').trim());
+    wrap.style.display = changed ? '' : 'none';
+    if (!changed) {
+      const ta = document.getElementById('managePropVendorJustify');
+      if (ta) ta.value = '';
+    }
   },
 
   /** Backoffice/supervisor+ podem ajustar nº e valor (inclusive em proposta já paga). */
@@ -4707,6 +4810,26 @@ delete parsed[k];
   },
 
   /**
+   * _isTabelaExcecao — NCDT_096-999_EXCECAO e equivalentes.
+   * Banco manda sem coeficiente e sem %; não simula e não gera comissão.
+   */
+  _isTabelaExcecao: function(code) {
+    const s = String(code || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return /EXCEC/.test(s) || /NCDT_\d{3}-999_/.test(s);
+  },
+
+  /**
+   * _tabelaPctOf — % da tabela para valor final.
+   * EXCECAO = 0 (não cair no fallback 100% do valor bruto).
+   */
+  _tabelaPctOf: function(code) {
+    if (this._isTabelaExcecao(code)) return 0;
+    const pct = this._tabelaPct[code];
+    if (pct != null && !isNaN(pct)) return Number(pct);
+    return null;
+  },
+
+  /**
    * _applyTabelaToProposal — aplica tabela e recalcula valorFinal/desconto.
    * Evita proposta “PAGO” com comissão no valor bruto quando a tabela está vazia/errada.
    */
@@ -4719,7 +4842,7 @@ delete parsed[k];
       proposal.desconto = 0;
       return;
     }
-    const pct = this._tabelaPct[code];
+    const pct = this._tabelaPctOf(code);
     const factor = (pct != null && !isNaN(pct)) ? Number(pct) : 1;
     const bruto = Number(proposal.valor) || 0;
     proposal.tabela = code;
@@ -4826,6 +4949,7 @@ delete parsed[k];
    * Parceiros NÃO excluem (só veem/editam a própria rede).
    */
   _canDeleteProposal: function() {
+    if (this._canManageAllProposals() && Auth.getSession()?.permissions?.canDeleteAllProposals === true) return true;
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return false;
     if (this._isMaster()) return true;
     const role = this._normProposalManageRole(
@@ -5006,11 +5130,25 @@ delete parsed[k];
   },
 
   _proposalClientFallback: function(client, proposal) {
-    if (client) return client;
+    const parse = value => {
+      if (typeof value === 'string') { try { value = JSON.parse(value); } catch (_) { return {}; } }
+      return value && typeof value === 'object' ? value : {};
+    };
+    const meta = parse(proposal?.meta);
+    const bank = parse(meta.client_bank);
+    const credit = parse(proposal?.creditoEsteira || proposal?.credito_esteira);
     const cpf = String(proposal?.clientCpf || proposal?.client_cpf || '').replace(/\D/g, '');
     const name = String(proposal?.clientName || proposal?.client_name || '').trim();
-    if (!cpf && !name) return null;
-    return { id: cpf || name, cpf: cpf || '', name, _fromProposalOnly: true };
+    if (!client && !cpf && !name) return null;
+    const base = client || { id: cpf || name, cpf, name, _fromProposalOnly: true };
+    return {
+      ...base,
+      address: base.address || meta.client_address || credit.endereco || '',
+      banco: base.banco || base.bank || bank.banco || credit.banco_conta || '',
+      agencia: base.agencia || bank.agencia || credit.agencia || '',
+      conta: base.conta || base.conta_corrente || bank.conta || credit.conta || '',
+      tipo_conta: bank.tipo_conta || base.tipo_conta || credit.tipo_conta || '',
+    };
   },
 
   _lookupClientByCpf: async function(cpf) {
@@ -5041,6 +5179,10 @@ delete parsed[k];
         `<p style="color:var(--color-warning);margin:0 0 8px;font-size:13px;font-weight:600;">Cliente não está no cadastro — preencha telefone, e-mail e endereço abaixo e salve a proposta.</p>`,
         row('Nome completo', client.name),
         row('CPF', client.cpf),
+        row('Banco da conta', client.banco),
+        row('Agência', client.agencia),
+        row('Conta', client.conta),
+        row('Tipo de conta', ({corrente:'Conta corrente',poupanca:'Conta poupança',salario:'Conta salário',pagamento:'Conta de pagamento'})[client.tipo_conta] || client.tipo_conta),
       ].filter(Boolean).join('');
     }
     const addr = this._parseAddress(client.address);
@@ -5058,6 +5200,7 @@ delete parsed[k];
       row('Banco (conta)', client.banco || client.bank),
       row('Agência', client.agencia),
       row('Conta', client.conta || client.conta_corrente),
+      row('Tipo de conta', ({corrente:'Conta corrente',poupanca:'Conta poupança',salario:'Conta salário',pagamento:'Conta de pagamento'})[client.tipo_conta] || client.tipo_conta),
     ].filter(Boolean).join('');
     return [
       row('Nome completo', client.name),
@@ -5189,6 +5332,13 @@ delete parsed[k];
               <input type="text" id="${p}ClientConta" class="form-control prop-client-field" placeholder="00000-0" value="${this._escAttr(client.conta || client.conta_corrente || '')}"${dis}/>
             </div>
           </div>
+          <div class="form-group" style="margin:10px 0 0;">
+            <label for="${p}ClientTipoConta" style="font-size:11px;">Tipo de conta</label>
+            <select id="${p}ClientTipoConta" class="form-control prop-client-field"${disSel}>
+              <option value="">Selecione o tipo de conta...</option>
+              ${[['corrente','Conta corrente'],['poupanca','Conta poupança'],['salario','Conta salário'],['pagamento','Conta de pagamento']].map(([value,label]) => `<option value="${value}"${client.tipo_conta === value ? ' selected' : ''}>${label}</option>`).join('')}
+            </select>
+          </div>
         </div>
       </div>
     `;
@@ -5215,6 +5365,7 @@ delete parsed[k];
       banco: gv('Banco'),
       agencia: gv('Agencia'),
       conta: gv('Conta'),
+      tipo_conta: gv('TipoConta'),
       address: this._formatAddress({
         estado: gv('Estado'),
         municipio: gv('Municipio'),
@@ -5362,11 +5513,12 @@ delete parsed[k];
     }
     // Espelha conta do cliente na meta da proposta (auditoria / esteira).
     const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
-    if (form.banco || form.agencia || form.conta) {
+    if (form.banco || form.agencia || form.conta || form.tipo_conta) {
       meta.client_bank = {
         banco: form.banco || '',
         agencia: form.agencia || '',
         conta: form.conta || '',
+        tipo_conta: form.tipo_conta || '',
       };
       proposal.meta = meta;
     }
@@ -5395,7 +5547,7 @@ delete parsed[k];
     // usado apenas quando o formulário mostra o campo tabela visivelmente
     const valor  = parseFloat(document.getElementById('propValor')?.value) || 0;
     const tabela = document.getElementById('propTabela')?.value || 'NORMAL';
-    const pct    = this._tabelaPct[tabela] ?? 1;
+    const pct    = this._tabelaPctOf(tabela) ?? (this._isTabelaExcecao(tabela) ? 0 : 1);
     const final  = valor * pct;
     const desconto = valor - final;
     const dispEl = document.getElementById('propValorFinalDisplay');
@@ -5482,7 +5634,7 @@ delete parsed[k];
     const parsed = this._readManageValorInput();
     const bruto = (!isNaN(parsed) && parsed >= 0) ? parsed : 0;
     const tabela = document.getElementById('managePropTabela')?.value || '';
-    const pct    = tabela ? (this._tabelaPct[tabela] ?? 1) : null;
+    const pct    = tabela ? (this._tabelaPctOf(tabela) ?? (this._isTabelaExcecao(tabela) ? 0 : 1)) : null;
     const finalV = pct !== null ? parseFloat((bruto * pct).toFixed(2)) : null;
     const desconto = finalV !== null ? parseFloat((bruto - finalV).toFixed(2)) : null;
 
@@ -6216,7 +6368,9 @@ delete parsed[k];
       const me = await DB.getUser(user.id).catch(() => null);
       const vendorUser = { id: user.id, name: me?.name || user.name || '' };
 
-      const raw = await DB.getProposals(user.id, vendorUser);
+      const raw = this._canManageAllProposals(user)
+        ? await DB.getProposals(null, null)
+        : await DB.getProposals(user.id, vendorUser);
       // getProposals já filtra por vendor_id/employee_id e por CPF dos clientes do vendedor.
       // Não aplicar _ownsProposal de novo — isso escondia propostas com vendor_id vazio/errado.
       let all = this._rowsFromProposalQuery(raw)
@@ -6279,7 +6433,7 @@ delete parsed[k];
     const t0 = Date.now();
     const q = this._getProposalSearchQuery();
     const session = Auth.getSession();
-    const isVendorSession = session?.role === 'vendedor';
+    const isVendorSession = session?.role === 'vendedor' && !this._canManageAllProposals(session);
     let vendorId = this._getAdminVendorFilter();
     if (isVendorSession) vendorId = session.id;
     this._adminList.vendorId = vendorId;
@@ -6410,6 +6564,19 @@ delete parsed[k];
     this._adminListCacheAt = 0;
   },
 
+  /**
+   * _proposalExportHeaders — colunas do Excel/CSV de Baixar Planilha.
+   * Convênio e entidade saem porque a lista mostra os dois na coluna Convênio.
+   */
+  _proposalExportHeaders: function() {
+    return ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Convênio', 'Entidade', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+  },
+
+  /**
+   * _proposalExportRow — uma linha da planilha da gestão.
+   * Status é o rótulo marcado na ficha (statusOp), o mesmo do badge da tabela.
+   * O filtro do cabeçalho STATUS já corta as linhas em _fetchAdminProposalsFiltered.
+   */
   _proposalExportRow: function(p) {
     const num = (v) => (v != null && v !== '' && Number.isFinite(parseFloat(v)) ? parseFloat(v) : '');
     const dt = this._proposalCreatedAt(p);
@@ -6430,14 +6597,18 @@ delete parsed[k];
         }
       }
     }
+    let status = this._proposalDisplayStatus(p);
+    if (!status || status === '—') status = '';
     return {
       'Nº Proposta': p.numero || p.id || '',
       Vendedor: p.vendorName || '',
       Cliente: p.clientName || '',
       CPF: p.clientCpf || '',
       Produto: p.product || '',
+      'Convênio': p.convenio || '',
+      Entidade: p.entidade || '',
       'Valor Final (R$)': num(p.valorFinal),
-      Status: p.status || p.statusOp || '',
+      Status: status,
       'Data criação': dataCriacao,
       'Data pagamento': dataPagamento,
     };
@@ -6446,7 +6617,7 @@ delete parsed[k];
   _downloadProposalCsv: function(rows, filenameBase) {
     const headers = rows.length
       ? Object.keys(rows[0])
-      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+      : this._proposalExportHeaders();
     const stamp = nowBrazilSql().slice(0, 10);
     const fname = `${filenameBase}_${stamp}.csv`;
     const bom = '\uFEFF';
@@ -6471,7 +6642,7 @@ delete parsed[k];
 
     const headers = rows.length
       ? Object.keys(rows[0])
-      : ['Nº Proposta', 'Vendedor', 'Cliente', 'CPF', 'Produto', 'Valor Final (R$)', 'Status', 'Data criação', 'Data pagamento'];
+      : this._proposalExportHeaders();
     const moneyCols = new Set(['Valor Final (R$)']);
     const moneyColIdx = headers.reduce((acc, h, i) => { if (moneyCols.has(h)) acc.push(i); return acc; }, []);
 
@@ -6767,8 +6938,8 @@ delete parsed[k];
         usedKeys.add(item.key);
         (item.legado || []).forEach((lk) => usedKeys.add(lk));
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
-        html += this._renderAttachmentPreview(doc, cacheIdx);
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho, key: item.key, pid: proposal.id, proposalRef: proposal });
+        html += this._wrapAttachmentTile(doc, cacheIdx);
       });
       if (!algum) html += `<span style="font-size:12px;color:var(--color-text-muted);align-self:center;">Nenhum arquivo</span>`;
       html += `</div></div>`;
@@ -6794,8 +6965,8 @@ delete parsed[k];
         if (!doc) return;
         algumCustom = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
-        html += this._renderAttachmentPreview(doc, cacheIdx);
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho, key, pid: proposal.id, proposalRef: proposal });
+        html += this._wrapAttachmentTile(doc, cacheIdx);
       });
       if (!algumCustom) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
       html += `</div></div>`;
@@ -6814,8 +6985,8 @@ delete parsed[k];
         if (!doc) return;
         algumMisc = true;
         const cacheIdx = this._attachmentViewerCache.length;
-        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho });
-        html += this._renderAttachmentPreview(doc, cacheIdx);
+        this._attachmentViewerCache.push({ url: doc.url, rawUrl: doc.rawUrl, urls: doc.urls, nome: doc.nome, caminho: doc.caminho, key, pid: proposal.id, proposalRef: proposal });
+        html += this._wrapAttachmentTile(doc, cacheIdx);
       });
       if (!algumMisc) html += `<span style="font-size:12px;color:var(--color-text-muted);">Nenhum arquivo</span>`;
       html += `</div></div>`;
@@ -6823,6 +6994,152 @@ delete parsed[k];
 
     html += '</div>';
     attEl.innerHTML = html;
+    /* Arquivos que sumiram (Supabase desativado) viram card com "Enviar documento novamente". */
+    if (proposal && proposal.id) void this._flagMissingAttachments(attEl, proposal.id);
+  },
+
+  /** Card do anexo com marcador pra trocar por "arquivo perdido" depois da checagem. */
+  _wrapAttachmentTile: function(doc, cacheIdx) {
+    return `<div class="soublu-att-tile" data-att-idx="${cacheIdx}">${this._renderAttachmentPreview(doc, cacheIdx)}</div>`;
+  },
+
+  /**
+   * _attachmentFileMissing — true só quando o file.php confirma 404 em todos os caminhos.
+   * Erro de rede, 429 ou 500 contam como "não sei" (false) pra não oferecer reenvio à toa.
+   */
+  _attachmentFileMissing: async function(item) {
+    const all = [item.rawUrl, item.url].concat(item.urls || []);
+    const urls = all.filter((u) => /file\.php\?/i.test(String(u || '')));
+    if (!urls.length) return false;
+    const seen = new Set();
+    let checked = 0;
+    for (const u of urls) {
+      const key = typeof this._fileServeKey === 'function' ? this._fileServeKey(u) : u;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      let res = null;
+      for (let t = 0; t < 3; t++) {
+        res = await fetch(u + '&check=1', { cache: 'no-store' }).catch(() => null);
+        if (res && res.status === 429) {
+          await new Promise((r) => setTimeout(r, 2500 * (t + 1)));
+          continue;
+        }
+        break;
+      }
+      if (!res) return false;
+      if (res.status === 200) {
+        const j = await res.json().catch(() => null);
+        if (j && j.ok) return false;
+        return false;
+      }
+      if (res.status !== 404) return false;
+      checked++;
+    }
+    return checked > 0;
+  },
+
+  /** Depois de renderizar os anexos, marca os que não existem mais no servidor. */
+  _flagMissingAttachments: async function(attEl, proposalId) {
+    const token = (this._flagMissingToken = (this._flagMissingToken || 0) + 1);
+    const cache = this._attachmentViewerCache || [];
+    for (let i = 0; i < cache.length; i++) {
+      if (token !== this._flagMissingToken || !attEl.isConnected) return;
+      const item = cache[i];
+      if (!item || !item.key) continue;
+      let missing = false;
+      try {
+        missing = await this._attachmentFileMissing(item);
+      } catch (_) {
+        missing = false;
+      }
+      if (!missing || token !== this._flagMissingToken) continue;
+      item.missing = true;
+      item.pid = item.pid || proposalId;
+      const tile = attEl.querySelector(`[data-att-idx="${i}"]`);
+      if (tile) tile.innerHTML = this._missingAttachmentTileHtml(item, i);
+    }
+  },
+
+  _missingAttachmentTileHtml: function(item, cacheIdx) {
+    const nome = this._escHtml(item.nome || item.key || 'Anexo');
+    const shortNome = nome.length > 42 ? (nome.slice(0, 39) + '…') : nome;
+    return `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:120px;min-height:150px;border-radius:10px;border:2px dashed var(--color-danger,#dc2626);background:var(--color-surface-2,#fff5f5);padding:8px;text-align:center;box-sizing:border-box;" title="${nome} — o arquivo não existe mais no servidor">
+        <span style="font-size:22px;line-height:1;">⚠️</span>
+        <span style="font-size:10px;font-weight:700;color:var(--color-danger,#dc2626);">Arquivo perdido</span>
+        <span style="font-size:10px;line-height:1.2;word-break:break-word;color:var(--color-text-muted);">${shortNome}</span>
+        <button type="button" class="btn btn-primary" style="font-size:10px;padding:4px 6px;line-height:1.2;white-space:normal;" onclick="event.stopPropagation();Proposals.reuploadAttachment(${cacheIdx}, this)">Enviar documento novamente</button>
+      </div>`;
+  },
+
+  /**
+   * reuploadAttachment — reenvia um anexo perdido na mesma categoria (ex.: extrato_1).
+   * Sobe pro disco Locaweb e grava em proposals.attachments sem mexer nos outros anexos.
+   */
+  reuploadAttachment: function(cacheIdx, btn) {
+    const item = this._attachmentViewerCache && this._attachmentViewerCache[cacheIdx];
+    if (!item || !item.key || !item.pid) {
+      const msg = 'Não deu pra identificar o anexo. Feche e abra a proposta de novo.';
+      if (typeof showToast === 'function') showToast(msg, 'warning'); else alert(msg);
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/pdf,image/*,.doc,.docx,.xls,.xlsx,.zip';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    const btnLabel = 'Enviar documento novamente';
+    input.addEventListener('change', async () => {
+      const file = input.files && input.files[0];
+      input.remove();
+      if (!file) return;
+      if (file.size > 50 * 1024 * 1024) {
+        const msg = 'Arquivo maior que 50MB.';
+        if (typeof showToast === 'function') showToast(msg, 'warning'); else alert(msg);
+        return;
+      }
+      if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
+      try {
+        const db = window.DB || DB;
+        const uploaded = await db.uploadProposalFile(file, item.pid, item.key);
+        let base = {};
+        try {
+          const full = await db.getProposal(item.pid);
+          base = this._parseAttachments(full && full.attachments);
+        } catch (_) { base = {}; }
+        if (!this._hasProposalAttachments(base)) {
+          const r = await db.getProposalAttachments(item.pid);
+          base = this._parseAttachments(r && r.attachments);
+        }
+        base = { ...(base || {}) };
+        delete base[item.key + '_caminho'];
+        delete base[item.key + '_public'];
+        this._applyProposalUploadResult(base, item.key, uploaded, file.name);
+        await db.updateProposal(item.pid, { attachments: base });
+        if (item.proposalRef && typeof item.proposalRef === 'object') {
+          item.proposalRef.attachments = base;
+        }
+        const caminho = base[item.key + '_caminho'] || '';
+        const raw = base[item.key];
+        Object.assign(item, {
+          url: raw,
+          rawUrl: raw,
+          urls: this._attachmentOpenUrls(raw, caminho),
+          nome: base[item.key + '_nome'] || file.name,
+          caminho,
+          missing: false,
+        });
+        const tile = (btn && btn.closest ? btn.closest('[data-att-idx]') : null)
+          || document.querySelector(`[data-att-idx="${cacheIdx}"]`);
+        if (tile) tile.innerHTML = this._renderAttachmentPreview(item, cacheIdx);
+        if (typeof showToast === 'function') showToast('Documento reenviado.', 'success');
+      } catch (e) {
+        console.warn('[Proposals] reenvio de anexo:', e);
+        const msg = 'Falha ao reenviar: ' + (e && e.message ? e.message : e);
+        if (typeof showToast === 'function') showToast(msg, 'error'); else alert(msg);
+        if (btn) { btn.disabled = false; btn.textContent = btnLabel; }
+      }
+    });
+    input.click();
   },
 
   _applyEmployeeModalMode: function(viewOnly) {
@@ -6892,7 +7209,7 @@ delete parsed[k];
         else modal?.classList.remove('open');
         return;
       }
-      if (!this._ownsProposal(proposal, user)) {
+      if (!this._canManageAllProposals(user) && !this._ownsProposal(proposal, user)) {
         alert('Você só pode visualizar ou editar suas próprias propostas.');
         if (typeof closeModal === 'function') closeModal('employeeProposalModal');
         else modal?.classList.remove('open');
@@ -7038,7 +7355,7 @@ delete parsed[k];
       }
     }
     const norm = this._normProposal(proposal);
-    if (!this._ownsProposal(norm, user)) {
+    if (!this._canManageAllProposals(user) && !this._ownsProposal(norm, user)) {
       alert('Você só pode editar suas próprias propostas.');
       return;
     }
@@ -7274,8 +7591,13 @@ delete parsed[k];
 
     // Garante bloco de vendedor visível quando o perfil pode trocar (inclui proposta paga).
     const vendorBlock = document.getElementById('managePropVendorBlock');
+    const showVendor = canPickVendor && (!viewOnly || valorOnlyMode);
     if (vendorBlock) {
-      vendorBlock.style.display = (canPickVendor && (!viewOnly || valorOnlyMode)) ? '' : 'none';
+      vendorBlock.style.display = showVendor ? '' : 'none';
+    }
+    if (!showVendor) {
+      const jw = document.getElementById('managePropVendorJustifyWrap');
+      if (jw) jw.style.display = 'none';
     }
 
     this._unlockManageValorFields((canEditValor && !viewOnly) || valorOnlyMode);
@@ -7377,7 +7699,15 @@ delete parsed[k];
           : '<option value="">Nenhum vendedor encontrado</option>';
         if (vid && vendors.some(v => v.id === vid)) vendorSel.value = vid;
         else if (vendors.length) vendorSel.selectedIndex = 0;
+        vendorSel.dataset.origVendorId = String(vid || '');
+        vendorSel.onchange = () => this._syncVendorJustifyVisibility(vendorSel.dataset.origVendorId);
+        this._syncVendorJustifyVisibility(vid);
+        const justifyEl = document.getElementById('managePropVendorJustify');
+        if (justifyEl) justifyEl.value = '';
       }
+    } else {
+      const jw = document.getElementById('managePropVendorJustifyWrap');
+      if (jw) jw.style.display = 'none';
     }
     if (token !== this._modalLoadToken) return;
     sv('managePropNumeroEdit', proposal.numero);
@@ -7530,7 +7860,8 @@ delete parsed[k];
     try {
       const rolePaid = this._normProposalManageRole(user?.role);
       let vendorChanged = false;
-      // Gerente+ grava troca de vendedor também em proposta paga (UI já libera o select).
+      let vendorJustify = '';
+      // Backoffice grava troca de vendedor também em proposta paga (UI já libera o select).
       if (this._canPickVendor(rolePaid)) {
         const vendorSel = document.getElementById('managePropVendor');
         if (vendorSel && vendorSel.value) {
@@ -7538,6 +7869,11 @@ delete parsed[k];
           const opt = vendorSel.options[vendorSel.selectedIndex];
           const newName = opt ? String(opt.textContent || '').trim() : '';
           if (newVid && newVid !== origVendorId) {
+            vendorJustify = this._readVendorTransferJustify();
+            if (vendorJustify.length < 5) {
+              this._notifyOverModal('Informe a justificativa da troca de vendedor (mín. 5 caracteres).', 'warning');
+              return;
+            }
             proposal.vendorId = newVid;
             proposal.vendor_id = newVid;
             proposal.employee_id = newVid;
@@ -7581,7 +7917,12 @@ delete parsed[k];
       if (proposal.valor !== orig.valor) noteParts.push(`Valor: ${orig.valor} → ${proposal.valor}`);
       if (orig.numero !== proposal.numero) noteParts.push(`Nº: ${orig.numero || '—'} → ${proposal.numero}`);
       if (orig.tabela !== proposal.tabela) noteParts.push(`Tabela: ${orig.tabela || '—'} → ${proposal.tabela}`);
-      if (vendorChanged) noteParts.push(`Vendedor: ${orig.vendorName || orig.vendorId || '—'} → ${proposal.vendorName || proposal.vendorId}`);
+      if (vendorChanged) {
+        noteParts.push(
+          `Vendedor: ${orig.vendorName || orig.vendorId || '—'} → ${proposal.vendorName || proposal.vendorId}`
+          + (vendorJustify ? ` | Justificativa: ${vendorJustify}` : '')
+        );
+      }
       const actionLabel = vendorChanged && noteParts.length === 1
         ? 'Troca de vendedor (proposta paga)'
         : (orig.tabela !== proposal.tabela
@@ -7589,13 +7930,21 @@ delete parsed[k];
           : (vendorChanged
             ? 'Correção de valor/nº/vendedor (proposta paga)'
             : 'Correção de valor/nº (proposta paga)'));
-      proposal.history.push({
+      const histPaid = {
         date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
         actorName: user?.name || 'Sistema',
         action: actionLabel,
         note: noteParts.join(' · ') || actionLabel,
         kind: vendorChanged && noteParts.length === 1 ? 'vendor_fix_paid' : 'valor_fix_paid',
-      });
+      };
+      if (vendorChanged) {
+        histPaid.prevVendorId = orig.vendorId || null;
+        histPaid.prevVendorName = orig.vendorName || null;
+        histPaid.newVendorId = proposal.vendorId || proposal.vendor_id || null;
+        histPaid.newVendorName = proposal.vendorName || proposal.vendor_name || null;
+        histPaid.justification = vendorJustify || null;
+      }
+      proposal.history.push(histPaid);
       const saved = await this._withTimeout(
         DB.saveProposal(proposal, { skipHydrate: true, preserveUpdatedAt: true }),
         45000,
@@ -7711,7 +8060,7 @@ delete parsed[k];
 
     const role = roleNorm;
 
-    // Vendedor responsável — troca grava history (passar venda para outro).
+    // Vendedor responsável — troca grava history (passar venda para outro) + justificativa obrigatória.
     if (this._canPickVendor(role)) {
       const vendorSel = document.getElementById('managePropVendor');
       if (vendorSel && vendorSel.value) {
@@ -7720,21 +8069,31 @@ delete parsed[k];
         const newVid = String(vendorSel.value || '').trim();
         const opt = vendorSel.options[vendorSel.selectedIndex];
         const newName = opt ? String(opt.textContent || '').trim() : '';
-        proposal.vendorId = newVid;
-        proposal.vendor_id = newVid;
-        proposal.employee_id = newVid;
-        if (newName) {
-          proposal.vendorName = newName;
-          proposal.vendor_name = newName;
-        }
         if (newVid && newVid !== prevVid) {
+          const justify = this._readVendorTransferJustify();
+          if (justify.length < 5) {
+            this._notifyOverModal('Informe a justificativa da troca de vendedor (mín. 5 caracteres).', 'warning');
+            return;
+          }
+          proposal.vendorId = newVid;
+          proposal.vendor_id = newVid;
+          proposal.employee_id = newVid;
+          if (newName) {
+            proposal.vendorName = newName;
+            proposal.vendor_name = newName;
+          }
           proposal.history = Array.isArray(proposal.history) ? proposal.history.slice() : [];
           proposal.history.push({
             date: typeof nowBrazilSql === 'function' ? nowBrazilSql() : new Date().toISOString(),
             actorName: user?.name || 'Sistema',
             action: 'Troca de vendedor',
-            note: `Vendedor: ${prevName || prevVid || '—'} → ${newName || newVid}`,
+            note: `Vendedor: ${prevName || prevVid || '—'} → ${newName || newVid} | Justificativa: ${justify}`,
             kind: 'vendor_transfer',
+            prevVendorId: prevVid || null,
+            prevVendorName: prevName || null,
+            newVendorId: newVid,
+            newVendorName: newName || null,
+            justification: justify,
           });
         }
       }
@@ -7859,7 +8218,7 @@ delete parsed[k];
          action = `Status: [${oldStatusOp || oldStatus}] → [${newStatusOp}]`;
        }
        if (novaTabela && novaTabela !== oldTabela) {
-         const pctLabel = Math.round((this._tabelaPct[novaTabela]??1)*100);
+         const pctLabel = Math.round((this._tabelaPctOf(novaTabela) ?? (this._isTabelaExcecao(novaTabela) ? 0 : 1)) * 100);
          action += ` | Tabela definida: ${novaTabela} (${pctLabel}%) → Valor Final: R$ ${proposal.valorFinal?.toLocaleString('pt-BR',{minimumFractionDigits:2})||'0,00'}`;
        }
        const histEntry = {
@@ -8031,9 +8390,10 @@ delete parsed[k];
     }
     const nome = label || id;
     if (!confirm(
-      `Arquivar a proposta "${nome}"?\n\n` +
-      `A ficha vira Cancelado e uma cópia fica na Localweb.\n` +
-      `Proposta PAGA não é cancelada — só a cópia de segurança é gravada.`
+      `Arquivar/apagar a proposta "${nome}"?\n\n` +
+      `1º clique: vira Cancelado (some da lista ativa) + cópia na Localweb.\n` +
+      `2º clique (já Cancelado): remove a ficha do banco.\n` +
+      `Proposta PAGA não é apagada — só a cópia de segurança é gravada.`
     )) return;
 
     if (typeof showLoading === 'function') showLoading('Excluindo proposta...');
@@ -8079,7 +8439,9 @@ delete parsed[k];
       }
       const toastMsg = result?.keptPaid
         ? 'Proposta paga permanece. Cópia salva na Localweb.'
-        : 'Proposta arquivada (status Cancelado).';
+        : (result?.removed
+          ? 'Proposta removida (cópia permanece na Localweb).'
+          : 'Proposta arquivada (status Cancelado).');
       if (typeof showToast === 'function') showToast(toastMsg, 'success');
       else alert(toastMsg);
       // Remove a linha na hora (feedback imediato) e re-renderiza.
@@ -8087,6 +8449,15 @@ delete parsed[k];
       if (row && !result?.keptPaid) row.remove();
       const mobileCard = document.querySelector(`#manageProposalsMobileList [data-prop-id="${CSS?.escape ? CSS.escape(String(id)) : String(id)}"]`);
       if (mobileCard && !result?.keptPaid) mobileCard.remove();
+      // Gestão de Crédito: tira a linha do BO e recarrega (não depende só do painel Propostas).
+      try {
+        const cdRow = document.querySelector(`#cd_bo_list tr td select[id="cd_st_${CSS?.escape ? CSS.escape(String(id)) : String(id)}"]`)
+          ?.closest('tr');
+        if (cdRow && !result?.keptPaid) cdRow.remove();
+        if (typeof window.EsteiraCompraDivida?.refreshBo === 'function' && document.getElementById('cd_bo_list')) {
+          await window.EsteiraCompraDivida.refreshBo();
+        }
+      } catch (_) { /* noop */ }
       await this.renderAdminList({ soft: true, fromCache: !!this._adminListCache });
       if (typeof renderAdminRanking === 'function' && document.getElementById('adminRankingList')) {
         try { await renderAdminRanking(); } catch (_) { /* noop */ }
@@ -8131,3 +8502,229 @@ document.addEventListener('keydown', (e) => {
     Proposals.closeModal();
   }
 });
+
+
+
+/* Permissão individual: esteira completa no painel do vendedor autorizado. */
+(function () {
+  let attempts = 0;
+  function applyProposalAccess() {
+    const u = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    const cd = window.EsteiraCompraDivida;
+    if (!u || !cd || typeof Proposals === 'undefined') {
+      if (++attempts < 40) setTimeout(applyProposalAccess, 500);
+      return;
+    }
+    if (u.permissions?.canManageAllProposals !== true) {
+      if (++attempts < 40) setTimeout(applyProposalAccess, 500);
+      return;
+    }
+    if (!cd._allProposalAccessWired) {
+      cd._allProposalAccessWired = true;
+      const original = cd.ensureVendorSection;
+      cd.ensureVendorSection = function () {
+        if (Auth.getSession()?.permissions?.canManageAllProposals === true) {
+          const result = this.ensureBoSection();
+          this.refreshBo();
+          return result;
+        }
+        return original.apply(this, arguments);
+      };
+      const actions = Proposals.actionsRowHtml;
+      Proposals.actionsRowHtml = function (id, opts) {
+        if (Auth.getSession()?.permissions?.canManageAllProposals === true && !document.getElementById('manageProposalModal')) {
+          opts = Object.assign({}, opts, { employee: true });
+        }
+        return actions.call(this, id, opts);
+      };
+    }
+    if (u.permissions?.canManageAllProposals === true && /employee\.html/i.test(location.pathname)) {
+      cd.ensureVendorSection();
+    }
+  }
+  document.addEventListener('load', function (event) {
+    if (event.target?.tagName === 'SCRIPT' && /esteira-compra-divida/.test(event.target.src || '')) applyProposalAccess();
+  }, true);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) applyProposalAccess(); });
+  async function startProposalAccess() {
+    if (typeof Auth !== 'undefined' && typeof Auth.syncSessionFromDb === 'function') {
+      try { await Auth.syncSessionFromDb(); } catch (_) {}
+    }
+    applyProposalAccess();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startProposalAccess);
+  else startProposalAccess();
+})();
+
+
+/* Seletor de status da esteira: remove opção atual repetida e padroniza visual. */
+(function () {
+  let scheduled = false;
+  function cleanCreditStatuses() {
+    scheduled = false;
+    document.querySelectorAll('select[id^="cd_st_"]').forEach(function (select) {
+      const value = select.value;
+      const seen = new Set();
+      Array.from(select.options).forEach(function (option) {
+        const key = option.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        if (seen.has(key)) option.remove(); else seen.add(key);
+      });
+      select.value = value;
+      select.classList.add('credit-status-select');
+      select.setAttribute('aria-label', 'Situação da proposta');
+      select.title = select.selectedOptions[0]?.textContent || value;
+    });
+  }
+  function start() {
+    cleanCreditStatuses();
+    new MutationObserver(function (changes) {
+      if (scheduled || !changes.some(function (change) { return change.addedNodes.length || change.removedNodes.length; })) return;
+      scheduled = true;
+      requestAnimationFrame(cleanCreditStatuses);
+    }).observe(document.body, { childList:true, subtree:true });
+    document.addEventListener('change', function (event) {
+      if (event.target.matches?.('select[id^="cd_st_"]')) event.target.title = event.target.selectedOptions[0]?.textContent || event.target.value;
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+
+
+
+
+/* Menu de situações da Gestão de Crédito; mantém o select e o onchange originais. */
+(function () {
+  let active = null, scheduled = false;
+  function close() {
+    if (!active) return;
+    active.button.setAttribute('aria-expanded', 'false');
+    active.menu.remove(); active = null;
+  }
+  function tone(value) {
+    const v=String(value).toUpperCase();
+    return /CANCEL/.test(v) ? 'cancel' : /^(PAGO|PAGA)$/.test(v) ? 'paid' : /PEND/.test(v) ? 'pending' : 'waiting';
+  }
+  function sync(select, button) {
+    const caption=select.selectedOptions[0]?.textContent || select.value || 'Selecionar situação';
+    if(button.querySelector('.credit-status-caption').textContent!==caption)button.querySelector('.credit-status-caption').textContent=caption;
+    button.dataset.tone=tone(select.value);
+    button.disabled=select.disabled;
+    button.title=button.querySelector('.credit-status-caption').textContent;
+  }
+  function open(select, button) {
+    if (active?.button===button) { close();return; }
+    close();
+    const menu=document.createElement('div');menu.className='credit-status-menu';menu.setAttribute('role','listbox');menu.setAttribute('aria-label','Situação da proposta');menu.id=button.getAttribute('aria-controls');
+    const options=Array.from(select.options).filter(o=>!o.disabled && o.value);
+    options.forEach(function(option) {
+      const item=document.createElement('button');item.type='button';item.className='credit-status-option';item.setAttribute('role','option');item.setAttribute('aria-selected',String(option.value===select.value));item.dataset.tone=tone(option.value);
+      const dot=document.createElement('span');dot.className='credit-status-dot';dot.setAttribute('aria-hidden','true');
+      const text=document.createElement('span');text.textContent=option.textContent;
+      const tick=document.createElement('span');tick.className='credit-status-tick';tick.textContent=option.value===select.value?'✓':'';tick.setAttribute('aria-hidden','true');
+      item.append(dot,text,tick);
+      item.addEventListener('click',function(event){event.stopPropagation();const changed=select.value!==option.value;select.value=option.value;sync(select,button);close();button.focus({preventScroll:true});if(changed)select.dispatchEvent(new Event('change',{bubbles:true}));});
+      menu.appendChild(item);
+    });
+    menu.addEventListener('keydown',function(event){
+      const items=Array.from(menu.querySelectorAll('button'));let i=items.indexOf(document.activeElement);
+      if(event.key==='Escape'){event.preventDefault();close();button.focus({preventScroll:true});return;}
+      if(event.key==='Tab'){close();return;}
+      if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();i=event.key==='Home'?0:event.key==='End'?items.length-1:(i+(event.key==='ArrowDown'?1:-1)+items.length)%items.length;items[i]?.focus({preventScroll:true});}
+    });
+    document.body.appendChild(menu);
+    const rect=button.getBoundingClientRect(),width=Math.min(280,window.innerWidth-24);
+    menu.style.width=width+'px';menu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-width-12))+'px';
+    const height=Math.min(menu.scrollHeight,300),below=window.innerHeight-rect.bottom-12;
+    menu.style.top=(below>=height?rect.bottom+6:Math.max(12,rect.top-height-6))+'px';
+    active={button,menu};button.setAttribute('aria-expanded','true');menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});
+  }
+  function enhance() {
+    scheduled=false;
+    document.querySelectorAll('select[id^="cd_st_"]').forEach(function(select){
+      if(select.dataset.creditMenuReady){sync(select,select.previousElementSibling);return;}
+      select.dataset.creditMenuReady='1';
+      const button=document.createElement('button');button.type='button';button.className='credit-status-trigger';button.setAttribute('aria-label','Alterar situação da proposta');button.setAttribute('aria-haspopup','listbox');button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','credit-menu-'+select.id);
+      button.innerHTML='<span class="credit-status-dot" aria-hidden="true"></span><span class="credit-status-caption"></span><span class="credit-status-chevron" aria-hidden="true">⌄</span>';
+      select.before(button);select.style.setProperty('display','none','important');select.setAttribute('aria-hidden','true');select.tabIndex=-1;
+      sync(select,button);
+      button.addEventListener('click',function(event){event.stopPropagation();open(select,button);});
+      button.addEventListener('keydown',function(event){if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();open(select,button);}});
+      select.addEventListener('change',()=>sync(select,button));
+    });
+  }
+  function start(){enhance();new MutationObserver(function(changes){if(active && !active.button.isConnected)close();if(scheduled || !changes.some(c=>c.addedNodes.length))return;scheduled=true;requestAnimationFrame(enhance);}).observe(document.body,{childList:true,subtree:true});}
+  document.addEventListener('click',function(event){if(active && !active.menu.contains(event.target) && !active.button.contains(event.target))close();});
+  window.addEventListener('resize',close);window.addEventListener('scroll',function(event){if(active && !active.menu.contains(event.target))close();},true);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
+
+/* Gestão de Propostas: mesma linguagem visual da Gestão de Crédito. */
+(function () {
+  const style = document.createElement('style');
+  style.id = 'proposals-credit-layout-20261123';
+  style.textContent = `
+#secManageProposals .proposals-credit-layout{width:100%!important;min-width:0!important;table-layout:fixed;border-collapse:separate;border-spacing:0;font-family:inherit;}
+#secManageProposals .proposals-credit-layout th{background:#f3f6fb;color:#7f93ad;font-family:inherit;font-size:10px;font-weight:700;letter-spacing:.035em;padding:16px 12px;line-height:1.5;text-align:left;border-bottom:1px solid #dce5f1;}
+#secManageProposals .proposals-credit-layout td{font-size:13px;line-height:1.7;font-weight:400;padding:22px 12px;vertical-align:middle;overflow-wrap:anywhere;white-space:normal;border-bottom:1px solid #e1e8f2;background:#fff;color:#163a60;}
+#secManageProposals .proposals-credit-layout tbody tr:nth-child(even) td{background:#f8fafd;}
+#secManageProposals .proposals-credit-layout tbody tr:hover td{background:#fff7f0;}
+#secManageProposals .proposals-credit-layout td:first-child strong{font-weight:600;font-size:12px;}
+#secManageProposals .proposals-credit-layout td:nth-child(3)>div{font-size:11px!important;line-height:1.6;color:#8092a8!important;}
+#secManageProposals .proposals-credit-layout td[data-col=valor],#secManageProposals .proposals-credit-layout td[data-col=valorFinal]{font-variant-numeric:tabular-nums;font-size:12px;}
+#secManageProposals .proposals-credit-layout td[data-col=valorFinal] strong{font-weight:600;color:#163a60!important;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge{--status-dot:#4b8dc3;display:inline-flex!important;align-items:center;gap:9px;width:100%;max-width:190px;min-height:40px;box-sizing:border-box;padding:10px 12px!important;border:1px solid #d5e1f2!important;border-radius:10px!important;background:#f3f7fd!important;color:#234b76!important;font-family:inherit;font-size:10px!important;font-weight:500!important;line-height:1.5;white-space:normal!important;overflow-wrap:normal;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge:before{content:'';display:block;flex:0 0 6px;width:6px;height:6px;border-radius:50%;background:var(--status-dot);}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge-success{--status-dot:#11ab80;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge-warning{--status-dot:#efaa36;}
+#secManageProposals .proposals-credit-layout td[data-col=status]>.badge-danger{--status-dot:#ef6571;}
+#secManageProposals .proposals-credit-layout .client-actions{display:flex;flex-wrap:nowrap!important;align-items:center;justify-content:flex-end;gap:6px;}
+#secManageProposals .proposals-credit-layout .client-actions button,#secManageProposals .proposals-credit-layout .client-actions a{display:inline-flex;align-items:center;justify-content:center;width:32px;height:34px;min-width:30px;padding:6px!important;border-radius:10px!important;border:1px solid #dce5f1;background:#fff;box-shadow:none;}
+#secManageProposals .proposals-credit-layout .client-actions button:hover{background:#eaf2fc;border-color:#adc4df;}
+@media(min-width:1101px){#secManageProposals .proposals-credit-layout :is(th,td):nth-child(1){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(2){width:9%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(3){width:12%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(4){width:9%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(5){width:9%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(6){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(7){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(8){width:7%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(9){width:10%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(10){width:10%;}#secManageProposals .proposals-credit-layout :is(th,td):nth-child(11){width:6%;}#secManageProposals .proposals-credit-layout :is(th,td):last-child{width:7%;}}
+@media(min-width:1101px) and (max-width:1450px){#secManageProposals .proposals-credit-layout td,#secManageProposals .proposals-credit-layout th{padding:18px 7px;font-size:11px;}#secManageProposals .proposals-credit-layout .client-actions{gap:3px;}#secManageProposals .proposals-credit-layout .client-actions button{min-width:25px;width:27px;height:30px;padding:4px!important;}}
+@media(max-width:1100px){#secManageProposals .proposals-credit-layout td{font-size:12px;padding:12px;}#secManageProposals .proposals-credit-layout td[data-col=status]>.badge{min-height:40px;}#secManageProposals .prop-mobile-card{border:1px solid #dce5f1;border-radius:14px;box-shadow:none;padding:18px;background:#fff;}#secManageProposals .prop-mobile-card__actions{gap:8px;}}
+`;
+  document.head.appendChild(style);
+  function apply() {
+    const body = document.getElementById('manageProposalsTbody');
+    const table = body?.closest('table');
+    if (!table) return;
+    table.classList.add('proposals-credit-layout');
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',apply); else apply();
+})();
+
+
+/* Shared presentation only: proposal and credit workflows keep their own handlers. */
+(function () {
+  if (document.getElementById('soublu-commercial-layout')) return;
+  const style = document.createElement('style');
+  style.id = 'soublu-commercial-layout';
+  style.textContent = `
+:is(#secManageProposals,#cdBoRoot) .data-table{width:100%!important;table-layout:auto!important;border-collapse:separate;border-spacing:0;}
+:is(#secManageProposals,#cdBoRoot) .table-wrap{border:1px solid #dce5f1;border-radius:14px;overflow:auto;background:#fff;}
+:is(#secManageProposals,#cdBoRoot) .data-table th{padding:14px 12px!important;background:#f2f6fb!important;color:#7186a2!important;font-family:inherit;font-size:10px;font-weight:700;line-height:1.5;letter-spacing:.04em;text-align:left;border-bottom:1px solid #dce5f1;white-space:nowrap;}
+:is(#secManageProposals,#cdBoRoot) .data-table td{padding:18px 12px!important;color:#173858!important;font-size:12px!important;line-height:1.55!important;vertical-align:middle;border-bottom:1px solid #e2e9f2;background:#fff;overflow-wrap:normal!important;}
+:is(#secManageProposals,#cdBoRoot) .data-table tbody tr:nth-child(even) td{background:#f8fafd!important;}
+:is(#secManageProposals,#cdBoRoot) .data-table tbody tr:hover td{background:#fff7ef!important;}
+:is(#secManageProposals,#cdBoRoot) .data-table tbody tr:last-child td{border-bottom:0;}
+:is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(3){min-width:150px;}
+:is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(4){min-width:140px;}
+:is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(7),:is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(8){white-space:nowrap!important;font-variant-numeric:tabular-nums;}
+:is(#secManageProposals,#cdBoRoot) .data-table .text-muted{font-size:11px;color:#7b8fa8;}
+:is(#secManageProposals,#cdBoRoot) .data-table .header-filter{font:inherit;color:inherit;max-width:100%;}
+:is(#secManageProposals,#cdBoRoot) .credit-status-trigger,:is(#secManageProposals,#cdBoRoot) td[data-col=status]>.badge{box-sizing:border-box;display:inline-flex!important;align-items:center;gap:8px;min-width:160px!important;max-width:210px!important;min-height:40px!important;padding:9px 12px!important;border:1px solid #d6e2f2!important;border-radius:10px!important;background:#f3f7fd!important;color:#204971!important;font-size:10px!important;font-weight:600!important;line-height:1.5!important;white-space:normal!important;text-align:left;}
+:is(#secManageProposals,#cdBoRoot) .client-actions{display:flex!important;align-items:center;justify-content:flex-end;gap:6px!important;flex-wrap:nowrap!important;}
+:is(#secManageProposals,#cdBoRoot) .client-actions :is(button,a){display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 32px;width:32px!important;min-width:32px!important;height:34px!important;padding:6px!important;border:1px solid #dce5f1!important;border-radius:10px!important;background:#fff;box-shadow:none;}
+:is(#secManageProposals,#cdBoRoot) .client-actions :is(button,a):hover{background:#edf4fd;border-color:#9bb9dc!important;}
+:is(#secManageProposals,#cdBoRoot) .client-actions :is(button,a):focus-visible{outline:2px solid #ff8b3d;outline-offset:2px;}
+#secManageProposals .proposal-page-header{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:18px;}
+#secManageProposals .proposal-toolbar,#cdBoRoot .cd-bo-toolbar{display:flex;align-items:center;gap:8px!important;flex-wrap:wrap;padding:16px!important;border:1px solid #dce5f1;border-radius:14px;background:#fff;}
+#secManageProposals .proposal-toolbar{width:100%;box-sizing:border-box;}
+#secManageProposals .proposal-toolbar .btn,#cdBoRoot .cd-bo-toolbar .btn{min-height:36px;border-radius:10px;font-size:12px;}
+#secManageProposals .proposal-page-description{color:#7386a0;font-size:12px;line-height:1.6;}
+@media(min-width:1101px){:is(#secManageProposals,#cdBoRoot) .data-table{min-width:1320px!important;}:is(#secManageProposals,#cdBoRoot) .data-table :is(th,td){width:auto!important;}}
+@media(max-width:1100px){#cdBoRoot .data-table{min-width:1100px!important;}#secManageProposals .proposal-toolbar .search-bar,#cdBoRoot .cd-bo-toolbar .search-bar{width:100%!important;max-width:none!important;flex-basis:100%!important;}#secManageProposals .proposal-toolbar,#cdBoRoot .cd-bo-toolbar{padding:12px!important;}#secManageProposals .prop-mobile-card{border:1px solid #dce5f1;border-radius:14px;padding:16px;background:#fff;}}
+`;
+  document.head.appendChild(style);
+})();

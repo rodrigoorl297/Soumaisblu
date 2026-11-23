@@ -5,23 +5,46 @@
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
   <script src="js/base-path.js?v=1781704178"></script>
   <title>SOU+BLU · Entrar</title>
-  <link rel="icon" href="images/logo.png" type="image/png" sizes="32x32"/>
-  <link rel="apple-touch-icon" href="images/logo.png"/>
+  <link rel="icon" href="images/logo.png?v=blu1" type="image/png" sizes="32x32"/>
+  <link rel="apple-touch-icon" href="images/logo.png?v=blu1"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <link href="css/bootstrap.min.css?v=bs533" rel="stylesheet" crossorigin="anonymous"/>
   <link rel="stylesheet" href="css/variables.css?v=bs-tokens1"/>
-  <link rel="stylesheet" href="css/global.css?v=limao1"/>
-  <link rel="stylesheet" href="css/login.css?v=logo-new1"/>
+  <link rel="stylesheet" href="css/global.css?v=credstatus1795119686950"/>
+  <link rel="stylesheet" href="css/login.css?v=word2"/><link rel="stylesheet" href="css/bootstrap-bridge.css?v=prop-cfg-pro2"/>
+  <style>
+    /* Logo da tela de entrada: wordmark Sou+blu, sem o ícone e sem o texto ao lado. */
+    .login-left .brand-logo img {
+      width: auto;
+      height: 64px;
+      min-width: 0;
+      min-height: 0;
+      max-width: min(380px, 100%);
+      object-fit: contain;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    /* Chrome autofill pintava o e-mail de azul e a senha de branco */
+    .form-group input:-webkit-autofill,
+    .form-group input:-webkit-autofill:hover,
+    .form-group input:-webkit-autofill:focus {
+      -webkit-box-shadow: 0 0 0 1000px #f9f9f9 inset !important;
+      -webkit-text-fill-color: #333 !important;
+      caret-color: #333;
+      border-color: #e0e0e0;
+      transition: background-color 99999s ease-out;
+    }
+  </style>
   <script>window.SOUBLU_CONFIG=window.SOUBLU_CONFIG||{};</script>
-  <script src="js/db-connect.js?v=97c411dbstable4"></script>
-  <script src="js/config.js?v=rl429fix1" defer></script>
-  <script src="js/db.js?v=finance-20261006-2" defer></script>
+  <script src="js/db-connect.js?v=dbg-guard1"></script>
+  <script src="js/config.js?v=clubeoff1795118274" defer></script>
+  <script src="js/db.js?v=brclock1795116682" defer></script>
   <script src="js/br-holidays.js?v=1781704178" defer></script>
   <script src="js/attendance-penalty.js?v=1781704178" defer></script>
   <script src="js/vendor-tier-points.js?v=1781704178" defer></script>
   <script>(function(g){if(!g||!g.location)return;var SK='soublu_session',LK='soublu_prt_loop';function role(){try{var r=g.sessionStorage.getItem(SK)||g.localStorage.getItem(SK);return r?String(JSON.parse(r).role||'').toLowerCase():'';}catch(e){return'';}}function inP(){return/(^|\/)pages(\/|$)/i.test(String(g.location.pathname||'').replace(/\\/g,'/'));}function adm(){var rel=inP()?'admin.html':'pages/admin.html';try{return new URL(rel,g.location.href).href;}catch(e){return rel;}}var rl=role();if(rl!=='portaria')return;var p=String(g.location.pathname||'');if(/employee\.html/i.test(p)){var n=parseInt(g.sessionStorage.getItem(LK)||'0',10)+1;if(n>12)return;g.sessionStorage.setItem(LK,String(n));g.location.replace(adm());return;}if(/admin\.html/i.test(p)){g.sessionStorage.removeItem(LK);g.SOUBLU_PORTARIA_BOOT=true;}})(window);</script>
-  <script src="js/auth.js?v=finance-20261006-2" defer></script>
+  <script src="js/auth.js?v=loginfast1795112608" defer></script>
 </head>
 <body class="login-body">
 <div class="login-wrapper">
@@ -29,7 +52,7 @@
   <div class="login-left">
     <div class="brand">
       <div class="brand-logo">
-        <img class="brand-wordmark" src="images/blu-logo-new.png" width="200" height="44" alt="Sou+blu"/>
+        <img data-soublu-logo="images/logo-sou-blu.png?v=word2" src="images/logo-sou-blu.png?v=word2" alt="Sou+blu"/>
       </div>
       <h1 class="login-headline">Reconhecimento<br/>que transforma.</h1>
       <p class="login-sub">Seu saldo, seus prêmios,<br/>sua conquista.</p>
@@ -67,7 +90,7 @@
     </div>
   </div>
 </div>
-<script src="js/ui.js?v=1782501000" defer></script>
-<script src="js/login.js?v=97c411login1" defer></script>
+<script src="js/ui.js?v=storage-20261110" defer></script>
+<script src="js/login.js?v=loginfast1795112608" defer></script>
 <script src="js/bootstrap.bundle.min.js?v=bs533" defer crossorigin="anonymous"></script></body>
 </html>

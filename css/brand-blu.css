@@ -1,0 +1,30 @@
+/*
+ * Marca do menu: quadrado branco “blu” no lugar do ícone antigo.
+ * O texto “SOU + BLU” continua ao lado da arte.
+ */
+.sidebar-logo,
+.sidebar-header .logo-icon {
+  width: 56px !important;
+  height: 56px !important;
+  min-width: 56px;
+  background: transparent !important;
+  border-radius: 12px;
+  overflow: hidden;
+  padding: 0 !important;
+  box-shadow: none !important;
+}
+.sidebar-logo img,
+.sidebar-header .logo-icon img,
+.logo-icon img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+  border-radius: 12px;
+  display: block;
+}
+.sidebar.collapsed .sidebar-logo,
+.sidebar.collapsed .sidebar-header .logo-icon {
+  width: 36px !important;
+  height: 36px !important;
+  min-width: 36px;
+}

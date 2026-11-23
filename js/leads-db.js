@@ -54,7 +54,6 @@ const LeadsDB = {
   /* ── LEADS ── */
   async importLeads(batchId, leadsArray) {
     _cacheDel('leads');
-    // nginx rejeita POST ~>=50KB com 400 HTML; manter margem (evidência: 45KB ok, 57KB fail).
     // WAF da Locaweb esvazia POST acima de ~16KB (corpo chega vazio e o INSERT vira 1136).
     const MAX_CHUNK_BYTES = 12000;
     const MAX_CHUNK_ROWS = 80;
@@ -78,15 +77,19 @@ const LeadsDB = {
         }
         if (phone2) extraData.phone2 = phone2;
         // extra_data como JSON texto — PDO não aceita objeto/array no INSERT (erro 1136).
+        const extraJson = JSON.stringify(extraData && typeof extraData === 'object' ? extraData : {});
         const row = {
           id: DB._genId('ld'),
           batch_id: batchId,
           name: (lead.name || '').trim(),
           orgao: (lead.orgao || '').trim(),
-          cpf: (lead.cpf || '').trim(),
+          // CPF sempre string de 11 dígitos — nunca number (JSON/Excel cortam zeros).
+          cpf: (typeof LeadsImport !== 'undefined' && LeadsImport.normalizeCpf)
+            ? LeadsImport.normalizeCpf(lead.cpf)
+            : String(lead.cpf == null ? '' : lead.cpf).replace(/[^\d]/g, ''),
           mother_name: (lead.mother_name || '').trim(),
           phone,
-          extra_data: JSON.stringify(extraData && typeof extraData === 'object' ? extraData : {}),
+          extra_data: extraJson,
           status: 'pending',
           assigned_to: null,
           assigned_date: null,
@@ -207,16 +210,25 @@ const LeadsDB = {
         const status = l.status || 'pending';
         if (status !== 'pending') return false;
         const assigned = this._normDate(l.assigned_date);
-        return !assigned || assigned <= today;
+        if (!assigned || assigned <= today) return true;
+        // Mesma semana à frente (ex.: 99 viraram 20 hoje + 79 ter–sex) — senão “sumiram”
+        const aw = Number(l.assigned_week);
+        const ay = Number(l.assigned_year);
+        return aw === weekNumber && ay === year;
       })
       .sort((a, b) => String(a.assigned_date || '').localeCompare(String(b.assigned_date || '')));
 
     /**
      * Regra da mesa (todos os vendedores):
      * 1) SEMPRE mostra pendentes de HOJE (lote novo não some após meta batida).
-     * 2) Atrasados: sobra da meta + mínimo de backlog (não zera atraso só porque há lote novo).
+     * 2) Pendentes da semana já atribuídos (ter/qua/…) — o gerente mandou o lote agora.
+     * 3) Atrasados: sobra da meta + mínimo de backlog (não zera atraso só porque há lote novo).
      */
     const pendingToday = pendingPool.filter((l) => this._normDate(l.assigned_date) === today);
+    const pendingRestOfWeek = pendingPool.filter((l) => {
+      const a = this._normDate(l.assigned_date);
+      return a && a > today;
+    });
     const pendingOverdue = pendingPool.filter((l) => {
       const a = this._normDate(l.assigned_date);
       return !a || a < today;
@@ -225,6 +237,7 @@ const LeadsDB = {
     const overdueCap = Math.max(remainingByMeta, overdueFloor);
     const pendingOnDesk = [
       ...pendingToday,
+      ...pendingRestOfWeek,
       ...pendingOverdue.slice(0, overdueCap),
     ];
 
@@ -236,13 +249,15 @@ const LeadsDB = {
 
   _filterDeskLeads(leads, todayStr) {
     const today = this._normDate(todayStr);
+    const { week, year } = today ? this.getWeekAndYearFromDateStr(today) : { week: 0, year: 0 };
     return (leads || []).filter((l) => {
       const status = l.status || 'pending';
       const assigned = this._normDate(l.assigned_date);
       if (assigned && assigned === today) return true;
       if (!this.isWorkedStatus(status)) {
         if (!assigned || assigned <= today) return true;
-        return false;
+        // Pendente com data ainda na semana (lote espalhado ter–sex)
+        return Number(l.assigned_week) === week && Number(l.assigned_year) === year;
       }
       if (l.completed_at) {
         const completedLocal = this._normDate(l.completed_at) || this._toLocalDateStr(new Date(l.completed_at));
@@ -559,14 +574,9 @@ const LeadsDB = {
    * Usado no redistribuir/sobrescrever sem mexer nos já trabalhados.
    */
   async getPendingLeadsInBatch(batchId) {
-    const rows = [];
-    for (let offset = 0; offset < 500000; offset += 500) {
-      const page = await supaReq('GET', 'leads', null,
-        `?batch_id=eq.${encodeURIComponent(batchId)}&status=eq.pending&select=*&order=created_at.asc,id.asc&limit=500&offset=${offset}`);
-      rows.push(...page);
-      if (page.length < 500) return rows;
-    }
-    throw new Error('Lote muito grande. Divida-o antes de distribuir.');
+    return await supaReq('GET', 'leads', null,
+      `?batch_id=eq.${encodeURIComponent(batchId)}&status=eq.pending&select=*&order=created_at.asc&limit=50000`
+    ).catch(() => []);
   },
 
   /**
@@ -736,22 +746,19 @@ const LeadsDB = {
   /**
    * _buildDistributionPlan — monta assigned_* + cotas semanais EM MEMÓRIA.
    * Não grava no banco. Usado por distributeLeads e redistributeLeads.
-   * Cap por semana (weekLeadCount) evita despejar o lote inteiro nos dias restantes.
+   * A cota da semana inteira cai no 1º dia útil: 100/pessoa não vira 20/dia
+   * (ceil/5) com o resto escondido até terça–sexta.
    */
-  _buildDistributionPlan(leads, employeeIds, weeksCount = null, ref = new Date()) {
-    employeeIds = [...new Set((employeeIds || []).map(id => String(id).trim()).filter(Boolean))];
+  _buildDistributionPlan(leads, employeeIds, weeksCount = null) {
     const pool = Array.isArray(leads) ? leads.slice() : [];
     if (!pool.length) throw new Error('Nenhum lead disponível para distribuição.');
     if (!employeeIds?.length) throw new Error('Selecione pelo menos um funcionário.');
 
     const leadsPerEmployee = Math.floor(pool.length / employeeIds.length);
     const remainder = pool.length % employeeIds.length;
-    const totalWeeks = weeksCount == null ? Math.max(1, Math.ceil(Math.ceil(pool.length / employeeIds.length) / 200)) : Number(weeksCount);
-    if (!Number.isInteger(totalWeeks) || totalWeeks < 1 || totalWeeks > 52) throw new Error("Informe de 1 a 52 semanas.");
+    const totalWeeks = weeksCount || Math.ceil(Math.max(1, leadsPerEmployee) / 200);
     const leadsPerWeek = Math.ceil(Math.max(1, leadsPerEmployee) / totalWeeks);
-    const dailyTarget = Math.ceil(leadsPerWeek / 5);
-    const { week: currentWeek, year: currentYear } = this.getCurrentWeekAndYear(new Date(ref));
-    const firstMonday = this._getWeekStartDate(currentYear, currentWeek);
+    const { week: currentWeek, year: currentYear } = this.getCurrentWeekAndYear();
 
     let leadIndex = 0;
     const weeklyAssignments = [];
@@ -763,27 +770,29 @@ const LeadsDB = {
       let empAssigned = 0;
 
       for (let week = 0; week < totalWeeks; week++) {
-        const weekStart = new Date(firstMonday);
-        weekStart.setDate(weekStart.getDate() + week * 7);
-        const { week: weekNum, year: yearForWeek } = this.getCurrentWeekAndYear(weekStart);
-        const weekLeadCount = Math.floor(empLeadCount / totalWeeks) + (week < empLeadCount % totalWeeks ? 1 : 0);
+        let weekNum = currentWeek + week;
+        let yearForWeek = currentYear;
+        while (weekNum > 53) {
+          weekNum -= 52;
+          yearForWeek += 1;
+        }
+        const weekStart = this._getWeekStartDate(yearForWeek, weekNum);
+        const weekLeadCount = Math.min(leadsPerWeek, empLeadCount - empAssigned);
         if (weekLeadCount <= 0) break;
 
-        const daysInWeek = 5;
         let startDayOffset = 0;
         if (week === 0) {
-          const now = new Date(ref);
+          const now = new Date();
           const dow = now.getDay();
           if (dow >= 1 && dow <= 5) startDayOffset = dow - 1;
           else if (dow === 6) startDayOffset = 4;
         }
-        const daysLeftForTarget = Math.max(1, daysInWeek - startDayOffset);
-        // Cota ≤60: tudo no 1º dia útil. Espalhar 49 em 5 dias (~10/dia) faz a mesa
-        // parecer vazia (“não chegou”) quando o gerente espera ~50 na hora.
-        const dumpAllOnFirstDay = weekLeadCount <= 60;
-        const dailyTargetForWa = dumpAllOnFirstDay
-          ? weekLeadCount
-          : Math.ceil(weekLeadCount / daysLeftForTarget);
+        const date = new Date(weekStart);
+        date.setDate(date.getDate() + startDayOffset);
+        while (date.getDay() === 0 || date.getDay() === 6) {
+          date.setDate(date.getDate() + 1);
+        }
+        const dateStr = this._toLocalDateStr(date);
 
         weeklyAssignments.push({
           id: DB._genId('lwa'),
@@ -792,39 +801,21 @@ const LeadsDB = {
           week_number: weekNum,
           year: yearForWeek,
           total_leads: weekLeadCount,
-          daily_target: dailyTargetForWa,
+          daily_target: weekLeadCount,
           created_at: new Date().toISOString(),
         });
 
-        let assignedThisWeek = 0;
-
-        for (let dayOffset = startDayOffset; dayOffset < daysInWeek && leadIndex < pool.length && assignedThisWeek < weekLeadCount; dayOffset++) {
-          const date = new Date(weekStart);
-          date.setDate(date.getDate() + dayOffset);
-          while (date.getDay() === 0 || date.getDay() === 6) {
-            date.setDate(date.getDate() + 1);
-          }
-          const dateStr = this._toLocalDateStr(date);
-          const slotsLeft = weekLeadCount - assignedThisWeek;
-          const daysRemaining = daysInWeek - dayOffset;
-          const dailyCount = dumpAllOnFirstDay
-            ? slotsLeft
-            : Math.ceil(slotsLeft / Math.max(1, daysRemaining));
-
-          for (let d = 0; d < dailyCount && leadIndex < pool.length && assignedThisWeek < weekLeadCount && empAssigned < empLeadCount; d++) {
-            const lead = pool[leadIndex];
-            leadUpdates.push({
-              id: lead.id,
-              assigned_to: empId,
-              assigned_date: dateStr,
-              assigned_week: weekNum,
-              assigned_year: yearForWeek,
-            });
-            leadIndex++;
-            assignedThisWeek++;
-            empAssigned++;
-          }
-          if (dumpAllOnFirstDay) break;
+        for (let d = 0; d < weekLeadCount && leadIndex < pool.length && empAssigned < empLeadCount; d++) {
+          const lead = pool[leadIndex];
+          leadUpdates.push({
+            id: lead.id,
+            assigned_to: empId,
+            assigned_date: dateStr,
+            assigned_week: weekNum,
+            assigned_year: yearForWeek,
+          });
+          leadIndex++;
+          empAssigned++;
         }
       }
     }
@@ -834,12 +825,8 @@ const LeadsDB = {
       weeklyAssignments,
       distributed: leadUpdates.length,
       perEmployee: leadsPerEmployee,
-      dailyTarget: Math.max(0, ...weeklyAssignments.map(row => row.daily_target)),
+      dailyTarget: leadsPerWeek,
     };
-  },
-
-  buildDistributionPlan(leads, employeeIds, weeksCount = null, ref = new Date()) {
-    return this._buildDistributionPlan(leads, employeeIds, weeksCount, ref);
   },
 
   async distributeLeads(batchId, employeeIds, weeksCount = null) {
@@ -997,9 +984,9 @@ const LeadsDB = {
   async upsertDailyProgress(userId, date, target, completed) {
     _cacheDel('lead_daily_progress');
     const existing = await this.getDailyProgress(userId, date);
-    const safeTarget = Math.max(0, Number(target) || 0);
+    const safeTarget = Math.max(1, Number(target) || 1);
     const safeCompleted = Math.max(0, Number(completed) || 0);
-    const metTarget = safeTarget > 0 && safeCompleted >= safeTarget;
+    const metTarget = safeCompleted >= safeTarget;
     const payload = {
       target: safeTarget,
       completed: safeCompleted,

@@ -2756,9 +2756,28 @@ function _filterPropsForTeamBilling(props, filterKey, statusKey) {
 }
 window._filterPropsForTeamBilling = _filterPropsForTeamBilling;
 
-function _isTeamVendorMember(u, supIds) {
+/** Fora do gráfico/tabela (pedido: sem Higor, Ana Bela, Vinícius). */
+function _isBillingTeamHidden(name) {
+  const n = _normSupervisorNameKey(name);
+  if (!n) return false;
+  if (n.includes('higor') || n.includes('vinicius')) return true;
+  if (n.includes('ana bela') || n.includes('anabela') || n.includes('viviane')) return true;
+  return false;
+}
+
+/** Chefe de equipe no faturamento: supervisor comercial OU sup_backoffice (ex.: Beatriz). */
+function _isBillingTeamHead(u) {
+  const n = _normSupervisorNameKey(u?.name);
+  /* Higor/Vinícius: backoffice sem time comercial — nem entram na agregação. */
+  if (n.includes('higor') || n.includes('vinicius')) return false;
   const r = String(u?.role || '').toLowerCase();
-  const teamRoles = ['employee', 'vendedor', 'backoffice', 'sup_backoffice'];
+  return r === 'supervisor' || r === 'sup_backoffice';
+}
+
+function _isTeamVendorMember(u, supIds) {
+  if (!u || _isBillingTeamHead(u)) return false;
+  const r = String(u?.role || '').toLowerCase();
+  const teamRoles = ['employee', 'vendedor', 'backoffice', 'operacional'];
   return teamRoles.includes(r) && supIds.has(String(u.admin_id || ''));
 }
 
@@ -2789,6 +2808,27 @@ function _attachUnassignedTeamBillingProps(rows, inRange, statusKey) {
   return rows.sort((a, b) => b.total - a.total);
 }
 
+function _buildParceirosTeamFromProps(props, users, usersByVendorName) {
+  const byId = new Map((users || []).map((u) => [String(u.id), u]));
+  const seen = new Set();
+  const team = [];
+  (props || []).forEach((p) => {
+    const vid = String(_resolveProposalVendorId(p, usersByVendorName) || '').trim();
+    if (vid && byId.has(vid) && !seen.has(vid)) {
+      seen.add(vid);
+      team.push(byId.get(vid));
+      return;
+    }
+    const name = String(p?.vendorName || p?.vendor_name || '').trim();
+    if (!name) return;
+    const key = 'name:' + name.toLocaleLowerCase('pt-BR');
+    if (seen.has(key)) return;
+    seen.add(key);
+    team.push({ id: vid || null, name, role: 'vendedor', _synthetic: true });
+  });
+  return team.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'pt-BR'));
+}
+
 function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, statusKey) {
   const sk = statusKey || _teamBillingStatusFilter || 'total';
   const propAmt = (p) => _teamBillingChartAmt(p, sk);
@@ -2797,11 +2837,12 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
     total: props.reduce((s, p) => s + propAmt(p), 0),
     totalBruto: props.reduce((s, p) => s + propBruto(p), 0),
   });
+  const teamHeads = (supervisors || []).filter(_isBillingTeamHead);
   const processedSupIds = new Set();
   const rows = [];
 
   for (const g of _SUPERVISOR_TEAM_MERGE_GROUPS) {
-    const sups = supervisors.filter((s) => _supervisorMergeGroup(s.name) === g);
+    const sups = teamHeads.filter((s) => _supervisorMergeGroup(s.name) === g);
     if (!sups.length) continue;
     sups.forEach((s) => processedSupIds.add(s.id));
     const supIds = new Set(sups.map((s) => String(s.id)));
@@ -2824,7 +2865,7 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
     });
   }
 
-  for (const sup of supervisors) {
+  for (const sup of teamHeads) {
     if (processedSupIds.has(sup.id)) continue;
     const supIds = new Set([String(sup.id)]);
     const team = users.filter((u) => _isTeamVendorMember(u, supIds));
@@ -2833,6 +2874,8 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
       const vid = _resolveProposalVendorId(p, usersByVendorName);
       return vid && scopeIds.has(String(vid));
     });
+    /* Esconde chefes sem equipe e sem proposta (ex.: sup_backoffice só operacional). */
+    if (!team.length && !props.length) continue;
     rows.push({
       sup,
       team,
@@ -2842,7 +2885,7 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
     });
   }
 
-  const allSupIds = new Set(supervisors.map((s) => String(s.id)));
+  const allSupIds = new Set(teamHeads.map((s) => String(s.id)));
   const internalVendorIds = new Set([...allSupIds]);
   users.forEach((u) => {
     if (allSupIds.has(String(u.admin_id || ''))) internalVendorIds.add(String(u.id));
@@ -2856,7 +2899,7 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
   if (orphanSums.total > 0 || orphanProps.length > 0) {
     rows.push({
       sup: { name: 'Parceiros', id: null },
-      team: [],
+      team: _buildParceirosTeamFromProps(orphanProps, users, usersByVendorName),
       props: orphanProps,
       ...orphanSums,
       count: orphanProps.length,
@@ -2864,6 +2907,11 @@ function _buildTeamBillingData(supervisors, users, inRange, usersByVendorName, s
   }
 
   const withUnassigned = _attachUnassignedTeamBillingProps(rows, inRange, sk);
+  /* Garante time de Parceiros preenchido após anexar órfãs. */
+  const parceiros = withUnassigned.find((r) => r.sup?.name === 'Parceiros');
+  if (parceiros) {
+    parceiros.team = _buildParceirosTeamFromProps(parceiros.props, users, usersByVendorName);
+  }
   return withUnassigned;
 }
 
@@ -3078,7 +3126,8 @@ async function renderTeamBillingChart() {
     });
   }
   if (gen !== _teamBillingRenderGen) return;
-  const supervisors = users.filter(u => u.role === 'supervisor');
+  /* Inclui sup_backoffice (Beatriz etc.) — senão o time cai em Parceiros. */
+  const supervisors = users.filter(_isBillingTeamHead);
   const periodLabels = {
     day: 'Hoje', month: 'Este Mês', year: 'Este Ano', all: 'Todo o período', custom: 'Período customizado'
   };
@@ -3106,6 +3155,8 @@ async function renderTeamBillingChart() {
       teamData = teamData.filter((d) => d.sup?.name === myGroup.label || _supervisorMergeGroup(d.sup?.name) === myGroup);
     }
   }
+  /* Só equipes com proposta; sem Higor / Ana Bela / Vinícius. */
+  teamData = teamData.filter((d) => (d.count || 0) > 0 && !_isBillingTeamHidden(d.sup?.name));
 
   const fmtR = v => 'R$ ' + parseFloat(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
   const poolTotal = inRange.reduce((s, p) => s + propAmt(p), 0);
@@ -3199,56 +3250,54 @@ async function renderTeamBillingChart() {
               const v = finalV || brutoV;
               return `<div class="tb-card__value${v ? '' : ' tb-card__value--zero'}">${fmtR(v)}</div>`;
             };
-            /* Resumo por vendedor — controle de quem produziu no período. */
-            const vendorStats = (() => {
+            /* Vendedor → propostas dele (Parceiros e Beatriz inclusive). */
+            const vendorBlocks = (() => {
               const map = new Map();
-              (d.props || []).forEach((p) => {
-                const name = String(p.vendorName || p.vendor_name || '').trim() || 'Sem vendedor';
-                const key = name.toLocaleLowerCase('pt-BR');
-                const cur = map.get(key) || { name, count: 0, total: 0 };
-                cur.count += 1;
-                cur.total += propAmt(p) || propBruto(p) || 0;
-                map.set(key, cur);
-              });
+              const ensure = (name, extra = {}) => {
+                const key = String(name || 'Sem vendedor').toLocaleLowerCase('pt-BR');
+                if (!map.has(key)) map.set(key, { name: name || 'Sem vendedor', count: 0, total: 0, props: [], ...extra });
+                return map.get(key);
+              };
               (d.team || []).forEach((u) => {
                 const name = String(u.name || '').trim();
-                if (!name) return;
-                const key = name.toLocaleLowerCase('pt-BR');
-                if (!map.has(key)) map.set(key, { name, count: 0, total: 0, idle: true });
+                if (name) ensure(name, { idle: true });
+              });
+              (d.props || []).forEach((p) => {
+                const name = String(p.vendorName || p.vendor_name || '').trim() || 'Sem vendedor';
+                const cur = ensure(name);
+                cur.idle = false;
+                cur.count += 1;
+                cur.total += propAmt(p) || propBruto(p) || 0;
+                cur.props.push(p);
               });
               return [...map.values()].sort((a, b) => b.total - a.total || b.count - a.count || a.name.localeCompare(b.name, 'pt-BR'));
             })();
-            const vendorsHtml = vendorStats.length
+            const propCardHtml = (p) => {
+              const st = p.statusOp || p.status || '—';
+              return `<div class="tb-card">
+                <div class="tb-card__head"><span class="tb-card__num">${p.numero || p.id}</span><span class="tb-status tb-status--${_tbStatusKind(st)}">${_tbUpper(st)}</span></div>
+                <div class="tb-card__meta" title="${_tbUpper(p.clientName || '—')}">${_tbUpper(p.clientName || '—')} · ${_tbUpper(p.convenio || '—')}</div>
+                ${propValHtml(p)}
+              </div>`;
+            };
+            const vendorsHtml = vendorBlocks.length
               ? `<div class="tb-detail__block">
-                  <div class="tb-detail__title">Vendedores da equipe (${vendorStats.length})</div>
-                  <div class="tb-detail__grid tb-detail__grid--vendors">
-                    ${vendorStats.map((v) => `
-                      <div class="tb-card${v.count ? '' : ' tb-card--idle'}">
-                        <div class="tb-card__name" title="${_tbUpper(v.name)}">${_tbUpper(v.name)}</div>
-                        <div class="tb-card__meta">${v.count ? `${v.count} proposta${v.count === 1 ? '' : 's'} · <strong>${fmtR(v.total)}</strong>` : 'Sem proposta no período'}</div>
+                  <div class="tb-detail__title">Vendedores e propostas (${vendorBlocks.length})</div>
+                  <div class="tb-vendor-list">
+                    ${vendorBlocks.map((v) => `
+                      <div class="tb-vendor${v.count ? '' : ' tb-vendor--idle'}">
+                        <div class="tb-vendor__head">
+                          <div class="tb-vendor__name" title="${_tbUpper(v.name)}">${_tbUpper(v.name)}</div>
+                          <div class="tb-vendor__meta">${v.count ? `${v.count} proposta${v.count === 1 ? '' : 's'} · <strong>${fmtR(v.total)}</strong>` : 'Sem proposta no período'}</div>
+                        </div>
+                        ${v.props.length ? `<div class="tb-detail__grid">${v.props.slice(0, 12).map(propCardHtml).join('')}${v.props.length > 12 ? `<div class="tb-detail__more">+${v.props.length - 12} mais…</div>` : ''}</div>` : ''}
                       </div>`).join('')}
                   </div>
                 </div>`
-              : '';
+              : '<span class="tb-detail__empty">Nenhuma proposta neste período.</span>';
             return `
             <tr style="border-bottom:1px solid var(--color-border);" id="trow_${i}"><td style="padding:8px 12px;"><span style="font-weight:800;color:${cor};">#${i+1}</span></td><td style="padding:8px 12px;"><span style="font-weight:700;">${d.sup.name}</span><div style="font-size:11px;color:var(--color-text-muted);">${supSub}</div></td><td style="padding:8px 12px;">${d.team.length}</td><td style="padding:8px 12px;font-weight:700;">${d.count}</td><td style="padding:8px 12px;font-weight:800;color:${cor};">${fmtR(d.total)}</td>${isPagas ? `<td style="padding:8px 12px;font-weight:700;color:var(--color-text-muted);">${fmtR(d.totalBruto || 0)}</td>` : ''}<td style="padding:8px 12px;"><div style="display:flex;align-items:center;gap:8px;"><div style="background:var(--color-surface-2);border-radius:4px;height:6px;width:80px;overflow:hidden;"><div style="height:6px;width:${share}%;background:${cor};border-radius:4px;"></div></div><span style="font-size:12px;">${share}%</span></div></td><td style="padding:8px 12px;"><button class="btn btn-ghost btn-sm" onclick="_toggleTeamDetail('tdetail_${i}')">▼ Ver</button></td></tr><tr id="tdetail_${i}" style="display:none;background:var(--color-surface-2);"><td colspan="${isPagas ? 8 : 7}" style="padding:12px 20px;">
                 ${vendorsHtml}
-                ${!d.props.length
-                  ? '<span class="tb-detail__empty">Nenhuma proposta neste período.</span>'
-                  : `<div class="tb-detail__title">Propostas (${d.props.length})</div>
-                    <div class="tb-detail__grid">
-                      ${d.props.slice(0,20).map(p => {
-                        const st = p.statusOp || p.status || '—';
-                        return `
-                        <div class="tb-card">
-                          <div class="tb-card__head"><span class="tb-card__num">${p.numero || p.id}</span><span class="tb-status tb-status--${_tbStatusKind(st)}">${_tbUpper(st)}</span></div>
-                          <div class="tb-card__name" title="${_tbUpper(p.vendorName || p.vendor_name || '—')}">${_tbUpper(p.vendorName || p.vendor_name || '—')}</div>
-                          <div class="tb-card__meta" title="${_tbUpper(p.clientName || '—')}">${_tbUpper(p.clientName || '—')} · ${_tbUpper(p.convenio || '—')}</div>
-                          ${propValHtml(p)}
-                        </div>`;
-                      }).join('')}
-                      ${d.props.length > 20 ? `<div class="tb-detail__more">+${d.props.length-20} mais…</div>` : ''}
-                    </div>`}
               </td></tr>`;
           }).join('')}
         </tbody><tfoot><tr style="border-top:2px solid var(--color-border);font-weight:800;"><td colspan="3" style="padding:10px 12px;">TOTAL GERAL</td><td style="padding:10px 12px;">${grandCount}</td><td style="padding:10px 12px;color:var(--color-success);">${fmtR(grandTotal)}</td>${isPagas ? `<td style="padding:10px 12px;color:var(--color-text-muted);">${fmtR(grandTotalBruto)}</td>` : ''}<td colspan="2" style="padding:10px 12px;">100%</td></tr></tfoot></table></div>`;

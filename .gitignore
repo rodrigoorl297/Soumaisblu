@@ -48,3 +48,20 @@ api/scan-*.php
 api/debug-session-log.php
 
 !js/commission-seed.json
+
+# Governança e publicação: dados/artefatos privados nunca entram no Git
+.claude/
+__pycache__/
+*.pyc
+output/
+release-backups/
+documentos/*.xlsx
+deploy/*.private.*
+# Fontes antigas recuperadas são versionadas; publicação continua bloqueada pelo allowlist.
+!api/migrate-*.php
+!api/repair-*.php
+!api/purge-*.php
+!api/scan-*.php
+!api/debug-session-log.php
+
+!deploy/*.json

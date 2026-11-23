@@ -21,18 +21,18 @@
 
 .sidebar.collapsed { width: var(--sidebar-collapsed); }
 
-/* Verde da marca ajustado para fundo branco (o #C5FF00 puro some no branco) */
+/* Azul padrão da marca na sidebar escura */
 .sidebar {
-  --sb-green:        #5F8A00;
-  --sb-green-text:   #3D5A00;
-  --sb-green-soft:   #F3FBDC;
-  --sb-green-ring:   rgba(122, 176, 0, 0.55);
-  --nav-active-bg:     var(--sb-green-soft);
-  --nav-active-text:   var(--sb-green-text);
-  --nav-active-border: var(--sb-green);
+  --sb-blue:         #4A7FFF;
+  --sb-blue-text:    #FFFFFF;
+  --sb-blue-soft:    rgba(74, 127, 255, 0.22);
+  --sb-blue-ring:    rgba(74, 127, 255, 0.55);
+  --nav-active-bg:     var(--sb-blue-soft);
+  --nav-active-text:   var(--sb-blue-text);
+  --nav-active-border: var(--sb-blue);
 }
-.sidebar .sidebar-title span { color: var(--sb-green); }
-body.leads-app .sidebar .sidebar-header .logo-text span { color: var(--sb-green); }
+.sidebar .sidebar-title span { color: var(--sb-blue); }
+body.leads-app .sidebar .sidebar-header .logo-text span { color: var(--sb-blue); }
 
 /* Brand */
 .sidebar-brand {
@@ -1809,7 +1809,7 @@ body.leads-app .sidebar .sidebar-header .logo-text span { color: var(--sb-green)
   .client-filters__count { margin-left: 0; }
 }
 
-/* ── Faturamento por equipe: detalhe expandido (vendedores + propostas) ── */
+/* ── Faturamento por equipe: detalhe expandido (vendedor → propostas) ── */
 .tb-detail__block { margin-bottom: 16px; }
 .tb-detail__title {
   margin-bottom: 8px;
@@ -1827,6 +1827,34 @@ body.leads-app .sidebar .sidebar-header .logo-text span { color: var(--sb-green)
 .tb-detail__grid--vendors { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
 .tb-detail__empty { font-size: 12px; color: var(--color-text-muted); }
 .tb-detail__more { align-self: center; font-size: 12px; color: var(--color-text-muted); }
+
+.tb-vendor-list { display: flex; flex-direction: column; gap: 14px; }
+.tb-vendor {
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+.tb-vendor--idle { opacity: .65; }
+.tb-vendor__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+.tb-vendor__name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-text);
+}
+.tb-vendor__meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.tb-vendor__meta strong { color: var(--color-text); font-weight: 800; }
+.tb-vendor .tb-detail__grid { margin-top: 4px; }
 
 .tb-card {
   display: flex;

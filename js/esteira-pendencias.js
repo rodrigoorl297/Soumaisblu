@@ -266,6 +266,21 @@
     return list;
   }
 
+  /**
+   * HISTORY_CAP — teto de eventos no JSON history.
+   * Sem isso o auto-block enche centenas de linhas e o nginx/WAF devolve 400 no PATCH (~64KB).
+   */
+  const HISTORY_CAP = 40;
+
+  /**
+   * capHistory — mantém só os últimos N eventos (abertura + bloqueios + resoluções).
+   */
+  function capHistory(hist) {
+    const list = Array.isArray(hist) ? hist : [];
+    if (list.length <= HISTORY_CAP) return list;
+    return list.slice(list.length - HISTORY_CAP);
+  }
+
   function pushHistory(p, action, by, note) {
     const hist = Array.isArray(p.history) ? p.history.slice() : [];
     hist.push({
@@ -274,7 +289,7 @@
       action,
       note: note || '',
     });
-    return hist;
+    return capHistory(hist);
   }
 
   /**
@@ -706,6 +721,10 @@
 
   /* ── Ações ── */
 
+  /**
+   * applyAutoBlocks — bloqueia vendedor se pendência aberta passou do prazo.
+   * Revalida status no banco antes de gravar (evita bloquear já resolvida por lista velha).
+   */
   async function applyAutoBlocks() {
     if (typeof DB === 'undefined') return;
     const actor = session();
@@ -719,15 +738,27 @@
       return;
     }
     const users = await loadUsers();
+    const overdueVendorIds = new Set();
     for (const p of rows) {
       if (!isOverdue(p)) continue;
       if (PILOT_MODE && !isPilotVendor(p.vendor_id)) continue;
       const vendor = userById(users, p.vendor_id);
       if (!vendor) continue;
+      overdueVendorIds.add(String(p.vendor_id));
       if (DB.isPendencyBlocked(vendor)) continue;
       try {
+        // Confirma no banco (sem cache) que ainda está aberta — resolve pode ter rodado no meio.
+        const fresh = await fetchPendencia(p.id);
+        if (!fresh || String(fresh.status) !== 'aberta') continue;
+        if (!isOverdue(fresh)) continue;
+        // Já marcou blocked_at nesta pendência → só garante flag no user, sem reescrever history.
+        if (fresh.blocked_at) {
+          await DB.setPendencyBlock(p.vendor_id, { by: 'system', pendenciaId: p.id });
+          vendor.pendency_block_active = true;
+          continue;
+        }
         await DB.setPendencyBlock(p.vendor_id, { by: 'system', pendenciaId: p.id });
-        const hist = pushHistory(p, 'bloqueio_auto', 'system', 'Prazo de 1 dia útil esgotado');
+        const hist = pushHistory(fresh, 'bloqueio_auto', 'system', 'Prazo de 1 dia útil esgotado');
         await DB.updateVendorPendencia(p.id, {
           blocked_at: (typeof nowBrazilSql === 'function' ? nowBrazilSql() : null),
           block_reason: 'Prazo de 1 dia útil esgotado',
@@ -738,6 +769,47 @@
       } catch (e) {
         console.warn(TAG, 'auto-block fail', e);
       }
+    }
+    // Flag velha (pendência já resolvida) não pode prender a conta.
+    await clearStalePendencyBlocks(users, overdueVendorIds);
+  }
+
+  /**
+   * clearStalePendencyBlocks — se o vendedor está com pendency_block mas não tem
+   * pendência aberta em atraso, libera. Evita “resolvi e o auto-block religou”.
+   */
+  async function clearStalePendencyBlocks(users, overdueVendorIds) {
+    if (typeof DB === 'undefined' || !Array.isArray(users)) return;
+    for (const vendor of users) {
+      if (!vendor?.id || !DB.isPendencyBlocked(vendor)) continue;
+      if (overdueVendorIds.has(String(vendor.id))) continue;
+      try {
+        await DB.clearPendencyBlock(vendor.id);
+        vendor.pendency_block_active = false;
+        console.info(TAG, 'clear-stale-block', vendor.id);
+      } catch (e) {
+        console.warn(TAG, 'clear-stale-block fail', e);
+      }
+    }
+  }
+
+  /**
+   * clearBlockIfNoOpenOverdue — após resolver, libera se não sobrar pendência aberta em atraso.
+   */
+  async function clearBlockIfNoOpenOverdue(vendorId) {
+    if (!vendorId || typeof DB === 'undefined') return;
+    let open = [];
+    try {
+      open = await DB.getVendorPendencias({ vendorId, status: 'aberta', limit: 50 });
+    } catch {
+      open = [];
+    }
+    const stillOverdue = (open || []).some((row) => isOverdue(row));
+    if (stillOverdue) return;
+    try {
+      await DB.clearPendencyBlock(vendorId);
+    } catch (e) {
+      console.warn(TAG, 'clear block after resolve', e);
     }
   }
 
@@ -1064,6 +1136,8 @@
 
     /**
      * confirmResolve — grava status resolvida após o usuário ver o histórico.
+     * Também limpa pendency_block se não restar outra aberta em atraso.
+     * History vai capped; se o WAF ainda rejeitar o body, resolve sem history.
      */
     async confirmResolve(id, fromVendor) {
       const actor = session();
@@ -1081,14 +1155,28 @@
           alert('Esta pendência já não está aberta.');
           return;
         }
+        const resolvedAt = (typeof nowBrazilSql === 'function' ? nowBrazilSql() : null);
         const hist = pushHistory(p, 'resolvida', actor.name || actor.id, note);
-        await DB.updateVendorPendencia(id, {
+        const basePatch = {
           status: 'resolvida',
-          resolved_at: (typeof nowBrazilSql === 'function' ? nowBrazilSql() : null),
+          resolved_at: resolvedAt,
           resolved_by: actor.id,
           resolved_note: note || null,
-          history: hist,
-        });
+        };
+        try {
+          await DB.updateVendorPendencia(id, { ...basePatch, history: hist });
+        } catch (e1) {
+          // nginx 400 com body grande — resolve só o status (history fica para depois)
+          console.warn(TAG, 'resolve com history falhou, tentando sem', e1);
+          await DB.updateVendorPendencia(id, basePatch);
+          try {
+            await DB.updateVendorPendencia(id, { history: hist });
+          } catch (e2) {
+            console.warn(TAG, 'trim history após resolve falhou', e2);
+          }
+        }
+        // Resolver tem que liberar a digitação — antes só o botão Desbloquear limpava.
+        await clearBlockIfNoOpenOverdue(p.vendor_id);
         this.closeResolveModal();
         if (typeof showToast === 'function') showToast('Pendência resolvida.', 'success');
         if (fromVendor) await renderMinhas();

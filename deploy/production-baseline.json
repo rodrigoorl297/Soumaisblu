@@ -1,0 +1,1883 @@
+{
+  "captured_at": "2026-11-23T13:25:33.097235+00:00",
+  "origin": "https://www.soumaisblu.com.br",
+  "scope": "public runtime assets only; PHP and server configuration require authenticated source export",
+  "files": {
+    "admin.html": {
+      "status": "verified",
+      "sha256": "473d40f88e545e50ac5d3518c3f74e8c88109a505682e0462921305f95ca01e1",
+      "bytes": 135887,
+      "changed": true
+    },
+    "clube-beneficios.html": {
+      "status": "verified",
+      "sha256": "e30a1173fb5866cdab78a3a03e2a357ad41002a3bcc0ef7224e5a9bbf931d400",
+      "bytes": 608,
+      "changed": false
+    },
+    "css/bolao-copa.css": {
+      "status": "verified",
+      "sha256": "e3733925f61951ee40133f4493f7e73cfc982288a9ed14f40e5c4cdffd9c477c",
+      "bytes": 8103,
+      "changed": true
+    },
+    "css/bootstrap.min.css": {
+      "status": "verified",
+      "sha256": "3c8f27e6009ccfd710a905e6dcf12d0ee3c6f2ac7da05b0572d3e0d12e736fc8",
+      "bytes": 232803,
+      "changed": true
+    },
+    "css/clube-beneficios.css": {
+      "status": "verified",
+      "sha256": "a2fdda238ede23b8b8941ac0c1a76b447db2cb1755cff66b2451a973196bd5f6",
+      "bytes": 17149,
+      "changed": true
+    },
+    "css/colors-orange.css": {
+      "status": "verified",
+      "sha256": "a443748d8e83338183cb433d5a881c1575b2a90dbf456def6f72c2d55a66d894",
+      "bytes": 1069,
+      "changed": true
+    },
+    "css/daily-production.css": {
+      "status": "verified",
+      "sha256": "05698219103d9b5b8b0240d948de538540c8fa43fb700631094394fbabefefe0",
+      "bytes": 16347,
+      "changed": true
+    },
+    "css/dashboard-motion.css": {
+      "status": "http_404"
+    },
+    "css/folha-pagamento.css": {
+      "status": "verified",
+      "sha256": "2c1cc774ae885efe0cbc9a5d0ff464e184f14f2377082f2077595ded03dd58f4",
+      "bytes": 37221,
+      "changed": true
+    },
+    "css/global.css": {
+      "status": "verified",
+      "sha256": "13ec3c5173a1ce9b7dda187a9e350444f215673bb490a61dbe2a04802c72dabd",
+      "bytes": 42175,
+      "changed": true
+    },
+    "css/internal-chat.css": {
+      "status": "verified",
+      "sha256": "4b6e2f9258740d5a9bda982769cfd6e08426531296c7ac8a26d27c0a26811cbf",
+      "bytes": 10090,
+      "changed": true
+    },
+    "css/layout.css": {
+      "status": "verified",
+      "sha256": "5e81e7c6c13c648b46ffd64791baa6efc39b1897f1f93e85330d36662fb17f62",
+      "bytes": 52025,
+      "changed": true
+    },
+    "css/leads.css": {
+      "status": "verified",
+      "sha256": "2cf2f8fcd340984f0bc6a3415e4d9de68c8769f8597da8e1c1bd16a82a1df4e6",
+      "bytes": 21915,
+      "changed": true
+    },
+    "css/login.css": {
+      "status": "verified",
+      "sha256": "8258e85e5c8635c8c036c0eb7eae6b66c67b0a7eba9b070d65c1bdd1e8674457",
+      "bytes": 4336,
+      "changed": true
+    },
+    "css/monitoramento.css": {
+      "status": "http_404"
+    },
+    "css/monitoria-atendimento.css": {
+      "status": "verified",
+      "sha256": "8f4f356efd87e993a2e5281ee15d76dd5b75921aa0fcbc1ea60d0ea0e0cfef92",
+      "bytes": 2983,
+      "changed": false
+    },
+    "css/painel-sonhos.css": {
+      "status": "verified",
+      "sha256": "6100cd90701f3afd3caca90634794768f7207a859e3552a601ffccfbff53b32e",
+      "bytes": 48887,
+      "changed": true
+    },
+    "css/proposals-page.css": {
+      "status": "http_404"
+    },
+    "css/provider-portal.css": {
+      "status": "http_404"
+    },
+    "css/rh-modules.css": {
+      "status": "verified",
+      "sha256": "2e8961ad8b3a0aaf8990322a2ee9ee08025281c436919e38345a3b30aacd095d",
+      "bytes": 3561,
+      "changed": true
+    },
+    "css/roulette.css": {
+      "status": "verified",
+      "sha256": "c1d1f39ff0dc26e6e1d7d1bc4c68d5a53604c89293a5ce42b7c6f53f55592c36",
+      "bytes": 15496,
+      "changed": false
+    },
+    "css/store.css": {
+      "status": "verified",
+      "sha256": "9d584f8b0dc137ade979fdad00d886982d634303ea397e9c59246eccb62c323a",
+      "bytes": 16285,
+      "changed": true
+    },
+    "css/training-tracks.css": {
+      "status": "verified",
+      "sha256": "5a09197579783c2b50510e1581ea0a719db756bb3834eefdb80d4baa8577814d",
+      "bytes": 3146,
+      "changed": true
+    },
+    "css/trainings.css": {
+      "status": "verified",
+      "sha256": "596dfa605b834ff59527e8cec78158366e3d19b318578c9afe574765d3041df7",
+      "bytes": 30784,
+      "changed": true
+    },
+    "css/variables.css": {
+      "status": "verified",
+      "sha256": "fe26faa236081612c3f15aa891deddb0d632751822c17b2069e33a5ff84b3825",
+      "bytes": 3142,
+      "changed": true
+    },
+    "css/waspeed.css": {
+      "status": "http_404"
+    },
+    "css/whatsapp-app.css": {
+      "status": "verified",
+      "sha256": "09395e895500ad772dbc1abb18557b4bffa36f217fdf6840f00a4b23b835306d",
+      "bytes": 35614,
+      "changed": false
+    },
+    "css/whatsapp-chat.css": {
+      "status": "verified",
+      "sha256": "f9a1abcb0f21950aaecd2afe02b6b69a939c48f067e556d56e4c7f12ddfc0bb4",
+      "bytes": 35649,
+      "changed": false
+    },
+    "css/withdrawal.css": {
+      "status": "verified",
+      "sha256": "92f3725576c5a3a0c758f07ce91d8803d96dbc9b3913cfdeb9cd54b952e383db",
+      "bytes": 6641,
+      "changed": false
+    },
+    "debug-datepick.html": {
+      "status": "http_404"
+    },
+    "debug-modal-pe.html": {
+      "status": "http_404"
+    },
+    "documentos/SOUmaisBLU_Resumo_das_Mudancas.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-1.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-2.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-3.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-4.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-5.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-6.png": {
+      "status": "http_404"
+    },
+    "documentos/qa_pdf/page-7.png": {
+      "status": "http_404"
+    },
+    "employee.html": {
+      "status": "verified",
+      "sha256": "80ebf171755cfee25b646dac4d3570e4576f248651cf5bac29effc56cc8a3dac",
+      "bytes": 75816,
+      "changed": true
+    },
+    "financeiro.html": {
+      "status": "verified",
+      "sha256": "66184044bbe352805942fe320dc2c8d158e5048db5928aedd9ab2b3a87bf9dd0",
+      "bytes": 23972,
+      "changed": true
+    },
+    "images/blu-logo-new.png": {
+      "status": "http_404"
+    },
+    "images/blu-logo.png": {
+      "status": "verified",
+      "sha256": "fffa9ff2174c55d1a38f2af29f912e60a51b09b58fd18e6a288a0b36cddd3aa9",
+      "bytes": 3322,
+      "changed": false
+    },
+    "images/favicon.png": {
+      "status": "http_404"
+    },
+    "images/login_bg.jpg": {
+      "status": "verified",
+      "sha256": "ff9a447b9dcb2b46b96aec145da52021fc876f838005897bf8373d153f27a595",
+      "bytes": 67416,
+      "changed": false
+    },
+    "images/logo-sidebar.png": {
+      "status": "http_404"
+    },
+    "images/logo.png": {
+      "status": "verified",
+      "sha256": "f0df1f67eb3ab27b9c4b90917c14238e1756cd5f82efca91cd331704d875893f",
+      "bytes": 8062,
+      "changed": true
+    },
+    "images/logo.svg": {
+      "status": "verified",
+      "sha256": "d825a71389f5264a7c6f158ec172cccacf74a647115910a35f4afd7fc570774c",
+      "bytes": 697,
+      "changed": false
+    },
+    "images/zs-clube-beneficios.png": {
+      "status": "verified",
+      "sha256": "d5c87881affbe4b61f9dbad95f453f3c7d0e9b5c6ee36be84ab3dd6c83de0136",
+      "bytes": 112782,
+      "changed": false
+    },
+    "index.html": {
+      "status": "verified",
+      "sha256": "a22ccb6f839b8b69f6189c12409e8e14942cf38158e931ca9a9d1e3264b552f8",
+      "bytes": 5513,
+      "changed": true
+    },
+    "js/admin-beneficios.js": {
+      "status": "verified",
+      "sha256": "c839edc0af9db6f58fcc1970539d6a37270582f8c278aff2ef3943b857f84bd0",
+      "bytes": 36095,
+      "changed": true
+    },
+    "js/admin.js": {
+      "status": "verified",
+      "sha256": "f1e483c0399b4e88e0e2d4d6fcf5d173f2953f622f2e9858c55d70bf56f6f99b",
+      "bytes": 357272,
+      "changed": true
+    },
+    "js/attendance-penalty.js": {
+      "status": "verified",
+      "sha256": "6a56c7bfa3a76ded56ec515a3c21cc6731ac7794ea7c6ad543729270f803cefa",
+      "bytes": 16339,
+      "changed": true
+    },
+    "js/auth.js": {
+      "status": "verified",
+      "sha256": "5db81c8566c62b6c0d901d434540935b9b5e84dab4ca6d79822e9cf81c0d22a1",
+      "bytes": 21620,
+      "changed": true
+    },
+    "js/base-path.js": {
+      "status": "verified",
+      "sha256": "02506c898814785a37a8009cb5e4caedc43d6e3c278e5fa0e6737c5cd3b472fa",
+      "bytes": 2582,
+      "changed": false
+    },
+    "js/bolao-copa.js": {
+      "status": "verified",
+      "sha256": "21e421f0f007854d934fd9a1821e03375e1d613f1488fa341d4687afcafe467b",
+      "bytes": 44133,
+      "changed": true
+    },
+    "js/bootstrap.bundle.min.js": {
+      "status": "verified",
+      "sha256": "0833b2e9c3a26c258476c46266e6877fc75218625162e0460be9a3a098a61c6c",
+      "bytes": 80721,
+      "changed": true
+    },
+    "js/br-holidays.js": {
+      "status": "verified",
+      "sha256": "d9c9d9698a81bcd119854ecab190f8410869add4841a77822d02386d8ce8eca1",
+      "bytes": 2344,
+      "changed": false
+    },
+    "js/cbo-data.js": {
+      "status": "http_404"
+    },
+    "js/cbo.js": {
+      "status": "verified",
+      "sha256": "19a01af1e3cbcf4d7b8d340c3b682421b769d713c51f3823e087450aa581156f",
+      "bytes": 3445,
+      "changed": true
+    },
+    "js/clients.js": {
+      "status": "verified",
+      "sha256": "512ee0661ec01876e8138f5b41ddf9f0d2ccaf25c5af228486553fdbe8915ef0",
+      "bytes": 50662,
+      "changed": true
+    },
+    "js/clube-beneficios.js": {
+      "status": "verified",
+      "sha256": "9c29af3ce02a7dcb6800951e18a6f83bf173198982df3d5a71b6e10635bfe720",
+      "bytes": 45162,
+      "changed": true
+    },
+    "js/commission-engine.js": {
+      "status": "verified",
+      "sha256": "5f62a390bf8da933357f8ece686ff38d08d5e1df0332638fda283c9c1e2a5797",
+      "bytes": 4847,
+      "changed": true
+    },
+    "js/config.js": {
+      "status": "verified",
+      "sha256": "6abb54fd57d4192ed901f8a8c263474e9d51ec761115ff166b159c00d67d1390",
+      "bytes": 32649,
+      "changed": true
+    },
+    "js/conta-corrente.js": {
+      "status": "verified",
+      "sha256": "d939a03a20b1dbd730879f2b5b1832ea0a6bd01ee387df8b402ec497353aeb57",
+      "bytes": 74269,
+      "changed": true
+    },
+    "js/contestacao.js": {
+      "status": "verified",
+      "sha256": "494e1acc9617b2b766c76c9bf25ccd2c409fa728e71fc6c387253e8d504a1403",
+      "bytes": 23478,
+      "changed": true
+    },
+    "js/credito-fluxo.js": {
+      "status": "verified",
+      "sha256": "33343b0827ab537d72e073cfe389d41f44d95752e0dcc907e3af24ad63e806a0",
+      "bytes": 2921,
+      "changed": true
+    },
+    "js/credito-propostas-api.js": {
+      "status": "verified",
+      "sha256": "efe1ee1bca9000982668d3d0d43840f7e34611e2ef7f3fdb47be665daacdc348",
+      "bytes": 2820,
+      "changed": true
+    },
+    "js/daily-production.js": {
+      "status": "verified",
+      "sha256": "eb57138987775446c93d17047514bde54baeef81f266107f869b75efa3120d79",
+      "bytes": 43825,
+      "changed": false
+    },
+    "js/dashboard-motion.js": {
+      "status": "http_404"
+    },
+    "js/db-connect.js": {
+      "status": "verified",
+      "sha256": "c050d8515289083e80cb6bc9490a285afe944d49a1f2a9b3821cf53b341d6cdd",
+      "bytes": 5362,
+      "changed": false
+    },
+    "js/db.js": {
+      "status": "verified",
+      "sha256": "5cf268e2db41c8b7ad8959bcf1aa59151f6947646309c27405c902dbfa3c85e9",
+      "bytes": 390954,
+      "changed": true
+    },
+    "js/employee.js": {
+      "status": "verified",
+      "sha256": "9a78d3d4f9b5814e6b27bf264f5f0a21ea67802f4f8f6a0d1b80d047e95be5f3",
+      "bytes": 31367,
+      "changed": true
+    },
+    "js/esteira-compra-divida.js": {
+      "status": "verified",
+      "sha256": "1463f1f7c7fe1067c8a68182baed6b772b0d37f8bd7c6684b7b576ee8af6ebf4",
+      "bytes": 62571,
+      "changed": true
+    },
+    "js/esteira-credito.js": {
+      "status": "verified",
+      "sha256": "8a819149e962714e9d6ace8c89e4619dce02bead622d7358e0d66b6fd8382977",
+      "bytes": 56397,
+      "changed": true
+    },
+    "js/esteira-pendencias.js": {
+      "status": "verified",
+      "sha256": "1e414a5d724c4e1509d8eb60fbe6c300ca7cbf65fa805646724e0b5ff646164e",
+      "bytes": 52510,
+      "changed": true
+    },
+    "js/finance-access.js": {
+      "status": "http_404"
+    },
+    "js/finance-workbook.js": {
+      "status": "http_404"
+    },
+    "js/financeiro-boot.js": {
+      "status": "verified",
+      "sha256": "2774b56c8706acfeaca6cbc95a8672aa9bda95f0c9bcfda44ebe64d707074122",
+      "bytes": 19739,
+      "changed": true
+    },
+    "js/financeiro-credito.js": {
+      "status": "verified",
+      "sha256": "0778c27add6a5605d6b5e337570890cf3fe3f4b7b7f03780ae48b040987bba25",
+      "bytes": 32472,
+      "changed": true
+    },
+    "js/financeiro-page.js": {
+      "status": "verified",
+      "sha256": "6eaffded6f14001d61d14cf3e05ee976cf930661c16b1c1fa913ab4acf21d704",
+      "bytes": 13576,
+      "changed": true
+    },
+    "js/financeiro-propostas.js": {
+      "status": "verified",
+      "sha256": "7491f23c27d939d4ca82e48e514a073480c550c4a0813925039ecf03d1da41fc",
+      "bytes": 67120,
+      "changed": true
+    },
+    "js/financeiro-reembolso.js": {
+      "status": "verified",
+      "sha256": "baa4635a2c8d456a8b1503a313b490418e2eccb7edd3cf3d56d8593941d1bbe4",
+      "bytes": 22892,
+      "changed": true
+    },
+    "js/fiscal-parceiro.js": {
+      "status": "verified",
+      "sha256": "a0171163fe2b3c7b035e3ae6462a1a3b44e528e9fb6bcc0566ca1c558b7b0d48",
+      "bytes": 21106,
+      "changed": true
+    },
+    "js/folha-pagamento.js": {
+      "status": "verified",
+      "sha256": "87e3040dff206e0ce50651941c310a4ee205b32d045cf7b8428409d87fc2ab4a",
+      "bytes": 29150,
+      "changed": true
+    },
+    "js/fontedata.js": {
+      "status": "verified",
+      "sha256": "68f6edc7bbaedd086892148443d825b73f732d4e0a88a4ff30785cd52ac56a25",
+      "bytes": 25535,
+      "changed": true
+    },
+    "js/fornecedor-financeiro.js": {
+      "status": "verified",
+      "sha256": "0ba0299e6b47388ecdf541ea8a9e1770d2cfe27e0f404c20a5ec99dd0a56db1c",
+      "bytes": 20923,
+      "changed": true
+    },
+    "js/hostinger-connect.js": {
+      "status": "verified",
+      "sha256": "283931fc5167093b88eb37d569118bf825ed4c206b14258884ffb3f68b5fb934",
+      "bytes": 345,
+      "changed": false
+    },
+    "js/internal-chat.js": {
+      "status": "verified",
+      "sha256": "2a77354cb5083ad860673fa596595f07f5bc5cbd64116bfc7ae585a6c590ed65",
+      "bytes": 21628,
+      "changed": true
+    },
+    "js/juridico-manager.js": {
+      "status": "verified",
+      "sha256": "d2f4f351dc637b810ed23d6631f60644dec975c4b5a53850bd91e955cbc6c6f5",
+      "bytes": 4315,
+      "changed": true
+    },
+    "js/leads-db.js": {
+      "status": "verified",
+      "sha256": "a4113e6ecbdc16ffb04d24a4746c024a872d82fae02ec2b12c5aa14bc577a7c5",
+      "bytes": 52909,
+      "changed": true
+    },
+    "js/leads-employee.js": {
+      "status": "verified",
+      "sha256": "a458d9222bd82a6ea1187d2883758eaf508d59aa9b2600e87f3e07a84f8992f6",
+      "bytes": 41772,
+      "changed": true
+    },
+    "js/leads-import.js": {
+      "status": "verified",
+      "sha256": "8a36f97c73b0a0b80e2e26ad4d9680ef93a0782173501f5e961ba45b34c44faf",
+      "bytes": 9466,
+      "changed": true
+    },
+    "js/leads-manager.js": {
+      "status": "verified",
+      "sha256": "76832de9a1f15d9d168dcb456a3820fb1bed5de4a23b4ab7a7c31bfe244a9f52",
+      "bytes": 67156,
+      "changed": true
+    },
+    "js/login.js": {
+      "status": "verified",
+      "sha256": "b72e6c341bef2f6aa3bf2143b0c929d23a44bcb471382671701657a05bfed10b",
+      "bytes": 5731,
+      "changed": true
+    },
+    "js/marketplace-blu.js": {
+      "status": "verified",
+      "sha256": "28fea1788588e8e1dd934fc99b121fcbc949b76853c8dbe42c8cc88836603906",
+      "bytes": 35683,
+      "changed": true
+    },
+    "js/masterProposal.js": {
+      "status": "verified",
+      "sha256": "f1975c1f8efc63ea5be2d0647609073f5d4f17dad02da7f04241f0ee498b56ca",
+      "bytes": 5852,
+      "changed": true
+    },
+    "js/meetings.js": {
+      "status": "verified",
+      "sha256": "c79fa8ff7d7718b2340f6df6a658b806f93b7b875482867c715123d6d00e7395",
+      "bytes": 45785,
+      "changed": true
+    },
+    "js/monitoramento.js": {
+      "status": "verified",
+      "sha256": "448f9a85500d6ca990a9d2b5048c57245a28bfcf8804f3e5ccc67e510d883062",
+      "bytes": 15405,
+      "changed": false
+    },
+    "js/monitoria-atendimento.js": {
+      "status": "verified",
+      "sha256": "94e71b3e79ce4290c150272a0ed5aa2445679bc218661299687b321ca0112147",
+      "bytes": 22058,
+      "changed": false
+    },
+    "js/mural-upload-fix.js": {
+      "status": "verified",
+      "sha256": "670dd01c027085987bd824679e2f27139934688d3434bfd3ec69c3961f51d967",
+      "bytes": 5438,
+      "changed": true
+    },
+    "js/painel-sonhos.js": {
+      "status": "verified",
+      "sha256": "080e447e49450eeb24c6bb4e5584522d4677a2919e5028cf16b3fa69bbee8154",
+      "bytes": 78678,
+      "changed": true
+    },
+    "js/partner-ops.js": {
+      "status": "verified",
+      "sha256": "9a3386c207212bee2f7118151b236079ca87571257fd39058e9694f904937d92",
+      "bytes": 14047,
+      "changed": false
+    },
+    "js/partners-ui.js": {
+      "status": "verified",
+      "sha256": "04b3e0b4cebd49f6c74c25cee690b83b9e6c8484434062f6f83d30413ef42d5d",
+      "bytes": 37373,
+      "changed": true
+    },
+    "js/partners.js": {
+      "status": "verified",
+      "sha256": "c47661e15f9d82002cb45764fda8279ea8da36ecf5ae0b548f3d5608bd638651",
+      "bytes": 19136,
+      "changed": true
+    },
+    "js/pedido-alert.js": {
+      "status": "verified",
+      "sha256": "e9ee5794bb948a06d9167a7780277e4588714aca69114e1fc7cf9892753a1093",
+      "bytes": 13419,
+      "changed": true
+    },
+    "js/pix-automatico-credito.js": {
+      "status": "verified",
+      "sha256": "e89ff555fdfb7e75987765abc063e1724958981d7974947fc96e1ff26cde3168",
+      "bytes": 27268,
+      "changed": true
+    },
+    "js/pix-autorizar-employee.js": {
+      "status": "verified",
+      "sha256": "3d4e10b235668ddfdad3e50e4d3b0a2b59a1bbc7b845dfa8e1b1266321a831f4",
+      "bytes": 22085,
+      "changed": true
+    },
+    "js/pix-config.js": {
+      "status": "verified",
+      "sha256": "9b476fd6c30559cec93f2430a4659d910e94ca8ba5fbf4c90a05068387b3153c",
+      "bytes": 1190,
+      "changed": false
+    },
+    "js/portaria-routing.js": {
+      "status": "http_404"
+    },
+    "js/prestador-servicos.js": {
+      "status": "verified",
+      "sha256": "90397577ee78410d0d3cea815069bb330cad4c5acdcd1fc98b68b10df719166a",
+      "bytes": 28488,
+      "changed": true
+    },
+    "js/profile.js": {
+      "status": "verified",
+      "sha256": "d0c708c481c56ec3df7a58a702d01eea71910c735fb9154917900bad5d331e87",
+      "bytes": 39752,
+      "changed": true
+    },
+    "js/proposal-workflow.js": {
+      "status": "http_404"
+    },
+    "js/proposals.js": {
+      "status": "verified",
+      "sha256": "97d579d59a60b1d2fb5a86cdf03404b0de090fc67b5bf421f91cd045cea08e30",
+      "bytes": 399521,
+      "changed": true
+    },
+    "js/proposta-credito.js": {
+      "status": "verified",
+      "sha256": "8d7e81f038f355c68514eaf283dc0074beba6743e1cec08971dd98002e94c61f",
+      "bytes": 35075,
+      "changed": true
+    },
+    "js/provider-portal.js": {
+      "status": "http_404"
+    },
+    "js/rh-feedback.js": {
+      "status": "verified",
+      "sha256": "6fca26841991a9f04e2f4ba41ca307bf797fb393a596e6f51feba89f0f10ddbb",
+      "bytes": 12444,
+      "changed": true
+    },
+    "js/rh-justificativa-boot.js": {
+      "status": "verified",
+      "sha256": "ea64a073315955c8e6d55519bf5820fcf33c88de09a6239776609f95a5d8dd75",
+      "bytes": 4159,
+      "changed": false
+    },
+    "js/rh-manager.js": {
+      "status": "verified",
+      "sha256": "45dd18b9748de786dbce50a5b07d39575261f61d0d3174d4b88337e950dc68c4",
+      "bytes": 62494,
+      "changed": true
+    },
+    "js/rh-ops.js": {
+      "status": "verified",
+      "sha256": "de1c59887f64a3d372ea6e6538f6447da2dac26c716aa60cd03b11cf08108c04",
+      "bytes": 62558,
+      "changed": true
+    },
+    "js/rh-relatorios.js": {
+      "status": "verified",
+      "sha256": "130dad465f614bb4b12f7863fe5c7ad553b624bd7536213e84364496d4efcbdc",
+      "bytes": 18376,
+      "changed": true
+    },
+    "js/rh-ui.js": {
+      "status": "verified",
+      "sha256": "c077c748cecd5c4de86ed758ca2a9106ec2495ff3840b6f39b4c406376776281",
+      "bytes": 1118,
+      "changed": false
+    },
+    "js/rh-vagas.js": {
+      "status": "verified",
+      "sha256": "383bf79380bdd5e3e295dd1db5f27777c81c0bd1f14e7b32c52381021c2539f7",
+      "bytes": 39617,
+      "changed": true
+    },
+    "js/roulette-ui.js": {
+      "status": "verified",
+      "sha256": "86e2486a67c93aedc1e801a25c080ba70ab3acba799ac8f272207ecd3f7aebf2",
+      "bytes": 37213,
+      "changed": true
+    },
+    "js/sales-ranking.js": {
+      "status": "verified",
+      "sha256": "4756d56c91c539cde78ad74d5d730ffd82f832dcfbae4503e5160d9f98dcc3a6",
+      "bytes": 77554,
+      "changed": true
+    },
+    "js/security-guard.js": {
+      "status": "verified",
+      "sha256": "0aba25e10e60a07cac6f425c19ca781be3e8c57aa6cb4514f1744ca6300a818f",
+      "bytes": 1299,
+      "changed": false
+    },
+    "js/simulacao.js": {
+      "status": "verified",
+      "sha256": "6eed4603d817a8b6651b4a5fdacf029f544f781f5565e9cef4275f4e80089e62",
+      "bytes": 18701,
+      "changed": true
+    },
+    "js/store-shop.js": {
+      "status": "verified",
+      "sha256": "3751702994fd448b08fc0062d05ba53a9dc7303c57342645b894974402c4d50f",
+      "bytes": 12905,
+      "changed": false
+    },
+    "js/supabase-connect.js": {
+      "status": "verified",
+      "sha256": "eb10d9cde035420946706408db5d818d488c5f1f9d282608a376c8d103c2c0fa",
+      "bytes": 591,
+      "changed": false
+    },
+    "js/tabelas-compra-divida.js": {
+      "status": "verified",
+      "sha256": "71562b15ef130fc31bc812cc526b56df4748e4a3584205334016a40d79fb6c28",
+      "bytes": 7356,
+      "changed": true
+    },
+    "js/tabelas-futuro.js": {
+      "status": "verified",
+      "sha256": "bcc4ce8f13cd4591264943b686d8e3bce09536978b07a5677bca7a9a34d9eb6f",
+      "bytes": 13285,
+      "changed": true
+    },
+    "js/tickets.js": {
+      "status": "verified",
+      "sha256": "d3d564cec674edd413ec8e178be6f52112cf8044d9380b49d98580045759277c",
+      "bytes": 42208,
+      "changed": true
+    },
+    "js/tim.js": {
+      "status": "verified",
+      "sha256": "625807e222c68fa235df137280fe3779120b9986be5c90b556bf6e1ebf47b30e",
+      "bytes": 21972,
+      "changed": false
+    },
+    "js/training-tracks.js": {
+      "status": "verified",
+      "sha256": "70e19976d0813074d44c12c7d2da77513529aea93cef81edf3dd20859613abc2",
+      "bytes": 23657,
+      "changed": true
+    },
+    "js/trainings.js": {
+      "status": "verified",
+      "sha256": "3948defa8b56795d754932978bbff1249706c3354b10b2603f7f425cc4432d71",
+      "bytes": 98121,
+      "changed": true
+    },
+    "js/ui.js": {
+      "status": "verified",
+      "sha256": "381b5764e043e8c973ac198962adf27d82380e5fb03bd2de4ad7463cee2d74b2",
+      "bytes": 76730,
+      "changed": true
+    },
+    "js/vendor-tier-points.js": {
+      "status": "verified",
+      "sha256": "d9b3533cce340ba4fd29a2fd7ab0d10f833ce857f7296a19cd84dfe6ad71d78a",
+      "bytes": 14371,
+      "changed": true
+    },
+    "js/vendor/xlsx.full.min.js": {
+      "status": "verified",
+      "sha256": "cc015130aa8521e7f088f88898eba949ccdcbfb38df0bd129b44b7273c3a6f41",
+      "bytes": 951904,
+      "changed": true
+    },
+    "js/wa-audio-recorder.js": {
+      "status": "verified",
+      "sha256": "61e9e1b43761c4d8450a8bb9df23de3728e7d1cd2d85521c6198fe314f306847",
+      "bytes": 6396,
+      "changed": true
+    },
+    "js/wa-emoji-mart.js": {
+      "status": "verified",
+      "sha256": "b8272e3200ac44f28b6acdecbbb5cc297a34c218e741aaf5f906c086f9ffbaf5",
+      "bytes": 1651,
+      "changed": true
+    },
+    "js/wa-number-requests.js": {
+      "status": "verified",
+      "sha256": "8e607969ccd394f50622065a22da9e1df560476c4242e84e80b99e0d9ec7fe3b",
+      "bytes": 17721,
+      "changed": true
+    },
+    "js/waspeed-kanban.js": {
+      "status": "http_404"
+    },
+    "js/whatsapp-chat.js": {
+      "status": "verified",
+      "sha256": "75e03384cfcd61dd0d607ed2e519027921852ada042261f4593ff640ab41d825",
+      "bytes": 138267,
+      "changed": true
+    },
+    "js/whatsapp-kanban.js": {
+      "status": "verified",
+      "sha256": "39611d3a12cf866584597af6688729aadf3fc52cd864fe0bf5a4127866d91c5d",
+      "bytes": 69792,
+      "changed": true
+    },
+    "js/whatsapp-page.js": {
+      "status": "verified",
+      "sha256": "261c30c291d4906e104394f45b31b3440047fc9bed0b475c1e44f3de0528e80a",
+      "bytes": 2782,
+      "changed": true
+    },
+    "js/withdrawal-flow.js": {
+      "status": "verified",
+      "sha256": "2961fcb091a7030780c032e867fde1e3bf165c0cc14738d45468cabc72ad65fe",
+      "bytes": 36951,
+      "changed": true
+    },
+    "js/withdrawal-rules.js": {
+      "status": "verified",
+      "sha256": "f588bdb2d209aa29d52508a755496e0d773229724a1e4c2fae7aa63bb9677dcc",
+      "bytes": 22266,
+      "changed": true
+    },
+    "leads-employee.html": {
+      "status": "verified",
+      "sha256": "45392c4dbb407b9e6b04a8400f9626c7248fa52782550cc7a2921b4845977654",
+      "bytes": 23397,
+      "changed": true
+    },
+    "leads-manager.html": {
+      "status": "verified",
+      "sha256": "f8e634beb53fcb9bccebf2e336c5e77750c7de7a00b8f6fb7da4dc5c9907f3b7",
+      "bytes": 31481,
+      "changed": true
+    },
+    "monitoramento.html": {
+      "status": "http_404"
+    },
+    "pages/admin-beneficios.html": {
+      "status": "verified",
+      "sha256": "57e36c469c6a712b13c1279b3f238e4a26d7f2862e1864bac55dfacd8cbd7865",
+      "bytes": 21444,
+      "changed": true
+    },
+    "pages/admin.html": {
+      "status": "verified",
+      "sha256": "1ea7a44d8cc2b71af2e3b73eee2f017d23f598bfd4339d7ef85a16090b104792",
+      "bytes": 135893,
+      "changed": true
+    },
+    "pages/clube-beneficios.html": {
+      "status": "verified",
+      "sha256": "ca5dad0e177bee42d9601c293c08045b90f135b9ad9e7ccfedd23eaa8af0cd07",
+      "bytes": 45733,
+      "changed": false
+    },
+    "pages/employee.html": {
+      "status": "verified",
+      "sha256": "43e3ea95045ffafde9f09adf0edd274c080e63bf4601a5d046e28b70b5def913",
+      "bytes": 73290,
+      "changed": true
+    },
+    "pages/financeiro-sections.html": {
+      "status": "verified",
+      "sha256": "d014023077d91f63810f073f6fc2f646a267470c6bd86c342790c8120a94598b",
+      "bytes": 38330,
+      "changed": true
+    },
+    "pages/financeiro.html": {
+      "status": "verified",
+      "sha256": "66184044bbe352805942fe320dc2c8d158e5048db5928aedd9ab2b3a87bf9dd0",
+      "bytes": 23972,
+      "changed": true
+    },
+    "pages/folha-embed.html": {
+      "status": "verified",
+      "sha256": "0015e4ea0a8b9ddb0fad8c273a853e71341c058912d067128b0e39c864c9aec1",
+      "bytes": 11300,
+      "changed": true
+    },
+    "pages/folha-pagamento.html": {
+      "status": "verified",
+      "sha256": "2ddef513e54ea89cb255e90d3db97fa6a8de0450538ad1054d32412788e99a7c",
+      "bytes": 15143,
+      "changed": true
+    },
+    "pages/juridico-manager.html": {
+      "status": "verified",
+      "sha256": "4b2f5e5ad3f4fe77d277205accdac653c8a4040f6ec5c42ae9c761f03cf229fb",
+      "bytes": 29106,
+      "changed": true
+    },
+    "pages/leads-employee.html": {
+      "status": "verified",
+      "sha256": "45392c4dbb407b9e6b04a8400f9626c7248fa52782550cc7a2921b4845977654",
+      "bytes": 23397,
+      "changed": true
+    },
+    "pages/leads-manager.html": {
+      "status": "verified",
+      "sha256": "7bcef772416d68398bedfc7eb1a20e50da906534af6a1acb5a0160b1e0abb0b7",
+      "bytes": 30992,
+      "changed": true
+    },
+    "pages/monitoramento.html": {
+      "status": "http_404"
+    },
+    "pages/monitoria-atendimento.html": {
+      "status": "verified",
+      "sha256": "a69405f279ec0b66b891d3c5380eef9f852a548e87090ed5776cf027164cb79d",
+      "bytes": 5347,
+      "changed": false
+    },
+    "pages/prestador.html": {
+      "status": "http_404"
+    },
+    "pages/rh-justificativa-section.html": {
+      "status": "verified",
+      "sha256": "f4dfe025bae1415d42cae66a9bc8069711d359a13baa577a4ef7a6f30cc6c001",
+      "bytes": 10277,
+      "changed": false
+    },
+    "pages/rh-manager.html": {
+      "status": "verified",
+      "sha256": "e627b893e22e6c5a0e29cb42965c782054374d21e66516b7e929b89752f698f8",
+      "bytes": 128059,
+      "changed": true
+    },
+    "pages/treinamentos.html": {
+      "status": "verified",
+      "sha256": "49257dddbafb55a666f97d83c51655381973fc0d7ff044cb74cf6fe864b1b2fb",
+      "bytes": 84135,
+      "changed": true
+    },
+    "pages/whatsapp.html": {
+      "status": "verified",
+      "sha256": "68e3ab12170f4a21d95a18ffbf06aae2d8bc3cdc2454178f501f8dddfc742c8a",
+      "bytes": 63671,
+      "changed": true
+    },
+    "producao.html": {
+      "status": "http_404"
+    },
+    "rh-justificativa-section.html": {
+      "status": "verified",
+      "sha256": "f4dfe025bae1415d42cae66a9bc8069711d359a13baa577a4ef7a6f30cc6c001",
+      "bytes": 10277,
+      "changed": false
+    },
+    "rh-manager.html": {
+      "status": "verified",
+      "sha256": "6a5efea68e1e89821ceaa7a973f09fe1f75b2cc3232b1c71cbb730ac2fd726c3",
+      "bytes": 130202,
+      "changed": true
+    },
+    "whatsapp.html": {
+      "status": "verified",
+      "sha256": "09af2beeeca7ebc1445afaa05bc95bb71c686840aa95c9abe6738069d827800d",
+      "bytes": 641,
+      "changed": true
+    },
+    "api/migrate-rh-carreira.php": {
+      "status": "verified_source_export",
+      "sha256": "0decb810e215cb666f3d43d314bfb7495b0dc987dc9358a7ca7259995c38c9fd",
+      "bytes": 496,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/rest-ping.php": {
+      "status": "verified_source_export",
+      "sha256": "069885a102e0fd5870b3c7f10ec2c2bfb9bdfd6da341198d20fb71c15a687c0e",
+      "bytes": 1534,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-proposals-comissao.php": {
+      "status": "verified_source_export",
+      "sha256": "dbc2f2383d6378fe709becd7a42cf727ba9ebed26df3a13e91bffc19a69367d3",
+      "bytes": 1964,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-bolao-copa.php": {
+      "status": "verified_source_export",
+      "sha256": "120351cfc0271c97a6cc9f5e950b3e8723189c174c28b507f927b4de2a8da5e0",
+      "bytes": 2317,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/nextbilling.php": {
+      "status": "verified_source_export",
+      "sha256": "6295c98b9458ef7b51f0c5f6f90ca8d2c0c699a4031c73bd5c2069ec8721cacc",
+      "bytes": 20556,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/consigbot.php": {
+      "status": "verified_source_export",
+      "sha256": "403f60fb6eb2c68357b81434e46cc275d2b4cee724482f80535d4212a3204803",
+      "bytes": 2349,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-whatsapp.php": {
+      "status": "verified_source_export",
+      "sha256": "55630d2c6bea0530399d4b61e67cd16daca3e16054dd0d97e071de385c1b5350",
+      "bytes": 18407,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-users-cc-money.php": {
+      "status": "verified_source_export",
+      "sha256": "ed1b56f3d35f005102dbe17157e6658cc0e38fc52157fe3f4cc0257ac06629f7",
+      "bytes": 1137,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-users-acesso-clube.php": {
+      "status": "verified_source_export",
+      "sha256": "68f983d960ac004f49fe352df80790bcbb3d823b88e3351104d32e35bdd4498f",
+      "bytes": 1031,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/debug-session-log.php": {
+      "status": "verified_source_export",
+      "sha256": "7cfa3c2482c16ff2dbe15400bfd4608315e0dee47201c4a72eb167169edacb7d",
+      "bytes": 2363,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-rh-justif-hours.php": {
+      "status": "verified_source_export",
+      "sha256": "09ae596f94e3447a31e9be8cd5d6bc6693186a63b4e8eaa240b1fb5cdab98d95",
+      "bytes": 708,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-beneficios-whatsapp.php": {
+      "status": "verified_source_export",
+      "sha256": "63575892e0048a31aea6ce9da7c51049a0dc14e3d284108c6d262809acacfc03",
+      "bytes": 2398,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/server-inventory.php": {
+      "status": "verified_source_export",
+      "sha256": "e8af34e40f47703747b9022c7e2386abb81a8f0c6669b688075438cd55e8baba",
+      "bytes": 13178,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/rest/v1/index.php": {
+      "status": "verified_source_export",
+      "sha256": "15f9924882042723c4add035ec4ee5caae3e5e61de58c86f392bd4a0a468e4f7",
+      "bytes": 409,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/rest/v1/.htaccess": {
+      "status": "verified_source_export",
+      "sha256": "94abc1aa0663202169d80b9d5de852838daa0b6e2f4f5f61cccb1f31ea7ef81a",
+      "bytes": 158,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/rest/index.php": {
+      "status": "verified_source_export",
+      "sha256": "08e1a315ebfa4a7f9d4d327e074f7b468ed8abba52467a8d44cf26c751994c8a",
+      "bytes": 5292,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-mural-ciencia.php": {
+      "status": "verified_source_export",
+      "sha256": "0561ea3157135fbe6a1f239d74499e1e12a24b10cd3739fc549cfb63cc70dbbc",
+      "bytes": 734,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-rh-hierarchy.php": {
+      "status": "verified_source_export",
+      "sha256": "f70d20532d2da85d77d7965c9bea523256d8946e915b10ffeb838b4613ba3642",
+      "bytes": 679,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/whatsapp_api.php": {
+      "status": "verified_source_export",
+      "sha256": "c1a569b765606df7e5dce85507aa05746c290fb2405ac1679ad448038db740fd",
+      "bytes": 237257,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/remote-deploy.php": {
+      "status": "verified_source_export",
+      "sha256": "64ce454e7c8d1e83aa995b6d948bb5d82efc778aee98e9e7cde83253ee8a7368",
+      "bytes": 11118,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/mercadinho-charge.php": {
+      "status": "verified_source_export",
+      "sha256": "a12d6401f0e5aaccc1e3fcce33aa46a76816a559345504bdb8556c7b15730cd3",
+      "bytes": 11347,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/fontedata.php": {
+      "status": "verified_source_export",
+      "sha256": "4950040b97eb8c403508d38c43322361aba0654675685a364c708f1f377b6254",
+      "bytes": 11720,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-users-account-block.php": {
+      "status": "verified_source_export",
+      "sha256": "40d226af64735bd4cf051999c529ba6849fdf35228c1423afa1d6c9e3517aacc",
+      "bytes": 3425,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-chipeira-numeros.php": {
+      "status": "verified_source_export",
+      "sha256": "3fb58ccfff7724ee50471ad40b6528a1ee2f43b486798efc90817ce2a5cdf42c",
+      "bytes": 2624,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/daily-production.php": {
+      "status": "verified_source_export",
+      "sha256": "910404a2eff4e7c11a2ad032c56fc0b23efec5fafeafe618c4e62dddf33d2483",
+      "bytes": 6899,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-internal-chat.php": {
+      "status": "verified_source_export",
+      "sha256": "226fa5c656618cedb37618fe7c72b89fe9d580b66abce4faf3564e24eeeb847c",
+      "bytes": 510,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/pix_api.php": {
+      "status": "verified_source_export",
+      "sha256": "604931f169e76113d17358e3d0334808da1e7148cffe770ea97380f6ab96a526",
+      "bytes": 43372,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/scan-partner-docs.php": {
+      "status": "verified_source_export",
+      "sha256": "dc85d7dd314146e27f5f68bab5644f99e8f1e1fa5292857950f1ee711d77f0e7",
+      "bytes": 3119,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/purge-vendor-comissao-history.php": {
+      "status": "verified_source_export",
+      "sha256": "af1b29e3011f4929ea4da2d8d9a0e26d993b9b58dcdc24ddaf494c5498fb6420",
+      "bytes": 22922,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/parceiros.php": {
+      "status": "verified_source_export",
+      "sha256": "3f356a214c796c758c5ff02528edc988813160d1445963a5d55a827f04c71db6",
+      "bytes": 11862,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-training-progress.php": {
+      "status": "verified_source_export",
+      "sha256": "5663c42806142dc1798169a3b645fab6c17dbd78b0f48105b3f680e2f40aab63",
+      "bytes": 629,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/credito_api.php": {
+      "status": "verified_source_export",
+      "sha256": "033031f4bcedd21868801194ac7310c70573821760faec3695f5890e2e4ea641",
+      "bytes": 9676,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-credit-proposals.php": {
+      "status": "verified_source_export",
+      "sha256": "b776d3d469f0cf47a0ac5823c5f6dcb0a3f164b3d2209db62986cbc1e736ab78",
+      "bytes": 1105,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-users-training-block.php": {
+      "status": "verified_source_export",
+      "sha256": "a17a6546467e24d94d2d5c0e223006c46a2a47d39ff62372dde73afde62697b5",
+      "bytes": 1144,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-vendor-pendencias.php": {
+      "status": "verified_source_export",
+      "sha256": "b6fa55373a8c804af29aa362c9e46cb6d6a30eae9ea4907bc6600bcd94ae5066",
+      "bytes": 4832,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/repair-partner-attachments.php": {
+      "status": "verified_source_export",
+      "sha256": "64f12d05749ef97eaebf5293c49efb0256c3b290c3af31d7aeaef348fc48024e",
+      "bytes": 6577,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/folha_api.php": {
+      "status": "verified_source_export",
+      "sha256": "bdd16226877adf7cc0693df60cb5511645c1929f65f250dcbfaedaaab42b713c",
+      "bytes": 4347,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/bootstrap.php": {
+      "status": "verified_source_export",
+      "sha256": "90bb7d2ea7f7471edc46b3d8cf896feb6c3db8f1b287bdbabc27cfe46f54552b",
+      "bytes": 9241,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-rh-core.php": {
+      "status": "verified_source_export",
+      "sha256": "a7b8a639b7e256fa943d69434298d79554c83861656130eb453440164f2ecbeb",
+      "bytes": 664,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-rh-cbo.php": {
+      "status": "verified_source_export",
+      "sha256": "3477711b58589c3f59c49a072947c94bc4d9489937bba9e3508b77123477eb73",
+      "bytes": 661,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-db-init-fast.php": {
+      "status": "verified_source_export",
+      "sha256": "5ef38199c844e5c22a3acd0be658f2792b1c6458b2ca2611b21ba7625596af54",
+      "bytes": 1582,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-rh-vagas.php": {
+      "status": "verified_source_export",
+      "sha256": "823164781feda219cf188c0f62d922b3662cf26d131b1421d5c7632c2cb9f4e0",
+      "bytes": 493,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/repair-proposal-attachments.php": {
+      "status": "verified_source_export",
+      "sha256": "f71a53877d251bc6c291e09baf9b54e297f66fc3ace98c09a17569339b8d0acd",
+      "bytes": 8421,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-finance-proposta-ops.php": {
+      "status": "verified_source_export",
+      "sha256": "88b4d2e93f7d88fe8502321b4c288531e30c64a1f19b5bb495a59f6d479dd8f6",
+      "bytes": 2211,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/repair-beneficios-ids.php": {
+      "status": "verified_source_export",
+      "sha256": "db7bfd84cca3ccddcf0c72c9018ffd12fe529cc77b1186ec6236388f53dcedc9",
+      "bytes": 1485,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/consulta-cnpj.php": {
+      "status": "verified_source_export",
+      "sha256": "7cd8020b354ea290755e190b7f724e2374093520484daa6351b1ba82dff67b5f",
+      "bytes": 3053,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/upload.php": {
+      "status": "verified_source_export",
+      "sha256": "6e9167b1b7bf9b63b11cb50ff40ece6eeac4f74a516dd9e17eebddffaaf1515b",
+      "bytes": 6379,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/proposal-catalog.php": {
+      "status": "verified_source_export",
+      "sha256": "3bd81440bf9cd00217281aa4798932dae6ed8d512e16bc0a80d1db245e086d63",
+      "bytes": 5681,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/repair-vendor-comissao.php": {
+      "status": "verified_source_export",
+      "sha256": "6d1bcd411d17135d98b76c38d3579d8918a5c3a69bd510373ea74804bf23ef94",
+      "bytes": 18031,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-wa-number-requests.php": {
+      "status": "verified_source_export",
+      "sha256": "d07c44a5087ecbf99fddef382715daf788bdcc8b82fc0734aa0fd84d668db99b",
+      "bytes": 1758,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-partner-comissao.php": {
+      "status": "verified_source_export",
+      "sha256": "977d47f861b8448312acb96c7ef3f68d80e52da069e75cb48ed7e5a2b8c3331b",
+      "bytes": 2451,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/.htaccess": {
+      "status": "verified_source_export",
+      "sha256": "b2d39ab0f04bd6c3203321fec074fcf956e84c6578b5396fc51b380697d4a337",
+      "bytes": 168,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-credito.php": {
+      "status": "verified_source_export",
+      "sha256": "11216c53e6cebf39d224f4ee03e42571aa6fec5e3f5d16ac61fe4a21ab6c6553",
+      "bytes": 1234,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-cadastro-hero.php": {
+      "status": "verified_source_export",
+      "sha256": "5b5bcfc13eecf9ccf77c058c98d1bd28850e892a8791bd4a87097397b7fac119",
+      "bytes": 1051,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-bloqueio-saque.php": {
+      "status": "verified_source_export",
+      "sha256": "9da4c5edb63722ec49cef8dc9d8b6eb288e1a6b80326c757cfe097b82d15d1fb",
+      "bytes": 3387,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-clients-search.php": {
+      "status": "verified_source_export",
+      "sha256": "4071f7e7203eb2eea914b230089336336ae966733a744c36306ae8b8bb10ca04",
+      "bytes": 2318,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-locaweb-cutover.php": {
+      "status": "verified_source_export",
+      "sha256": "6fdcb7d78610302f28270b6d828af9188462af39d1160b1e871bb18f086221e3",
+      "bytes": 31876,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/novati.php": {
+      "status": "verified_source_export",
+      "sha256": "599af4017ff2b486a7b85502bb22b90293827951cefb85c67a5b4e77d433aa87",
+      "bytes": 10733,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/chipeira_numbers.php": {
+      "status": "verified_source_export",
+      "sha256": "0affa572d1da23865924f28cab0fe5185992ebcd638ec78afa18fe3bdbd17e79",
+      "bytes": 9952,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/InternalChatMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "11e613fbfac98ab093cfdf89d3023dbe237c3c277734535bfb708a1c340a35a2",
+      "bytes": 2505,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/WhatsAppRepository.php": {
+      "status": "verified_source_export",
+      "sha256": "9ee4484abdc116899a340fb5754540d7ad7b2103722ce064dd6c3bfaa7394760",
+      "bytes": 55201,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/SupabaseV2.php": {
+      "status": "verified_source_export",
+      "sha256": "931fec7196ded60749e50af359db920470d02a0ef2f3e4018fed38fbb8a093ac",
+      "bytes": 1288,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/lp-admin-actions.php": {
+      "status": "verified_source_export",
+      "sha256": "64e49535465128a2d86189e4988b9b9f8b78559653c22570d4131532851e9a6b",
+      "bytes": 3243,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/FinanceSchedule.php": {
+      "status": "verified_source_export",
+      "sha256": "a4ec478b4b5cc7db5f6f7dfe3ad88c655fce431838bdf846ca543760cc20572e",
+      "bytes": 5273,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/CreditProposalRepository.php": {
+      "status": "verified_source_export",
+      "sha256": "769d80b5ed01baff7627ddc739277cb5880e0d69093baa27e15f7f1b22692fde",
+      "bytes": 6694,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/lp-partner-archive.php": {
+      "status": "verified_source_export",
+      "sha256": "9a92ae6f97b9c01ffca6f1465c86a074fd2b69ded668a122c8dabf1da9d54a94",
+      "bytes": 2528,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/WhatsAppClientFactory.php": {
+      "status": "verified_source_export",
+      "sha256": "507532ed7c2935abe61593a2a772d13811fb1e6ccf77bb921a93b97b74d2fc29",
+      "bytes": 1956,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/ProposalArchive.php": {
+      "status": "verified_source_export",
+      "sha256": "e3cde5b3dea28c7a987283551cfe63b1b49a1e7a7b872d32f9362d21a06346a0",
+      "bytes": 8515,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/CreditProposalMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "be233e6584145924538c89b3d3724680f389df40eea4f2ac739a7e68939eb8d5",
+      "bytes": 6442,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/SupabaseLegacy.php": {
+      "status": "verified_source_export",
+      "sha256": "464a2e6099100716d90af8dca750310ce5eddd1ff26d347c8a0e2ecb78ec113a",
+      "bytes": 1550,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/SupabaseClient.php": {
+      "status": "verified_source_export",
+      "sha256": "44e545efeaa337c66a05622ea27d8888bc02cce0b2ea585d59cf80ab338938c1",
+      "bytes": 3587,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/LeadsMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "5d3bcf619c991d4303fddfdbe2d8575660c74732ae0d1612e6d403c5d4bc0566",
+      "bytes": 6118,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/TrainingTracksMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "54e45ef3ea00598791e7aca6fcc409ecffe4facf0a732fe678e9c2e1934a0b4e",
+      "bytes": 7612,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/lp-mailer.php": {
+      "status": "verified_source_export",
+      "sha256": "29e265a37cfbff8622436903c7f687e19cb5be00b77d225ed61023539871329a",
+      "bytes": 3039,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/CreditProposalMysqlRepository.php": {
+      "status": "verified_source_export",
+      "sha256": "a4028d7d6002397a3c492a1c93281c877fc74a06ee50255a82501c1fb5d5b754",
+      "bytes": 8765,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/BeneficiosMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "894f6f4edce0c600e3e69c72ab808dbc7f59a6d7a54ff101628b7b786368cafc",
+      "bytes": 6705,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/WithdrawalRepositoryMysql.php": {
+      "status": "verified_source_export",
+      "sha256": "1cd93e2d619020b667bf550b864ffe019ea1875b9c257117cce9bf4aee7b446c",
+      "bytes": 1455,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/FinanceSession.php": {
+      "status": "verified_source_export",
+      "sha256": "ba1ce72588c424195c27ee339bb880fd181c0ccc0eacd13570c99e56662e6a9a",
+      "bytes": 1869,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/HttpClient.php": {
+      "status": "verified_source_export",
+      "sha256": "456c4dfe1b7748d2a573894f547182c846fee7509cfdac4fc3969864a24a0bad",
+      "bytes": 2368,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/FinanceWorkbookMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "d214e82198770c90c1253f3952d99648d803a21cc7bce00e75aed28418dc034e",
+      "bytes": 1376,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/EfiPayClient.php": {
+      "status": "verified_source_export",
+      "sha256": "1878108db646b1626e917aa54c742f8b2c2fbef5e018542d403e5ffe3cae5c63",
+      "bytes": 5654,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/UploadChunks.php": {
+      "status": "verified_source_export",
+      "sha256": "5b65cbc547746cf71f7a9caca599fb0e4bdf1b328b1f50ab425705ac4512a3dc",
+      "bytes": 3034,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/lp-admin.php": {
+      "status": "verified_source_export",
+      "sha256": "13ee5c54c6f59e3a9a293c1451c2f907d70d747f871381c36db22138a672124d",
+      "bytes": 8317,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/FileStorage.php": {
+      "status": "verified_source_export",
+      "sha256": "783ba9bf2354fac2cddec8eb9854422979a066e023ce1a742809d1b982ba902d",
+      "bytes": 34210,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/ZApiClient.php": {
+      "status": "verified_source_export",
+      "sha256": "cba73439b88ffc8117208f202024bf5777e4b2b261ab439731afd3cb5ff673ef",
+      "bytes": 17676,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/EfiPayPixAutomatico.php": {
+      "status": "verified_source_export",
+      "sha256": "469b51d1307640ad9a4b07a4d6c59437436f62bc6b2aad92f4abd6f7adacd72c",
+      "bytes": 11411,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/PostgRestCompat.php": {
+      "status": "verified_source_export",
+      "sha256": "674c30479545d3b34026407078a3b30c565999f2de729ed2053c8f1446c53f55",
+      "bytes": 35254,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/FinanceMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "df795f926e26643d140637bd778f24a66b5d2bfada0d33cd1fadae360b57b05a",
+      "bytes": 3457,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/EvolutionClient.php": {
+      "status": "verified_source_export",
+      "sha256": "6110ba9347b301582a63a9bceb82783b9945537ce3292b77de62b1bd6da18802",
+      "bytes": 26452,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/lp-soublu.php": {
+      "status": "verified_source_export",
+      "sha256": "9704a6646d2f53674e7d60a1ac3851df8c8f0bf18f00c19687b4e11c2f0976ab",
+      "bytes": 7571,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/SistemaWebClient.php": {
+      "status": "verified_source_export",
+      "sha256": "ad14e104a7b4bc820eec173724c6dc86bfbd7a03e16d477f17bc19432859d67f",
+      "bytes": 11319,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/RhMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "4030087f687ba7d3b59676ac84bdbc64f82bdec1dcfc4fa49015a7d87940cb25",
+      "bytes": 17562,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/ProposalMysqlSchema.php": {
+      "status": "verified_source_export",
+      "sha256": "3c573fc17357e3b9e804a54ea59952f432a030e54f043a450cf903a7140cb85e",
+      "bytes": 2304,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/lib/DailyProduction.php": {
+      "status": "verified_source_export",
+      "sha256": "8971082198f1d1e2c3da9479c6f3c1c313acf010f3621df049906bb6c1b4080f",
+      "bytes": 19181,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/hyperflow-boleto.php": {
+      "status": "verified_source_export",
+      "sha256": "ac002f28074f41f5ddab09ce7d00edd962745738ecf9c7a834f53aff7cc4b13a",
+      "bytes": 15238,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-rh-resume-avaliacao.php": {
+      "status": "verified_source_export",
+      "sha256": "036b1a2826c151b600ac37c857036a1a906eb212c27cbf866e9706bb537a2307",
+      "bytes": 700,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/file.php": {
+      "status": "verified_source_export",
+      "sha256": "4cd1dc0e391ff41aa141f6172ed12f31c232c825a9cb4959e3b022c6e6e04745",
+      "bytes": 4523,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/chipeira_whatsapp_check.php": {
+      "status": "verified_source_export",
+      "sha256": "49fb47a2961b6fa670b82b68e082786cd3bd7dc39db6b7498edd2a05e6d70192",
+      "bytes": 5194,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-wa-numbers.php": {
+      "status": "verified_source_export",
+      "sha256": "6898d10b8462eb5f7447228e2e67597e6373819ef4ee7f33a3bcfaca2c36947a",
+      "bytes": 2822,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/rest-v1.php": {
+      "status": "verified_source_export",
+      "sha256": "f45212cc6e0fc7f83436eb8120fbded278a6024428a7b31e044fc66cc33d8167",
+      "bytes": 158,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/attachment-proxy.php": {
+      "status": "verified_source_export",
+      "sha256": "3cb35b51f8e5805f57859305a39a78cde68a784197792b2412e63bebff02fe5c",
+      "bytes": 267,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/chunk-deploy.php": {
+      "status": "verified_source_export",
+      "sha256": "81fca8657b4d314871246294b650ad10599bfe42138708d164dc6521d0996598",
+      "bytes": 4228,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/credito_pix_auto_api.php": {
+      "status": "verified_source_export",
+      "sha256": "f0e627290744f0e50a8f51351531fb10e6b252afecc897393d4efd54d8279124",
+      "bytes": 47566,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/clear-ghost-leads.php": {
+      "status": "verified_source_export",
+      "sha256": "fd6d0468bfd074b069a31e1f25878bcffe2747684bc7c051980b3926687143c0",
+      "bytes": 1878,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/purge-demo-users.php": {
+      "status": "verified_source_export",
+      "sha256": "c39efa2b971ac63fa107f45cddb457fac7445047a686267beb6a6e6e7369efd5",
+      "bytes": 3450,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-mural-engagement.php": {
+      "status": "verified_source_export",
+      "sha256": "6778b4cb350b64a6d75deeab3eb628459a2d44ed17f1bb7f149eb9065ec46a6e",
+      "bytes": 801,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/nextbilling-probe.php": {
+      "status": "verified_source_export",
+      "sha256": "426019a9ea84ef443558ec287939260eefe8ff352f28bde4ddadaa531ecfde6a",
+      "bytes": 3834,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/health.php": {
+      "status": "verified_source_export",
+      "sha256": "1e053254ee87442325d5de3b3527d9d33ae233deb07efbc5ce4dfaab0a7f6a5f",
+      "bytes": 1875,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/recover-dismissed.php": {
+      "status": "verified_source_export",
+      "sha256": "e2bb0cf03a7e7081af602cb07c86541218697f8100d03609d4e8dff6d5cab174",
+      "bytes": 17674,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/nextbilling-debug.php": {
+      "status": "verified_source_export",
+      "sha256": "d464df80b2863594f7b6b3080dc6acb81f299950b7c70a02af77069e52845dc9",
+      "bytes": 4227,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-cadastro-nofooter.php": {
+      "status": "verified_source_export",
+      "sha256": "7f0b09a578bd6c67d10ef88cad6ecc2d77b44b1418091ef50b1780746c1e515b",
+      "bytes": 861,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/repair-timestamps-brt.php": {
+      "status": "verified_source_export",
+      "sha256": "e5e370adb0a289bdc82b535c851d26a7ed4afaa4e3c717810c661dafa3df41f1",
+      "bytes": 10216,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-mural-image.php": {
+      "status": "verified_source_export",
+      "sha256": "89528bebacf5433b345348d0eb45149e47536a79fe774028920059d42d277fa0",
+      "bytes": 7188,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/restore-archived-proposal.php": {
+      "status": "verified_source_export",
+      "sha256": "3bec2de5ee605b46e10aeda1cf4d391462128bf3d2efa49f0764dec056ac54b0",
+      "bytes": 4164,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-users-columns.php": {
+      "status": "verified_source_export",
+      "sha256": "097baed7f3059992510a24a628277f35a6fa51e06dc078aea6740565e392993f",
+      "bytes": 2366,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/migrate-training-tracks.php": {
+      "status": "verified_source_export",
+      "sha256": "5954c824b188e702affd7739c0a41b7f37170f73a2a9a1707ddfa801ad67358c",
+      "bytes": 621,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/cbo.php": {
+      "status": "verified_source_export",
+      "sha256": "4d8b2646f312d6dcdf7ad1f8f70082dc657e2598f1ff9034536fd03d75d83d55",
+      "bytes": 1713,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/purge-eleva-transactions.php": {
+      "status": "verified_source_export",
+      "sha256": "768282707803d8488cc45690e0c495f652dafb59aa406d3fc91ba20d1c944253",
+      "bytes": 19258,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/partner-cadastro.php": {
+      "status": "verified_source_export",
+      "sha256": "f5f015b85eec6cd34445225c36b40eab2f830cdcfb7896ae3aed871ca096c24e",
+      "bytes": 6742,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/boleto-webhook.php": {
+      "status": "verified_source_export",
+      "sha256": "6b65caf86f5d77b4fb04b5d6c888b2a5660e2dd6809496182eab6ea9593f12f2",
+      "bytes": 12999,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/repair-user-roles.php": {
+      "status": "verified_source_export",
+      "sha256": "2cfb0c909f2b8edbd187f7d30fe459e843a42128a10db64fa656a0b7ecdae2e9",
+      "bytes": 17545,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/reset-lead-distribution.php": {
+      "status": "verified_source_export",
+      "sha256": "efe200d8a16562dc481384f455e3b2572ab8f3d5c3c8b34fa4ad874ce94c8a7d",
+      "bytes": 2686,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "api/fintech-corban.php": {
+      "status": "verified_source_export",
+      "sha256": "5a14ec64e25822c21eddc6674c2bf343bcfe2e7556ecc1af5c54ba24025db747",
+      "bytes": 9082,
+      "source": "authenticated WebFTP api.zip"
+    },
+    "cadastro.html": {
+      "status": "verified",
+      "sha256": "a4397821e3db4e1226bf7b2005ef738f725f646b168ab600e6056449ff7f1cf1",
+      "bytes": 17482,
+      "newly_discovered": true
+    },
+    "financeiro-sections.html": {
+      "status": "verified",
+      "sha256": "d014023077d91f63810f073f6fc2f646a267470c6bd86c342790c8120a94598b",
+      "bytes": 38330,
+      "newly_discovered": true
+    },
+    "politica-privacidade.html": {
+      "status": "verified",
+      "sha256": "bb9b70a965d6725c55fdc1f377db10def560880ce01ae187eb704d88b4e72df0",
+      "bytes": 20013,
+      "newly_discovered": true
+    },
+    "politicas.html": {
+      "status": "verified",
+      "sha256": "2acbd0f327b4b279575c980d1cb21cce57bcb21b66a0315f2f4c07b7302bd2f4",
+      "bytes": 9699,
+      "newly_discovered": true
+    },
+    "termos.html": {
+      "status": "verified",
+      "sha256": "cc9890af987b5e042597aa5718eaadba64516d3312305a7f623cd471a6cb57fa",
+      "bytes": 15375,
+      "newly_discovered": true
+    },
+    "js/cadastro-parceiro.js": {
+      "status": "verified",
+      "sha256": "bdc6d3caacc08ecef6660a7b413b27fae811d19a88ca8c5c1e5156b242913a11",
+      "bytes": 7010,
+      "newly_discovered": true
+    },
+    "js/clients-search-fix.js": {
+      "status": "verified",
+      "sha256": "de45601f60c8689d17071ff049586c2716d4b8a9c4dc71a656769d4a405e6900",
+      "bytes": 5199,
+      "newly_discovered": true
+    },
+    "js/consigbot.js": {
+      "status": "verified",
+      "sha256": "d089036c645c1d472f2725eeacf6562f9b76daced571968994766b5545d54429",
+      "bytes": 5659,
+      "newly_discovered": true
+    },
+    "js/conta-bloqueio-saque.js": {
+      "status": "verified",
+      "sha256": "dcec21dd4766488ebe7434db33f3281aa2edb95cde7524069a76eab79d799bd2",
+      "bytes": 2719,
+      "newly_discovered": true
+    },
+    "js/db-init-fast.js": {
+      "status": "verified",
+      "sha256": "17ac25ddd21240cab919be4d581488f81002c06d2b397ab0a4f0a4529b18e2ac",
+      "bytes": 2445,
+      "newly_discovered": true
+    },
+    "js/financeiro-boletos.js": {
+      "status": "verified",
+      "sha256": "d82c45b8e17a2ed8ef9977e5db06c2236e50cad99646893bfd68654aea9ea04d",
+      "bytes": 212,
+      "newly_discovered": true
+    },
+    "js/landing.js": {
+      "status": "verified",
+      "sha256": "290f8877d87da503a0f4dbfe90ae72f4529085dd1e3f920bb646cf3919f7f4c5",
+      "bytes": 12247,
+      "newly_discovered": true
+    },
+    "js/leads-cpf.js": {
+      "status": "verified",
+      "sha256": "067380c819ce42de60fa252fa7511323af42130b9f7a20d2468a062782428a18",
+      "bytes": 10291,
+      "newly_discovered": true
+    },
+    "js/novati.js": {
+      "status": "verified",
+      "sha256": "a20fedad9f1a1d23c04bc51c4cb4b58a4165809d2f64571fa79c2df8b817e617",
+      "bytes": 2897,
+      "newly_discovered": true
+    },
+    "js/partner-comissao-tabela.js": {
+      "status": "verified",
+      "sha256": "b8d831efc87ce759ac716c0654a2fc1a8ef37225aa348f7ce63d8627b84342d5",
+      "bytes": 11809,
+      "newly_discovered": true
+    },
+    "js/partner-comissao-view.js": {
+      "status": "verified",
+      "sha256": "ffe54122df7d7d1181e87d24574572baf7ad6110d0d5bd6b61fde8369c935706",
+      "bytes": 5649,
+      "newly_discovered": true
+    },
+    "js/rh-carreira.js": {
+      "status": "verified",
+      "sha256": "e00d4f6b23547ae994730e872581ac606f9cd662f58acc8e365e0d6ade141efa",
+      "bytes": 33444,
+      "newly_discovered": true
+    },
+    "js/tabelas-fitech.js": {
+      "status": "verified",
+      "sha256": "baf85ee71a70d26c858f6d82718b91d2a5f3db60b32a6fc2230c02c54acc2cbd",
+      "bytes": 4205,
+      "newly_discovered": true
+    },
+    "css/bootstrap-bridge.css": {
+      "status": "verified",
+      "sha256": "428547f55f6eefb3840112f38287e1422d6fe8c988d0e94450ca1951ed806edc",
+      "bytes": 24704,
+      "newly_discovered": true
+    },
+    "css/brand-blu.css": {
+      "status": "verified",
+      "sha256": "16918f79fb058d57d817254d6ed4e74de3ddc687ddae5021b78a7939cf81a475",
+      "bytes": 738,
+      "newly_discovered": true
+    },
+    "css/cadastro-parceiro.css": {
+      "status": "verified",
+      "sha256": "3037ffa3d0c11bdbda76563d784b1aba0fa86a2f52769429cae4c0087ce53220",
+      "bytes": 39732,
+      "newly_discovered": true
+    },
+    "css/consigbot.css": {
+      "status": "verified",
+      "sha256": "924307e587564a38154a520ef7d79f63cd808d6f547ba0faebaccf8e25038180",
+      "bytes": 3030,
+      "newly_discovered": true
+    },
+    "css/landing.css": {
+      "status": "verified",
+      "sha256": "6ce1fac48fca4583060ab59f88358f23f6fb7d99b431a8f73507294dff263b2d",
+      "bytes": 41786,
+      "newly_discovered": true
+    },
+    "css/rh-carreira.css": {
+      "status": "verified",
+      "sha256": "f498ec4c29202c235399ce1963442f18371068802055d5302aacb9748c11472d",
+      "bytes": 17185,
+      "newly_discovered": true
+    },
+    "css/style.css": {
+      "status": "verified",
+      "sha256": "7b7c84810c6c49f9535db7334d52b055e843d2ea5b8779906d5d69e88418ff50",
+      "bytes": 37462,
+      "newly_discovered": true
+    },
+    "images/logo-sou-blu-light.png": {
+      "status": "verified",
+      "sha256": "b96bea57ce0cb8dcce00dea6bdd285444d002a9e9a65ebc6c3f7fcfdac794977",
+      "bytes": 16914,
+      "newly_discovered": true
+    },
+    "images/logo-sou-blu-mark.png": {
+      "status": "verified",
+      "sha256": "10d0ff5e55da27d338093455246c3e331ce157e562b35ccbbdb898c874910887",
+      "bytes": 18921,
+      "newly_discovered": true
+    },
+    "images/logo-sou-blu-nav-light.png": {
+      "status": "verified",
+      "sha256": "ce477fc6f04419d10aff8414cf893d19d15893e1bb96c7a3ede40629975e8771",
+      "bytes": 7687,
+      "newly_discovered": true
+    },
+    "images/logo-sou-blu-nav.png": {
+      "status": "verified",
+      "sha256": "022380b45803218526e87b77488df69b89614797bfef42fca971587434857339",
+      "bytes": 10769,
+      "newly_discovered": true
+    },
+    "images/logo-sou-blu.png": {
+      "status": "verified",
+      "sha256": "eb306feb231eefdba58013d2a8ea2921590cdac9319c0a311f8f935075ed9700",
+      "bytes": 18080,
+      "newly_discovered": true
+    }
+  },
+  "backend_unverified": [
+    ".htaccess",
+    "api/.user.ini",
+    "api/finance-schedule-cron.php",
+    "api/finance.php",
+    "api/lib/MetaWhatsAppClient.php",
+    "api/lib/WhaticketClient.php",
+    "api/upload_test.php",
+    "certs/.htaccess",
+    "tests/daily-production.test.php",
+    "tests/finance-schedule.test.php",
+    "tests/finance-session.test.php",
+    "uploads/.htaccess",
+    "uploads/proposal-attachments/.htaccess"
+  ],
+  "excluded_runtime_data_count": 11
+}

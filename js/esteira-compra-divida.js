@@ -125,14 +125,14 @@
   }
 
   /**
-   * findProposalsNav — acha o botão “Gestão de Propostas” no menu GESTÃO
+   * findProposalsNav — acha o botão “Gestão Compra de Dívida” (ex.: Gestão de Propostas) no menu GESTÃO
    * (id pode ser navManageProposals ou navProposals).
    */
   function findProposalsNav() {
     return document.getElementById('navManageProposals')
       || document.getElementById('navProposals')
       || document.querySelector('[data-section="secManageProposals"]')
-      || [...document.querySelectorAll('.sidebar-nav .nav-label')].find((el) => /Gest[aã]o de Propostas/i.test(el.textContent || ''))?.closest('button');
+      || [...document.querySelectorAll('.sidebar-nav .nav-label')].find((el) => /Gest[aã]o (?:Compra de D[ií]vida|de Propostas)/i.test(el.textContent || ''))?.closest('button');
   }
 
   /** Ícone documento — mesmo estilo dos itens de GESTÃO. */
@@ -223,7 +223,7 @@
     const sel = document.getElementById('cd_tabela');
     if (!sel) return;
     const items = typeof cat().tabelasPor === 'function'
-      ? cat().tabelasPor(banco, convenio)
+      ? cat().tabelasPor(banco, convenio, document.getElementById('cd_produto')?.value || '')
       : [];
     const cur = sel.value;
     sel.innerHTML = `<option value="">Selecione...</option>${optsHtml(items, cur)}`;
@@ -232,6 +232,7 @@
   async function fillVendorSelect() {
     const sel = document.getElementById('cd_vendedor');
     if (!sel) return;
+    if (sel.getAttribute('aria-readonly') === 'true') return; /* travado no vendedor logado: não sobrescrever */
     let list = [];
     try {
       if (typeof DB !== 'undefined' && typeof DB.getVendorsForSelect === 'function') {
@@ -249,6 +250,7 @@
       const existing = [...new Set(_boRows.map((p) => p.vendorName || p.vendor_name).filter(Boolean))];
       list = existing.map((name) => ({ id: name, name }));
     }
+    if (sel.getAttribute('aria-readonly') === 'true') return; /* travou enquanto carregava: mantém o vendedor logado */
     const cur = sel.value;
     sel.innerHTML = `<option value="">Selecione o vendedor...</option>` +
       list.map((v) => {
@@ -480,6 +482,39 @@
     </div>
     <input type="hidden" id="cd_nome"/>
     <div id="cd_cliente_info" style="min-height:16px;"></div>
+  </div>
+
+  <div class="cd-field">
+    <label for="cd_endereco">Endereço do cliente</label>
+    <input type="text" id="cd_endereco" class="form-control" autocomplete="street-address" maxlength="500" placeholder="Rua, número, complemento, bairro, cidade e CEP"/>
+  </div>
+  <div class="cd-field col-full">
+    <label>Dados bancários do cliente</label>
+    <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Informe a conta do cliente que receberá o crédito.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px;">
+      <div class="cd-field">
+        <label for="cd_banco_conta">Banco da conta</label>
+        <input type="text" id="cd_banco_conta" class="form-control" maxlength="120" placeholder="Nome ou código do banco do cliente"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_agencia">Agência</label>
+        <input type="text" id="cd_agencia" class="form-control" maxlength="20" placeholder="Agência com dígito, se houver"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_conta">Número da conta</label>
+        <input type="text" id="cd_conta" class="form-control" maxlength="40" placeholder="Número da conta com dígito"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_tipo_conta">Tipo de conta</label>
+        <select id="cd_tipo_conta" class="form-control">
+          <option value="">Selecione o tipo de conta...</option>
+          <option value="corrente">Conta corrente</option>
+          <option value="poupanca">Conta poupança</option>
+          <option value="salario">Conta salário</option>
+          <option value="pagamento">Conta de pagamento</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <!-- Situação Beneficiário -->
@@ -822,6 +857,11 @@ ${cdModalStyles()}
     }
   }
 
+  /**
+   * boFilteredRows — aplica busca/vendedor/status/período na lista BO.
+   * Filtro status vazio (padrão): esconde Cancelado — senão o “Apagar” parece
+   * que não funciona (ficha só muda pra Cancelado e continua na tela).
+   */
   function boFilteredRows(rows) {
     const st = document.getElementById('cd_bo_status_filter')?.value || '';
     const vendor = document.getElementById('cd_bo_vendor')?.value || '';
@@ -830,7 +870,11 @@ ${cdModalStyles()}
     const from = document.getElementById('cd_bo_from')?.value || '';
     const to = document.getElementById('cd_bo_to')?.value || '';
     let out = rows.slice();
-    if (st && st !== 'todos') out = out.filter((p) => String(p.status || p.statusOp || '') === st);
+    if (!st) {
+      out = out.filter((p) => !/cancel/i.test(String(p.status || p.statusOp || '')));
+    } else if (st !== 'todos') {
+      out = out.filter((p) => String(p.status || p.statusOp || '') === st);
+    }
     if (vendor) out = out.filter((p) => String(p.vendorName || p.vendor_name || '') === vendor);
     if (q) {
       out = out.filter((p) => {
@@ -946,7 +990,7 @@ ${cdModalStyles()}
 
   const EsteiraCompraDivida = {
     maskCpf(v) { return maskCpf(v); },
-    onProdutoChange() { toggleRefinPort(); },
+    onProdutoChange() { toggleRefinPort(); fillTabelaSelect(); },
     onFiltroTabela() { fillTabelaSelect(); },
     onPortChange() { recalcTotal(); },
 
@@ -1204,13 +1248,18 @@ ${cdModalStyles()}
       const d = new Date();
       const protocolo = `CD-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
       const id = `CD-${Date.now()}`;
-      const status = 'AG. ANÁLISE';
+      const status = 'AGUARDANDO DIGITAÇÃO';
       const payload = {
         tipo: TIPO,
         origem,
         produto,
         convenio,
         situacao_beneficiario: situacao,
+        endereco: document.getElementById('cd_endereco')?.value?.trim() || '',
+        conta: document.getElementById('cd_conta')?.value?.trim() || '',
+        banco_conta: document.getElementById('cd_banco_conta')?.value?.trim() || '',
+        agencia: document.getElementById('cd_agencia')?.value?.trim() || '',
+        tipo_conta: document.getElementById('cd_tipo_conta')?.value || '',
         banco,
         tabela,
         contratos_port: contratos,
@@ -1253,6 +1302,7 @@ ${cdModalStyles()}
         status_op: status,
         creditoEsteira: payload,
         credito_esteira: payload,
+        meta: { client_bank: { banco: payload.banco_conta, agencia: payload.agencia, conta: payload.conta, tipo_conta: payload.tipo_conta }, client_address: payload.endereco },
         obs: [
           TAG,
           'tipo_esteira=compra_divida',

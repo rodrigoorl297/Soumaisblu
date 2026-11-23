@@ -2,22 +2,57 @@
 (function (g) {
   'use strict';
 
-  let currentUser = null; //gera uma variável global pra armazenar usuário 
-  let selectedVouchersForClose = []; //array vazio  
+  /**
+   * _clubeEnabled — mesma flag do Clube (config.CLUBE_BENEFICIOS_ENABLED).
+   * Se desligado, não sobe a gestão e redireciona a página standalone.
+   */
+  function _clubeEnabled() {
+    if (typeof g.isClubeBeneficiosEnabled === 'function') return !!g.isClubeBeneficiosEnabled();
+    const cfg = g.SOUBLU_CONFIG || {};
+    return cfg.CLUBE_BENEFICIOS_ENABLED === true || cfg.CLUBE_BENEFICIOS_ENABLED === 1 || cfg.CLUBE_BENEFICIOS_ENABLED === '1';
+  }
+
+  if (!_clubeEnabled()) {
+    const stub = {
+      init() { return Promise.resolve(); },
+      bootStandalone() {
+        try {
+          const dest = (typeof Auth !== 'undefined' && Auth.defaultAppHref)
+            ? Auth.defaultAppHref()
+            : '/pages/admin.html';
+          g.location.replace(dest);
+        } catch (_) {
+          g.location.replace('/pages/admin.html');
+        }
+        return Promise.resolve();
+      },
+      enabled: false,
+    };
+    g.BeneficiosAdmin = stub;
+    if (/\/admin-beneficios\.html/i.test(g.location.pathname || '')) {
+      const run = () => stub.bootStandalone();
+      if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run, { once: true });
+      else run();
+    }
+    return;
+  }
+
+  let currentUser = null;
+  let selectedVouchersForClose = [];
 
   function _benId(prefix) {
     return prefix + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-  } //gerador de ID único       
+  }
 
   function formatCurrency(val) {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
-  } // formato pra R$ 
+  }
 
-  function _formatPedidoDescricao(v) { //recebe pedido 
-    let d = v?.detalhes_pedido; // pega detalhes de um pedido (Dentro de v, pegue a propriedade detalhes_pedido e coloque dentro de d)
+  function _formatPedidoDescricao(v) {
+    let d = v?.detalhes_pedido;
     if (typeof d === 'string') {
       try { d = JSON.parse(d); } catch (_) { d = null; }
-    } // uma conversão segurar de JSON pra Objeto
+    }
     if (!d || typeof d !== 'object') return '—';
     const parts = [];
     const itens = Array.isArray(d.itens) ? d.itens : [];
@@ -36,7 +71,7 @@
     if (d.origem === 'mercadinho') parts.push('Mercadinho');
     if (Array.isArray(d.carnes) && d.carnes.length) parts.push(`Carnes: ${d.carnes.join(', ')}`);
     return parts.length ? parts.join(' · ') : '—';
-  } //Ela pega os detalhes do pedido, que podem estar em JSON, transforma o JSON em objeto e depois transforma os dados desse objeto em um texto legível.
+  }
 
   function switchTab(tabId, el) {
     document.querySelectorAll('.menu-tab').forEach(t => t.classList.remove('active'));
@@ -44,22 +79,22 @@
     if (el) el.classList.add('active');
     const panel = document.getElementById(`tab-${tabId}`);
     if (panel) panel.style.display = 'block';
-  } //controla qual aba está ativa e qual conteúdo aparece na tela
+  }
 
-  const _VOUCHER_DEBIT_STATUSES = new Set(['em_analise', 'utilizado', 'em_processamento', 'pago']); // seta status  
+  const _VOUCHER_DEBIT_STATUSES = new Set(['em_analise', 'utilizado', 'em_processamento', 'pago']);
 
-  function _sumVoucherUtilizado(vouchers) { //receb vouchers, garante q seja um array filtra e soma 
+  function _sumVoucherUtilizado(vouchers) {
     return (Array.isArray(vouchers) ? vouchers : [])
       .filter((v) => _VOUCHER_DEBIT_STATUSES.has(String(v.status || '').toLowerCase()))
       .reduce((acc, v) => acc + (parseFloat(v.valor) || 0), 0);
-  } // soma de débitos 
+  }
 
   function _limitBalances(aprovado, utilizado) {
     const approved = Math.max(0, Math.round((parseFloat(aprovado) || 0) * 100) / 100);
     const used = Math.max(0, Math.min(approved, Math.round((parseFloat(utilizado) || 0) * 100) / 100));
     const available = Math.max(0, Math.round((approved - used) * 100) / 100);
     return { aprovado: approved, utilizado: used, disponivel: available };
-  } //limita os valores aprovado/utilizado e calcula o saldo disponível.
+  }
 
   function _escAttr(s) {
     return String(s ?? '')
@@ -67,35 +102,35 @@
       .replace(/"/g, '&quot;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
-  } //protege/escapa valores antes de inseri-los em atributos HTML, convertendo caracteres especiais em entidades HTML.
+  }
 
   function _ensureManualDebitModal() {
     let modal = document.getElementById('manualDebitModal');
     if (modal) return modal;
     document.body.insertAdjacentHTML('beforeend', `
-      <div class="modal-overlay" id="manualDebitModal">
-        <div class="modal" style="max-width:480px;">
-          <div class="modal-header">
-            <h3>Lançar débito manual</h3>
-            <button type="button" class="modal-close" onclick="closeManualDebitModal()"></button>
-          </div>
-          <div class="modal-body">
-            <input type="hidden" id="manualDebitLimitId"/>
-            <input type="hidden" id="manualDebitEmployeeId"/>
-            <div class="form-group"><label>Funcionário</label><input type="text" id="manualDebitName" class="form-control" readonly/></div>
-            <div class="form-group"><label>Disponível agora</label><input type="text" id="manualDebitDisponivel" class="form-control" readonly/></div>
-            <div class="form-group"><label>Valor do débito (R$)</label><input type="number" id="manualDebitValor" class="form-control" min="0.01" step="0.01" placeholder="0,00"/></div>
-            <div class="form-group"><label>Descrição / o que foi comprado</label><input type="text" id="manualDebitDesc" class="form-control" placeholder="Ex.: Marmitas semana 10/07"/></div>
-            <div class="form-group"><label>Estabelecimento (opcional)</label><input type="text" id="manualDebitPrestador" class="form-control" placeholder="Ex.: Restaurante ZS"/></div>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-outline" onclick="closeManualDebitModal()">Cancelar</button>
-            <button type="button" class="btn btn-primary" onclick="confirmManualDebit()">Lançar débito</button>
-          </div>
-        </div>
-      </div>`);
+<div class="modal-overlay" id="manualDebitModal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-header">
+      <h3>Lançar débito manual</h3>
+      <button type="button" class="modal-close" onclick="closeManualDebitModal()"></button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="manualDebitLimitId"/>
+      <input type="hidden" id="manualDebitEmployeeId"/>
+      <div class="form-group"><label>Funcionário</label><input type="text" id="manualDebitName" class="form-control" readonly/></div>
+      <div class="form-group"><label>Disponível agora</label><input type="text" id="manualDebitDisponivel" class="form-control" readonly/></div>
+      <div class="form-group"><label>Valor do débito (R$)</label><input type="number" id="manualDebitValor" class="form-control" min="0.01" step="0.01" placeholder="0,00"/></div>
+      <div class="form-group"><label>Descrição / o que foi comprado</label><input type="text" id="manualDebitDesc" class="form-control" placeholder="Ex.: Marmitas semana 10/07"/></div>
+      <div class="form-group"><label>Estabelecimento (opcional)</label><input type="text" id="manualDebitPrestador" class="form-control" placeholder="Ex.: Restaurante ZS"/></div>
+    </div>
+    <div class="modal-footer">
+      <button type="button" class="btn btn-outline" onclick="closeManualDebitModal()">Cancelar</button>
+      <button type="button" class="btn btn-primary" onclick="confirmManualDebit()">Lançar débito</button>
+    </div>
+  </div>
+</div>`);
     return document.getElementById('manualDebitModal');
-  } //verifica se o modal de lançamento de débito manual existe; se não existir, cria o HTML do modal e retorna o elemento.
+  }
 
   async function loadLimitRequests() {
     const tbody = document.getElementById('limitesTbody');
@@ -193,10 +228,7 @@
         }
       });
     }
-  } // Busca limites e vouchers da API.
-    // Calcula o valor utilizado por funcionário.
-    // Calcula os saldos.
-    // Monta/atualiza a tabela de acompanhamento.
+  }
 
   function openApproveModal(id, name) {
     const modal = document.getElementById('approveLimitModal');
@@ -208,7 +240,7 @@
       modal.style.display = '';
       modal.classList.add('open');
     }
-  } //preenche o ID e o nome do funcionário no modal de aprovação e abre o modal.
+  }
 
   function closeApproveModal() {
     const modal = document.getElementById('approveLimitModal');
@@ -216,7 +248,7 @@
       modal.classList.remove('open');
       modal.style.display = '';
     }
-  } //remove a classe open e limpa o display do modal, fazendo com que o modal de aprovação seja fechado.
+  }
 
   async function openManualDebitModal(limitId, employeeId, name) {
     const modal = _ensureManualDebitModal();
@@ -256,109 +288,99 @@
     document.getElementById('manualDebitDisponivel').value = disponivelTxt;
     modal.style.display = '';
     modal.classList.add('open');
-  } // Prepara o modal de lançamento de débito.
-    // Preenche os dados do funcionário.
-    // Limpa os campos anteriores.
-    // Busca o limite e os vouchers atualizados.
-    // Calcula o valor disponível.
-    // Por fim, abre o modal.
-      
+  }
+
   function closeManualDebitModal() {
     const modal = document.getElementById('manualDebitModal');
     if (modal) {
       modal.classList.remove('open');
       modal.style.display = '';
     }
-  } //Fecha o modal de lançamento de débito, removendo a classe open e limpando o display
+  }
 
   async function confirmManualDebit() {
-      const modal = document.getElementById('manualDebitModal');
-      const limitId = document.getElementById('manualDebitLimitId')?.value;
-      const employeeId = document.getElementById('manualDebitEmployeeId')?.value;
-      const employeeName = document.getElementById('manualDebitName')?.value || '';
-      const valor = Math.round((parseFloat(document.getElementById('manualDebitValor')?.value) || 0) * 100) / 100;
-      const desc = String(document.getElementById('manualDebitDesc')?.value || '').trim();
-      const prestadorName = String(document.getElementById('manualDebitPrestador')?.value || '').trim() || 'Débito Manual';
-      if (!limitId) {
-        alert('Registro de limite inválido.');
-        return;
-      }
-      if (!employeeId) {
-        alert('Este limite não está vinculado a um login. Vincule o colaborador no RH antes de lançar o débito.');
-        return;
-      }
-      if (valor <= 0) {
-        alert('Informe um valor maior que zero.');
-        return;
-      }
-      if (!desc) {
-        alert('Informe a descrição do que foi comprado.');
-        return;
-      }
-      const disponivel = parseFloat(modal?.dataset?.disponivel) || 0;
-      if (valor > disponivel + 0.009) {
-        alert(`O valor excede o limite disponível (${formatCurrency(disponivel)}).`);
-        return;
-      }
-      try {
-        const today = new Date();
-        const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
-        const voucherNo = `MAN-${today.getDate().toString().padStart(2, '0')}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getFullYear()}-${rand}`;
-        const voucherPayload = {
-          id: _benId('ben_vou_'),
-          voucher_no: voucherNo,
-          employee_id: employeeId,
-          employee_name: employeeName,
-          prestador_id: 'manual',
-          prestador_name: prestadorName,
-          categoria: 'Débito Manual',
-          valor,
-          status: 'utilizado',
-          detalhes_pedido: {
-            origem: 'debito_manual',
-            observacoes: desc,
-            itens: [{ name: desc, qty: 1 }],
-          },
-          created_at: (typeof DB !== 'undefined' && typeof DB._nowBrazilSql === 'function')
-            ? DB._nowBrazilSql()
-            : undefined,
-        };
-        await supaReq('POST', 'beneficios_vouchers', voucherPayload);
-        if (typeof DB !== 'undefined' && typeof DB.registerOpenAccountDebito === 'function') {
-          try {
-            await DB.registerOpenAccountDebito({
-              employeeId,
-              amount: valor,
-              reason: `Débito Clube ${voucherNo}${desc ? ' — ' + desc : ''}`,
-              byUser: (typeof Auth !== 'undefined' && Auth.getSession()?.id) || 'admin',
-              voucherId: voucherPayload.id,
-              voucherNo,
-              source: 'clube',
-            });
-          } catch (regErr) {
-            console.warn('[admin-beneficios] lançamento débito aberto:', regErr);
-          }
+    const modal = document.getElementById('manualDebitModal');
+    const limitId = document.getElementById('manualDebitLimitId')?.value;
+    const employeeId = document.getElementById('manualDebitEmployeeId')?.value;
+    const employeeName = document.getElementById('manualDebitName')?.value || '';
+    const valor = Math.round((parseFloat(document.getElementById('manualDebitValor')?.value) || 0) * 100) / 100;
+    const desc = String(document.getElementById('manualDebitDesc')?.value || '').trim();
+    const prestadorName = String(document.getElementById('manualDebitPrestador')?.value || '').trim() || 'Débito Manual';
+    if (!limitId) {
+      alert('Registro de limite inválido.');
+      return;
+    }
+    if (!employeeId) {
+      alert('Este limite não está vinculado a um login. Vincule o colaborador no RH antes de lançar o débito.');
+      return;
+    }
+    if (valor <= 0) {
+      alert('Informe um valor maior que zero.');
+      return;
+    }
+    if (!desc) {
+      alert('Informe a descrição do que foi comprado.');
+      return;
+    }
+    const disponivel = parseFloat(modal?.dataset?.disponivel) || 0;
+    if (valor > disponivel + 0.009) {
+      alert(`O valor excede o limite disponível (${formatCurrency(disponivel)}).`);
+      return;
+    }
+    try {
+      const today = new Date();
+      const rand = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const voucherNo = `MAN-${today.getDate().toString().padStart(2, '0')}${(today.getMonth() + 1).toString().padStart(2, '0')}${today.getFullYear()}-${rand}`;
+      const voucherPayload = {
+        id: _benId('ben_vou_'),
+        voucher_no: voucherNo,
+        employee_id: employeeId,
+        employee_name: employeeName,
+        prestador_id: 'manual',
+        prestador_name: prestadorName,
+        categoria: 'Débito Manual',
+        valor,
+        status: 'utilizado',
+        detalhes_pedido: {
+          origem: 'debito_manual',
+          observacoes: desc,
+          itens: [{ name: desc, qty: 1 }],
+        },
+        created_at: (typeof DB !== 'undefined' && typeof DB._nowBrazilSql === 'function')
+          ? DB._nowBrazilSql()
+          : undefined,
+      };
+      await supaReq('POST', 'beneficios_vouchers', voucherPayload);
+      if (typeof DB !== 'undefined' && typeof DB.registerOpenAccountDebito === 'function') {
+        try {
+          await DB.registerOpenAccountDebito({
+            employeeId,
+            amount: valor,
+            reason: `Débito Clube ${voucherNo}${desc ? ' — ' + desc : ''}`,
+            byUser: (typeof Auth !== 'undefined' && Auth.getSession()?.id) || 'admin',
+            voucherId: voucherPayload.id,
+            voucherNo,
+            source: 'clube',
+          });
+        } catch (regErr) {
+          console.warn('[admin-beneficios] lançamento débito aberto:', regErr);
         }
-        const aprovado = parseFloat(modal?.dataset?.aprovado) || 0;
-        const utilizadoAtual = parseFloat(modal?.dataset?.utilizado) || 0;
-        const balances = _limitBalances(aprovado, utilizadoAtual + valor);
-        await supaReq('PATCH', 'beneficios_limites', {
-          limite_utilizado: balances.utilizado,
-          limite_disponivel: balances.disponivel,
-          status: 'aprovado',
-        }, `?id=eq.${encodeURIComponent(limitId)}`);
-        alert(`Débito lançado: ${formatCurrency(valor)}\nVoucher: ${voucherNo}`);
-        closeManualDebitModal();
-        await loadAllData();
-      } catch (e) {
-        alert('Erro ao lançar débito: ' + (e.message || e));
       }
-    }// Confirma o lançamento de um débito manual.
-     // Valida os dados e o saldo disponível.
-     // Cria o voucher e registra o débito.
-     // Atualiza o limite utilizado e disponível.
-     // Fecha o modal e atualiza os dados da tela.
-    // usuario informa debito, confirma, valida, tem limite ? tem funcionario ? valor > 0, tem descrição , SIM? , cria voucher, registra e atualiza   
+      const aprovado = parseFloat(modal?.dataset?.aprovado) || 0;
+      const utilizadoAtual = parseFloat(modal?.dataset?.utilizado) || 0;
+      const balances = _limitBalances(aprovado, utilizadoAtual + valor);
+      await supaReq('PATCH', 'beneficios_limites', {
+        limite_utilizado: balances.utilizado,
+        limite_disponivel: balances.disponivel,
+        status: 'aprovado',
+      }, `?id=eq.${encodeURIComponent(limitId)}`);
+      alert(`Débito lançado: ${formatCurrency(valor)}\nVoucher: ${voucherNo}`);
+      closeManualDebitModal();
+      await loadAllData();
+    } catch (e) {
+      alert('Erro ao lançar débito: ' + (e.message || e));
+    }
+  }
 
   async function confirmLimitApproval() {
     const id = document.getElementById('modalReqId').value;
@@ -382,7 +404,7 @@
     } catch (e) {
       alert('Erro ao aprovar limite: ' + e.message);
     }
-  } //confirma e aprova um limite caso dê certo 
+  }
 
   async function loadProviders() {
     const list = await supaReq('GET', 'beneficios_prestadores', null, '?order=nome_fantasia.asc');
@@ -397,52 +419,47 @@
         if (selectClose) selectClose.innerHTML += opt;
       });
     }
-  } //busca os prestadores cadastrados na API e preenche os campos de seleção de prestadores da tela, ordenados por nome.
-  
-  
-    async function saveProvider(e) {
-      e.preventDefault();
-      try {
-        const waRaw = String(document.getElementById('provWhatsapp')?.value || '').replace(/\D/g, '');
-        const cnpj = String(document.getElementById('provCpfCnpj').value || '').replace(/\D/g, '');
-        const payload = {
-          nome_fantasia: document.getElementById('provNome').value,
-          cnpj_cpf: document.getElementById('provCpfCnpj').value,
-          chave_pix: document.getElementById('provPix').value,
-          dia_pagamento: parseInt(document.getElementById('provDiaPgto').value, 10) || 5,
-          categoria: document.getElementById('provCategoria').value,
-          pagamento_automatico: document.getElementById('provAutoPgto').value,
-          whatsapp: waRaw || null,
-        };
-        let existing = null;
-        if (cnpj) {
-          try {
-            const rows = await supaReq('GET', 'beneficios_prestadores', null,
-              `?cnpj_cpf=eq.${encodeURIComponent(cnpj)}&limit=1`);
-            existing = Array.isArray(rows) && rows[0] ? rows[0] : null;
-          } catch (_) { existing = null; }
-        }
-        if (existing?.id) {
-          await supaReq('PATCH', 'beneficios_prestadores', payload, `?id=eq.${encodeURIComponent(existing.id)}`);
-          alert('Prestador atualizado (WhatsApp/dados salvos)!');
-        } else {
-          await supaReq('POST', 'beneficios_prestadores', {
-            id: _benId('ben_pre_'),
-            codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
-            ...payload,
-          });
-          alert('Prestador cadastrado com sucesso!');
-        }
-        document.getElementById('providerForm').reset();
-        await loadAllData();
-      } catch (err) {
-        alert('Erro ao salvar prestador: ' + err.message);
+  }
+
+  async function saveProvider(e) {
+    e.preventDefault();
+    try {
+      const waRaw = String(document.getElementById('provWhatsapp')?.value || '').replace(/\D/g, '');
+      const cnpj = String(document.getElementById('provCpfCnpj').value || '').replace(/\D/g, '');
+      const payload = {
+        nome_fantasia: document.getElementById('provNome').value,
+        cnpj_cpf: document.getElementById('provCpfCnpj').value,
+        chave_pix: document.getElementById('provPix').value,
+        dia_pagamento: parseInt(document.getElementById('provDiaPgto').value, 10) || 5,
+        categoria: document.getElementById('provCategoria').value,
+        pagamento_automatico: document.getElementById('provAutoPgto').value,
+        whatsapp: waRaw || null,
+      };
+      let existing = null;
+      if (cnpj) {
+        try {
+          const rows = await supaReq('GET', 'beneficios_prestadores', null,
+            `?cnpj_cpf=eq.${encodeURIComponent(cnpj)}&limit=1`);
+          existing = Array.isArray(rows) && rows[0] ? rows[0] : null;
+        } catch (_) { existing = null; }
       }
-    } // Recebe os dados do formulário e limpa os campos necessários.
-      // Verifica se o prestador já está cadastrado pelo CPF/CNPJ.
-      // Se existir, atualiza o cadastro existente.
-      // Caso contrário, cria um novo prestador.
-      // Depois, limpa o formulário e atualiza a tela.
+      if (existing?.id) {
+        await supaReq('PATCH', 'beneficios_prestadores', payload, `?id=eq.${encodeURIComponent(existing.id)}`);
+        alert('Prestador atualizado (WhatsApp/dados salvos)!');
+      } else {
+        await supaReq('POST', 'beneficios_prestadores', {
+          id: _benId('ben_pre_'),
+          codigo_parceiro: 'PRT-' + Date.now().toString(36).toUpperCase(),
+          ...payload,
+        });
+        alert('Prestador cadastrado com sucesso!');
+      }
+      document.getElementById('providerForm').reset();
+      await loadAllData();
+    } catch (err) {
+      alert('Erro ao salvar prestador: ' + err.message);
+    }
+  }
 
   async function saveProduct(e) {
     e.preventDefault();
@@ -465,10 +482,7 @@
     } catch (err) {
       alert('Erro ao cadastrar produto: ' + err.message);
     }
-  } // Recebe os dados do formulário e identifica o prestador selecionado.
-    // Monta os dados do novo produto.
-    // Envia o produto para o banco de dados.
-    // Depois, limpa o formulário após o cadastro.
+  }
 
   async function loadActiveOrders() {
     const list = await supaReq('GET', 'beneficios_vouchers', null, '?order=created_at.desc');
@@ -509,11 +523,7 @@
     } catch (e) {
       alert('Erro ao aprovar pedido: ' + e.message);
     }
-  } // Busca os pedidos registrados e ordena pelos mais recentes.
-    // Limpa a tabela antes de carregar os novos dados.
-    // Exibe uma mensagem caso não existam pedidos.
-    // Monta cada pedido como uma linha da tabela.
-    // Adiciona as ações de aprovação e exclusão conforme o status.
+  }
 
   /** Apaga pedido de teste / incorreto e estorna o valor no limite do colaborador. */
   async function deleteMealOrder(id) {

@@ -684,4 +684,17 @@ final class EvolutionClient
         }
         throw $last ?? new RuntimeException('Falha ao atualizar foto do perfil.');
     }
+
+    /**
+     * whatsappNumbers — consulta se numeros tem conta WhatsApp (Evolution v2).
+     * Usado pelo painel Chipeira quando o PC local nao alcanca a VPS Evolution.
+     */
+    public function whatsappNumbers(string $instanceName, array $numbers): array
+    {
+        $list = array_values(array_filter(array_map(static fn($n) => trim((string) $n), $numbers), static fn($n) => $n !== ''));
+        // Timeout maior: VPS Evolution (Locaweb) pode demorar; checagem em lote no Chipeira.
+        return $this->request('POST', '/chat/whatsappNumbers/' . rawurlencode($instanceName), [
+            'numbers' => $list,
+        ], 45);
+    }
 }

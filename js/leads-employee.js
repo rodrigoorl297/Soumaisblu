@@ -10,6 +10,8 @@ let _weekProgress = [];
 let _currentLeadId = null;
 let _currentFilter = 'all';
 let _massCallRunning = false;
+/** Meta diária em memória — contador otimista ao Ligar (antes da resposta do banco). */
+let _dailyTarget = 0;
 
 /* ── Init ── */
 document.addEventListener('DOMContentLoaded', async () => {
@@ -64,8 +66,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadTodayData();
     await loadWeekOverview();
 
-    // Show app
-    document.getElementById('globalLoader').style.display = 'none';
+    // Show app — esconde loader de verdade (leads.css força display:flex; senão bloqueia cliques)
+    _hideGlobalLoader();
     const app = document.getElementById('appLayout');
     app.style.display = 'flex';
     app.classList.add('is-ready');
@@ -90,8 +92,18 @@ function _waitForDB() {
 }
 
 /* ── Locked Screen ── */
+/** _hideGlobalLoader — tira o overlay inicial da frente (pointer-events + display). */
+function _hideGlobalLoader() {
+  const loader = document.getElementById('globalLoader');
+  if (!loader) return;
+  loader.classList.add('is-hidden');
+  loader.style.display = 'none';
+  loader.style.pointerEvents = 'none';
+  loader.setAttribute('aria-hidden', 'true');
+}
+
 async function showLockedScreen() {
-  document.getElementById('globalLoader').style.display = 'none';
+  _hideGlobalLoader();
   const app = document.getElementById('appLayout');
   if (app) {
     app.classList.remove('is-ready');
@@ -109,6 +121,103 @@ async function showLockedScreen() {
 }
 
 /* ── Load Today's Data ── */
+function _patchLocalLeadStatus(leadId, status, notes = '') {
+  const idx = (_todayLeads || []).findIndex((l) => String(l.id) === String(leadId));
+  if (idx === -1) return;
+  _todayLeads[idx].status = status;
+  if (notes) _todayLeads[idx].notes = notes;
+  if (LeadsDB.isWorkedStatus(status)) {
+    _todayLeads[idx].completed_at = new Date().toISOString();
+  } else if (status === 'pending') {
+    _todayLeads[idx].completed_at = null;
+  }
+}
+
+/**
+ * _countWorkedTodayLocal — quantos da mesa local contam como feitos hoje.
+ */
+function _countWorkedTodayLocal() {
+  const today = LeadsDB.getCurrentDateStr();
+  return (_todayLeads || []).filter((l) => {
+    if (!LeadsDB.isWorkedStatus(l.status || 'pending')) return false;
+    if (!l.completed_at) return true;
+    const d = LeadsDB._normDate(l.completed_at) || LeadsDB._toLocalDateStr(new Date(l.completed_at));
+    return d === today;
+  }).length;
+}
+
+/**
+ * _paintCountersNow — pinta 1/51 e Leads (N) na hora (sem esperar API).
+ * Leads (N) = pendentes na mesa (não “faltam pra meta”).
+ */
+function _paintCountersNow(worked, target) {
+  const dailyTarget = Math.max(1, Number(target) || _dailyTarget || 1);
+  const done = Math.max(0, Number(worked) || 0);
+  _dailyTarget = dailyTarget;
+
+  const doneEl = document.getElementById('todayDone');
+  const targetEl = document.getElementById('todayTarget');
+  const countEl = document.getElementById('leadsCount');
+  const progressBar = document.getElementById('todayProgressBar');
+  const statusEl = document.getElementById('todayStatus');
+  if (doneEl) doneEl.textContent = String(done);
+  if (targetEl) targetEl.textContent = String(dailyTarget);
+  const pendingOnDesk = (_todayLeads || []).filter((l) => (l.status || 'pending') === 'pending').length;
+  if (countEl) countEl.textContent = String(pendingOnDesk);
+
+  const pct = dailyTarget > 0 ? Math.min(100, Math.round((done / dailyTarget) * 100)) : 0;
+  if (progressBar) {
+    progressBar.style.width = `${pct}%`;
+    progressBar.className = `progress-fill ${pct < 50 ? 'danger' : ''}`;
+  }
+  if (statusEl) {
+    if (done >= dailyTarget && dailyTarget > 0) {
+      statusEl.className = 'badge badge-success';
+      statusEl.textContent = '✅ Meta Batida!';
+    } else if (pct >= 75) {
+      statusEl.className = 'badge badge-info';
+      statusEl.textContent = `${pct}% — Quase lá!`;
+    } else {
+      statusEl.className = 'badge badge-warning';
+      statusEl.textContent = `${pct}% — Faltam ${Math.max(0, dailyTarget - done)}`;
+    }
+  }
+}
+
+async function _refreshTodayCounters() {
+  const today = LeadsDB.getCurrentDateStr();
+  // Pintura imediata com a mesa local (botão → contador sem atraso)
+  _paintCountersNow(_countWorkedTodayLocal(), _dailyTarget || undefined);
+
+  const stats = await LeadsDB.computeEmployeeDailyStats(_userId, today, _todayLeads);
+  const dailyTarget = stats.target;
+  const worked = stats.worked;
+  _dailyTarget = dailyTarget;
+  _paintCountersNow(worked, dailyTarget);
+
+  await LeadsDB.upsertDailyProgress(_userId, today, dailyTarget, worked);
+}
+
+/**
+ * _markDialedLead — marca pendente como nao_atende e sobe contagem na hora do clique.
+ */
+async function _markDialedLead(leadId) {
+  if (!leadId) return;
+  const lead = _findLead(leadId);
+  if (!lead || (lead.status || 'pending') !== 'pending') return;
+  // Otimista: UI sobe antes do PATCH (contagem acompanha o botão)
+  _patchLocalLeadStatus(lead.id, 'nao_atende', 'Discagem registrada');
+  _paintCountersNow(_countWorkedTodayLocal(), _dailyTarget);
+  renderLeads();
+  try {
+    await LeadsDB.markLeadTouchedOnCall(lead.id);
+    await _refreshTodayCounters();
+  } catch (e) {
+    console.warn('[leads] mark on dial', leadId, e);
+    // Mantém UI otimista; próximo loadTodayData reconcilia
+  }
+}
+
 async function loadTodayData() {
   const today = LeadsDB.getCurrentDateStr();
 
@@ -117,41 +226,11 @@ async function loadTodayData() {
     await LeadsDB.getEmployeeTodayLeads(_userId, today)
   );
 
-  // A meta real de hoje é tudo o que está acumulado na mesa do vendedor (hoje + atrasados)
-  const dailyTarget = _todayLeads.length;
-
-  const worked = _todayLeads.filter(l => LeadsDB.isWorkedStatus(l.status)).length;
-
-  // Update daily progress widget
-  document.getElementById('todayDone').textContent = worked;
-  document.getElementById('todayTarget').textContent = dailyTarget;
   document.getElementById('todayDate').textContent = new Date().toLocaleDateString('pt-BR', {
     weekday: 'long', day: 'numeric', month: 'long'
   });
 
-  const pct = dailyTarget > 0 ? Math.min(100, Math.round((worked / dailyTarget) * 100)) : 0;
-  const progressBar = document.getElementById('todayProgressBar');
-  progressBar.style.width = `${pct}%`;
-  progressBar.className = `progress-fill ${pct < 50 ? 'danger' : ''}`;
-
-  // Status badge
-  const statusEl = document.getElementById('todayStatus');
-  if (worked >= dailyTarget && dailyTarget > 0) {
-    statusEl.className = 'badge badge-success';
-    statusEl.textContent = '✅ Meta Batida!';
-  } else if (pct >= 75) {
-    statusEl.className = 'badge badge-info';
-    statusEl.textContent = `${pct}% — Quase lá!`;
-  } else {
-    statusEl.className = 'badge badge-warning';
-    statusEl.textContent = `${pct}% — Faltam ${dailyTarget - worked}`;
-  }
-
-  // Update progress in DB
-  await LeadsDB.upsertDailyProgress(_userId, today, dailyTarget, worked);
-
-  // Update leads count
-  document.getElementById('leadsCount').textContent = _todayLeads.length;
+  await _refreshTodayCounters();
 
   // Render leads + metrics
   renderLeads();
@@ -194,17 +273,17 @@ function renderLeads() {
     const statusInfo = LeadsDB.LEAD_STATUSES[lead.status] || LeadsDB.LEAD_STATUSES.pending;
     const isWorked = LeadsDB.isWorkedStatus(lead.status);
     const cardClass = isWorked ? (lead.status === 'venda_fechada' ? 'completed' : lead.status === 'sem_interesse' ? 'failed' : 'no-answer') : '';
-    const safeId = String(lead.id || '').replace(/'/g, "\\'");
-    const hasPhone = !!(lead.phone || lead.phone2);
+    const safeId = _escAttr(lead.id);
 
     const leadScore = lead.score || lead.extra_data?.score;
+    const phone2 = _leadPhone2(lead);
     return `
-      <div class="lead-card ${cardClass}" id="lead-${lead.id}">
+      <div class="lead-card ${cardClass}" id="lead-${safeId}">
         <div class="lead-info">
           <div class="lead-name">${_esc(lead.name || 'Sem nome')}</div>
           <div class="lead-details">
-            ${lead.phone ? `<span>📞 ${_esc(lead.phone)}</span>` : ''}
-            ${lead.phone2 ? `<span>📞 ${_esc(lead.phone2)}</span>` : ''}
+            ${lead.phone ? `<span>📞 ${_esc(lead.phone)} <button type="button" class="btn btn-success btn-sm le-btn-ligar" data-le-action="call" data-lead-id="${safeId}" data-phone-field="phone" title="Ligar para este número">Ligar</button></span>` : ''}
+            ${phone2 ? `<span>📞 ${_esc(phone2)} <button type="button" class="btn btn-success btn-sm le-btn-ligar" data-le-action="call" data-lead-id="${safeId}" data-phone-field="phone2" title="Ligar para este número">Ligar</button></span>` : ''}
             ${lead.orgao ? `<span>🏢 ${_esc(lead.orgao)}</span>` : ''}
             ${lead.cpf ? `<span>📄 ${_maskCPF(lead.cpf)}</span>` : ''}
             ${leadScore ? `<span style="font-weight:800;color:var(--color-primary);">⭐ Score: ${_esc(leadScore)}</span>` : ''}
@@ -212,20 +291,38 @@ function renderLeads() {
           ${lead.notes ? `<div style="font-size:12px;color:var(--color-text-muted);margin-top:4px;">📝 ${_esc(lead.notes)}</div>` : ''}
         </div>
         <div class="lead-actions">
-          ${hasPhone ? `
-            <button type="button" class="btn btn-success btn-sm le-btn-ligar" onclick="event.stopPropagation();callLeadPhone('${safeId}','${lead.phone ? 'phone' : 'phone2'}')" title="Ligar agora">
-              📞 Ligar
-            </button>
-          ` : ''}
           ${isWorked
             ? `<span class="badge badge-${statusInfo.color}">${statusInfo.icon} ${statusInfo.label}</span>
-               <button class="btn btn-ghost btn-sm" onclick="openLeadModal('${safeId}')" title="Editar">✏️</button>`
-            : `<button class="btn btn-accent btn-sm" onclick="openLeadModal('${safeId}')">Atender</button>`
+               <button type="button" class="btn btn-outline-secondary btn-sm" data-le-action="open" data-lead-id="${safeId}" title="Editar">✏️</button>`
+            : `<button type="button" class="btn btn-primary btn-sm" data-le-action="open" data-lead-id="${safeId}">Atender</button>`
           }
         </div>
       </div>
     `;
   }).join('');
+
+  _bindLeadCardButtons(grid);
+}
+
+/**
+ * _bindLeadCardButtons — amarra Ligar/Atender direto no botão após o innerHTML.
+ * Reforço além da delegação (capture), para o clique nunca “morrer”.
+ */
+function _bindLeadCardButtons(grid) {
+  if (!grid) return;
+  grid.querySelectorAll('[data-le-action]').forEach((btn) => {
+    if (btn.dataset.leBound === '1') return;
+    btn.dataset.leBound = '1';
+    btn.addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const action = btn.getAttribute('data-le-action');
+      const leadId = btn.getAttribute('data-lead-id') || '';
+      const phoneField = btn.getAttribute('data-phone-field') || 'phone';
+      if (action === 'call') callLeadPhone(leadId, phoneField);
+      else if (action === 'open') openLeadModal(leadId);
+    });
+  });
 }
 
 function filterLeads(filter) {
@@ -339,10 +436,17 @@ function renderMetrics() {
 window.switchLeadsTab = switchLeadsTab;
 
 /* ── Lead Modal ── */
+/**
+ * openLeadModal — abre ficha do lead na mesa.
+ * Usa String(id) e força estilo no overlay (Bootstrap .modal escondia o diálogo).
+ */
 function openLeadModal(leadId) {
-  _currentLeadId = leadId;
-  const lead = _todayLeads.find(l => l.id === leadId);
-  if (!lead) return;
+  const lead = _findLead(leadId);
+  if (!lead) {
+    alert('Lead não encontrado na mesa. Recarregue a página (Ctrl+Shift+R).');
+    return;
+  }
+  _currentLeadId = String(lead.id);
 
   document.getElementById('modalLeadName').textContent = lead.name || 'Lead';
   document.getElementById('modalNotes').value = lead.notes || '';
@@ -352,7 +456,7 @@ function openLeadModal(leadId) {
   details.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px;">
       ${_detailItemCall('📞 Telefone 1', lead.phone, lead.id, 'phone')}
-      ${_detailItemCall('📞 Telefone 2', lead.phone2, lead.id, 'phone2')}
+      ${_detailItemCall('📞 Telefone 2', _leadPhone2(lead), lead.id, 'phone2')}
       ${_detailItem('🏢 Órgão', lead.orgao)}
       ${_detailItem('📄 CPF', lead.cpf ? _maskCPF(lead.cpf) : '')}
       ${_detailItem('⭐ Score', lead.score || lead.extra_data?.score)}
@@ -380,11 +484,24 @@ function openLeadModal(leadId) {
     </div>
   `;
 
-  document.getElementById('leadModal').classList.add('open');
+  const modal = document.getElementById('leadModal');
+  if (!modal) return;
+  modal.classList.add('open');
+  modal.style.display = 'flex';
+  modal.style.opacity = '1';
+  modal.style.visibility = 'visible';
+  modal.style.pointerEvents = 'auto';
 }
 
 function closeLeadModal() {
-  document.getElementById('leadModal').classList.remove('open');
+  const modal = document.getElementById('leadModal');
+  if (modal) {
+    modal.classList.remove('open');
+    modal.style.display = '';
+    modal.style.opacity = '';
+    modal.style.visibility = '';
+    modal.style.pointerEvents = '';
+  }
   _currentLeadId = null;
 }
 
@@ -392,12 +509,13 @@ async function setLeadStatus(status) {
   if (!_currentLeadId) return;
 
   const notes = document.getElementById('modalNotes').value.trim();
+  const leadId = String(_currentLeadId);
 
   try {
-    await LeadsDB.markLeadAs(_currentLeadId, status, notes);
+    await LeadsDB.markLeadAs(leadId, status, notes);
 
     // Update local state
-    const idx = _todayLeads.findIndex(l => l.id === _currentLeadId);
+    const idx = _todayLeads.findIndex(l => String(l.id) === leadId);
     if (idx !== -1) {
       _todayLeads[idx].status = status;
       _todayLeads[idx].notes = notes;
@@ -449,9 +567,22 @@ async function loadWeekOverview() {
 
 /* ── Helpers ── */
 function _esc(str) {
-  const div = document.createElement('div');
-  div.textContent = str || '';
-  return div.innerHTML;
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/** _escAttr — valor seguro em atributo HTML (data-lead-id etc.). */
+function _escAttr(str) {
+  return _esc(str).replace(/'/g, '&#39;');
+}
+
+/** _findLead — localiza lead na mesa por id (sempre compara como string). */
+function _findLead(leadId) {
+  const id = String(leadId || '');
+  return (_todayLeads || []).find((l) => String(l.id) === id) || null;
 }
 
 function _maskCPF(cpf) {
@@ -472,33 +603,70 @@ function _detailItem(label, value) {
 
 function _detailItemCall(label, value, leadId, phoneField) {
   if (!value) return '';
-  const safeId = String(leadId || '').replace(/'/g, "\\'");
+  const safeId = _escAttr(leadId);
   const field = phoneField === 'phone2' ? 'phone2' : 'phone';
   return `
     <div style="padding:8px 12px;background:var(--color-surface-2);border-radius:var(--radius-sm);">
       <div style="font-size:11px;color:var(--color-text-muted);font-weight:700;text-transform:uppercase;">${label}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:2px;">
         <div style="font-size:14px;font-weight:600;">${_esc(value)}</div>
-        <button type="button" class="btn btn-success btn-sm le-btn-ligar" onclick="callLeadPhone('${safeId}','${field}')">📞 Ligar</button>
+        <button type="button" class="btn btn-success btn-sm le-btn-ligar" data-le-action="call" data-lead-id="${safeId}" data-phone-field="${field}">📞 Ligar</button>
       </div>
     </div>
   `;
 }
 
+function _leadPhone2(lead) {
+  if (!lead) return '';
+  const extra = lead.extra_data && typeof lead.extra_data === 'object' ? lead.extra_data : {};
+  return String(lead.phone2 || extra.phone2 || '').trim();
+}
+
+async function _guardSellerClick2Call() {
+  const session = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+  let mode = 'softphone';
+  try {
+    // Timeout evita botão Ligar “travado” se o status demorar
+    const st = await Promise.race([
+      LeadsDB.nextBillingStatus(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000)),
+    ]);
+    mode = st?.call_mode || 'softphone';
+  } catch (_) { /* assume softphone */ }
+  if (mode === 'softphone') return true;
+  const ok = typeof LeadsDB.normalizeBrPhone === 'function'
+    ? LeadsDB.normalizeBrPhone(session?.phone || '')
+    : String(session?.phone || '').replace(/\D/g, '');
+  if (!ok || String(ok).length < 10) {
+    alert('Cadastre seu telefone no perfil para usar o Click2Call.');
+    return false;
+  }
+  return true;
+}
+
 async function callLeadPhone(leadId, phoneField) {
-  const lead = (_todayLeads || []).find((l) => l.id === leadId);
+  const lead = _findLead(leadId);
   const field = phoneField === 'phone2' ? 'phone2' : 'phone';
-  const num = lead ? (lead[field] || lead.phone || '') : '';
+  const num = lead ? (field === 'phone2' ? (_leadPhone2(lead) || lead.phone) : (lead.phone || _leadPhone2(lead))) : '';
   if (!num) {
     alert('Lead sem telefone.');
     return;
   }
-  if (!confirm(`Ligar para ${num}?\n\nO MicroSIP deve estar Online.\nA discagem abre no softphone (headset).`)) return;
+  if (typeof LeadsDB.normalizeBrPhone === 'function' && !LeadsDB.normalizeBrPhone(num)) {
+    alert('Lead sem telefone válido (DDD + número).');
+    return;
+  }
+  if (!(await _guardSellerClick2Call())) return;
+  if (!confirm(`Ligar para ${num}?\n\nO MicroSIP vai discar este número na conta blu-209.`)) return;
   try {
-    if (typeof showLoading === 'function') showLoading('Abrindo MicroSIP…');
-    const r = await LeadsDB.nextBillingClick2Call({ lead_id: leadId, phone_field: field });
-    if (typeof showToast === 'function') showToast(r.message || 'Discagem enviada ao MicroSIP.', 'success');
-    else alert(r.message || 'Discagem enviada ao MicroSIP.');
+    if (typeof LeadsDB.openSoftphoneDialNow === 'function') LeadsDB.openSoftphoneDialNow(num);
+    if (typeof showLoading === 'function') showLoading('Abrindo o MicroSIP…');
+    // Conta já na discagem — não espera o click2call (senão o contador não sobe e o lead “volta”).
+    await _markDialedLead(lead?.id || leadId);
+    const r = await LeadsDB.nextBillingClick2Call({ lead_id: lead?.id || leadId, phone_field: field });
+    const msg = r.message || 'MicroSIP discando o número na conta registrada.';
+    if (typeof showToast === 'function') showToast(msg, 'success');
+    else alert(msg);
   } catch (e) {
     alert(e.message || 'Falha ao ligar');
   } finally {
@@ -514,14 +682,22 @@ async function callManualNumber() {
     input?.focus();
     return;
   }
-  if (!confirm(`Ligar para ${num}?\n\nO MicroSIP deve estar Online.\nA discagem abre no softphone (headset).`)) return;
+  if (typeof LeadsDB.normalizeBrPhone === 'function' && !LeadsDB.normalizeBrPhone(num)) {
+    alert('Informe o destino com DDD (ex.: 62999999999).');
+    input?.focus();
+    return;
+  }
+  if (!(await _guardSellerClick2Call())) return;
+  if (!confirm(`Ligar para ${num}?\n\nO MicroSIP vai discar este número na conta blu-209.`)) return;
   const btn = document.getElementById('btnLeDial');
   if (btn) { btn.disabled = true; btn.textContent = 'Ligando…'; }
   try {
-    if (typeof showLoading === 'function') showLoading('Abrindo MicroSIP…');
+    if (typeof LeadsDB.openSoftphoneDialNow === 'function') LeadsDB.openSoftphoneDialNow(num);
+    if (typeof showLoading === 'function') showLoading('Abrindo o MicroSIP…');
     const r = await LeadsDB.nextBillingClick2Call({ dst: num });
-    if (typeof showToast === 'function') showToast(r.message || 'Discagem enviada ao MicroSIP.', 'success');
-    else alert(r.message || 'Discagem enviada ao MicroSIP.');
+    const msg = r.message || 'MicroSIP discando o número na conta registrada.';
+    if (typeof showToast === 'function') showToast(msg, 'success');
+    else alert(msg);
   } catch (e) {
     alert(e.message || 'Falha ao ligar');
   } finally {
@@ -534,6 +710,131 @@ async function callManualNumber() {
 let _massaRunning = false;
 let _massaStop = false;
 let _massaWaitResolve = null;
+let _massaDialAt = 0;
+let _massaLastAutoAt = 0;
+let _massaTick = 0;
+let _massaInCall = false;
+let _massaWasFocused = true;
+let _massaStatusBase = '';
+let _massaQueue = [];
+let _massaIndex = -1;
+let _massaPreDialedId = '';
+let _massaOk = 0;
+let _massaFail = 0;
+
+const _MASSA_SKIP_SIP_BOUNCE_MS = 3000;
+const _MASSA_NO_ANSWER_MS = 9000;
+
+function _massaClearTick() {
+  if (_massaTick) {
+    clearInterval(_massaTick);
+    _massaTick = 0;
+  }
+}
+
+function _massaCanAdvance() {
+  if (!_massaRunning || typeof _massaWaitResolve !== 'function') return false;
+  if (Date.now() - (_massaLastAutoAt || 0) < 800) return false;
+  return Date.now() - (_massaDialAt || 0) >= _MASSA_SKIP_SIP_BOUNCE_MS;
+}
+
+function _massaHasGesture() {
+  try {
+    return !!(navigator.userActivation && navigator.userActivation.isActive);
+  } catch (_) {
+    return false;
+  }
+}
+
+function _massaDialLead(lead, opts = {}) {
+  if (!lead) return;
+  const n = lead.phone || _leadPhone2(lead) || '';
+  const field = lead.phone ? 'phone' : 'phone2';
+  const originate = opts.forceOriginate === true;
+  if (typeof LeadsDB.openSoftphoneDialNow === 'function') {
+    LeadsDB.openSoftphoneDialNow(n);
+  }
+  // Marca na hora (antes do click2call) para a contagem subir e o lead não “voltar”.
+  void _markDialedLead(lead.id);
+  LeadsDB.nextBillingClick2Call({
+    lead_id: lead.id,
+    phone_field: field,
+    originate: originate ? 1 : 0,
+  }).then(() => {
+    _massaOk += 1;
+  })
+    .catch((e) => { _massaFail += 1; console.warn('[LigarMassa]', lead.id, e); });
+  _massaPreDialedId = String(lead.id || '');
+}
+
+/**
+ * _massaCompleteCurrentLead — marca lead atual como não atende ao pular/timeout (não atendeu).
+ * Se o vendedor clicou em Em ligação, não marca — ele classifica no Atender.
+ */
+async function _massaCompleteCurrentLead(markAsNoAnswer) {
+  if (!markAsNoAnswer) return;
+  const lead = _massaQueue[_massaIndex];
+  if (!lead || (lead.status || 'pending') !== 'pending') return;
+  await _markDialedLead(lead.id);
+}
+
+function _massaGoNext() {
+  if (!_massaCanAdvance()) return false;
+  _massaLastAutoAt = Date.now();
+  const next = _massaQueue[_massaIndex + 1];
+  if (next) _massaDialLead(next, { forceOriginate: !_massaHasGesture() });
+  if (!_massaInCall) _massaCompleteCurrentLead(true);
+  _massaInCall = false;
+  proximoLigarMassa(true);
+  return true;
+}
+
+function _massaOnReturnedToCrm() {
+  if (!_massaCanAdvance()) return;
+  if (_massaInCall || Date.now() - (_massaDialAt || 0) >= 6000) {
+    _massaGoNext();
+  }
+}
+
+function _massaPaintStatus() {
+  const st = document.getElementById('massaStatus');
+  if (!st || !_massaRunning) return;
+  const elapsed = Date.now() - (_massaDialAt || 0);
+  if (_massaInCall) {
+    st.textContent = _massaStatusBase + ' Em ligação — ao encerrar, o próximo liga sozinho (ou clique em Próximo).';
+    return;
+  }
+  const left = Math.max(0, Math.ceil((_MASSA_NO_ANSWER_MS - elapsed) / 1000));
+  st.textContent = _massaStatusBase + (left > 0
+    ? ` Sem atendimento: próximo em ${left}s. Atendeu? clique em Em ligação.`
+    : ' Passando para o próximo…');
+}
+
+function _massaOnTick() {
+  if (!_massaRunning || typeof _massaWaitResolve !== 'function') return;
+  const focused = document.hasFocus();
+  const elapsed = Date.now() - (_massaDialAt || 0);
+  if (!focused) _massaWasFocused = false;
+  else if (!_massaWasFocused && elapsed >= _MASSA_SKIP_SIP_BOUNCE_MS) {
+    _massaWasFocused = true;
+    _massaOnReturnedToCrm();
+    return;
+  } else {
+    _massaWasFocused = true;
+  }
+  if (!_massaInCall && elapsed >= _MASSA_NO_ANSWER_MS) {
+    _massaGoNext();
+    return;
+  }
+  _massaPaintStatus();
+}
+
+window.addEventListener('focus', () => {
+  if (_massaRunning) _massaOnReturnedToCrm();
+});
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && _massaRunning) _massaOnReturnedToCrm();
+});
 
 /** Mesma ordem da tela: data de atribuição → criação → nome. */
 function _sortLeadsDeskOrder(leads) {
@@ -571,12 +872,14 @@ function _massaSetUi(running, text, opts = {}) {
   const stop = document.getElementById('btnPararMassa');
   const next = document.getElementById('btnProximoMassa');
   const skip = document.getElementById('btnPularMassa');
+  const hold = document.getElementById('btnEmLigacaoMassa');
   const st = document.getElementById('massaStatus');
   const showNext = !!(running && opts.showNext);
   if (btn) btn.disabled = !!running;
   if (stop) stop.classList.toggle('d-none', !running);
   if (next) next.classList.toggle('d-none', !showNext);
   if (skip) skip.classList.toggle('d-none', !showNext);
+  if (hold) hold.classList.toggle('d-none', !(showNext && opts.showHold));
   if (st) {
     st.classList.toggle('d-none', !text);
     st.textContent = text || '';
@@ -585,6 +888,7 @@ function _massaSetUi(running, text, opts = {}) {
 
 function _massaFinishWait(action) {
   if (typeof _massaWaitResolve !== 'function') return;
+  _massaClearTick();
   const resolve = _massaWaitResolve;
   _massaWaitResolve = null;
   resolve(action);
@@ -596,18 +900,45 @@ function pararLigarMassa() {
   _massaSetUi(true, 'Parando a fila…', { showNext: false });
 }
 
-function proximoLigarMassa() {
+function proximoLigarMassa(alreadyDialed) {
+  if (alreadyDialed !== true) {
+    const next = _massaQueue[_massaIndex + 1];
+    if (next) _massaDialLead(next, { forceOriginate: !_massaHasGesture() });
+    if (!_massaInCall) _massaCompleteCurrentLead(true);
+  }
+  _massaInCall = false;
   _massaFinishWait('next');
 }
 
+function emLigacaoMassa() {
+  if (!_massaRunning || typeof _massaWaitResolve !== 'function') return;
+  _massaInCall = true;
+  const hold = document.getElementById('btnEmLigacaoMassa');
+  if (hold) hold.classList.add('d-none');
+  _massaPaintStatus();
+}
+
+document.addEventListener('keydown', (e) => {
+  if (!_massaRunning || typeof _massaWaitResolve !== 'function') return;
+  const tag = String(e.target && e.target.tagName || '');
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    proximoLigarMassa();
+  }
+});
+
 function pularLigarMassa() {
+  _massaCompleteCurrentLead(true);
+  _massaInCall = false;
   _massaFinishWait('skip');
 }
 
 function _massaWaitUserNext(statusText) {
   return new Promise((resolve) => {
     _massaWaitResolve = resolve;
-    _massaSetUi(true, statusText, { showNext: true });
+    _massaStatusBase = statusText;
+    _massaSetUi(true, statusText, { showNext: true, showHold: true });
   });
 }
 
@@ -615,7 +946,7 @@ async function ligarEmMassa() {
   if (_massaRunning) return;
   // Ordem = mesma da lista na tela (pendentes com telefone)
   const queue = _sortLeadsDeskOrder(_todayLeads || []).filter((l) =>
-    !LeadsDB.isWorkedStatus(l.status || 'pending') && (l.phone || l.phone2)
+    !LeadsDB.isWorkedStatus(l.status || 'pending') && (l.phone || _leadPhone2(l))
   );
   if (!queue.length) {
     alert('Nenhum lead pendente com telefone para ligar.');
@@ -624,18 +955,21 @@ async function ligarEmMassa() {
   if (!confirm(
     `Ligar em massa na ordem da lista (${queue.length} lead(s))?\n\n` +
     `1º: ${queue[0].name || queue[0].phone || '—'}\n` +
-    `MicroSIP Online.\nApós cada ligação, clique em Próximo para o seguinte na ordem.`
+    `Não atendeu: em 9s o próximo já liga. Atendeu? clique em Em ligação.`
   )) return;
+
+  _massaQueue = queue;
+  _massaIndex = -1;
+  _massaPreDialedId = '';
+  _massaOk = 0;
+  _massaFail = 0;
+  _massaDialLead(queue[0], { forceOriginate: false });
+
+  if (!(await _guardSellerClick2Call())) return;
 
   _massaRunning = true;
   _massaStop = false;
-  let ok = 0;
-  let fail = 0;
   let skipped = 0;
-
-  // #region agent log
-  fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'massa-order',hypothesisId:'M1',location:'leads-employee.js:ligarEmMassa',message:'massa start ordered',data:{total:queue.length,first:queue[0]?.name||null,last:queue[queue.length-1]?.name||null},timestamp:Date.now()})}).catch(()=>{});
-  // #endregion
 
   try {
     for (let i = 0; i < queue.length; i++) {
@@ -644,47 +978,60 @@ async function ligarEmMassa() {
       const field = lead.phone ? 'phone' : 'phone2';
       const num = lead[field] || '';
       const label = `${i + 1}/${queue.length}`;
+      const hasNext = i < queue.length - 1;
+      const n = lead.phone || _leadPhone2(lead) || num;
+      _massaIndex = i;
       _massaHighlightLead(lead.id);
-      _massaSetUi(true, `Ordem ${label}: ligando ${lead.name || num}…`, { showNext: false });
 
-      try {
-        await LeadsDB.nextBillingClick2Call({ lead_id: lead.id, phone_field: field });
-        ok++;
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'massa-order',hypothesisId:'M2',location:'leads-employee.js:ligarEmMassa:ok',message:'dial ok',data:{i:i+1,total:queue.length,leadId:lead.id,name:lead.name||null},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
-      } catch (e) {
-        fail++;
-        console.warn('[LigarMassa]', lead.id, e);
-        // #region agent log
-        fetch('http://127.0.0.1:7585/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7a80a8'},body:JSON.stringify({sessionId:'7a80a8',runId:'massa-order',hypothesisId:'M2',location:'leads-employee.js:ligarEmMassa:fail',message:'dial fail',data:{i:i+1,error:String(e?.message||e).slice(0,160)},timestamp:Date.now()})}).catch(()=>{});
-        // #endregion
+      const waiter = hasNext
+        ? _massaWaitUserNext(`Ordem ${label}: ligando ${lead.name || n}.`)
+        : null;
+      if (!waiter) {
+        _massaSetUi(true, `Ordem ${label}: ${lead.name || n}. Último da fila.`, { showNext: false });
       }
 
-      if (_massaStop || i >= queue.length - 1) break;
+      _massaDialAt = Date.now();
+      _massaInCall = false;
+      _massaWasFocused = document.hasFocus();
+      if (waiter) {
+        _massaClearTick();
+        _massaTick = setInterval(_massaOnTick, 400);
+        _massaPaintStatus();
+      }
 
-      const nextLead = queue[i + 1];
-      const action = await _massaWaitUserNext(
-        `Ordem ${label} discado (${lead.name || num}). Próximo na ordem: ${nextLead.name || nextLead.phone || '—'} — clique em Próximo.`
-      );
+      try {
+        if (String(lead.id) !== String(_massaPreDialedId)) {
+          _massaDialLead(lead, { forceOriginate: i > 0 });
+        }
+      } catch (e) {
+        _massaFail += 1;
+        console.warn('[LigarMassa]', lead.id, e);
+      }
+
+      if (!waiter) break;
+      const action = await waiter;
+      _massaClearTick();
       if (action === 'stop') break;
       if (action === 'skip') {
-        // Pula o próximo da fila e discagem imediata do seguinte (gesto do clique)
         skipped += 1;
         i += 1;
       }
+      await new Promise((r) => setTimeout(r, 400));
     }
     const msg = _massaStop
-      ? `Interrompido. Ok: ${ok} · Falhas: ${fail}` + (skipped ? ` · Pulados: ${skipped}` : '')
-      : `Fila na ordem concluída. Ok: ${ok} · Falhas: ${fail}` + (skipped ? ` · Pulados: ${skipped}` : '');
+      ? `Interrompido. Ok: ${_massaOk} · Falhas: ${_massaFail}` + (skipped ? ` · Pulados: ${skipped}` : '')
+      : `Fila na ordem concluída. Ok: ${_massaOk} · Falhas: ${_massaFail}` + (skipped ? ` · Pulados: ${skipped}` : '');
     _massaSetUi(false, msg, { showNext: false });
     _massaClearHighlight();
-    if (typeof showToast === 'function') showToast(msg, fail ? 'warning' : 'success');
+    if (typeof showToast === 'function') showToast(msg, _massaFail ? 'warning' : 'success');
     else alert(msg);
   } finally {
     _massaRunning = false;
     _massaStop = false;
     _massaWaitResolve = null;
+    _massaDialAt = 0;
+    _massaInCall = false;
+    _massaClearTick();
     _massaClearHighlight();
     _massaSetUi(false, document.getElementById('massaStatus')?.textContent || '', { showNext: false });
     const stop = document.getElementById('btnPararMassa');
@@ -700,6 +1047,51 @@ window.ligarEmMassa = ligarEmMassa;
 window.pararLigarMassa = pararLigarMassa;
 window.proximoLigarMassa = proximoLigarMassa;
 window.pularLigarMassa = pularLigarMassa;
+window.emLigacaoMassa = emLigacaoMassa;
+window.openLeadModal = openLeadModal;
+window.closeLeadModal = closeLeadModal;
+window.setLeadStatus = setLeadStatus;
+window.filterLeads = filterLeads;
+window.navigateBack = navigateBack;
+window.toggleSidebar = toggleSidebar;
+
+/**
+ * _onLeadsUiClick — cliques Ligar/Atender/filtros via data-le-action (capture).
+ * Não depende só de onclick inline (mesmo padrão que corrigiu Gestão de Propostas).
+ */
+function _onLeadsUiClick(e) {
+  const btn = e.target && e.target.closest ? e.target.closest('[data-le-action]') : null;
+  if (!btn || !document.body.contains(btn)) return;
+  const action = btn.getAttribute('data-le-action');
+  if (!action) return;
+  const leadId = btn.getAttribute('data-lead-id') || '';
+  const phoneField = btn.getAttribute('data-phone-field') || 'phone';
+  const filter = btn.getAttribute('data-filter') || '';
+  e.preventDefault();
+  e.stopPropagation();
+  if (action === 'call') {
+    callLeadPhone(leadId, phoneField);
+    return;
+  }
+  if (action === 'open') {
+    openLeadModal(leadId);
+    return;
+  }
+  if (action === 'filter') {
+    filterLeads(filter);
+    return;
+  }
+  if (action === 'dial-manual') {
+    callManualNumber();
+    return;
+  }
+  if (action === 'mass-start') {
+    ligarEmMassa();
+    return;
+  }
+}
+
+document.addEventListener('click', _onLeadsUiClick, true);
 
 function navigateBack() {
   if (typeof Auth !== 'undefined' && Auth.employeePageHref) {

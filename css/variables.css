@@ -46,19 +46,19 @@
   --color-text-secondary: #475569;
   --color-text-muted:     #94A3B8;
 
-  /* Sidebar */
-  --sidebar-bg:           #FFFFFF;
-  --sidebar-text:         #000000;
-  --sidebar-text-muted:   rgba(0, 0, 0, 0.5);
-  --sidebar-hover:        rgba(0, 0, 0, 0.05);
-  --sidebar-active:       rgba(0, 0, 0, 0.07);
-  --sidebar-active-text:  #000000;
+  /* Sidebar — azul padrão SOU+BLU */
+  --sidebar-bg:           #0B2545;
+  --sidebar-text:         #F8FAFC;
+  --sidebar-text-muted:   rgba(248, 250, 252, 0.55);
+  --sidebar-hover:        rgba(74, 127, 255, 0.14);
+  --sidebar-active:       rgba(74, 127, 255, 0.22);
+  --sidebar-active-text:  #FFFFFF;
   --sidebar-width:        248px;
   --sidebar-collapsed:    68px;
 
   /* Nav item ativo — isolado, não afeta outros elementos */
-  --nav-active-bg:        rgba(74, 127, 255, 0.12);
-  --nav-active-text:      #4A7FFF;
+  --nav-active-bg:        rgba(74, 127, 255, 0.22);
+  --nav-active-text:      #FFFFFF;
   --nav-active-border:    #4A7FFF;
 
   /* Cor do "+ BLU" no logo — isolado */

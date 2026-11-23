@@ -384,6 +384,7 @@
 
           '<div class="wa-kcard__hover-actions" onclick="event.stopPropagation()">' +
             '<button type="button" class="wa-kcard__action-btn" title="Definir Valor (R$)" onclick="WhatsAppCRM.editDealValue(\'' + esc(c.id) + '\', \'' + (c.deal_value||'') + '\')">💰</button>' +
+            '<button type="button" class="wa-kcard__action-btn" title="Etiquetas" onclick="event.stopPropagation();WhatsAppCRM.editDealTags(\'' + esc(c.id) + '\', \'' + esc(c.deal_tags||'') + '\', event)">🏷️</button>' +
             '<button type="button" class="wa-kcard__action-btn" title="Agendar Retorno" onclick="WhatsAppCRM.editNextAction(\'' + esc(c.id) + '\', \'' + esc(c.next_action_at||'') + '\')">📅</button>' +
             '<select class="wa-kcard__stage" onchange="WA.moveCard(\'' + esc(c.id) + '\',this.value)">' + stageOpts + '</select>' +
           '</div>' +
@@ -402,6 +403,7 @@
           '<div class="wa-kcard__obs">' +
             '<span class="wa-kcard__obs-label">Observação</span>' +
             '<span class="wa-kcard__obs-val">' + obs + '</span>' +
+            inboxTagsHtml(c) +
           '</div>' +
 
           '<div class="wa-kcard__footer">' +
@@ -1170,11 +1172,26 @@ if (dropdownStatus) {
 
     _saveDealPriority: function(chatId, priority) {
       if (!chatId || !priority) return;
+      var chat = (_chats || []).find(function(c) { return String(c.id) === String(chatId); });
+      var tags = parseTags(chat && chat.deal_tags);
+      var prioKeys = { urgente:1, urgent:1, alta:1, high:1, 'média':1, media:1, medium:1, baixa:1, low:1 };
+      tags = tags.filter(function(t) {
+        return !prioKeys[String(t || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')];
+      });
+      tags.unshift(priority);
+      if (typeof WhatsAppCRM !== 'undefined' && WhatsAppCRM.updateDeal) {
+        WhatsAppCRM.updateDeal(chatId, { deal_tags: tags.join(', ') });
+        return;
+      }
       var api = (typeof WhatsAppChat !== 'undefined' && WhatsAppChat.config && WhatsAppChat.config.api) || 'api/whatsapp_api.php';
+      var state = (typeof WhatsAppChat !== 'undefined' && WhatsAppChat._getState) ? WhatsAppChat._getState() : {};
+      var cfg = window.SOUBLU_CONFIG || {};
       var formData = new FormData();
       formData.append('action', 'update_deal_info');
       formData.append('chat_id', chatId);
-      formData.append('deal_tags', priority);
+      formData.append('user_id', state.userId || cfg.USER_ID || '');
+      formData.append('apikey', cfg.API_KEY || '');
+      formData.append('deal_tags', tags.join(', '));
       fetch(api, { method: 'POST', body: formData })
         .then(function(r) { return r.json(); })
         .then(function(json) {

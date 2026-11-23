@@ -134,6 +134,7 @@ const VendorTierPoints = (() => {
     if (typeof isUserInPartnerNetworkSync === 'function' && isUserInPartnerNetworkSync(user)) return false;
     if (typeof DB !== 'undefined' && DB._isPartnerWalletUser?.(user)) return false;
     if (typeof userUsesMoneyWallet === 'function' && userUsesMoneyWallet(user)) return false;
+    if (typeof DB !== 'undefined' && typeof DB.isCcMoneyActive === 'function' && DB.isCcMoneyActive(user)) return false;
     const roots = typeof window !== 'undefined' ? window._PARTNER_ROOT_USER_IDS : null;
     if (roots && user.admin_id && roots.has(String(user.admin_id))) return false;
     if (typeof window !== 'undefined' && window.__PREVIEW_USER_ID__) return false;

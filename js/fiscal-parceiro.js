@@ -51,7 +51,6 @@
     const s = Auth.getSession();
     if (!s) return false;
     const role = String(s.role || '').toLowerCase();
-    if (role === 'parceiro') return false;
     if (role === 'master' || role === 'fundador' || role === 'gerente' || role === 'financeiro' || role === 'financial' || role === 'rh' || role === 'diretoria' || role === 'desenvolvedor') {
       return false;
     }
@@ -77,7 +76,14 @@
       hypothesisId: 'fiscal-partner-hide',
       runId: '97c411bol8',
     };
-}
+    // #region agent log
+    fetch('http://127.0.0.1:7816/ingest/dedb3b14-4a31-406e-8669-bb6fd84699d1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': '97c411' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+    // #endregion
+  }
 
   function canManageFechamento() {
     const s = Auth.getSession();
@@ -86,12 +92,11 @@
   }
 
   function canViewFiscal() {
+    if (isPartnerOrgViewer()) return false;
     const s = Auth.getSession();
     if (!s) return false;
-    const role = String(s.role || '').toLowerCase();
-    if (role === 'parceiro') return !!window.PARTNER_ROOT_ID;
-    if (isPartnerOrgViewer()) return false;
     if (!window.PARTNER_ROOT_ID) return canManageFechamento();
+    if (String(s.role || '').toLowerCase() === 'parceiro') return true;
     return hasPerm('fechamento_financeiro') || hasPerm('dados_nota_fiscal') || hasPerm('upload_nota_fiscal');
   }
 
@@ -139,7 +144,7 @@
   const FiscalParceiro = {
     ensureUi() {
       const cfg = window.__ADMIN_NAV_CFG__;
-      if (_isSouBluAdminPanel() && (cfg?._inPartnerOrg || window.PARTNER_ROOT_ID)) {
+      if (_isSouBluAdminPanel() && (cfg?._inPartnerOrg || (window.PARTNER_ROOT_ID && isPartnerOrgViewer()))) {
         document.getElementById('navFiscalParceiro')?.remove();
         return;
       }
@@ -160,8 +165,7 @@
         btn.className = 'nav-item fiscal-parceiro-nav';
         btn.id = 'navFiscalParceiro';
         btn.dataset.section = 'secFiscalParceiro';
-        const fiscalIcon = typeof navIconHtml === 'function' ? navIconHtml('receipt') : '<span class="nav-icon"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg></span>';
-        btn.innerHTML = `${fiscalIcon}<span class="nav-label">Comissões / Fiscal</span>`;
+        btn.innerHTML = `${navIconHtml('receipt')}<span class="nav-label">Comissões / Fiscal</span>`;
         const anchor = document.getElementById('navContestacao') || document.getElementById('navTimEsteira');
         if (anchor?.nextSibling) anchor.parentNode.insertBefore(btn, anchor.nextSibling);
         else nav.appendChild(btn);
@@ -178,7 +182,7 @@
     },
 
     applyNavVisibility(cfg) {
-      const inPartnerAdmin = !!((cfg?._inPartnerOrg || window.PARTNER_ROOT_ID) && _isSouBluAdminPanel());
+      const inPartnerAdmin = !!(cfg?._inPartnerOrg || (window.PARTNER_ROOT_ID && isPartnerOrgViewer()));
       const show = !inPartnerAdmin
         && cfg?.canFiscalParceiro !== false && canViewFiscal()
         && (!_isSouBluAdminPanel() || !!window.PARTNER_ROOT_ID)

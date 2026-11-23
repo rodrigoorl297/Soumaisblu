@@ -1500,3 +1500,17 @@ select.header-filter.filter-active + .header-filter-chevron {
 .sidebar-nav .hide-from-sidebar {
     display: none !important;
 }
+
+/* Status da Gestão de Crédito: leitura clara e controle compacto. */
+select.credit-status-select { min-width:190px !important; width:100%; max-width:240px; height:38px; padding:8px 28px 8px 10px !important; border:1px solid #cbd8ea; border-radius:9px; background-color:#f1f6fd; color:#173b66; font-size:11px !important; font-weight:600; line-height:1.3; cursor:pointer; box-shadow:none; }
+select.credit-status-select:hover { border-color:#8daacb; background-color:#eaf2fd; }
+select.credit-status-select:focus { outline:2px solid #ff8a3d; outline-offset:2px; border-color:#f97316; box-shadow:none; }
+select.credit-status-select option { color:#173b66; background:#fff; font-size:12px; }
+/* Menu personalizado de situação da proposta. */
+.credit-status-trigger{display:flex;align-items:center;gap:8px;width:100%;min-width:190px;max-width:250px;min-height:38px;padding:9px 11px;border:1px solid #d6e1ee;border-radius:10px;background:#f3f7fd;color:#204971;font-family:inherit;font-size:11px;font-weight:600;line-height:1.35;text-align:left;cursor:pointer;transition:background .15s,border-color .15s;}
+.credit-status-caption{flex:1;font-size:11px;font-weight:600;line-height:1.4;white-space:normal;}
+.credit-status-trigger:hover{border-color:#91b4da;background:#eaf2fd;}.credit-status-trigger:focus-visible{outline:2px solid #fb923c;outline-offset:2px;}.credit-status-trigger[aria-expanded="true"]{border-color:#3279bc;box-shadow:0 0 0 3px #dceaf9;}.credit-status-chevron{font-size:16px;color:#6b87a5;}
+.credit-status-dot{width:7px;height:7px;border-radius:50%;background:#4381bb;flex-shrink:0;}
+.credit-status-menu{position:fixed;z-index:2147483000;padding:6px;border:1px solid #dbe5f1;border-radius:13px;background:#fff;box-shadow:0 12px 36px #0c25442b;max-height:300px;overflow-y:auto;box-sizing:border-box;}
+.credit-status-option{display:flex;align-items:center;gap:9px;width:100%;min-height:38px;padding:9px 10px;border:0;border-radius:8px;background:#fff;color:#274766;font-family:inherit;font-size:11px;line-height:1.4;font-weight:600;text-align:left;cursor:pointer;}.credit-status-option:hover,.credit-status-option:focus-visible{background:#f0f5fc;outline:none;}.credit-status-option[aria-selected="true"]{background:#eaf2fe;color:#124f8c;}.credit-status-tick{margin-left:auto;color:#2068aa;font-size:15px;}
+.credit-status-option[data-tone="paid"] .credit-status-dot,.credit-status-trigger[data-tone="paid"] .credit-status-dot{background:#14a875;}.credit-status-option[data-tone="cancel"] .credit-status-dot,.credit-status-trigger[data-tone="cancel"] .credit-status-dot{background:#e25a61;}.credit-status-option[data-tone="pending"] .credit-status-dot,.credit-status-trigger[data-tone="pending"] .credit-status-dot{background:#e8a02c;}

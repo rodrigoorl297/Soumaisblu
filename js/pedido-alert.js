@@ -16,6 +16,8 @@
   let audioUnlocked = false;
   let audioCtx = null;
   let lastToastAt = 0;
+  /** Depois de 429 ou queda, o alerta espera para não repetir a mesma leitura. */
+  let failUntil = 0;
 
   function _role() {
     const s = (typeof Auth !== 'undefined' && Auth.getSession) ? Auth.getSession() : null;
@@ -23,6 +25,8 @@
   }
 
   function _canReceive() {
+    /* Clube desligado → sem alerta de pedidos do restaurante. */
+    if (typeof g.isClubeBeneficiosEnabled === 'function' && !g.isClubeBeneficiosEnabled()) return false;
     return ALERT_ROLES.has(_role());
   }
 
@@ -284,12 +288,15 @@
         null,
         '?status=eq.em_analise&order=created_at.desc&limit=100'
       );
+      failUntil = 0;
       return (Array.isArray(rows) ? rows : []).filter((v) => {
         const cat = String(v?.categoria || '').toLowerCase();
         if (cat && !cat.startsWith('aliment')) return false;
         return _orderAgeMs(v) < NOTE_TTL_MS;
       });
     } catch (e) {
+      const code = Number(e?.status) || 0;
+      failUntil = Date.now() + ((code === 429 || code === 0) ? 120000 : 30000);
       console.warn('[PedidoAlert]', e?.message || e);
       return [];
     }
@@ -310,6 +317,7 @@
 
   async function tick(isFirst) {
     if (!_canReceive()) return;
+    if (!isFirst && Date.now() < failUntil) return;
     const pending = await fetchPendingOrders();
     renderNotes(pending);
     const seen = _loadSeen();

@@ -34,3 +34,23 @@
 .dp-period-switch button { background:transparent; color:#52657c; border:0; border-radius:8px; padding:10px 16px; font-weight:700; }
 .dp-period-switch button[aria-pressed="true"] { background:#123862; color:white; box-shadow:0 2px 5px #12386220; }
 @media(max-width:600px) { .dp-period-controls { width:100%; } .dp-period-switch { flex:1; } .dp-period-switch button { flex:1; padding:10px; } }
+
+/* Mobile: campos legíveis e ações que cabem em telas estreitas. */
+@media (max-width: 600px) {
+  .dp-panel input, .dp-panel select, .dp-panel textarea { font-size: 16px; min-width: 0; }
+  .dp-panel h2 { font-size: 23px; }
+  .dp-hero, .dp-filter-card, [data-daily-form] { padding: 14px; }
+  .dp-totals { grid-template-columns: minmax(0, 1fr); }
+  .dp-kpi:last-child { grid-column: auto; }
+  .dp-kpi { padding: 14px; }
+  .dp-kpi-icon { margin-bottom: 8px; }
+  .dp-period-controls, .dp-period-controls label, .dp-period-switch { width: 100%; min-width: 0; }
+  .dp-period-switch button { min-width: 0; padding: 10px 8px; }
+  .dp-section-heading { flex-wrap: wrap; }
+  .dp-table-tools { justify-content: flex-start; width: 100%; }
+  .dp-panel table[data-own-actions=true] th:last-child,
+  .dp-panel table[data-own-actions=true] td:last-child { position: static; box-shadow: none; }
+  .dp-pagination { flex-wrap: wrap; }
+  .dp-page-buttons { margin-left: 0; flex-wrap: wrap; justify-content: center; }
+  .dp-panel .dp-record-actions button, .dp-panel .dp-page-buttons button { min-height: 44px; }
+}
