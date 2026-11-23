@@ -43,3 +43,7 @@ O teste leads-distribution.test.cjs espera uma API pública buildDistributionPla
 ## Responsáveis pela autorização
 
 Correções extremas e publicações podem ser autorizadas pelo Plínio OU pelo Rodrigo. A autorização deve constar da issue/PR; os nomes não concedem automaticamente acesso administrativo ao GitHub. Integrar um PR depende da revisão do fluxo e pode ser feito por quem tiver permissão de merge. Ativar rulesets e o ambiente/segredos depende das permissões administrativas adequadas. As credenciais FTPS ainda não foram fornecidas/configuradas; não houve teste de conexão real.
+
+## Atualização da base publicada
+
+A correção visual autorizada de Propostas/Crédito está no commit a6b6e5690d7b8cf48fe0b041cc302448e534084b. Os cinco arquivos alterados foram reconferidos por HTTP antes de registrar deploy/current-production-ref. O snapshot original permanece imutável para auditoria. A base padrão de publicação usa a referência atual, evitando tentar republicar a correção já presente no servidor. O preflight FTPS continua obrigatório para cada próxima alteração.

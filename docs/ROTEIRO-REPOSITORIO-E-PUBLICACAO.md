@@ -59,7 +59,7 @@ Deixar LOCAWEB_DEPLOY_ENABLED=false até confirmar conexão, certificado TLS, pe
 1. Integrar o PR aprovado na main e anotar o SHA completo.
 2. Abrir Actions > Publicar na Locaweb > Run workflow, selecionando main.
 3. Executar mode=plan. É uma comparação offline dos commits e não escreve na hospedagem. Revisar arquivos incluídos e ignorados.
-4. Na primeira publicação, usar a base de deploy/initial-production-ref. Nas seguintes, usar o SHA atualmente publicado, mostrado no resumo da execução anterior. Não chutar a base.
+4. Na primeira publicação, usar a base de deploy/current-production-ref (reconferida após a correção visual autorizada). deploy/initial-production-ref preserva a fotografia original para auditoria. Nas seguintes, usar o SHA atualmente publicado, mostrado no resumo da execução anterior. Não chutar a base.
 5. Executar mode=publish com base_sha e a URL da issue/PR que registra a autorização explícita do Plínio ou do Rodrigo. A URL é referência de auditoria: a revisão humana confirma o conteúdo e o ambiente restringe quem pode publicar.
 6. Aprovar o ambiente, se solicitado. Conferir o resumo e guardar o release_id.
 7. Abrir o site e conferir login, tela alterada, permissões e anexos relevantes. Registrar resultado e evidências no PR ou incidente.

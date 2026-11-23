@@ -137,7 +137,7 @@ def release(store, webroot, backup, base, target, files, publish=False):
     current = json.loads(current_raw) if current_raw else None
     if current and current.get("commit") != base:
         raise ValueError("O servidor já está em outro commit. Atualize base_sha.")
-    initial = (ROOT / "deploy/initial-production-ref").read_text().strip()
+    initial = (ROOT / "deploy/current-production-ref").read_text().strip()
     if not current and base != initial:
         raise ValueError("Primeira publicação deve partir do SHA da reconciliação.")
     originals, desired = {}, {}
@@ -234,7 +234,7 @@ def main():
     p.add_argument("--offline", action="store_true")
     args = p.parse_args()
     target = args.target or git("rev-parse", "HEAD").decode().strip()
-    base = args.base or (ROOT / "deploy/initial-production-ref").read_text().strip()
+    base = args.base or (ROOT / "deploy/current-production-ref").read_text().strip()
     files, skipped = plan(base, target) if args.mode != "rollback" else ([], [])
     if args.offline:
         if args.mode != "plan":
