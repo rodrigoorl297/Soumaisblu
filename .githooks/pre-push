@@ -1,8 +1,8 @@
 #!/bin/sh
 while read local_ref local_sha remote_ref remote_sha; do
   if [ "$remote_ref" = refs/heads/main ]; then
-    if [ "$SOUBLU_EMERGENCY_AUTHORIZED" != "PLINIO" ] || [ -z "$SOUBLU_INCIDENT_URL" ]; then
-      echo 'BLOQUEADO: trabalhe em uma branch e abra PR. Main direta somente em incidente extremo autorizado pelo Plinio.' >&2
+    if { [ "$SOUBLU_EMERGENCY_AUTHORIZED" != "PLINIO" ] && [ "$SOUBLU_EMERGENCY_AUTHORIZED" != "RODRIGO" ]; } || [ -z "$SOUBLU_INCIDENT_URL" ]; then
+      echo 'BLOQUEADO: trabalhe em uma branch e abra PR. Main direta somente em incidente extremo autorizado pelo Plinio ou Rodrigo.' >&2
       exit 1
     fi
     echo "EXCECAO LOCAL: $SOUBLU_INCIDENT_URL. Este sinalizador nao substitui autorizacao nem protecao do GitHub." >&2

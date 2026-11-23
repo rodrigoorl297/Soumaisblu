@@ -13,5 +13,5 @@ Descreva o problema, o comportamento final e as telas afetadas.
 Arquivos alterados, dependencias, risco, teste apos publicar e forma de retorno.
 
 ## Autorizacao excepcional (somente incidente extremo)
-URL da autorizacao explicita do Plinio, motivo da urgencia e responsavel.
+URL da autorizacao explicita do Plinio ou do Rodrigo, motivo da urgencia e responsavel.
 O rotulo urgente, sozinho, NAO autoriza commit direto na main ou publicacao.

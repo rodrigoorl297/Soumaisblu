@@ -6,7 +6,7 @@ Versão 1.0 | 23/11/2026 | Para equipe técnica, colaboradores e agentes de IA.
 
 Fluxo oficial: branch de trabalho -> Pull Request -> revisão e testes -> main -> plano de publicação -> publicação manual -> conferência.
 
-Nunca fazer commits novos diretamente na main, force push ou apagar a branch principal. Exceção somente em incidente extremo com autorização explícita do Plínio, responsável, escopo, backup e retorno registrados. Mesmo em urgência, preferir branch hotfix com PR curto. O rótulo urgente sozinho não autoriza publicação nem bypass.
+Nunca fazer commits novos diretamente na main, force push ou apagar a branch principal. Exceção somente em incidente extremo com autorização explícita do Plínio ou do Rodrigo, responsável, escopo, backup e retorno registrados. Mesmo em urgência, preferir branch hotfix com PR curto. O rótulo urgente sozinho não autoriza publicação nem bypass.
 
 Leia também AGENTS.md, CONTRIBUTING.md e ESTADO-DA-CONFIGURACAO.md. As regras anteriores de bloqueio temporário foram substituídas por este fluxo controlado. A integração usual é quinta-feira; incidentes extremos autorizados podem ser antecipados.
 
@@ -60,7 +60,7 @@ Deixar LOCAWEB_DEPLOY_ENABLED=false até confirmar conexão, certificado TLS, pe
 2. Abrir Actions > Publicar na Locaweb > Run workflow, selecionando main.
 3. Executar mode=plan. É uma comparação offline dos commits e não escreve na hospedagem. Revisar arquivos incluídos e ignorados.
 4. Na primeira publicação, usar a base de deploy/initial-production-ref. Nas seguintes, usar o SHA atualmente publicado, mostrado no resumo da execução anterior. Não chutar a base.
-5. Executar mode=publish com base_sha e a URL da issue/PR que registra a autorização explícita do Plínio. A URL é referência de auditoria: a revisão humana confirma o conteúdo e o ambiente restringe quem pode publicar.
+5. Executar mode=publish com base_sha e a URL da issue/PR que registra a autorização explícita do Plínio ou do Rodrigo. A URL é referência de auditoria: a revisão humana confirma o conteúdo e o ambiente restringe quem pode publicar.
 6. Aprovar o ambiente, se solicitado. Conferir o resumo e guardar o release_id.
 7. Abrir o site e conferir login, tela alterada, permissões e anexos relevantes. Registrar resultado e evidências no PR ou incidente.
 
@@ -90,7 +90,7 @@ Depois, conferir o site e abrir PR de revert/correção para alinhar o Git ao qu
 
 ## 10. Incidente extremo
 
-Registrar impacto, autorização do Plínio, responsável, escopo, backup e plano de retorno. Só então aplicar o menor hotfix possível. Se for indispensável WebFTP ou commit direto, registrar a exceção e reconciliar no mesmo dia. Ajuste temporário de proteção é feito apenas por administrador autorizado, com restauração ao terminar e sem bypass permanente.
+Registrar impacto, autorização do Plínio ou do Rodrigo, responsável, escopo, backup e plano de retorno. Só então aplicar o menor hotfix possível. Se for indispensável WebFTP ou commit direto, registrar a exceção e reconciliar no mesmo dia. Ajuste temporário de proteção é feito apenas por administrador autorizado, com restauração ao terminar e sem bypass permanente.
 
 Não usar remote-deploy.php, chunk-deploy.php, FTP avulso ou purges no fluxo normal. Não classificar módulo como lixo apenas por um script antigo: Monitoria está ativa. A Esteira de Chamados foi ocultada, preservando registros.
 

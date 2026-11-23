@@ -16,7 +16,7 @@ on:
         type: string
         default: ''
       authorization:
-        description: Para publish/rollback, informe a URL da autorizacao do Plinio (issue/PR)
+        description: Para publish/rollback, informe a URL da autorizacao do Plinio ou do Rodrigo (issue/PR)
         type: string
         default: ''
 permissions:
@@ -56,7 +56,7 @@ jobs:
           test "$ENABLED" = true || { echo 'Administrador deve concluir a configuracao e habilitar LOCAWEB_DEPLOY_ENABLED'; exit 1; }
           case "$AUTHORIZATION" in
             https://github.com/rodrigoorl297/Soumaisblu/issues/*|https://github.com/rodrigoorl297/Soumaisblu/pull/*) ;;
-            *) echo 'Informe uma issue ou PR com autorizacao explicita do Plinio'; exit 1 ;;
+            *) echo 'Informe uma issue ou PR com autorizacao explicita do Plinio ou do Rodrigo'; exit 1 ;;
           esac
           test "$MODE" = publish -o "$MODE" = rollback
       - name: Validar codigo e testes

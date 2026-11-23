@@ -5,7 +5,7 @@ Estas regras substituem o bloqueio temporário de 19/11/2026 por um fluxo contro
 1. Toda alteração nasce em branch: `feat/`, `fix/`, `style/`, `docs/` ou `chore/`.
 2. Nunca fazer commit/push direto na `main`, force push ou apagar a branch principal.
 3. Integrar por Pull Request, com revisão e checagens verdes. A integração usual é quinta-feira; incidente extremo autorizado pode ser integrado antes.
-4. Exceção extrema exige autorização explícita do Plínio, incidente registrado, escopo, backup e retorno. O rótulo `urgente` sozinho não autoriza nada. Preferir PR hotfix mesmo em urgência.
+4. Exceção extrema exige autorização explícita do Plínio ou do Rodrigo, incidente registrado, escopo, backup e retorno. O rótulo `urgente` sozinho não autoriza nada. Preferir PR hotfix mesmo em urgência.
 5. Não publicar automaticamente ao fazer push. Usar `Publicar na Locaweb`, manualmente, a partir da `main`, com ambiente production e autorização registrada.
 6. Não usar WebFTP, FTP avulso, remote-deploy.php ou chunk-deploy.php no fluxo normal. Exceção apenas em incidente expressamente autorizado; depois reconciliar o servidor no mesmo dia.
 7. Nunca sobrescrever arquivo divergente da versão base no servidor: exportar, comparar e reconciliar primeiro.

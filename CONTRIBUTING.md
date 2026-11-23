@@ -18,7 +18,7 @@ git commit -m "fix: problema corrigido e comportamento final"
 git push -u origin fix/descricao-curta
 ```
 
-Abra PR para main usando o template. É necessária revisão; integre preferencialmente por squash após os testes. Integração usual às quintas; antecipação somente em incidente extremo autorizado pelo Plínio. Não usar `git add -A` sem revisar dados e segredos.
+Abra PR para main usando o template. É necessária revisão; integre preferencialmente por squash após os testes. Integração usual às quintas; antecipação somente em incidente extremo autorizado pelo Plínio ou Rodrigo. Não usar `git add -A` sem revisar dados e segredos.
 
 ## Proibições
 

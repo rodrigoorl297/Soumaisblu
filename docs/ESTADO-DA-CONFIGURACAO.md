@@ -39,3 +39,7 @@ O export contém scripts históricos de migração, publicação e limpeza. São
 ## Testes antigos fora da CI
 
 O teste leads-distribution.test.cjs espera uma API pública buildDistributionPlan que a versão recuperada da produção não expõe (ela usa _buildDistributionPlan). Ele permanece no repositório, mas não foi marcado como aprovado nem incluído entre as checagens verdes desta entrega. A reconciliação não altera regras de distribuição para satisfazer um teste de outra versão. Revalidar esse módulo em uma tarefa própria antes de alterá-lo.
+
+## Responsáveis pela autorização
+
+Correções extremas e publicações podem ser autorizadas pelo Plínio OU pelo Rodrigo. A autorização deve constar da issue/PR; os nomes não concedem automaticamente acesso administrativo ao GitHub. Integrar um PR depende da revisão do fluxo e pode ser feito por quem tiver permissão de merge. Ativar rulesets e o ambiente/segredos depende das permissões administrativas adequadas. As credenciais FTPS ainda não foram fornecidas/configuradas; não houve teste de conexão real.
