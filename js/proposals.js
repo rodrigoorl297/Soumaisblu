@@ -1134,7 +1134,7 @@ window.Proposals = {
     const sel = document.getElementById('proposalStatusFilterHeader');
     if (!sel || sel.dataset.situLoaded === '1') return;
     const cur = sel.value;
-    let html = '<option value="">STATUS</option><option value="todos">TODOS OS STATUS</option>';
+    let html = '<option value="">STATUS</option><option value="todos">TODAS</option><option value="sem_canceladas">TODAS, EXCETO CANCELADAS</option>';
     (this._VENDOR_SITUACOES || []).forEach(o => {
       const val = o.v || o;
       const lbl = String(o.l || o.v || o).toUpperCase();
@@ -2178,7 +2178,11 @@ return filtered;
 
   _matchesStatusFilter: function(p, status) {
     const want = String(status || '').trim().toLowerCase();
-    if (!want) return true;
+    if (!want || want === 'todos') return true;
+    if (want === 'sem_canceladas') {
+      if (typeof DB !== 'undefined' && typeof DB.isCancelledProposal === 'function') return !DB.isCancelledProposal(p);
+      return ![p.status, p.statusOp, p.status_op].some(value => /cancel/i.test(String(value || '')));
+    }
     const pStatus = String(p.status || '').trim().toLowerCase();
     const pStatusOp = String(p.statusOp || p.status_op || '').trim().toLowerCase();
     
@@ -2800,7 +2804,7 @@ return filtered;
     const sel = document.getElementById('proposalStatusFilterHeader');
     if (sel) {
       const val = sel.value;
-      return val === 'todos' ? '' : val;
+      return val;
     }
     return this._adminList.statusFilter || '';
   },
@@ -6524,8 +6528,8 @@ delete parsed[k];
     proposals = proposals.filter(p => this._matchesVendorIdFilter(p, vendorId || ''));
     proposals = proposals.filter(p => this._matchesStatusFilter(p, statusFilter || ''));
     // Lista padrão esconde Cancelado — exclusão/arquivamento some na hora (filtro Cancelado ainda mostra).
-    if (!statusFilter || statusFilter === 'todos') {
-      proposals = proposals.filter((p) => !(typeof DB !== 'undefined' && typeof DB.isCancelledProposal === 'function' && DB.isCancelledProposal(p)));
+    if (!statusFilter) {
+      proposals = proposals.filter(p => this._matchesStatusFilter(p, 'sem_canceladas'));
     }
     proposals = proposals.filter(p => this._matchesProposalQuickSearch(p, q));
     proposals = proposals.filter(p => this._matchesDateFilter(p, dateFrom, dateTo, statusFilter));
