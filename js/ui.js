@@ -1,3 +1,21 @@
+
+/* Horário de Brasília disponível para os módulos de propostas e cadastro. */
+(function (root) {
+  if (typeof root.nowBrazilSql !== 'function') {
+    root.nowBrazilSql = function (date) {
+      let source = date === undefined ? new Date() : (date instanceof Date ? date : new Date(date));
+      if (Number.isNaN(source.getTime())) source = new Date();
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+      }).formatToParts(source);
+      const part = name => parts.find(p => p.type === name)?.value || '00';
+      return part('year')+'-'+part('month')+'-'+part('day')+' '+part('hour')+':'+part('minute')+':'+part('second');
+    };
+  }
+  if (typeof root.todayBrazilYmd !== 'function') root.todayBrazilYmd = function () { return root.nowBrazilSql().slice(0,10); };
+})(typeof window !== 'undefined' ? window : globalThis);
+
 /* =============================================
    SOU + BLU – UI Utilities
    ============================================= */
@@ -1132,3 +1150,42 @@ document.addEventListener('input', (e) => {
   if (mask === 'cpf') t.value = formatCPF(t.value);
   else if (mask === 'rg') t.value = formatRG(t.value);
 });
+
+
+/* Rótulos de colunas para leitura das listas como cartões no celular. */
+function initMobileTableCards() {
+  const roots = document.querySelectorAll('.main-area, .main-content, .dp-overlay');
+  let scheduled = false;
+  function refresh() {
+    scheduled = false;
+    document.querySelectorAll('table.data-table, .dp-panel table').forEach(table => {
+      const headers = Array.from(table.querySelectorAll('thead tr:first-child th'));
+      if (!headers.length || headers.some(cell => cell.colSpan > 1 || cell.rowSpan > 1)) return;
+      table.classList.add('mobile-card-table');
+      table.querySelectorAll('tbody tr').forEach(row => {
+        Array.from(row.cells).forEach((cell, index) => {
+          if (cell.colSpan > 1) return;
+          const header = headers[index];
+          if (!header) return;
+          const label = header.querySelector('.dp-sort-button')?.firstElementChild?.textContent
+            || header.querySelector('select')?.options[0]?.text
+            || header.textContent;
+          const text = String(label || '').trim();
+          if (cell.getAttribute('data-mobile-label') !== text) cell.setAttribute('data-mobile-label', text);
+        });
+      });
+    });
+  }
+  const observer = new MutationObserver(() => {
+    if (scheduled) return;
+    scheduled = true;
+    requestAnimationFrame(refresh);
+  });
+  roots.forEach(root => observer.observe(root, { childList: true, subtree: true }));
+  refresh();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initMobileTableCards, { once: true });
+} else {
+  initMobileTableCards();
+}

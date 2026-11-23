@@ -49,6 +49,8 @@
 
   /** Tabelas: banco + convenio → value/label/pct (amostra da planilha). */
   const TABELAS = [
+    { banco: 'MERCANTIL', produto: 'CREDITO PESSOAL', value: 'MERCANTIL_PESSOAL_6X', label: 'PESSOAL 6x' },
+    { banco: 'MERCANTIL', produto: 'CREDITO PESSOAL', value: 'MERCANTIL_PESSOAL_12X', label: 'PESSOAL 12x' },
     { banco: 'BMG', convenio: 'INSS', value: 'BMG_CNC_18_10', label: 'BMG CNC 18 — 10%', pct: 0.10 },
     { banco: 'BMG', convenio: 'INSS', value: 'BMG_NOVO_108_8', label: 'BMG NOVO 108 — 8%', pct: 0.08 },
     { banco: 'BMG', convenio: 'INSS', value: 'BMG_NOVO_96_7', label: 'BMG NOVO 96 — 7%', pct: 0.07 },
@@ -89,25 +91,25 @@
   ];
 
   const STATUS_BO = [
-    'AG. ANÁLISE',
-    'AG. BOLETO',
-    'BOLETO VALIDADO',
-    'PROPOSTA DIGITADA',
-    'AG. DOCS GARANTIA',
-    'AG. LIBERAÇÃO MARGEM',
-    'Pendenciado',
-    'Em Andamento',
+    'AGUARDANDO DIGITAÇÃO',
+    'AGUARDA FORMALIZAÇÃO',
+    'AGUARDA VIDEO CHAMADA',
+    'PENDENTE',
+    'CANCELADA',
     'PAGO',
-    'CANCELADO',
   ];
 
   /**
    * tabelasPor — filtra tabelas pelo banco e convênio selecionados.
    */
-  function tabelasPor(banco, convenio) {
+  function tabelasPor(banco, convenio, produto) {
     const b = String(banco || '').trim();
     const c = String(convenio || '').trim();
-    return TABELAS.filter((t) => (!b || t.banco === b) && (!c || t.convenio === c));
+    const pessoal = String(produto || '').trim() === 'CREDITO PESSOAL';
+    return TABELAS.filter((t) => (!b || t.banco === b)
+      && (!c || !t.convenio || t.convenio === c)
+      && (!pessoal || t.produto === 'CREDITO PESSOAL')
+      && (!t.produto || t.produto === produto));
   }
 
   window.COMPRA_DIVIDA_CATALOG = {

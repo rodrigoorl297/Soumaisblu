@@ -1,0 +1,10 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert');
+(async()=>{
+const values={cd_cpf:'12345678901',cd_nome:'Cliente Teste',cd_produto:'CREDITO PESSOAL',cd_convenio:'INSS',cd_banco:'MERCANTIL',cd_tabela:'PESSOAL 12x',cd_valor:'1000',cd_banco_conta:'001 - Banco do Brasil',cd_agencia:'0001-2',cd_conta:'0000123-4',cd_tipo_conta:'poupanca',cd_endereco:'Rua de Teste, 1'};
+let saved;const ctx={window:{},document:{readyState:'loading',addEventListener(){},getElementById:id=>Object.hasOwn(values,id)?{value:values[id]}:null},Auth:{getSession:()=>({id:'test-user',name:'Teste',role:'vendedor'})},DB:{saveProposal:async p=>{saved=JSON.parse(JSON.stringify(p));}},setTimeout(){},console,showToast(){},Date,Math};
+vm.runInNewContext(fs.readFileSync('js/esteira-compra-divida.js','utf8'),ctx);
+const credit=ctx.window.EsteiraCompraDivida;credit.resetVendorForm=()=>{};credit.closeNova=()=>{};await credit.submitVendor();assert(saved,'Formulário não salvou');
+assert.equal(saved.credito_esteira.banco,'MERCANTIL');assert.equal(saved.credito_esteira.banco_conta,values.cd_banco_conta);assert.equal(saved.meta.client_bank.agencia,'0001-2');assert.equal(saved.meta.client_bank.conta,'0000123-4');assert.equal(saved.meta.client_bank.tipo_conta,'poupanca');
+const source=fs.readFileSync('js/proposals.js','utf8');const start=source.indexOf('_proposalClientFallback: function('),end=source.indexOf('\n  },',start)+6;const object=vm.runInNewContext('({'+source.slice(start,end)+'})');const loaded=object._proposalClientFallback(null,{...saved,meta:JSON.stringify(saved.meta),credito_esteira:JSON.stringify(saved.credito_esteira),creditoEsteira:null});assert.equal(loaded.banco,values.cd_banco_conta);assert.equal(loaded.agencia,'0001-2');assert.equal(loaded.conta,'0000123-4');assert.equal(loaded.tipo_conta,'poupanca');assert.equal(loaded.address,values.cd_endereco);
+assert(!Object.hasOwn(saved,'tipo_conta'),'Não criar coluna de conta no banco');console.log('PASS: envio, persistência JSON e reabertura de banco/agência/conta/tipo; zeros e banco da operação preservados.');
+})();

@@ -98,7 +98,7 @@ async function ensureSectionScripts(sec) {
     secContaCorrente: ['../js/conta-corrente.js?v=cc-money1'],
     secContaCorrenteGestao: ['../js/conta-corrente.js?v=cc-money1'],
     secWithdrawals: ['../js/withdrawal-flow.js'],
-    secRanking: ['../js/sales-ranking.js?v=rank-podium2', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
+    secRanking: ['../js/sales-ranking.js?v=local-standings-20261106', '../js/br-holidays.js?v=rank-export1', '../js/attendance-penalty.js?v=rank-export1', '../js/vendor-tier-points.js?v=rank-export1'],
     secCreateProposal: ['../js/masterProposal.js?v=prop-modal3', '../js/fontedata.js'],
     secPartnersForm: ['../js/fontedata.js'],
   };
@@ -5067,6 +5067,7 @@ function _renderUserCard(user, team, allOrders, allWds, roleLabels) {
     ].join('')}</div>
     <div class="master-team-grid">
       ${team.map(e => {
+        const memberRole = roleLabels[e.role]?.label || e.role || '—';
         const ptsBtn = (typeof canSouBluManagePoints === 'function' && canSouBluManagePoints(e))
           ? `<button class="btn btn-primary btn-sm" onclick="quickAddPoints('${e.id}','${e.name.replace(/'/g, "\\'")}')">Pontos</button>`
           : '';
@@ -5075,7 +5076,7 @@ function _renderUserCard(user, team, allOrders, allWds, roleLabels) {
           ${_masterAvatarCellHtml(e, 'avatar-sm')}
           <div class="master-team-member__info">
             <div class="master-team-member__name" title="${String(e.name || '').replace(/"/g, '&quot;')}">${e.name}</div>
-            <div class="master-team-member__sub">${e.department || '—'} · ${formatCurrency(userPts(e), e)}</div>
+            <div class="master-team-member__sub">${memberRole} · ${e.department || '—'} · ${formatCurrency(userPts(e), e)}</div>
           </div>
           <div class="master-team-member__actions">
             ${ptsBtn}

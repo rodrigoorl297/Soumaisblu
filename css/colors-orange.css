@@ -1,14 +1,13 @@
-/* SOU+BLU — cor de destaque da marca (verde-limão #C5FF00) */
+/* SOU+BLU — tema laranja (accento marca) */
 :root {
-  /* Antes laranja #F97316. O tom escuro (#4F6B00) é para texto sobre fundo claro. */
-  --color-accent:         #C5FF00;
-  --color-accent-dark:    #4F6B00;
-  --color-accent-light:   #F7FFE0;
-  --brand-accent-blu:     #C5FF00;
-  --color-primary-muted:  rgba(197, 255, 0, 0.18);
-  --nav-active-bg:        rgba(197, 255, 0, 0.18);
-  --nav-active-text:      #4F6B00;
-  --nav-active-border:    #C5FF00;
+  --color-accent:         #F97316;
+  --color-accent-dark:    #EA580C;
+  --color-accent-light:   #FFF7ED;
+  --brand-accent-blu:     #F97316;
+  --color-primary-muted:  rgba(249, 115, 22, 0.12);
+  --nav-active-bg:        rgba(249, 115, 22, 0.12);
+  --nav-active-text:      #EA580C;
+  --nav-active-border:    #F97316;
 }
 
 .sidebar-title span,
@@ -18,7 +17,7 @@ body.leads-app .sidebar-header .logo-text span {
 
 .pts-orange,
 .coins-amount {
-  color: var(--color-accent-dark) !important;
+  color: var(--color-accent) !important;
 }
 
 /* Gerenciador de Leads — mesmas cores do painel admin (sem azul legado) */
@@ -30,12 +29,6 @@ body.leads-app .btn-primary:hover:not(:disabled) {
   background: var(--color-primary-dark);
   border-color: var(--color-primary-dark);
 }
-/* Card de estatística com destaque: limão puro some no branco — ícone em tom escuro */
-.stats-grid .stat-card.accent .stat-icon {
-  background: rgba(197, 255, 0, 0.28);
-  color: var(--color-accent-dark);
-}
-
 body.leads-app .btn-outline:hover:not(:disabled) {
   border-color: var(--color-accent);
   color: var(--color-accent-dark);

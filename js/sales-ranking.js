@@ -629,11 +629,13 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
   },
 
   async _prepareRankingData(opts = {}) {
-    const users = await this._loadAllRankingVendors();
+    const [users, rawProps] = await Promise.all([
+      this._loadAllRankingVendors(),
+      this._loadProposals(opts),
+    ]);
     const usersByName = await this._getUsersByVendorName();
     const vendorIndex = this._buildVendorIndex(users);
     const userIds = users.map((u) => u.id);
-    const rawProps = await this._loadProposals(opts);
     const filtered = this._filterForDashboardSync(rawProps);
     const scoped = this._scopeProposals(filtered, userIds, vendorIndex, usersByName, true);
     const rows = this._aggregate(users, scoped, vendorIndex, usersByName, true);
@@ -696,10 +698,12 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
 
   /** Ranking dos funcionários (employee.html) — sem filtros master; valor = soma das pagas. */
   async _renderPublicRanking(listId, opts = {}) {
-    const users = await this._loadAllRankingVendors();
+    const [users, rawProps] = await Promise.all([
+      this._loadAllRankingVendors(),
+      this._loadProposals({ force: true, skipDashCache: true, fullList: true }),
+    ]);
     const vendorIndex = this._buildVendorIndex(users);
     const userIds = users.map((u) => u.id);
-    const rawProps = await this._loadProposals({ force: true, skipDashCache: true, fullList: true });
     const allProps = this._scopeProposals(rawProps, userIds, vendorIndex, null, false);
     const rows = this._aggregateByPaidAndProposals(users, allProps, vendorIndex, null, false);
     // #region agent log
@@ -772,6 +776,11 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
       console.warn('[SalesRanking] users:', e);
     }
     return (users || [])
+      .filter(u => {
+        const role=this._norm(u.role),department=this._norm(u.department);
+        return !['desenvolvedor','desenvolvimento','developer','dev','ti'].includes(role)
+          && !['desenvolvimento','ti','t.i.','tecnologia','tecnologia da informacao'].includes(department);
+      })
       .filter(u => typeof isRankingParticipant === 'function' && isRankingParticipant(u))
       .filter(u => typeof isUserInPartnerNetworkSync !== 'function' || !isUserInPartnerNetworkSync(u));
   },
@@ -799,7 +808,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     proposals.forEach(p => {
       const vid = this._resolveVendorId(p, vendorIndex, usersByName, masterMode);
       if (!vid) return;
-      if (!byVendor[vid]) byVendor[vid] = { total: 0, bruto: 0, count: 0 };
+      if (!byVendor[vid]) byVendor[vid] = { total: 0, bruto: 0, count: 0, paidCount: 0 };
       const amt = this._proposalChartAmount(p, billing);
       const bruto = this._proposalGrossAmount(p);
       if (!_dbgAmt && amt > 0) {
@@ -816,6 +825,7 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
       byVendor[vid].total += amt;
       byVendor[vid].bruto += bruto;
       byVendor[vid].count += 1;
+      if (this._isPaidProposal(p)) byVendor[vid].paidCount += 1;
     });
     // #region agent log
     if (_dbgAmt) {
@@ -825,13 +835,13 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
 
     return (users || [])
       .map(u => {
-        const agg = byVendor[u.id] || { total: 0, bruto: 0, count: 0 };
+        const agg = byVendor[u.id] || { total: 0, bruto: 0, count: 0, paidCount: 0 };
         return {
           user: u,
           total: agg.total,
           bruto: agg.bruto,
           count: agg.count,
-          paidCount: 0,
+          paidCount: agg.paidCount,
           tier: this._tierForSales(agg.total),
         };
       })
@@ -1161,29 +1171,23 @@ ${showMasterDetails ? `<p class="form-hint" style="margin:12px 0 0;font-size:12p
       }).join('')}</div>`
       : '';
 
-    // Demais posições
+    // Classificação abaixo do pódio: colunas alinhadas e comparação direta.
+    const hasActions = !publicRank && opts.allowAddPoints;
     const restHtml = rows.slice(podiumCount).map((r, idx) => {
-      const i = idx + podiumCount;
-      const e = r.user;
-      const isMe = viewerId && e.id === viewerId;
-      const m = main(r);
-      const posCls = i < 3 ? ` rk-row__pos--${i + 1}` : '';
-      return `<div class="rk-row${isMe ? ' is-me' : ''}">
-        <div class="rk-row__pos${posCls}">${i + 1}</div>
-        ${avatar(e, 'avatar-sm')}
-        <div class="rk-row__who">
-          <div class="rk-row__name" title="${esc(e.name)}">${esc(e.name)}${isMe ? ' ' + meBadge : ''}</div>
-          <div class="rk-row__dept">${dept(e)}</div>
-        </div>
-        ${aheadHint(i)}
-        ${publicRank ? `<div class="rk-row__conv" title="Conversão (pagas / propostas)">${conv(r)}%<small>conv.</small></div>` : ''}
-        ${showSales ? `<div class="rk-row__tier">${tierBadge(r)}</div>` : ''}
-        <div class="rk-row__metric"><strong>${m.value}</strong><span>${m.label}</span></div>
-        ${addBtn(e)}
-      </div>`;
+      const i = idx + podiumCount, e = r.user, isMe = viewerId && e.id === viewerId;
+      const percentage = Math.max(0, Math.min(100, conv(r)));
+      return `<tr class="${isMe ? 'is-me' : ''}">
+        <td class="rk-standings__position" data-label="Posição">${i + 1}<span>º</span></td>
+        <td class="rk-standings__person" data-label="Vendedor"><div class="rk-standings__identity">${avatar(e, 'avatar-sm')}<div><div class="rk-row__name" title="${esc(e.name)}">${esc(e.name)}${isMe ? ' ' + meBadge : ''}</div><div class="rk-row__dept">${dept(e)}</div>${isMe ? aheadHint(i) : ''}</div></div></td>
+        <td class="rk-standings__number" data-label="Pagas"><strong>${r.paidCount || 0}</strong></td>
+        <td class="rk-standings__number rk-standings__total" data-label="Total de propostas">${r.count || 0}</td>
+        <td class="rk-standings__conversion" data-label="Conversão"><strong>${percentage}%</strong><span class="rk-conversion-track" role="meter" aria-label="Conversão de ${esc(e.name)}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${percentage}"><i style="width:${percentage}%"></i></span></td>
+        ${showSales ? `<td class="rk-standings__sales" data-label="Faturamento">${salesText(r)}</td><td class="rk-standings__tier" data-label="Faixa">${tierBadge(r)}</td>` : ''}
+        ${hasActions ? `<td class="rk-standings__actions" data-label="Ações">${addBtn(e)}</td>` : ''}
+      </tr>`;
     }).join('');
-
-    box.innerHTML = `${summaryHtml}${podiumHtml}${restHtml ? `<div class="rk-rows">${restHtml}</div>` : ''}`;
+    const standings = restHtml ? `<div class="rk-standings-card"><div class="rk-standings-heading"><div><h3>Classificação geral</h3><p>${podiumCount ? 'Do 4º lugar em diante' : 'Resultados dos vendedores'}</p></div><span>${rows.length - podiumCount} vendedores</span></div><table class="rk-standings"><thead><tr><th scope="col">Posição</th><th scope="col">Vendedor</th><th scope="col" class="rk-standings__number">Pagas</th><th scope="col" class="rk-standings__number">Total de propostas</th><th scope="col">Conversão</th>${showSales ? '<th scope="col" class="rk-standings__number">Faturamento</th><th scope="col" class="rk-standings__tier">Faixa</th>' : ''}${hasActions ? '<th scope="col">Ações</th>' : ''}</tr></thead><tbody>${restHtml}</tbody></table></div>` : '';
+    box.innerHTML = `${summaryHtml}${podiumHtml}${standings}`;
   },
 
   async renderAdmin() {

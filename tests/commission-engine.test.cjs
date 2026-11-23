@@ -18,12 +18,17 @@ const exception={...p,bancoDigitado:'Banco Neo',entidade:'GOVERNO DO PARANÁ - P
 for(const entity of ['GOVERNO DO PARANÁ - PR','GOV DO PARANÁ - PR','GOV PR']){
  const result=engine.calculate({...exception,entidade:entity},[]);assert.equal(result.status,'calculado');assert.equal(result.rate,0);assert.equal(result.vendorRate,0);assert.equal(result.amount,0);assert.equal(result.vendorAmount,0);assert.equal(result.base,10000);
 }
-assert.equal(engine.zeroException({...exception,bancoDigitado:'AMIGOZ'}),false);
-assert.equal(engine.zeroException({...exception,entidade:'GOV SP'}),false);
+assert.equal(engine.zeroException({...exception,bancoDigitado:'AMIGOZ'}),true);
+assert.equal(engine.zeroException({...exception,entidade:'GOV SP'}),true);
+assert.equal(engine.calculate({...exception,bancoDigitado:'',entidade:''},[]).amount,0);
 assert.equal(engine.zeroException({...exception,tabela:'OUTRA'}),false);
-const catalogContext={window:{},console,document:{addEventListener(){}}};vm.createContext(catalogContext);vm.runInContext(fs.readFileSync('js/proposals.js','utf8'),catalogContext);
+const catalogContext={window:{addEventListener(){}},console,document:{readyState:"loading",addEventListener(){}}};vm.createContext(catalogContext);vm.runInContext(fs.readFileSync('js/proposals.js','utf8'),catalogContext);
 const catalog=catalogContext.window.Proposals;
-const entry=catalog._TABELA_GROUPS.find(g=>g.group==='NEO — GOV PR RCC').items.find(i=>i.value===exception.tabela);
-assert.equal(entry.empresa,0);assert.equal(entry.vendedor,0);assert.equal(catalog._tabelaPct[exception.tabela],1);
-assert.equal(10000*catalog._tabelaPct[exception.tabela],10000);
-console.log('PASS: exceção NEO Governo PR, empresa e vendedor 0%, valor da operação preservado e escopo restrito.');
+const entry=catalog._TABELA_GROUPS.find(g=>g.group==='EXCECAO').items.find(i=>i.value===exception.tabela);
+assert.equal(entry.empresa,0);assert.equal(entry.vendedor,0);assert.equal(catalog._tabelaPct[exception.tabela],0);
+const operation={valor:10000};catalog._applyTabelaToProposal(operation,exception.tabela);assert.equal(operation.valor,10000);assert.equal(operation.valorFinal,0);
+console.log('PASS: exceção NEO Governo PR, empresa e vendedor 0%, valor da operação preservado e sem vínculo com banco ou governo.');
+
+const groupsAfterExtensions=catalog._TABELA_GROUPS;groupsAfterExtensions.push({group:'Outro grupo',items:[]});const tableHtml=catalog._tabelaSelectHtml('');assert(tableHtml.lastIndexOf('label="EXCECAO"')>tableHtml.lastIndexOf('label="Outro grupo"'));
+
+assert.equal(catalog._tabelaLabel('NCDT_096-999_EXCECAO'),'TABELA_EXCECAO — sem comissão');assert(entry.label.startsWith('TABELA_EXCECAO'));

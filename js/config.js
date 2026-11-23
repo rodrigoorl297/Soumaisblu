@@ -1,3 +1,34 @@
+
+/* Compatibilidade MySQL: nomes físicos e JSON escalar para todos os módulos. */
+function _soubluMysqlAliases(table) {
+  return table === 'proposals' ? {
+    creditoEsteira:'credito_esteira',creditoRetorno:'credito_retorno',
+    comissao_elegivel:'comissaoElegivel',comissao_recebida:'comissaoRecebida',
+    valor_comissao_recebida:'valorComissaoRecebida'
+  } : {};
+}
+function _soubluMysqlParams(table, params) {
+  let output = params || '';
+  Object.entries(_soubluMysqlAliases(table)).forEach(([alias,column]) => {
+    output = output.replace(new RegExp('\\b' + alias + '\\b', 'g'), column);
+  });
+  return output;
+}
+function _soubluMysqlBody(table, body) {
+  if (body == null) return body;
+  const aliases = _soubluMysqlAliases(table);
+  const row = item => {
+    const result = {};
+    Object.entries(item || {}).forEach(([key,value]) => {
+      const column = aliases[key] || key;
+      if (aliases[key] && Object.prototype.hasOwnProperty.call(item,column) && item[column] != null) return;
+      result[column] = value && typeof value === 'object' ? JSON.stringify(value) : value;
+    });
+    return result;
+  };
+  return Array.isArray(body) ? body.map(row) : row(body);
+}
+
 /* =============================================
    SOU + BLU – Configuração Supabase
    ============================================= */
@@ -284,6 +315,7 @@
     }
 
     async function supaReqOnce(method, table, body = null, params = '') {
+     if (HOSTINGER_CONFIGURED) { params = _soubluMysqlParams(table, params); body = _soubluMysqlBody(table, body); }
      const url = HOSTINGER_CONFIGURED
        ? `${API_BASE_URL}/api/rest/v1/${table}${params}`
        : `${SUPABASE_URL}/rest/v1/${table}${params}`;

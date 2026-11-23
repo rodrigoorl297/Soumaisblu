@@ -846,3 +846,28 @@ window.addEventListener('DOMContentLoaded', () => {
         Clients.renderEmployeeList();
     }
 });
+
+/* Lista de clientes: identidade visual e identificação legível, sem alterar cadastros. */
+(function () {
+  function enhanceClients() {
+    const tbody=document.getElementById('clientsTbody');if(!tbody)return;
+    const table=tbody.closest('table'),card=table?.closest('.card');
+    if(!card)return;
+    card.classList.add('clients-list-card');table.classList.add('clients-modern-table');
+    let heading=card.querySelector('.clients-list-heading');
+    if(!heading){heading=document.createElement('div');heading.className='clients-list-heading';heading.innerHTML='<div><span class="clients-list-eyebrow">RELACIONAMENTO</span><h3>Base de clientes</h3><p>Consulte os dados e mantenha os cadastros atualizados.</p></div><span class="clients-list-count"></span>';card.prepend(heading);}
+    const rows=Array.from(tbody.rows).filter(row=>row.cells.length===7);
+    heading.querySelector('.clients-list-count').textContent=rows.length+' cliente'+(rows.length===1?'':'s')+' nesta página';
+    rows.forEach(function(row){
+      if(row.dataset.clientVisualReady)return;row.dataset.clientVisualReady='1';
+      const name=row.cells[1],original=name.textContent.trim();
+      const wrap=document.createElement('div');wrap.className='client-name-wrap';
+      const avatar=document.createElement('span');avatar.className='client-name-avatar';avatar.setAttribute('aria-hidden','true');avatar.textContent=original.split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0]).join('').toUpperCase();
+      const text=document.createElement('span');text.className='client-name-text';text.textContent=original;wrap.append(avatar,text);name.replaceChildren(wrap);
+      const cpf=row.cells[2],digits=cpf.textContent.replace(/\D/g,'');if(digits.length===11)cpf.textContent=digits.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4');
+      row.cells[0].classList.add('client-registrant-cell');row.cells[2].classList.add('client-document-cell');row.cells[3].classList.add('client-phone-cell');row.cells[4].classList.add('client-email-cell');row.cells[5].classList.add('client-document-cell');
+    });
+  }
+  function start(){const tbody=document.getElementById('clientsTbody');if(!tbody)return;let queued=false;new MutationObserver(function(){if(queued)return;queued=true;requestAnimationFrame(function(){queued=false;enhanceClients();});}).observe(tbody,{childList:true,subtree:true});enhanceClients();}
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();

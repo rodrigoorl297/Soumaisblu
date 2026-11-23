@@ -223,7 +223,7 @@
     const sel = document.getElementById('cd_tabela');
     if (!sel) return;
     const items = typeof cat().tabelasPor === 'function'
-      ? cat().tabelasPor(banco, convenio)
+      ? cat().tabelasPor(banco, convenio, document.getElementById('cd_produto')?.value || '')
       : [];
     const cur = sel.value;
     sel.innerHTML = `<option value="">Selecione...</option>${optsHtml(items, cur)}`;
@@ -482,6 +482,8 @@
     <div id="cd_cliente_info" style="min-height:16px;"></div>
   </div>
 
+
+
   <!-- Situação Beneficiário -->
   <div class="cd-field">
     <label for="cd_situacao">Situação Beneficiário</label>
@@ -550,6 +552,41 @@
     <label for="cd_anexo_2">Anexo / Documento 2 <span style="font-size:10px;color:#64748b;font-weight:600;text-transform:none;">(opcional)</span></label>
     <input type="file" id="cd_anexo_2" class="form-control" accept="image/*,.pdf" style="font-size:12px;padding:8px 10px;height:42px;"/>
     <div style="font-size:11px;color:#64748b;">Contrato, extrato, termo ou comprovante (PDF ou foto)</div>
+  </div>
+
+
+
+  <div class="cd-field">
+    <label for="cd_endereco">Endereço do cliente</label>
+    <input type="text" id="cd_endereco" class="form-control" autocomplete="street-address" maxlength="500" placeholder="Rua, número, complemento, bairro, cidade e CEP"/>
+  </div>
+  <div class="cd-field col-full">
+    <label>Dados bancários do cliente</label>
+    <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Informe a conta do cliente que receberá o crédito.</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px;">
+      <div class="cd-field">
+        <label for="cd_banco_conta">Banco da conta</label>
+        <input type="text" id="cd_banco_conta" class="form-control" maxlength="120" placeholder="Nome ou código do banco do cliente"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_agencia">Agência</label>
+        <input type="text" id="cd_agencia" class="form-control" maxlength="20" placeholder="Agência com dígito, se houver"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_conta">Número da conta</label>
+        <input type="text" id="cd_conta" class="form-control" maxlength="40" placeholder="Número da conta com dígito"/>
+      </div>
+      <div class="cd-field">
+        <label for="cd_tipo_conta">Tipo de conta</label>
+        <select id="cd_tipo_conta" class="form-control">
+          <option value="">Selecione o tipo de conta...</option>
+          <option value="corrente">Conta corrente</option>
+          <option value="poupanca">Conta poupança</option>
+          <option value="salario">Conta salário</option>
+          <option value="pagamento">Conta de pagamento</option>
+        </select>
+      </div>
+    </div>
   </div>
 
   <!-- Observação -->
@@ -933,7 +970,7 @@ ${cdModalStyles()}
             <td>${esc(fmtDay(dt.criacao))}${dt.digitacao ? `<div class="text-muted" style="font-size:11px;">Digitação: ${esc(fmtDay(dt.digitacao))}</div>` : ''}</td>
             <td><select class="form-control" id="cd_st_${id}" style="min-width:150px;"
               onchange="EsteiraCompraDivida.saveStatus('${id}')">
-              <option value="${cur}">${cur}</option>${statusOpts}
+              <option value="${cur}" selected>${cur}</option>${optsHtml((cat().STATUS_BO || []).filter((status) => status !== cur))}
             </select></td>
             <td>${esc(fmtDay(dt.pagamento))}</td>
             <td>${cdActionsHtml(p)}</td>
@@ -946,7 +983,7 @@ ${cdModalStyles()}
 
   const EsteiraCompraDivida = {
     maskCpf(v) { return maskCpf(v); },
-    onProdutoChange() { toggleRefinPort(); },
+    onProdutoChange() { toggleRefinPort(); fillTabelaSelect(); },
     onFiltroTabela() { fillTabelaSelect(); },
     onPortChange() { recalcTotal(); },
 
@@ -1204,13 +1241,18 @@ ${cdModalStyles()}
       const d = new Date();
       const protocolo = `CD-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
       const id = `CD-${Date.now()}`;
-      const status = 'AG. ANÁLISE';
+      const status = 'AGUARDANDO DIGITAÇÃO';
       const payload = {
         tipo: TIPO,
         origem,
         produto,
         convenio,
         situacao_beneficiario: situacao,
+        endereco: document.getElementById('cd_endereco')?.value?.trim() || '',
+        conta: document.getElementById('cd_conta')?.value?.trim() || '',
+        banco_conta: document.getElementById('cd_banco_conta')?.value?.trim() || '',
+        agencia: document.getElementById('cd_agencia')?.value?.trim() || '',
+        tipo_conta: document.getElementById('cd_tipo_conta')?.value || '',
         banco,
         tabela,
         contratos_port: contratos,
@@ -1253,6 +1295,7 @@ ${cdModalStyles()}
         status_op: status,
         creditoEsteira: payload,
         credito_esteira: payload,
+        meta: { client_bank: { banco: payload.banco_conta, agencia: payload.agencia, conta: payload.conta, tipo_conta: payload.tipo_conta }, client_address: payload.endereco },
         obs: [
           TAG,
           'tipo_esteira=compra_divida',

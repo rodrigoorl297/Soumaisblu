@@ -1,3 +1,21 @@
+
+/* Horário de Brasília disponível para os módulos de propostas e cadastro. */
+(function (root) {
+  if (typeof root.nowBrazilSql !== 'function') {
+    root.nowBrazilSql = function (date) {
+      let source = date === undefined ? new Date() : (date instanceof Date ? date : new Date(date));
+      if (Number.isNaN(source.getTime())) source = new Date();
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone:'America/Sao_Paulo',year:'numeric',month:'2-digit',day:'2-digit',
+        hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'
+      }).formatToParts(source);
+      const part = name => parts.find(p => p.type === name)?.value || '00';
+      return part('year')+'-'+part('month')+'-'+part('day')+' '+part('hour')+':'+part('minute')+':'+part('second');
+    };
+  }
+  if (typeof root.todayBrazilYmd !== 'function') root.todayBrazilYmd = function () { return root.nowBrazilSql().slice(0,10); };
+})(typeof window !== 'undefined' ? window : globalThis);
+
 window.Proposals = {
   /** Limite por anexo de proposta (alinhado com api/upload.php). */
   PROPOSAL_MAX_FILE_MB: 50,
@@ -1539,7 +1557,6 @@ window.Proposals = {
     {
       group: "NEO — GOV PR RCC",
       items: [
-        { value: "NCDT_096-999_EXCECAO", label: "NCDT_096-999_EXCECAO — Empresa 0% / Vendedor 0%", pct: 1, empresa: 0, vendedor: 0 },
         { value: "NEO_GOVPR_RCC_399_100", label: "NEO GOV PR RCC TX 3,99 — 100%", pct: 1.0 },
         { value: "NEO_GOVPR_RCC_379_80", label: "NEO GOV PR RCC TX 3,79 — 80%", pct: 0.8 },
         { value: "NEO_GOVPR_RCC_359_65", label: "NEO GOV PR RCC TX 3,59 — 65%", pct: 0.65 },
@@ -1724,11 +1741,12 @@ window.Proposals = {
         { value: "FUTURO_AERONAUTICA_EMP_96X_EMP_190_12", label: "FUTURO AERONAUTICA EMP 96X TX 1,90 — 12%", pct: 0.12 },
       ],
     },
+    { group: "EXCECAO", items: [{ value: "NCDT_096-999_EXCECAO", label: "TABELA_EXCECAO — sem comissão", pct: 0, empresa: 0, vendedor: 0 }] },
   ],
 
   _tabelaPct: {
-    // Fator do valor da operação; as comissões da exceção são zero.
-    "NCDT_096-999_EXCECAO": 1,
+    // Fator da tabela de comissão; valor bruto da operação permanece em valor.
+    "NCDT_096-999_EXCECAO": 0,
     AMIGOZ_GOVMG_RCC_450_100: 1.0,
     AMIGOZ_GOVMG_RCC_425_85: 0.85,
     AMIGOZ_GOVMG_RCC_399_65: 0.65,
@@ -1915,6 +1933,7 @@ window.Proposals = {
   },
 
   _tabelaLabel: function(code) {
+    if (code === 'NCDT_096-999_EXCECAO') return 'TABELA_EXCECAO — sem comissão';
     if (!code) return '';
     for (const g of this._TABELA_GROUPS) {
       const hit = g.items.find(i => i.value === code);
@@ -1929,7 +1948,7 @@ window.Proposals = {
 
   _tabelaSelectHtml: function(selected) {
     let html = '<option value="">— Aguardando análise —</option>';
-    for (const g of this._TABELA_GROUPS) {
+    for (const g of [...this._TABELA_GROUPS.filter(g => g.group !== 'EXCECAO'), ...this._TABELA_GROUPS.filter(g => g.group === 'EXCECAO')]) {
       html += `<optgroup label="${g.group}">`;
       html += g.items.map(i => {
         const sel = selected === i.value ? ' selected' : '';
@@ -4504,6 +4523,11 @@ delete parsed[k];
     return p?.vendorId || p?.vendor_id || p?.employee_id || '';
   },
 
+  _canManageAllProposals: function(user) {
+    const session = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
+    return session?.permissions?.canManageAllProposals === true;
+  },
+
   _ownsProposal: function(proposal, user) {
     if (!proposal || !user?.id) return false;
     if (typeof DB._matchProposalToVendor === 'function' && DB._matchProposalToVendor(proposal, user)) return true;
@@ -4826,6 +4850,7 @@ delete parsed[k];
    * Parceiros NÃO excluem (só veem/editam a própria rede).
    */
   _canDeleteProposal: function() {
+    if (this._canManageAllProposals() && Auth.getSession()?.permissions?.canDeleteAllProposals === true) return true;
     if (typeof window !== 'undefined' && window.PARTNER_ROOT_ID) return false;
     if (this._isMaster()) return true;
     const role = this._normProposalManageRole(
@@ -5006,11 +5031,25 @@ delete parsed[k];
   },
 
   _proposalClientFallback: function(client, proposal) {
-    if (client) return client;
+    const parse = value => {
+      if (typeof value === 'string') { try { value = JSON.parse(value); } catch (_) { return {}; } }
+      return value && typeof value === 'object' ? value : {};
+    };
+    const meta = parse(proposal?.meta);
+    const bank = parse(meta.client_bank);
+    const credit = parse(proposal?.creditoEsteira || proposal?.credito_esteira);
     const cpf = String(proposal?.clientCpf || proposal?.client_cpf || '').replace(/\D/g, '');
     const name = String(proposal?.clientName || proposal?.client_name || '').trim();
-    if (!cpf && !name) return null;
-    return { id: cpf || name, cpf: cpf || '', name, _fromProposalOnly: true };
+    if (!client && !cpf && !name) return null;
+    const base = client || { id: cpf || name, cpf, name, _fromProposalOnly: true };
+    return {
+      ...base,
+      address: base.address || meta.client_address || credit.endereco || '',
+      banco: base.banco || base.bank || bank.banco || credit.banco_conta || '',
+      agencia: base.agencia || bank.agencia || credit.agencia || '',
+      conta: base.conta || base.conta_corrente || bank.conta || credit.conta || '',
+      tipo_conta: bank.tipo_conta || base.tipo_conta || credit.tipo_conta || '',
+    };
   },
 
   _lookupClientByCpf: async function(cpf) {
@@ -5041,6 +5080,10 @@ delete parsed[k];
         `<p style="color:var(--color-warning);margin:0 0 8px;font-size:13px;font-weight:600;">Cliente não está no cadastro — preencha telefone, e-mail e endereço abaixo e salve a proposta.</p>`,
         row('Nome completo', client.name),
         row('CPF', client.cpf),
+        row('Banco da conta', client.banco),
+        row('Agência', client.agencia),
+        row('Conta', client.conta),
+        row('Tipo de conta', ({corrente:'Conta corrente',poupanca:'Conta poupança',salario:'Conta salário',pagamento:'Conta de pagamento'})[client.tipo_conta] || client.tipo_conta),
       ].filter(Boolean).join('');
     }
     const addr = this._parseAddress(client.address);
@@ -5058,6 +5101,7 @@ delete parsed[k];
       row('Banco (conta)', client.banco || client.bank),
       row('Agência', client.agencia),
       row('Conta', client.conta || client.conta_corrente),
+      row('Tipo de conta', ({corrente:'Conta corrente',poupanca:'Conta poupança',salario:'Conta salário',pagamento:'Conta de pagamento'})[client.tipo_conta] || client.tipo_conta),
     ].filter(Boolean).join('');
     return [
       row('Nome completo', client.name),
@@ -5189,6 +5233,13 @@ delete parsed[k];
               <input type="text" id="${p}ClientConta" class="form-control prop-client-field" placeholder="00000-0" value="${this._escAttr(client.conta || client.conta_corrente || '')}"${dis}/>
             </div>
           </div>
+          <div class="form-group" style="margin:10px 0 0;">
+            <label for="${p}ClientTipoConta" style="font-size:11px;">Tipo de conta</label>
+            <select id="${p}ClientTipoConta" class="form-control prop-client-field"${disSel}>
+              <option value="">Selecione o tipo de conta...</option>
+              ${[['corrente','Conta corrente'],['poupanca','Conta poupança'],['salario','Conta salário'],['pagamento','Conta de pagamento']].map(([value,label]) => `<option value="${value}"${client.tipo_conta === value ? ' selected' : ''}>${label}</option>`).join('')}
+            </select>
+          </div>
         </div>
       </div>
     `;
@@ -5215,6 +5266,7 @@ delete parsed[k];
       banco: gv('Banco'),
       agencia: gv('Agencia'),
       conta: gv('Conta'),
+      tipo_conta: gv('TipoConta'),
       address: this._formatAddress({
         estado: gv('Estado'),
         municipio: gv('Municipio'),
@@ -5362,11 +5414,12 @@ delete parsed[k];
     }
     // Espelha conta do cliente na meta da proposta (auditoria / esteira).
     const meta = (proposal.meta && typeof proposal.meta === 'object') ? { ...proposal.meta } : {};
-    if (form.banco || form.agencia || form.conta) {
+    if (form.banco || form.agencia || form.conta || form.tipo_conta) {
       meta.client_bank = {
         banco: form.banco || '',
         agencia: form.agencia || '',
         conta: form.conta || '',
+        tipo_conta: form.tipo_conta || '',
       };
       proposal.meta = meta;
     }
@@ -6216,7 +6269,9 @@ delete parsed[k];
       const me = await DB.getUser(user.id).catch(() => null);
       const vendorUser = { id: user.id, name: me?.name || user.name || '' };
 
-      const raw = await DB.getProposals(user.id, vendorUser);
+      const raw = this._canManageAllProposals(user)
+        ? await DB.getProposals(null, null)
+        : await DB.getProposals(user.id, vendorUser);
       // getProposals já filtra por vendor_id/employee_id e por CPF dos clientes do vendedor.
       // Não aplicar _ownsProposal de novo — isso escondia propostas com vendor_id vazio/errado.
       let all = this._rowsFromProposalQuery(raw)
@@ -6279,7 +6334,7 @@ delete parsed[k];
     const t0 = Date.now();
     const q = this._getProposalSearchQuery();
     const session = Auth.getSession();
-    const isVendorSession = session?.role === 'vendedor';
+    const isVendorSession = session?.role === 'vendedor' && !this._canManageAllProposals(session);
     let vendorId = this._getAdminVendorFilter();
     if (isVendorSession) vendorId = session.id;
     this._adminList.vendorId = vendorId;
@@ -6892,7 +6947,7 @@ delete parsed[k];
         else modal?.classList.remove('open');
         return;
       }
-      if (!this._ownsProposal(proposal, user)) {
+      if (!this._canManageAllProposals(user) && !this._ownsProposal(proposal, user)) {
         alert('Você só pode visualizar ou editar suas próprias propostas.');
         if (typeof closeModal === 'function') closeModal('employeeProposalModal');
         else modal?.classList.remove('open');
@@ -7038,7 +7093,7 @@ delete parsed[k];
       }
     }
     const norm = this._normProposal(proposal);
-    if (!this._ownsProposal(norm, user)) {
+    if (!this._canManageAllProposals(user) && !this._ownsProposal(norm, user)) {
       alert('Você só pode editar suas próprias propostas.');
       return;
     }
@@ -8131,3 +8186,158 @@ document.addEventListener('keydown', (e) => {
     Proposals.closeModal();
   }
 });
+
+
+
+/* Permissão individual: esteira completa no painel do vendedor autorizado. */
+(function () {
+  let attempts = 0;
+  function applyProposalAccess() {
+    const u = typeof Auth !== 'undefined' ? Auth.getSession() : null;
+    const cd = window.EsteiraCompraDivida;
+    if (!u || !cd || typeof Proposals === 'undefined') {
+      if (++attempts < 40) setTimeout(applyProposalAccess, 500);
+      return;
+    }
+    if (u.permissions?.canManageAllProposals !== true) {
+      if (++attempts < 40) setTimeout(applyProposalAccess, 500);
+      return;
+    }
+    if (!cd._allProposalAccessWired) {
+      cd._allProposalAccessWired = true;
+      const original = cd.ensureVendorSection;
+      cd.ensureVendorSection = function () {
+        if (Auth.getSession()?.permissions?.canManageAllProposals === true) {
+          const result = this.ensureBoSection();
+          this.refreshBo();
+          return result;
+        }
+        return original.apply(this, arguments);
+      };
+      const actions = Proposals.actionsRowHtml;
+      Proposals.actionsRowHtml = function (id, opts) {
+        if (Auth.getSession()?.permissions?.canManageAllProposals === true && !document.getElementById('manageProposalModal')) {
+          opts = Object.assign({}, opts, { employee: true });
+        }
+        return actions.call(this, id, opts);
+      };
+    }
+    if (u.permissions?.canManageAllProposals === true && /employee\.html/i.test(location.pathname)) {
+      cd.ensureVendorSection();
+    }
+  }
+  document.addEventListener('load', function (event) {
+    if (event.target?.tagName === 'SCRIPT' && /esteira-compra-divida/.test(event.target.src || '')) applyProposalAccess();
+  }, true);
+  document.addEventListener('visibilitychange', function () { if (!document.hidden) applyProposalAccess(); });
+  async function startProposalAccess() {
+    if (typeof Auth !== 'undefined' && typeof Auth.syncSessionFromDb === 'function') {
+      try { await Auth.syncSessionFromDb(); } catch (_) {}
+    }
+    applyProposalAccess();
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', startProposalAccess);
+  else startProposalAccess();
+})();
+
+
+/* Seletor de status da esteira: remove opção atual repetida e padroniza visual. */
+(function () {
+  let scheduled = false;
+  function cleanCreditStatuses() {
+    scheduled = false;
+    document.querySelectorAll('select[id^="cd_st_"]').forEach(function (select) {
+      const value = select.value;
+      const seen = new Set();
+      Array.from(select.options).forEach(function (option) {
+        const key = option.value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        if (seen.has(key)) option.remove(); else seen.add(key);
+      });
+      select.value = value;
+      select.classList.add('credit-status-select');
+      select.setAttribute('aria-label', 'Situação da proposta');
+      select.title = select.selectedOptions[0]?.textContent || value;
+    });
+  }
+  function start() {
+    cleanCreditStatuses();
+    new MutationObserver(function (changes) {
+      if (scheduled || !changes.some(function (change) { return change.addedNodes.length || change.removedNodes.length; })) return;
+      scheduled = true;
+      requestAnimationFrame(cleanCreditStatuses);
+    }).observe(document.body, { childList:true, subtree:true });
+    document.addEventListener('change', function (event) {
+      if (event.target.matches?.('select[id^="cd_st_"]')) event.target.title = event.target.selectedOptions[0]?.textContent || event.target.value;
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();
+})();
+
+
+
+
+/* Menu de situações da Gestão de Crédito; mantém o select e o onchange originais. */
+(function () {
+  let active = null, scheduled = false;
+  function close() {
+    if (!active) return;
+    active.button.setAttribute('aria-expanded', 'false');
+    active.menu.remove(); active = null;
+  }
+  function tone(value) {
+    const v=String(value).toUpperCase();
+    return /CANCEL/.test(v) ? 'cancel' : /^(PAGO|PAGA)$/.test(v) ? 'paid' : /PEND/.test(v) ? 'pending' : 'waiting';
+  }
+  function sync(select, button) {
+    const caption=select.selectedOptions[0]?.textContent || select.value || 'Selecionar situação';
+    if(button.querySelector('.credit-status-caption').textContent!==caption)button.querySelector('.credit-status-caption').textContent=caption;
+    button.dataset.tone=tone(select.value);
+    button.disabled=select.disabled;
+    button.title=button.querySelector('.credit-status-caption').textContent;
+  }
+  function open(select, button) {
+    if (active?.button===button) { close();return; }
+    close();
+    const menu=document.createElement('div');menu.className='credit-status-menu';menu.setAttribute('role','listbox');menu.setAttribute('aria-label','Situação da proposta');menu.id=button.getAttribute('aria-controls');
+    const options=Array.from(select.options).filter(o=>!o.disabled && o.value);
+    options.forEach(function(option) {
+      const item=document.createElement('button');item.type='button';item.className='credit-status-option';item.setAttribute('role','option');item.setAttribute('aria-selected',String(option.value===select.value));item.dataset.tone=tone(option.value);
+      const dot=document.createElement('span');dot.className='credit-status-dot';dot.setAttribute('aria-hidden','true');
+      const text=document.createElement('span');text.textContent=option.textContent;
+      const tick=document.createElement('span');tick.className='credit-status-tick';tick.textContent=option.value===select.value?'✓':'';tick.setAttribute('aria-hidden','true');
+      item.append(dot,text,tick);
+      item.addEventListener('click',function(event){event.stopPropagation();const changed=select.value!==option.value;select.value=option.value;sync(select,button);close();button.focus({preventScroll:true});if(changed)select.dispatchEvent(new Event('change',{bubbles:true}));});
+      menu.appendChild(item);
+    });
+    menu.addEventListener('keydown',function(event){
+      const items=Array.from(menu.querySelectorAll('button'));let i=items.indexOf(document.activeElement);
+      if(event.key==='Escape'){event.preventDefault();close();button.focus({preventScroll:true});return;}
+      if(event.key==='Tab'){close();return;}
+      if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();i=event.key==='Home'?0:event.key==='End'?items.length-1:(i+(event.key==='ArrowDown'?1:-1)+items.length)%items.length;items[i]?.focus({preventScroll:true});}
+    });
+    document.body.appendChild(menu);
+    const rect=button.getBoundingClientRect(),width=Math.min(280,window.innerWidth-24);
+    menu.style.width=width+'px';menu.style.left=Math.max(12,Math.min(rect.left,window.innerWidth-width-12))+'px';
+    const height=Math.min(menu.scrollHeight,300),below=window.innerHeight-rect.bottom-12;
+    menu.style.top=(below>=height?rect.bottom+6:Math.max(12,rect.top-height-6))+'px';
+    active={button,menu};button.setAttribute('aria-expanded','true');menu.querySelector('[aria-selected="true"]')?.focus({preventScroll:true});
+  }
+  function enhance() {
+    scheduled=false;
+    document.querySelectorAll('select[id^="cd_st_"]').forEach(function(select){
+      if(select.dataset.creditMenuReady){sync(select,select.previousElementSibling);return;}
+      select.dataset.creditMenuReady='1';
+      const button=document.createElement('button');button.type='button';button.className='credit-status-trigger';button.setAttribute('aria-label','Alterar situação da proposta');button.setAttribute('aria-haspopup','listbox');button.setAttribute('aria-expanded','false');button.setAttribute('aria-controls','credit-menu-'+select.id);
+      button.innerHTML='<span class="credit-status-dot" aria-hidden="true"></span><span class="credit-status-caption"></span><span class="credit-status-chevron" aria-hidden="true">⌄</span>';
+      select.before(button);select.style.setProperty('display','none','important');select.setAttribute('aria-hidden','true');select.tabIndex=-1;
+      sync(select,button);
+      button.addEventListener('click',function(event){event.stopPropagation();open(select,button);});
+      button.addEventListener('keydown',function(event){if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();open(select,button);}});
+      select.addEventListener('change',()=>sync(select,button));
+    });
+  }
+  function start(){enhance();new MutationObserver(function(changes){if(active && !active.button.isConnected)close();if(scheduled || !changes.some(c=>c.addedNodes.length))return;scheduled=true;requestAnimationFrame(enhance);}).observe(document.body,{childList:true,subtree:true});}
+  document.addEventListener('click',function(event){if(active && !active.menu.contains(event.target) && !active.button.contains(event.target))close();});
+  window.addEventListener('resize',close);window.addEventListener('scroll',function(event){if(active && !active.menu.contains(event.target))close();},true);
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start);else start();
+})();
