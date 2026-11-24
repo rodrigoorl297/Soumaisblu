@@ -761,7 +761,7 @@ this._renderList(listId, rows, {
 
   _showRankingToolbar(filtersId, summaryId) {
     const card = this._rankingToolbarCard(filtersId, summaryId);
-    if (card) card.style.display = '';
+    if (card) card.style.setProperty('display', 'block', 'important');
     const filters = document.getElementById(filtersId);
     const summary = document.getElementById(summaryId);
     if (filters) filters.style.display = '';
