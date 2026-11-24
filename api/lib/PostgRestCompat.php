@@ -500,6 +500,14 @@ final class PostgRestCompat
         $sql .= ' WHERE ' . $where;
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($row + $bind);
+        if ($table === 'proposals' && isset($row['updated_at'])) {
+            $idFilters = array_values(array_filter($params['filters'], static fn ($f) => $f['col'] === 'id' && $f['op'] === 'eq'));
+            $revisionFilters = array_filter($params['filters'], static fn ($f) => $f['col'] === 'updated_at');
+            if (count($idFilters) === 1 && $revisionFilters) {
+                if ($stmt->rowCount() === 0) return [];
+                $params['filters'] = $idFilters;
+            }
+        }
         return $this->select($table, $params);
     }
 

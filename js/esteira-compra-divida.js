@@ -9,6 +9,7 @@
 
   const TAG = '[COMPRA_DIVIDA]';
   const TIPO = 'compra_divida';
+  const AGUARDANDO_DIGITACAO = 'AGUARDANDO DIGITAÇÃO';
 
   function cat() {
     return window.COMPRA_DIVIDA_CATALOG || {};
@@ -183,6 +184,17 @@
       convenio: p.convenio || '',
       tabela: p.tabela || '',
     };
+  }
+
+  function canReturnToDigitacao(p, user) {
+    if (!user?.id || !canVendorView(user) || !isCompraDividaProposal(p)) return false;
+    const owner = p.vendorId || p.vendor_id || p.employee_id;
+    const product = String(payloadOf(p).produto || p.product || '').trim()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    const status = String(p.status || p.statusOp || p.status_op || '').trim().toUpperCase();
+    return String(owner) === String(user.id)
+      && ['CP', 'CREDITO PESSOAL'].includes(product)
+      && ['PENDENTE', 'PENDENCIADO'].includes(status);
   }
 
   /**
@@ -849,9 +861,14 @@ ${cdModalStyles()}
             <td>${esc(pl.produto || p.product || '')}</td>
             <td>${esc(pl.banco || '')}</td>
             <td>${esc(fmtMoney(p.valor))}</td>
-            <td><strong>${esc(p.status || p.statusOp || '')}</strong></td>
+            <td><strong>${esc(p.status || p.statusOp || p.status_op || '')}</strong>
+              ${canReturnToDigitacao(p, u) ? `<button type="button" class="btn btn-outline btn-sm" data-cd-return-id="${esc(p.id)}">Voltar para Digitação</button>` : ''}
+            </td>
           </tr>`;
         }).join('')}</tbody></table></div>`;
+      root.querySelectorAll('[data-cd-return-id]').forEach((button) => {
+        button.addEventListener('click', () => void EsteiraCompraDivida.returnToDigitacao(button));
+      });
     } catch (e) {
       root.innerHTML = `<p style="color:#dc2626;">${esc(e.message || 'Falha ao carregar')}</p>`;
     }
@@ -1248,7 +1265,7 @@ ${cdModalStyles()}
       const d = new Date();
       const protocolo = `CD-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
       const id = `CD-${Date.now()}`;
-      const status = 'AGUARDANDO DIGITAÇÃO';
+      const status = AGUARDANDO_DIGITACAO;
       const payload = {
         tipo: TIPO,
         origem,
@@ -1375,6 +1392,36 @@ ${cdModalStyles()}
         if (typeof showToast === 'function') showToast(e.message || 'Erro ao salvar.', 'error');
       } finally {
         if (btn) { btn.disabled = false; btn.textContent = 'Enviar para esteira'; }
+      }
+    },
+
+    async returnToDigitacao(button) {
+      if (button.disabled) return;
+      const id = button.dataset.cdReturnId;
+      const user = session();
+      button.disabled = true;
+      try {
+        const proposal = await DB.getProposal(id);
+        if (!canReturnToDigitacao(proposal, user)) {
+          throw new Error('Esta ficha não está mais disponível para reenvio.');
+        }
+        const previous = proposal.status || proposal.statusOp || proposal.status_op;
+        const saved = await DB.updateProposal(id, {
+          status: AGUARDANDO_DIGITACAO,
+          history: [...parseHistory(proposal), {
+            date: new Date().toISOString(),
+            actorName: user.name,
+            action: `Status: [${previous}] → [${AGUARDANDO_DIGITACAO}]`,
+          }],
+        }, { expectedUpdatedAt: proposal.updated_at ?? null });
+        if (!saved) throw new Error('A ficha mudou. Atualize a lista e tente novamente.');
+        if (typeof showToast === 'function') showToast('Ficha devolvida para Digitação.', 'success');
+        await renderMinhasFichas();
+      } catch (e) {
+        if (typeof showToast === 'function') showToast(e.message || 'Falha ao devolver a ficha.', 'error');
+        else alert(e.message || 'Falha ao devolver a ficha.');
+      } finally {
+        button.disabled = false;
       }
     },
 
