@@ -4644,17 +4644,22 @@ if (!allowed) return null;
       }
       return prop;
     },
-    async updateProposal(id, updates) {
+    async updateProposal(id, updates, { expectedUpdatedAt } = {}) {
       const row = this._sanitizeProposalForApi(this._normalizeProposalForDb(updates, { isNew: false }));
       if (this.online) {
         _cacheDel('proposals');
         this._invalidateProposalsCache();
-        const r = await supaReq('PATCH', 'proposals', row, `?id=eq.${encodeURIComponent(id)}`);
+        const revision = expectedUpdatedAt === undefined ? ''
+          : expectedUpdatedAt === null ? '&updated_at=is.null'
+          : `&updated_at=eq.${encodeURIComponent(expectedUpdatedAt)}`;
+        const r = await supaReq('PATCH', 'proposals', row, `?id=eq.${encodeURIComponent(id)}${revision}`);
         return r[0] || null;
       }
       const list = this._lget(this.LK.proposals);
       const idx = list.findIndex(p => p.id === id);
       if (idx === -1) return null;
+      if (expectedUpdatedAt !== undefined
+        && (list[idx].updated_at ?? null) !== expectedUpdatedAt) return null;
       list[idx] = { ...list[idx], ...row };
       this._lset(this.LK.proposals, list);
       return list[idx];
