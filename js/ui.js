@@ -1597,3 +1597,39 @@ if (document.readyState === 'loading') {
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',hideRetiredTickets);else hideRetiredTickets();
 })();
+
+/* Presentation shared by proposal and credit management. */
+(function () {
+  if (document.getElementById('soublu-commercial-alignment')) return;
+  const style = document.createElement('style');
+  style.id = 'soublu-commercial-alignment';
+  style.textContent = `
+body #secManageProposals .proposal-page-header{margin:0!important;padding:0!important;border:0!important;}
+body #secManageProposals .proposal-page-header .page-header-text{display:none;}
+body #secManageProposals .proposal-toolbar,body #cdBoRoot .cd-bo-toolbar{display:flex;align-items:center;justify-content:flex-end!important;flex-wrap:wrap;gap:8px!important;margin:0 0 14px!important;padding:16px!important;min-height:78px;box-sizing:border-box;width:100%;border:1px solid #dce5f1;border-radius:14px;background:#fff;}
+body #secManageProposals .proposal-toolbar .search-bar,body #cdBoRoot .cd-bo-toolbar .search-bar{flex:1 1 260px!important;min-width:0!important;max-width:320px!important;width:100%!important;margin:0;}
+body #secManageProposals .proposal-toolbar .btn,body #cdBoRoot .cd-bo-toolbar .btn{height:36px;min-height:36px;box-sizing:border-box;border-radius:10px;padding:8px 14px;font-size:12px;white-space:nowrap;}
+body :is(#secManageProposals,#cdBoRoot) .proposal-date-filter:not(.proposal-toolbar .proposal-date-filter){margin:0 0 14px!important;padding:16px!important;border:1px solid #dce5f1;border-radius:14px;background:#fff;box-sizing:border-box;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__row{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__field{flex:0 1 170px;min-width:0;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__field label{display:block;font-size:12px;color:#7b8fa8;margin-bottom:5px;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__field input{width:100%;padding:8px 12px;border:1px solid #dce5f1;border-radius:10px;background:#fff;color:#173858;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__radios{display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin:0 0 12px;font-size:12px;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__radios label{display:inline-flex;align-items:center;gap:5px;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__actions{display:flex;gap:8px;margin-left:auto;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__actions .btn{min-height:38px;border-radius:10px;padding:8px 16px;}
+body #secManageProposals .proposal-toolbar .search-bar input,body #cdBoRoot .cd-bo-toolbar .search-bar input{width:100%;height:44px;padding:10px 16px 10px 40px;box-sizing:border-box;border:1px solid #dce5f1;border-radius:24px;background:#fff;font-size:12px;color:#173858;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__title{font-size:12px;font-weight:700;margin-bottom:12px;}
+body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__field input{height:38px;min-height:38px;box-sizing:border-box;}
+body :is(#secManageProposals,#cdBoRoot) .data-table{width:100%!important;border-collapse:separate;border-spacing:0;}
+body :is(#secManageProposals,#cdBoRoot) .data-table th{font-size:10px!important;padding:14px 12px!important;line-height:1.5;font-weight:700;}
+body :is(#secManageProposals,#cdBoRoot) .data-table td{font-size:12px!important;padding:18px 12px!important;line-height:1.55!important;vertical-align:middle;}
+body :is(#secManageProposals,#cdBoRoot) .data-table td:first-child,body :is(#secManageProposals,#cdBoRoot) .data-table td:first-child strong{font-size:12px!important;font-weight:600;overflow-wrap:anywhere!important;white-space:normal!important;}
+body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(7),body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(8){white-space:nowrap!important;font-variant-numeric:tabular-nums;}
+body :is(#secManageProposals,#cdBoRoot) .credit-status-trigger,body #secManageProposals .data-table td[data-col=status]>.badge{min-width:160px!important;max-width:190px!important;min-height:40px!important;font-size:10px!important;padding:9px 12px!important;}
+@media(min-width:1101px){body :is(#secManageProposals,#cdBoRoot) .data-table{table-layout:fixed!important;min-width:1400px!important;}body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td){width:auto!important;}body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(3){width:14%!important;}body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(4){width:12%!important;}body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):nth-child(10){width:14%!important;}body :is(#secManageProposals,#cdBoRoot) .data-table :is(th,td):last-child{width:8%!important;}}
+@media(max-width:1100px){body #cdBoRoot .data-table{table-layout:fixed!important;min-width:1400px!important;}body #cdBoRoot .data-table :is(th,td):first-child{width:110px!important;}body #cdBoRoot .data-table :is(th,td):nth-child(3){width:180px!important;}body #cdBoRoot .data-table :is(th,td):nth-child(4){width:160px!important;}body #cdBoRoot .data-table :is(th,td):nth-child(10){width:190px!important;}body #cdBoRoot .data-table :is(th,td):last-child{width:120px!important;}}
+@media(max-width:767px){body #secManageProposals .proposal-toolbar,body #cdBoRoot .cd-bo-toolbar{justify-content:flex-start!important;padding:12px!important;}body #secManageProposals .proposal-toolbar .search-bar,body #cdBoRoot .cd-bo-toolbar .search-bar{flex-basis:100%!important;max-width:none!important;}body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__row{display:flex;flex-wrap:wrap;gap:12px;}body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__field{flex:1 1 135px;min-width:0;}body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__field input{width:100%;}body :is(#secManageProposals,#cdBoRoot) .prop-date-filter__actions{width:100%;display:flex;justify-content:flex-end;}}
+`;
+  document.head.appendChild(style);
+})();

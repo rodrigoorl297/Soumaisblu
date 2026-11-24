@@ -29,4 +29,5 @@ jobs:
       - run: python3 -m unittest discover -s tests -p 'test_release.py' -v
       - run: node tests/credit-bank-fields.test.cjs
       - run: node tests/commission-engine.test.cjs
+      - run: node tests/sales-ranking-periods.test.cjs
       - run: node tests/daily-production-export.test.cjs

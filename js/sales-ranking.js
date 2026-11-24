@@ -65,23 +65,49 @@ window.SalesRanking = {
     return false;
   },
 
-  _periodRange(periodKey) {
-    const now = new Date();
+  PERIOD_OPTIONS: [
+    { v: 'all', l: 'Total' }, { v: 'month', l: 'Mensal' },
+    { v: 'week', l: 'Semanal' }, { v: 'day', l: 'Diário' },
+  ],
+
+  _periodRange(periodKey, reference = new Date()) {
     if (periodKey === 'all') return { start: null, end: null };
-    if (periodKey === 'last_month') {
-      return {
-        start: new Date(now.getFullYear(), now.getMonth() - 1, 1),
-        end: new Date(now.getFullYear(), now.getMonth(), 1),
-      };
+    const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Sao_Paulo', year: 'numeric', month: 'numeric', day: 'numeric',
+    }).formatToParts(reference).filter(p => p.type !== 'literal').map(p => [p.type, Number(p.value)]));
+    const { year, month, day } = parts;
+    // Calendário comercial de Brasília (UTC-3), independentemente do fuso do computador.
+    const midnight = (m, d) => new Date(Date.UTC(year, m - 1, d, 3));
+    if (periodKey === 'day') return { start: midnight(month, day), end: midnight(month, day + 1) };
+    if (periodKey === 'week') {
+      const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+      const monday = day - (weekday + 6) % 7;
+      return { start: midnight(month, monday), end: midnight(month, monday + 7) };
     }
-    return {
-      start: new Date(now.getFullYear(), now.getMonth(), 1),
-      end: new Date(now.getFullYear(), now.getMonth() + 1, 1),
-    };
+    if (periodKey === 'last_month') return { start: midnight(month - 1, 1), end: midnight(month, 1) };
+    return { start: midnight(month, 1), end: midnight(month + 1, 1) };
   },
 
   _periodLabel(periodKey) {
-    return { month: 'Este mês', last_month: 'Mês anterior', all: 'Todo o período' }[periodKey] || 'Período';
+    return this.PERIOD_OPTIONS.find(p => p.v === periodKey)?.l
+      || (periodKey === 'last_month' ? 'Mês anterior' : 'Período');
+  },
+
+  _periodButtonsHtml(period) {
+    return this.PERIOD_OPTIONS.map(({ v, l }) =>
+      `<button type="button" class="rk-seg__btn${period === v ? ' is-active' : ''}" data-period="${v}" aria-pressed="${period === v}">${l}</button>`).join('');
+  },
+
+  _renderPublicPeriodFilter(containerId, listId, viewer) {
+    const box = document.getElementById(containerId);
+    if (!box) return;
+    box.innerHTML = `<div class="sales-ranking-toolbar"><div class="sales-ranking-filter-group"><span class="sales-ranking-filter-label">PERÍODO</span><div class="rk-seg" role="group" aria-label="Período do ranking" style="display:flex;flex-wrap:wrap;gap:4px">${this._periodButtonsHtml(this._filters.period)}</div></div></div>`;
+    box.querySelectorAll('[data-period]').forEach(button => button.addEventListener('click', () => {
+      if (this._filters.period === button.dataset.period) return;
+      this._filters.period = button.dataset.period;
+      if (listId === 'adminRankingList') this.renderAdmin();
+      else this.renderEmployee(viewer);
+    }));
   },
 
   _billingLabel(billingKey) {
@@ -619,9 +645,9 @@ ${body || '<tr><td colspan="9" style="text-align:center">Nenhum dado</td></tr>'}
     const hasExtra = !!(this._filters.status || this._filters.fase);
     const dashFilter = typeof window._dashBillingFilter === 'string' ? window._dashBillingFilter : null;
     const dashBilling = typeof window._dashBillingStatusFilter === 'string' ? window._dashBillingStatusFilter : null;
-    const filterKey = (!hasExtra && dashFilter && dashBilling === billing) ? dashFilter : period;
-    if (!hasExtra && typeof window._filterPropsForTeamBilling === 'function'
-      && (filterKey === 'month' || filterKey === 'all' || filterKey === 'custom' || filterKey === 'day' || filterKey === 'year')) {
+    const filterKey = period;
+    if (!hasExtra && dashFilter === period && dashBilling === billing && typeof window._filterPropsForTeamBilling === 'function'
+      && (filterKey === 'month' || filterKey === 'all')) {
       return window._filterPropsForTeamBilling(proposals, filterKey, billing);
     }
     return this._filterProposals(proposals);
@@ -696,7 +722,8 @@ return { users, vendorIndex, usersByName, userIds, rawProps, filtered, scoped, r
     const vendorIndex = this._buildVendorIndex(users);
     const userIds = users.map((u) => u.id);
     const rawProps = await this._loadProposals({ force: true, skipDashCache: true, fullList: true });
-    const allProps = this._scopeProposals(rawProps, userIds, vendorIndex, null, false);
+    const periodProps = this._filterByPeriodOnly(rawProps);
+    const allProps = this._scopeProposals(periodProps, userIds, vendorIndex, null, false);
     const rows = this._aggregateByPaidAndProposals(users, allProps, vendorIndex, null, false);
 this._renderList(listId, rows, {
       viewerId: opts.viewerId || '',
@@ -888,9 +915,8 @@ return (users || [])
   <div class="sales-ranking-filter-group">
     <span class="sales-ranking-filter-label">PERÍODO</span>
     <input type="hidden" id="salesRankPeriod${prefix}" value="${period}">
-    <div class="rk-seg" role="group" aria-label="Período">
-      ${[['month', 'Este mês'], ['last_month', 'Mês anterior'], ['all', 'Tudo']].map(([v, l]) =>
-        `<button type="button" class="rk-seg__btn${period === v ? ' is-active' : ''}" data-period="${v}" aria-pressed="${period === v}">${l}</button>`).join('')}
+    <div class="rk-seg" role="group" aria-label="Período" style="display:flex;flex-wrap:wrap;gap:4px">
+      ${this._periodButtonsHtml(period)}
     </div>
   </div>
   <div class="sales-ranking-filter-group">
@@ -1388,8 +1414,11 @@ if (typeof openModal === 'function') openModal('rankConfigModal');
 return;
     }
 
-    this._filters = { period: 'all', status: '', fase: '', billing: 'total' };
-    this._hideRankingToolbar('salesRankingFiltersAdmin', 'salesRankingSummaryAdmin');
+    this._filters = { ...this._filters, status: '', fase: '', billing: 'total' };
+    this._showRankingToolbar('salesRankingFiltersAdmin', 'salesRankingSummaryAdmin');
+    this._renderPublicPeriodFilter('salesRankingFiltersAdmin', listId, viewer);
+    const summary = document.getElementById('salesRankingSummaryAdmin');
+    if (summary) summary.style.display = 'none';
     await this._renderPublicRanking(listId, { viewer });
   },
 
@@ -1419,8 +1448,19 @@ return;
       return;
     }
 
-    this._filters = { period: 'all', status: '', fase: '', billing: 'total' };
-    this._hideRankingToolbar('salesRankingFiltersEmployee', 'salesRankingSummaryEmployee');
+    this._filters = { ...this._filters, status: '', fase: '', billing: 'total' };
+    this._showRankingToolbar('salesRankingFiltersEmployee', 'salesRankingSummaryEmployee');
+    this._renderPublicPeriodFilter('salesRankingFiltersEmployee', listId, cu);
+    const summary = document.getElementById('salesRankingSummaryEmployee');
+    if (summary) summary.style.display = 'none';
     await this._renderPublicRanking(listId, { viewerId: cu.id, viewer: cu });
   },
 };
+
+/* Period controls shared by the public and management rankings. */
+(function () {
+  if(document.getElementById('soublu-ranking-period-controls'))return;
+  const style=document.createElement('style');style.id='soublu-ranking-period-controls';
+  style.textContent=`.sales-ranking-toolbar .sales-ranking-filter-label{display:block;margin-bottom:8px;color:#7587a1;font:700 10px/1.5 Arial,sans-serif;letter-spacing:.06em}.sales-ranking-toolbar .rk-seg{display:flex;flex-wrap:wrap;gap:4px;padding:4px;border:1px solid #dce5f1;border-radius:12px;background:#f4f7fb}.sales-ranking-toolbar .rk-seg__btn{border:0;border-radius:9px;background:transparent;color:#173858;padding:9px 16px;min-height:36px;font:600 12px/1.5 Arial,sans-serif;cursor:pointer}.sales-ranking-toolbar .rk-seg__btn.is-active{background:#10294a;color:#fff;box-shadow:0 2px 5px #10294a20}.sales-ranking-toolbar .rk-seg__btn:focus-visible{outline:2px solid #ff8b3d;outline-offset:2px}@media(max-width:480px){.sales-ranking-toolbar .rk-seg__btn{padding:9px 12px;flex:1 1 auto}}`;
+  document.head.appendChild(style);
+})();
