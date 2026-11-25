@@ -8620,8 +8620,16 @@ document.addEventListener('keydown', (e) => {
     active.menu.remove(); active = null;
   }
   function tone(value) {
-    const v=String(value).toUpperCase();
-    return /CANCEL/.test(v) ? 'cancel' : /^(PAGO|PAGA)$/.test(v) ? 'paid' : /PEND/.test(v) ? 'pending' : 'waiting';
+    const status = String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+    if (/^CANCELAD[OA]$/.test(status)) return 'cancel';
+    if (/^PAG[OA]$/.test(status)) return 'paid';
+    if (/^PEND/.test(status)) return 'pending';
+    if (/^(AVERBAD[OA]|BOLETO VALIDADO|BOLETO QUITADO)$/.test(status)) return 'confirmed';
+    if (/ASS|FORMALIZACAO|VIDEO|DOCS/.test(status)) return 'formalization';
+    if (/^AG.*(BOLETO|QUITACAO|LIBERACAO MARGEM)/.test(status)) return 'processing';
+    if (/^(PROPOSTA DIGITADA|DIGITAD[OA])$/.test(status)) return 'entered';
+    if (/DIGITACAO/.test(status)) return 'waiting';
+    return 'neutral';
   }
   function sync(select, button) {
     const caption=select.selectedOptions[0]?.textContent || select.value || 'Selecionar situação';
@@ -8733,6 +8741,21 @@ document.addEventListener('keydown', (e) => {
 :is(#secManageProposals,#cdBoRoot) .data-table .text-muted{font-size:11px;color:#7b8fa8;}
 :is(#secManageProposals,#cdBoRoot) .data-table .header-filter{font:inherit;color:inherit;max-width:100%;}
 :is(#secManageProposals,#cdBoRoot) .credit-status-trigger,:is(#secManageProposals,#cdBoRoot) td[data-col=status]>.badge{box-sizing:border-box;display:inline-flex!important;align-items:center;gap:8px;min-width:160px!important;max-width:210px!important;min-height:40px!important;padding:9px 12px!important;border:1px solid #d6e2f2!important;border-radius:10px!important;background:#f3f7fd!important;color:#204971!important;font-size:10px!important;font-weight:600!important;line-height:1.5!important;white-space:normal!important;text-align:left;}
+.credit-status-trigger[data-tone],.credit-status-option[data-tone]{--credit-status-bg:#f1f5f9;--credit-status-border:#cbd5e1;--credit-status-ink:#334155;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="waiting"]{--credit-status-bg:#eaf3ff;--credit-status-border:#b5d4fa;--credit-status-ink:#174c91;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="entered"]{--credit-status-bg:#e0f2fe;--credit-status-border:#7dc8ef;--credit-status-ink:#075985;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="formalization"]{--credit-status-bg:#f3e8ff;--credit-status-border:#d8b4fe;--credit-status-ink:#6b21a8;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="processing"]{--credit-status-bg:#ffedd5;--credit-status-border:#fdba74;--credit-status-ink:#9a3412;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="pending"]{--credit-status-bg:#fef3c7;--credit-status-border:#f4c452;--credit-status-ink:#854d0e;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="confirmed"]{--credit-status-bg:#ccfbf1;--credit-status-border:#5eead4;--credit-status-ink:#115e59;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="paid"]{--credit-status-bg:#dcfce7;--credit-status-border:#86d99d;--credit-status-ink:#166534;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="cancel"]{--credit-status-bg:#fee2e2;--credit-status-border:#f7aaaa;--credit-status-ink:#991b1b;}
+:is(#secManageProposals,#cdBoRoot) .credit-status-trigger[data-tone],
+.credit-status-menu .credit-status-option[data-tone]{background:var(--credit-status-bg)!important;border-color:var(--credit-status-border)!important;color:var(--credit-status-ink)!important;}
+.credit-status-menu .credit-status-option[data-tone]{border-width:1px;border-style:solid;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone] .credit-status-dot{background:currentColor;}
+.credit-status-trigger[data-tone] .credit-status-chevron,.credit-status-option[data-tone] .credit-status-tick{color:inherit;}
+.credit-status-menu .credit-status-option[data-tone]:is(:hover,:focus-visible){outline:2px solid currentColor;outline-offset:-2px;}
 :is(#secManageProposals,#cdBoRoot) .client-actions{display:flex!important;align-items:center;justify-content:flex-end;gap:6px!important;flex-wrap:nowrap!important;}
 :is(#secManageProposals,#cdBoRoot) .client-actions :is(button,a){display:inline-flex!important;align-items:center;justify-content:center;flex:0 0 32px;width:32px!important;min-width:32px!important;height:34px!important;padding:6px!important;border:1px solid #dce5f1!important;border-radius:10px!important;background:#fff;box-shadow:none;}
 :is(#secManageProposals,#cdBoRoot) .client-actions :is(button,a):hover{background:#edf4fd;border-color:#9bb9dc!important;}
