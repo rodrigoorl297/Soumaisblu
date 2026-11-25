@@ -795,23 +795,20 @@ ${cdModalStyles()}
   }
 
   function dateOnly(v) {
-    const s = String(v || '').trim();
-    if (!s || s.startsWith('0000')) return '';
-    const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
-    return m ? m[1] : '';
+    const date = _parseSouBluDate(v);
+    return date ? nowBrazilSql(date).slice(0, 10) : '';
   }
 
-  function fmtDay(v) {
-    const d = dateOnly(v);
-    if (!d) return '—';
-    const [y, mo, da] = d.split('-');
-    return `${da}/${mo}/${y}`;
+  function fmtProposalDate(v) {
+    return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '').trim()) ? formatDate(v) : formatDateTime(v);
   }
 
   /** Datas de cadastro / digitação / pagamento da ficha. */
   function datesOf(p) {
     const hist = parseHistory(p);
-    const created = p.created_at || p.createdAt || '';
+    // O histórico mantém o fuso nos cadastros antigos enviados em ISO.
+    const cadastro = hist.find((h) => h.action === 'Cadastro Compra de Dívida' && h.date);
+    const created = cadastro?.date || p.created_at || p.createdAt || '';
     const dig = hist.find((h) => h.kind === 'digitacao');
     const paidH = hist.find((h) => h.kind === 'paid');
     const st = String(p.status || p.statusOp || p.status_op || '').toUpperCase();
@@ -852,7 +849,7 @@ ${cdModalStyles()}
         return;
       }
       root.innerHTML = `<div class="table-wrap"><table class="data-table" style="width:100%;font-size:13px;">
-        <thead><tr><th>Protocolo</th><th>Cliente</th><th>Produto</th><th>Banco</th><th>Valor</th><th>Status</th></tr></thead>
+        <thead><tr><th>Protocolo</th><th>Cliente</th><th>Produto</th><th>Banco</th><th>Valor</th><th>Cadastro</th><th>Status</th></tr></thead>
         <tbody>${mine.map((p) => {
           const pl = payloadOf(p);
           return `<tr>
@@ -861,6 +858,7 @@ ${cdModalStyles()}
             <td>${esc(pl.produto || p.product || '')}</td>
             <td>${esc(pl.banco || '')}</td>
             <td>${esc(fmtMoney(p.valor))}</td>
+            <td>${esc(fmtProposalDate(datesOf(p).criacao))}</td>
             <td><strong>${esc(p.status || p.statusOp || p.status_op || '')}</strong>
               ${canReturnToDigitacao(p, u) ? `<button type="button" class="btn btn-outline btn-sm" data-cd-return-id="${esc(p.id)}">Voltar para Digitação</button>` : ''}
             </td>
@@ -914,7 +912,8 @@ ${cdModalStyles()}
     if (_boSortAz) {
       out.sort((a, b) => String(a.vendorName || a.vendor_name || '').localeCompare(String(b.vendorName || b.vendor_name || ''), 'pt-BR'));
     } else {
-      out.sort((a, b) => String(b.created_at || b.createdAt || '').localeCompare(String(a.created_at || a.createdAt || '')));
+      out.sort((a, b) => (_parseSouBluDate(datesOf(b).criacao)?.getTime() || 0)
+        - (_parseSouBluDate(datesOf(a).criacao)?.getTime() || 0));
     }
     return out;
   }
@@ -991,12 +990,12 @@ ${cdModalStyles()}
             <td>${esc(p.protocolo || '—')}</td>
             <td>${esc(fmtMoney(p.valor))}</td>
             <td>${esc(fmtMoney(p.valorFinal ?? p.valor))}</td>
-            <td>${esc(fmtDay(dt.criacao))}${dt.digitacao ? `<div class="text-muted" style="font-size:11px;">Digitação: ${esc(fmtDay(dt.digitacao))}</div>` : ''}</td>
+            <td>${esc(fmtProposalDate(dt.criacao))}${dt.digitacao ? `<div class="text-muted" style="font-size:11px;">Digitação: ${esc(fmtProposalDate(dt.digitacao))}</div>` : ''}</td>
             <td><select class="form-control" id="cd_st_${id}" style="min-width:150px;"
               onchange="EsteiraCompraDivida.saveStatus('${id}')">
               <option value="${cur}">${cur}</option>${statusOpts}
             </select></td>
-            <td>${esc(fmtDay(dt.pagamento))}</td>
+            <td>${esc(fmtProposalDate(dt.pagamento))}</td>
             <td>${cdActionsHtml(p)}</td>
           </tr>`;
         }).join('')}</tbody></table></div>`;
@@ -1209,13 +1208,13 @@ ${cdModalStyles()}
         lines.push([
           p.numero || p.id, p.vendorName || p.vendor_name, p.clientName || p.client_name, fmtCpf(p.clientCpf || p.client_cpf),
           pl.produto || p.product, pl.banco, pl.tabela || p.tabela, pl.convenio || p.convenio, p.protocolo,
-          p.valor, p.valorFinal ?? p.valor, fmtDay(dt.criacao), fmtDay(dt.digitacao), p.status || p.statusOp, fmtDay(dt.pagamento),
+          p.valor, p.valorFinal ?? p.valor, fmtProposalDate(dt.criacao), fmtProposalDate(dt.digitacao), p.status || p.statusOp, fmtProposalDate(dt.pagamento),
         ].map(cell).join(';'));
       });
       const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = `gestao-credito-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.download = `gestao-credito-${nowBrazilSql().slice(0, 10)}.csv`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1261,9 +1260,8 @@ ${cdModalStyles()}
         return;
       }
 
-      const now = new Date().toISOString();
-      const d = new Date();
-      const protocolo = `CD-${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+      const now = nowBrazilSql();
+      const protocolo = `CD-${now.slice(0, 10).replaceAll('-', '')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
       const id = `CD-${Date.now()}`;
       const status = AGUARDANDO_DIGITACAO;
       const payload = {
@@ -1432,13 +1430,14 @@ ${cdModalStyles()}
       const u = session();
       try {
         if (typeof showLoading === 'function') showLoading('Salvando status…');
+        const now = nowBrazilSql();
         const patch = {
           id,
           status,
           statusOp: status,
           status_op: status,
-          updatedAt: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
+          updatedAt: now,
+          updated_at: now,
           lastUpdatedBy: u?.name || '',
         };
         if (typeof DB.saveProposal === 'function') {
