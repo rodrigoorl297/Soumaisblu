@@ -4397,6 +4397,14 @@ delete parsed[k];
   _proposalCreatedAt: function(p) {
     const stored = p?.createdAt || p?.created_at || '';
     if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(String(stored))) return stored;
+    const storedAsUtc = Date.parse(stored.replace(' ', 'T') + 'Z');
+    // A esteira gera o ID a partir do relógio na hora do cadastro.
+    // A margem cobre os milissegundos descartados ou arredondados pelo MySQL.
+    const generatedId = /^CD-(\d{13})$/.exec(String(p?.id || ''));
+    const generatedAt = Number(generatedId?.[1]);
+    if (Math.abs(generatedAt - storedAsUtc) <= 2000) {
+      return new Date(generatedAt).toISOString();
+    }
     let history = p?.history;
     if (typeof history === 'string') {
       try { history = JSON.parse(history); } catch (_) { return stored; }
@@ -4405,7 +4413,7 @@ delete parsed[k];
     const original = history.find((entry) => entry?.action === 'Cadastro Compra de Dívida')?.date;
     // Fichas antigas podiam gravar o horário UTC no MySQL sem seu sufixo de fuso.
     if (typeof original === 'string' && /Z$/i.test(original)
-      && original.slice(0, 19) === stored.replace(' ', 'T')) return original;
+      && Math.abs(Date.parse(original) - storedAsUtc) <= 1000) return original;
     return stored;
   },
 
