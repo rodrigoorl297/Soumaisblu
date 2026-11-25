@@ -8621,7 +8621,7 @@ document.addEventListener('keydown', (e) => {
   }
   function tone(value) {
     const status = String(value || '').trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
-    if (/^CANCELAD[OA]$/.test(status)) return 'processing';
+    if (/^CANCELAD[OA]$/.test(status)) return 'cancel';
     if (/^(PAG[OA]|AVERBAD[OA]|BOLETO VALIDADO|BOLETO QUITADO)$/.test(status)) return 'paid';
     if (/^PEND/.test(status)) return 'pending';
     if (/ASS|FORMALIZACAO|VIDEO|DOCS/.test(status)) return 'processing';
@@ -8738,10 +8738,11 @@ document.addEventListener('keydown', (e) => {
 :is(#secManageProposals,#cdBoRoot) .data-table .text-muted{font-size:11px;color:#7b8fa8;}
 :is(#secManageProposals,#cdBoRoot) .data-table .header-filter{font:inherit;color:inherit;max-width:100%;}
 :is(#secManageProposals,#cdBoRoot) .credit-status-trigger,:is(#secManageProposals,#cdBoRoot) td[data-col=status]>.badge{box-sizing:border-box;display:inline-flex!important;align-items:center;gap:8px;min-width:160px!important;max-width:210px!important;min-height:40px!important;padding:9px 12px!important;border:1px solid #d6e2f2!important;border-radius:10px!important;background:#f3f7fd!important;color:#204971!important;font-size:10px!important;font-weight:600!important;line-height:1.5!important;white-space:normal!important;text-align:left;}
-:is(.credit-status-trigger,.credit-status-option)[data-tone="waiting"]{--credit-status-bg:#1d4ed8;--credit-status-border:#1e40af;--credit-status-ink:#ffffff;}
-:is(.credit-status-trigger,.credit-status-option)[data-tone="processing"]{--credit-status-bg:#f97316;--credit-status-border:#c2410c;--credit-status-ink:#431407;}
-:is(.credit-status-trigger,.credit-status-option)[data-tone="pending"]{--credit-status-bg:#facc15;--credit-status-border:#a16207;--credit-status-ink:#422006;}
-:is(.credit-status-trigger,.credit-status-option)[data-tone="paid"]{--credit-status-bg:#15803d;--credit-status-border:#166534;--credit-status-ink:#ffffff;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="waiting"]{--credit-status-bg:#dbeafe;--credit-status-border:#93c5fd;--credit-status-ink:#1e3a8a;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="processing"]{--credit-status-bg:#ffedd5;--credit-status-border:#fdba74;--credit-status-ink:#9a3412;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="pending"]{--credit-status-bg:#fef3c7;--credit-status-border:#fcd34d;--credit-status-ink:#713f12;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="cancel"]{--credit-status-bg:#fee2e2;--credit-status-border:#fca5a5;--credit-status-ink:#991b1b;}
+:is(.credit-status-trigger,.credit-status-option)[data-tone="paid"]{--credit-status-bg:#dcfce7;--credit-status-border:#86efac;--credit-status-ink:#14532d;}
 :is(#secManageProposals,#cdBoRoot) .credit-status-trigger[data-tone],
 .credit-status-menu .credit-status-option[data-tone]{background:var(--credit-status-bg)!important;border-color:var(--credit-status-border)!important;color:var(--credit-status-ink)!important;}
 .credit-status-menu .credit-status-option[data-tone]{border-width:1px;border-style:solid;}
