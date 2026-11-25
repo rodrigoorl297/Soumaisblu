@@ -2848,7 +2848,7 @@ return filtered;
 
   /** Mesma data da coluna DATA (created_at), dia civil SP. */
   _proposalCreatedDayKey: function(p) {
-    return this._ymdInPropTz(p?.createdAt || p?.created_at || '');
+    return this._ymdInPropTz(this._proposalCreatedAt(p));
   },
 
   /**
@@ -4395,7 +4395,18 @@ delete parsed[k];
   },
 
   _proposalCreatedAt: function(p) {
-    return p.createdAt || p.created_at || '';
+    const stored = p?.createdAt || p?.created_at || '';
+    if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/.test(String(stored))) return stored;
+    let history = p?.history;
+    if (typeof history === 'string') {
+      try { history = JSON.parse(history); } catch (_) { return stored; }
+    }
+    if (!Array.isArray(history)) return stored;
+    const original = history.find((entry) => entry?.action === 'Cadastro Compra de Dívida')?.date;
+    // Fichas antigas podiam gravar o horário UTC no MySQL sem seu sufixo de fuso.
+    if (typeof original === 'string' && /Z$/i.test(original)
+      && original.slice(0, 19) === stored.replace(' ', 'T')) return original;
+    return stored;
   },
 
   _parseProposalMeta: function(raw) {
@@ -4585,7 +4596,7 @@ delete parsed[k];
   },
 
   _propDateStr: function(p) {
-    const created = this._fmtDateTime(p?.createdAt || p?.created_at);
+    const created = this._fmtDateTime(this._proposalCreatedAt(p));
     const dig = this._digitacaoAt(p);
     if (!dig) return created;
     const digStr = this._fmtDateTime(dig);
@@ -5853,7 +5864,7 @@ delete parsed[k];
     const ymd = now.toLocaleDateString('en-CA', { timeZone: tz });
     const hm = now.toLocaleTimeString('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit', hour12: false });
     if (proposal) {
-      const raw = proposal.createdAt || proposal.created_at || '';
+      const raw = this._proposalCreatedAt(proposal);
       const d = typeof _parseSouBluDate === 'function' ? _parseSouBluDate(raw) : new Date(raw);
       if (d && !Number.isNaN(d.getTime())) {
         if (dateEl) dateEl.value = d.toLocaleDateString('en-CA', { timeZone: tz });
