@@ -40,7 +40,7 @@
   }
 
   function roleOf(u) {
-    return String(u?.role || '').toLowerCase();
+    return String(u?.role || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   }
 
   /**
@@ -50,7 +50,7 @@
   function canVendorView(u) {
     if (!u) return false;
     const r = roleOf(u);
-    return ['employee', 'vendedor'].includes(r);
+    return ['employee', 'vendedor', 'funcionario'].includes(r);
   }
 
   /** Backoffice e cargos de gestão veem a esteira completa. */
@@ -85,7 +85,11 @@
     sel.innerHTML = `<option value="${esc(u.id)}" selected>${esc(name)}</option>`;
     sel.disabled = true;
     sel.setAttribute('aria-readonly', 'true');
+    const hint = document.getElementById('cd_vendedor_hint');
+    if (hint) hint.textContent = 'Sua conta é vinculada automaticamente à proposta.';
   }
+
+  const vendorsBySelect = new WeakMap();
 
   /**
    * goSection — usa navigateTo do CRM (.section.active).
@@ -244,33 +248,28 @@
   async function fillVendorSelect() {
     const sel = document.getElementById('cd_vendedor');
     if (!sel) return;
-    if (sel.getAttribute('aria-readonly') === 'true') return; /* travado no vendedor logado: não sobrescrever */
+    const user = session();
+    if (canVendorView(user)) {
+      lockVendorSelectToSelf();
+      return;
+    }
+    if (!canBoView(user)) return;
+    sel.disabled = true;
+    vendorsBySelect.delete(sel);
     let list = [];
     try {
       if (typeof DB !== 'undefined' && typeof DB.getVendorsForSelect === 'function') {
-        list = await DB.getVendorsForSelect();
-      }
-      if (!list?.length && typeof DB !== 'undefined' && typeof DB.getAllUsers === 'function') {
-        const all = await DB.getAllUsers();
-        list = (all || []).filter((usr) => {
-          const r = String(usr.role || '').toLowerCase();
-          return ['employee', 'vendedor', 'supervisor', 'parceiro'].includes(r);
-        });
+        list = await DB.getVendorsForSelect() || [];
       }
     } catch (_) { list = []; }
-    if (!list?.length) {
-      const existing = [...new Set(_boRows.map((p) => p.vendorName || p.vendor_name).filter(Boolean))];
-      list = existing.map((name) => ({ id: name, name }));
-    }
-    if (sel.getAttribute('aria-readonly') === 'true') return; /* travou enquanto carregava: mantém o vendedor logado */
-    const cur = sel.value;
-    sel.innerHTML = `<option value="">Selecione o vendedor...</option>` +
-      list.map((v) => {
-        const val = v.id || v.name;
-        const name = v.name || v.nome || v.id;
-        const selAttr = String(cur) === String(val) ? ' selected' : '';
-        return `<option value="${esc(val)}"${selAttr}>${esc(name)}</option>`;
-      }).join('');
+    if (document.getElementById('cd_vendedor') !== sel || session()?.id !== user.id) return;
+    const vendors = new Map(list.filter(v => v?.id).map(v => [String(v.id), v.name || v.nome || String(v.id)]));
+    vendorsBySelect.set(sel, vendors);
+    const placeholder = vendors.size ? 'Selecione o vendedor...' : 'Nenhum vendedor disponível';
+    sel.innerHTML = `<option value="">${placeholder}</option>` + Array.from(vendors, ([id, name]) =>
+      `<option value="${esc(id)}">${esc(name)}</option>`).join('');
+    sel.required = true;
+    sel.disabled = !vendors.size;
   }
 
   function toggleRefinPort() {
@@ -494,9 +493,10 @@
   <!-- Vendedor Responsável -->
   <div class="cd-field">
     <label for="cd_vendedor">Vendedor Responsável</label>
-    <select id="cd_vendedor" class="form-control">
+    <select id="cd_vendedor" class="form-control" aria-describedby="cd_vendedor_hint">
       <option value="">Carregando vendedores...</option>
     </select>
+    <small id="cd_vendedor_hint" class="text-muted"></small>
   </div>
 
   <!-- CPF com busca na API -->
@@ -1189,13 +1189,6 @@ ${cdModalStyles()}
       const modal = ensureCdNovaModal();
       modal.innerHTML = novaModalHtml(!isEmployeePage && canBoView(session()));
       this.resetVendorForm();
-      fillTabelaSelect();
-      toggleRefinPort();
-      if (isEmployeePage || canVendorView(session())) {
-        lockVendorSelectToSelf();
-      } else {
-        fillVendorSelect();
-      }
       if (typeof openModal === 'function') openModal('cdNovaModal');
       else modal.classList.add('open');
     },
@@ -1256,6 +1249,15 @@ ${cdModalStyles()}
       const u = session();
       if (!u?.id) {
         if (typeof showToast === 'function') showToast('Faça login novamente.', 'warning');
+        return;
+      }
+      const vendorSel = document.getElementById('cd_vendedor');
+      const isVendor = canVendorView(u);
+      const vendorId = isVendor ? String(u.id) : vendorSel?.value;
+      const vendorName = isVendor ? (u.name || u.email || String(u.id))
+        : vendorsBySelect.get(vendorSel)?.get(vendorId);
+      if ((!isVendor && !canBoView(u)) || !vendorId || !vendorName) {
+        if (typeof showToast === 'function') showToast('Selecione um vendedor responsável disponível.', 'warning');
         return;
       }
       const cpf = digits(document.getElementById('cd_cpf')?.value);
@@ -1326,12 +1328,6 @@ ${cdModalStyles()}
         valor_total: valor,
         criado_em: now,
       };
-
-      const vendorSel = document.getElementById('cd_vendedor');
-      const vendorVal = vendorSel?.value || '';
-      const vendorOpt = vendorSel?.options[vendorSel.selectedIndex];
-      const vendorId = vendorVal || u.id;
-      const vendorName = (vendorVal && vendorOpt?.text) ? vendorOpt.text.trim() : (u.name || 'Backoffice');
 
       const proposal = {
         id,

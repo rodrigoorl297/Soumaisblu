@@ -13,19 +13,24 @@ async function main() {
   };
   let saved;
   let role = 'vendedor';
+  const vendorSelect = { value: 'other-user', setAttribute() {} };
   const context = {
     window: {},
     document: {
       readyState: 'loading', addEventListener() {},
-      getElementById: id => Object.hasOwn(values, id) ? { value: values[id] } : null,
+      getElementById: id => id === 'cd_vendedor' ? vendorSelect
+        : Object.hasOwn(values, id) ? { value: values[id] } : null,
     },
     Auth: { getSession: () => ({ id: 'test-user', name: 'Teste', role }) },
-    DB: { saveProposal: async proposal => { saved = JSON.parse(JSON.stringify(proposal)); } },
+    DB: {
+      getVendorsForSelect: async () => [{ id: 'assigned-user', name: 'Responsável' }],
+      saveProposal: async proposal => { saved = JSON.parse(JSON.stringify(proposal)); },
+    },
     setTimeout() {}, nowBrazilSql: () => '2026-11-24 21:35:00', showToast() {}, console,
   };
   const script = fs.readFileSync('js/esteira-compra-divida.js', 'utf8');
   vm.runInNewContext(script.replace('  const EsteiraCompraDivida = {',
-    '  window.renderCreditFields = formFieldsHtml;\n  const EsteiraCompraDivida = {'), context);
+    '  window.renderCreditFields = formFieldsHtml;\n  window.fillVendorSelect = fillVendorSelect;\n  const EsteiraCompraDivida = {'), context);
   const credit = context.window.EsteiraCompraDivida;
   credit.resetVendorForm = () => {};
   credit.closeNova = () => {};
@@ -40,6 +45,7 @@ async function main() {
 
   await credit.submitVendor();
   assert.ok(saved, 'O formulário do vendedor deve salvar sem definir tabela');
+  assert.equal(saved.vendor_id, 'test-user');
   assert.equal(saved.tabela, '');
   assert.equal(saved.credito_esteira.tabela, '');
   assert.equal(saved.created_at, '2026-11-24 21:35:00');
@@ -65,7 +71,16 @@ async function main() {
   assert.equal(loaded.address, 'Estado: GO Município: Goiânia Rua: Rua de Teste, 1, Apto 2 Bairro: Centro Cep: 74000-000');
 
   role = 'backoffice';
+  saved = undefined;
   await credit.submitVendor();
+  assert.equal(saved, undefined, 'O backoffice deve aguardar a lista de vendedores');
+  await context.window.fillVendorSelect();
+  await credit.submitVendor();
+  assert.equal(saved, undefined, 'O backoffice deve escolher um vendedor da lista');
+  vendorSelect.value = 'assigned-user';
+  await credit.submitVendor();
+  assert.equal(saved.vendor_id, 'assigned-user');
+  assert.equal(saved.vendor_name, 'Responsável');
   assert.equal(saved.tabela, values.cd_tabela);
   console.log('PASS: endereço, anexos, tabela por perfil e conta recuperada do payload.');
 }
