@@ -4881,7 +4881,7 @@ if (!allowed) return null;
       if (!id) return null;
       if (this.online && opts && opts.lite) {
         try {
-          const cols = this._PROPOSALS_DETAIL_LITE_COLS;
+          const cols = this._PROPOSALS_DETAIL_LITE_COLS + ',meta,credito_esteira';
           const r = await supaReq('GET', 'proposals', null,
             `?id=eq.${encodeURIComponent(id)}&select=${cols}&limit=1`);
           if (r && r[0]) {
