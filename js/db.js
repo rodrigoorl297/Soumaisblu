@@ -801,10 +801,11 @@ if (typeof window !== 'undefined') {
     },
 
     /** Lista leve de vendedores para selects (evita timeout em GET users completo) */
-    async getVendorsForSelect(adminId = null) {
+    async getVendorsForSelect(adminId = null, { includeBackoffice = false } = {}) {
       const isVendorRole = (u) => {
         const r = String(u?.role || '').toLowerCase();
         if (r === 'employee' || r === 'vendedor') return true;
+        if (r === 'backoffice') return includeBackoffice;
         // Supervisora autorizada a cadastrar proposta (ex.: Ana Bela) também recebe transferência.
         if (r === 'supervisor' || r === 'sup_backoffice') {
           const p = (u.permissions && typeof u.permissions === 'object') ? u.permissions : {};
@@ -838,11 +839,12 @@ if (typeof window !== 'undefined') {
 
       if (this.online) {
         const cols = 'id,name,email,role,active,admin_id,permissions';
+        const roles = `employee,vendedor,supervisor,sup_backoffice${includeBackoffice ? ',backoffice' : ''}`;
         // active=eq.1 (não "true") — Hostinger/MySQL TINYINT
         // Inclui supervisores (podem cadastrar/receber proposta, ex. Ana Bela).
-        let params = `?role=in.(employee,vendedor,supervisor,sup_backoffice)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
+        let params = `?role=in.(${roles})&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         if (adminIds?.length === 1) {
-          params = `?or=(admin_id.eq.${encodeURIComponent(adminIds[0])},id.eq.${encodeURIComponent(adminIds[0])})&role=in.(employee,vendedor,supervisor,sup_backoffice)&active=eq.1&select=${cols}&order=name.asc&limit=500`;
+          params = `?or=(admin_id.eq.${encodeURIComponent(adminIds[0])},id.eq.${encodeURIComponent(adminIds[0])})&role=in.(${roles})&active=eq.1&select=${cols}&order=name.asc&limit=500`;
         }
         try {
           const rows = await supaReq('GET', 'users', null, params);
