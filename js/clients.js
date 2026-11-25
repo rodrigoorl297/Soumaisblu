@@ -579,7 +579,12 @@ window.Clients = {
     return role === 'gerente' || role === 'gerencia' || role === 'sup_backoffice';
   },
 
-  /** Vendedor pode editar clientes da própria lista; exclusão continua restrita. */
+  _isVendor(user) {
+    return ['vendedor', 'employee', 'funcionario'].includes(String(user?.role || '')
+      .trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+  },
+
+  /** Vendedor pode editar os clientes vinculados à sua conta. */
   async canEdit(client, user) {
     const c = client;
     const u = user || (typeof Auth !== 'undefined' ? Auth.getSession() : null);
@@ -588,10 +593,9 @@ window.Clients = {
       return true;
     }
     const role = String(u.role || '').toLowerCase();
-    // Vendedores: liberar edição (a lista já é filtrada pelos clientes deles).
-    if (role === 'vendedor') return true;
     if (role === 'gerente' || role === 'gerencia') return true;
     const ownerId = String(c.supervisorId || c.supervisor_id || '');
+    if (this._isVendor(u)) return ownerId === String(u.id);
     if (ownerId && ownerId === String(u.id)) return true;
     if (role === 'parceiro' || role === 'parceiro_vendedor') {
       if (ownerId === String(u.id)) return true;
@@ -786,12 +790,23 @@ window.Clients = {
         ? String(modal.dataset.editCpf).replace(/\D/g, '')
         : '';
       const isEdit = !!editCpf && editCpf === cpf;
+      const session = Auth.getSession();
+      const vendor = this._isVendor(session);
+      const vendorEdit = vendor && !!editCpf;
+      if (vendorEdit && !isEdit) {
+        this._notify('Mantenha o CPF original ao editar o cliente.', 'warning');
+        return;
+      }
 
       let existing = null;
       if (typeof DB.findClientByCpf === 'function') {
         existing = await DB.findClientByCpf(cpf);
       } else if (typeof DB.getClientByCpf === 'function') {
         existing = await DB.getClientByCpf(cpf);
+      }
+      if (vendorEdit && !(await this.canEdit(existing, session))) {
+        this._notify('Sem permissão para editar este cliente.', 'warning');
+        return;
       }
       // Flag setada no blur/input do CPF — barreira extra antes da consulta DB.
       if (!isEdit && modal?.dataset?.cpfDupBlocked === '1') {
@@ -831,11 +846,8 @@ window.Clients = {
       // Vendedor: endereço textual obrigatório ao salvar cadastro do cliente.
       // Backoffice/supervisor+ podem salvar sem (correção de ficha).
       {
-        const sess = typeof Auth !== 'undefined' ? Auth.getSession() : null;
-        const role = String(sess?.role || '').trim().toLowerCase();
-        const isVendor = role === 'vendedor' || role === 'employee' || role === 'funcionario';
         const addrVal = String(document.getElementById('clientAddress')?.value || '').trim();
-        if (isVendor && addrVal.length < 8) {
+        if (vendor && addrVal.length < 8) {
           alert('Endereço completo é obrigatório para vendedores.');
           return;
         }
@@ -859,7 +871,6 @@ window.Clients = {
         };
       }
 
-      const session = Auth.getSession();
       // Em edição, preserva o dono original do cadastro (não trocar supervisorId).
       const prevOwner = existing
         ? String(existing.supervisorId || existing.supervisor_id || '')
@@ -898,14 +909,23 @@ window.Clients = {
       if (editCpf && editCpf !== cpf) {
         try { await DB.delete('clients', editCpf); } catch(e) {}
       }
-      if (modal) {
+      if (modal && !vendorEdit) {
         delete modal.dataset.editCpf;
         delete modal.dataset.cpfDupBlocked;
       }
 
       try {
-        await DB.save('clients', clientData);
+        if (vendorEdit) {
+          const { id, cpf, supervisorId, supervisor_id, ...changes } = clientData;
+          const updated = await DB.updateClient(existing.id || editCpf, changes);
+          if (!updated) throw new Error('O cadastro não foi atualizado.');
+          delete modal.dataset.editCpf;
+          delete modal.dataset.cpfDupBlocked;
+        } else {
+          await DB.save('clients', clientData);
+        }
       } catch (e) {
+        if (vendorEdit) throw e;
         const msg = String(e?.message || e || '');
         if (/CLIENT_DUP|já está cadastrado|já cadastrado/i.test(msg)) {
           if (saveBtn) { saveBtn.innerText = oldText; saveBtn.disabled = false; }
