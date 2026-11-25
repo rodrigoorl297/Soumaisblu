@@ -259,7 +259,7 @@
     let list = [];
     try {
       if (typeof DB !== 'undefined' && typeof DB.getVendorsForSelect === 'function') {
-        list = await DB.getVendorsForSelect() || [];
+        list = await DB.getVendorsForSelect(null, { includeBackoffice: true }) || [];
       }
     } catch (_) { list = []; }
     if (document.getElementById('cd_vendedor') !== sel || session()?.id !== user.id) return;
