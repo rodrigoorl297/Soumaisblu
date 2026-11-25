@@ -362,6 +362,21 @@
 .cd-field.col-full {
   grid-column: 1 / -1;
 }
+.cd-field-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.cd-field-group legend {
+  margin-bottom: 8px;
+  padding: 0;
+  font-weight: 700;
+  color: #334155;
+}
+.cd-attachment { min-width: 0; }
+.cd-attachment label { flex-wrap: wrap; }
+.cd-attachment small { color: #64748b; }
 .cd-field label {
   font-size: 11px;
   font-weight: 800;
@@ -379,6 +394,7 @@
 .cd-field select,
 .cd-field input[type="text"],
 .cd-field input[type="number"],
+.cd-field input[type="file"],
 .cd-field textarea {
   border: 1.5px solid #cbd5e1 !important;
   border-radius: 8px !important;
@@ -393,6 +409,7 @@
   box-sizing: border-box !important;
   min-height: 42px;
 }
+.cd-attachment input[type="file"] { padding: 8px 10px !important; font-size: 12px !important; }
 .cd-field select:focus,
 .cd-field input:focus,
 .cd-field textarea:focus {
@@ -461,7 +478,7 @@
   }
 
   /** Componente com todos os campos de entrada do formulário. */
-  function formFieldsHtml() {
+  function formFieldsHtml({ showTabela = false } = {}) {
     const C = cat();
     return `
 <div class="cd-form-grid">
@@ -496,10 +513,23 @@
     <div id="cd_cliente_info" style="min-height:16px;"></div>
   </div>
 
-  <div class="cd-field">
-    <label for="cd_endereco">Endereço do cliente</label>
-    <input type="text" id="cd_endereco" class="form-control" autocomplete="street-address" maxlength="500" placeholder="Rua, número, complemento, bairro, cidade e CEP"/>
-  </div>
+  <fieldset class="cd-field cd-field-group col-full">
+    <legend>Endereço do cliente</legend>
+    <div class="cd-form-grid">
+      ${[
+        ['cep', 'CEP', 'postal-code', 9],
+        ['uf', 'UF', 'address-level1', 2],
+        ['cidade', 'Cidade', 'address-level2', 100],
+        ['bairro', 'Bairro', 'address-level3', 100],
+        ['logradouro', 'Logradouro', 'address-line1', 160],
+        ['numero', 'Número', 'off', 20],
+        ['complemento', 'Complemento', 'address-line2', 80],
+      ].map(([key, label, autocomplete, length]) => `<div class="cd-field">
+        <label for="cd_endereco_${key}">${label}</label>
+        <input type="text" id="cd_endereco_${key}" class="form-control" autocomplete="${autocomplete}" maxlength="${length}"${key === 'cep' ? ' inputmode="numeric"' : ''}/>
+      </div>`).join('')}
+    </div>
+  </fieldset>
   <div class="cd-field col-full">
     <label>Dados bancários do cliente</label>
     <div style="font-size:11px;color:#64748b;margin-bottom:4px;">Informe a conta do cliente que receberá o crédito.</div>
@@ -565,13 +595,14 @@
     </select>
   </div>
 
-  <!-- Tabela -->
+  ${showTabela ? `
   <div class="cd-field">
     <label for="cd_tabela">Tabela <span class="req">*</span></label>
     <select id="cd_tabela" class="form-control" required>
       <option value="">Selecione banco e convênio primeiro...</option>
     </select>
   </div>
+  ` : ''}
 
   <!-- Valor da Operação -->
   <div class="cd-field">
@@ -583,21 +614,21 @@
     <div id="cd_valor_hint" style="font-size:11px;color:#64748b;">No REFIN PORT, o valor total é calculado pelos contratos.</div>
   </div>
 
-  <div></div>
-
-  <!-- Anexo / Documento 1 -->
-  <div class="cd-field">
-    <label for="cd_anexo_1">Anexo / Documento 1 <span style="font-size:10px;color:#64748b;font-weight:600;text-transform:none;">(opcional)</span></label>
-    <input type="file" id="cd_anexo_1" class="form-control" accept="image/*,.pdf" style="font-size:12px;padding:8px 10px;height:42px;"/>
-    <div style="font-size:11px;color:#64748b;">RG, CNH ou documento do cliente (PDF ou foto)</div>
-  </div>
-
-  <!-- Anexo / Documento 2 -->
-  <div class="cd-field">
-    <label for="cd_anexo_2">Anexo / Documento 2 <span style="font-size:10px;color:#64748b;font-weight:600;text-transform:none;">(opcional)</span></label>
-    <input type="file" id="cd_anexo_2" class="form-control" accept="image/*,.pdf" style="font-size:12px;padding:8px 10px;height:42px;"/>
-    <div style="font-size:11px;color:#64748b;">Contrato, extrato, termo ou comprovante (PDF ou foto)</div>
-  </div>
+  <fieldset class="cd-field cd-field-group col-full">
+    <legend>Anexos opcionais</legend>
+    <div class="cd-form-grid">
+      <div class="cd-field cd-attachment">
+        <label for="cd_anexo_1">Documento 1</label>
+        <input type="file" id="cd_anexo_1" class="form-control" accept="image/*,.pdf" aria-describedby="cd_anexo_1_hint"/>
+        <small id="cd_anexo_1_hint">RG, CNH ou documento do cliente (PDF ou foto)</small>
+      </div>
+      <div class="cd-field cd-attachment">
+        <label for="cd_anexo_2">Documento 2</label>
+        <input type="file" id="cd_anexo_2" class="form-control" accept="image/*,.pdf" aria-describedby="cd_anexo_2_hint"/>
+        <small id="cd_anexo_2_hint">Contrato, extrato, termo ou comprovante (PDF ou foto)</small>
+      </div>
+    </div>
+  </fieldset>
 
   <!-- Observação -->
   <div class="cd-field col-full">
@@ -742,7 +773,7 @@ ${showMine ? `<div class="card card-padded" style="border-radius:14px;">
   }
 
   /** Popup "Nova Proposta" moderno e elegante. */
-  function novaModalHtml() {
+  function novaModalHtml(showTabela = false) {
     return `
 ${cdModalStyles()}
 <div class="modal cd-modal-container">
@@ -765,7 +796,7 @@ ${cdModalStyles()}
   
   <form id="cdVendorForm" onsubmit="EsteiraCompraDivida.submitVendor(event)" style="display:flex;flex-direction:column;flex:1;overflow:hidden;margin:0;">
     <div class="cd-modal-body">
-      ${formFieldsHtml()}
+      ${formFieldsHtml({ showTabela })}
     </div>
     <div class="cd-modal-footer">
       <button type="button" class="btn btn-outline btn-sm" onclick="EsteiraCompraDivida.resetVendorForm()" style="font-weight:600;color:#64748b;">
@@ -985,7 +1016,7 @@ ${cdModalStyles()}
             <td>${esc(p.numero || p.id)}</td>
             <td>${esc(p.vendorName || p.vendor_name || '—')}</td>
             <td>${esc(p.clientName || p.client_name || '')}<br/><span class="text-muted">${esc(fmtCpf(p.clientCpf || p.client_cpf))}</span>${attsHtml}</td>
-            <td>${esc(pl.produto || p.product || '')}<br/><span class="text-muted">${esc(pl.banco || '')} · ${esc(pl.tabela || p.tabela || '')}</span>${ports}</td>
+            <td>${esc(pl.produto || p.product || '')}<br/><span class="text-muted">${esc(pl.banco || '')} · ${esc((p.tabela ?? pl.tabela) || 'Tabela a definir')}</span>${ports}</td>
             <td>${esc(pl.convenio || p.convenio || '')}</td>
             <td>${esc(p.protocolo || '—')}</td>
             <td>${esc(fmtMoney(p.valor))}</td>
@@ -1156,7 +1187,7 @@ ${cdModalStyles()}
       else this.ensureBoSection();
 
       const modal = ensureCdNovaModal();
-      modal.innerHTML = novaModalHtml();
+      modal.innerHTML = novaModalHtml(!isEmployeePage && canBoView(session()));
       this.resetVendorForm();
       fillTabelaSelect();
       toggleRefinPort();
@@ -1207,7 +1238,7 @@ ${cdModalStyles()}
         const dt = datesOf(p);
         lines.push([
           p.numero || p.id, p.vendorName || p.vendor_name, p.clientName || p.client_name, fmtCpf(p.clientCpf || p.client_cpf),
-          pl.produto || p.product, pl.banco, pl.tabela || p.tabela, pl.convenio || p.convenio, p.protocolo,
+          pl.produto || p.product, pl.banco, p.tabela ?? pl.tabela, pl.convenio || p.convenio, p.protocolo,
           p.valor, p.valorFinal ?? p.valor, fmtProposalDate(dt.criacao), fmtProposalDate(dt.digitacao), p.status || p.statusOp, fmtProposalDate(dt.pagamento),
         ].map(cell).join(';'));
       });
@@ -1235,7 +1266,8 @@ ${cdModalStyles()}
       const convenio = document.getElementById('cd_convenio')?.value || '';
       const situacao = document.getElementById('cd_situacao')?.value || '';
       const banco = document.getElementById('cd_banco')?.value || '';
-      const tabela = document.getElementById('cd_tabela')?.value || '';
+      const tabelaField = canBoView(u) ? document.getElementById('cd_tabela') : null;
+      const tabela = tabelaField?.value || '';
       const origem = document.getElementById('cd_origem')?.value || 'propria';
       const obsUser = document.getElementById('cd_obs')?.value?.trim() || '';
       const contratos = produto === 'REFIN PORT' ? collectPortContracts() : [];
@@ -1247,8 +1279,10 @@ ${cdModalStyles()}
         if (typeof showToast === 'function') showToast('Informe o CPF do cliente.', 'warning');
         return;
       }
-      if (!produto || !convenio || !banco || !tabela) {
-        if (typeof showToast === 'function') showToast('Preencha produto, convênio, banco e tabela.', 'warning');
+      if (!produto || !convenio || !banco || (tabelaField && !tabela)) {
+        if (typeof showToast === 'function') showToast(tabelaField
+          ? 'Preencha produto, convênio, banco e tabela.'
+          : 'Preencha produto, convênio e banco.', 'warning');
         return;
       }
       if (produto === 'REFIN PORT' && !contratos.length) {
@@ -1264,13 +1298,24 @@ ${cdModalStyles()}
       const protocolo = `CD-${now.slice(0, 10).replaceAll('-', '')}-${String(Math.floor(1000 + Math.random() * 9000))}`;
       const id = `CD-${Date.now()}`;
       const status = AGUARDANDO_DIGITACAO;
+      const enderecoCampos = Object.fromEntries(['cep', 'uf', 'cidade', 'bairro', 'logradouro', 'numero', 'complemento']
+        .map(key => [key, document.getElementById(`cd_endereco_${key}`)?.value?.trim() || '']));
+      const rua = [enderecoCampos.logradouro, enderecoCampos.numero, enderecoCampos.complemento].filter(Boolean).join(', ');
+      const endereco = [
+        ['Estado', enderecoCampos.uf.toUpperCase()],
+        ['Município', enderecoCampos.cidade],
+        ['Rua', rua],
+        ['Bairro', enderecoCampos.bairro],
+        ['Cep', enderecoCampos.cep],
+      ].filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`).join(' ');
       const payload = {
         tipo: TIPO,
         origem,
         produto,
         convenio,
         situacao_beneficiario: situacao,
-        endereco: document.getElementById('cd_endereco')?.value?.trim() || '',
+        endereco,
+        endereco_campos: enderecoCampos,
         conta: document.getElementById('cd_conta')?.value?.trim() || '',
         banco_conta: document.getElementById('cd_banco_conta')?.value?.trim() || '',
         agencia: document.getElementById('cd_agencia')?.value?.trim() || '',
