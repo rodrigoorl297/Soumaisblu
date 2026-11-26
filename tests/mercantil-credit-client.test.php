@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../api/lib/MercantilCreditClient.php';
+require_once __DIR__ . '/../api/lib/MercantilCreditWorkflow.php';
 
 function check(bool $condition, string $message): void
 {
@@ -43,3 +44,37 @@ try {
     check(count($calls) === 4, 'Identificador inválido não pode gerar chamada');
 }
 echo "PASS: OAuth, rotas fixas, Bearer, GET, validação e HTTP 429.\n";
+
+$prospectId = '00000000-0000-4000-8000-000000000001';
+$requests = [];
+$workflow = new MercantilCreditWorkflow(new MercantilCreditClient('hml-id', 'hml-secret', 'hml',
+    static function ($method, $url, $payload) use (&$requests, $prospectId): array {
+        if (str_contains($url, '/oauth/')) {
+            return ['code' => 200, 'json' => ['access_token' => 'test', 'expires_in' => 3600]];
+        }
+        $requests[] = $payload;
+        return ['code' => 200, 'json' => ['Id' => $prospectId]];
+    }
+));
+$started = $workflow->startPreSimulation('012.345.678-90', '00123');
+check($requests === [['Cpf' => 1234567890, 'NumeroBeneficio' => 123]], 'DTO do banco');
+check($started === ['prospect_id' => $prospectId, 'cpf' => '01234567890', 'estado' => 'aguardando_retorno'], 'Vínculo local');
+$callback = ['PropostaProspectId' => $prospectId, 'CpfCliente' => 1234567890,
+    'PreSimulacaoResultado' => [], 'Concluido' => true];
+check(MercantilCreditWorkflow::readCallback($callback, $prospectId, '01234567890')['concluido'], 'Callback correlacionado');
+$offers = ['PropostaProspectId' => $prospectId, 'CpfCliente' => 1234567890,
+    'SimulacoesCreditoPessoal' => [['ValorLiberado' => 1000]], 'SimulacoesCombinados' => []];
+check(MercantilCreditWorkflow::readCallback($offers, $prospectId, '01234567890')['credito_pessoal'][0]['ValorLiberado'] === 1000, 'Ofertas');
+try {
+    MercantilCreditWorkflow::readCallback($callback, $prospectId, '12345678909');
+    throw new LogicException('Esperava rejeição de CPF divergente.');
+} catch (InvalidArgumentException) {
+    check(count($requests) === 1, 'Callback divergente rejeitado');
+}
+try {
+    $workflow->startPreSimulation('123.456.789-01');
+    throw new LogicException('Esperava rejeição de CPF inválido.');
+} catch (InvalidArgumentException) {
+    check(count($requests) === 1, 'CPF inválido não enviado');
+}
+echo "PASS: pré-simulação, CPF com zero à esquerda e correlação dos callbacks.\n";
