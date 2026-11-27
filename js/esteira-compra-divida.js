@@ -1036,6 +1036,47 @@ ${cdModalStyles()}
   }
 
   const EsteiraCompraDivida = {
+    mountMercantilPreview() {
+      const previewUrl = window.SoubluMercantilPreviewUrl;
+      if (!['localhost', '127.0.0.1'].includes(location.hostname)
+        || typeof previewUrl !== 'string' || !previewUrl.startsWith('/') || previewUrl.startsWith('//')
+        || document.getElementById('mercantilCreditoLauncher')) return;
+      const widget = document.createElement('div');
+      widget.className = 'mercantil-credit-widget';
+      widget.innerHTML = `
+        <style>
+          .mercantil-credit-widget{position:fixed;right:20px;bottom:20px;z-index:1040;font:inherit}
+          .mercantil-credit-widget button{cursor:pointer;font:inherit}
+          .mercantil-credit-launcher{display:flex;align-items:center;gap:8px;border:0;border-radius:999px;background:#1052a8;color:#fff;padding:12px 17px;box-shadow:0 4px 15px #12355a40}
+          .mercantil-credit-panel{position:absolute;right:0;bottom:58px;width:min(440px,calc(100vw - 40px));height:min(640px,calc(100dvh - 95px));background:#fff;border:1px solid #cbd9ed;border-radius:13px;overflow:hidden;box-shadow:0 10px 30px #12355a40}
+          .mercantil-credit-panel:not([hidden]){display:flex;flex-direction:column}
+          .mercantil-credit-heading{background:#1052a8;color:#fff;padding:11px 15px;display:flex;align-items:center;justify-content:space-between;font-weight:700}
+          .mercantil-credit-close{border:0;background:none;color:inherit;padding:2px 7px;font-size:20px!important}
+          .mercantil-credit-panel iframe{width:100%;flex:1;min-height:0;border:0}
+          .mercantil-credit-widget button:focus-visible{outline:2px solid #fcac52;outline-offset:2px}
+        </style>
+        <div class="mercantil-credit-panel" id="mercantilCreditoPanel" role="region" aria-label="Crédito Pessoal Mercantil" hidden>
+          <div class="mercantil-credit-heading">Crédito Pessoal Mercantil
+            <button type="button" class="mercantil-credit-close" aria-label="Fechar Mercantil">×</button>
+          </div>
+          <iframe title="Crédito Pessoal Mercantil"></iframe>
+        </div>
+        <button type="button" id="mercantilCreditoLauncher" class="mercantil-credit-launcher" aria-controls="mercantilCreditoPanel" aria-expanded="false">${credNavIcon()} Mercantil</button>`;
+      document.body.appendChild(widget);
+      const launcher = widget.querySelector('.mercantil-credit-launcher');
+      const panel = widget.querySelector('.mercantil-credit-panel');
+      const close = widget.querySelector('.mercantil-credit-close');
+      const frame = widget.querySelector('iframe');
+      const setOpen = (open) => {
+        if (open && !frame.hasAttribute('src')) frame.src = previewUrl;
+        panel.hidden = !open;
+        launcher.setAttribute('aria-expanded', String(open));
+        (open ? close : launcher).focus();
+      };
+      launcher.addEventListener('click', () => setOpen(panel.hidden));
+      close.addEventListener('click', () => setOpen(false));
+    },
+
     maskCpf(v) { return maskCpf(v); },
     onProdutoChange() { toggleRefinPort(); fillTabelaSelect(); },
     onFiltroTabela() { fillTabelaSelect(); },
@@ -1107,6 +1148,7 @@ ${cdModalStyles()}
       btn.style.display = '';
       btn.hidden = false;
       btn._cdOpenMode = mode;
+      this.mountMercantilPreview();
       // Um único handler: monta formulário + navigateTo (não deixar tela branca).
       if (!btn.dataset.cdOpenWired) {
         btn.dataset.cdOpenWired = '1';
