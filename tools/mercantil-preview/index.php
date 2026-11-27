@@ -6,10 +6,19 @@ if (PHP_SAPI !== 'cli-server' || !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.
     http_response_code(404);
     exit;
 }
+header('Cache-Control: no-store');
+if (($_GET['asset'] ?? '') === 'esteira') {
+    header('Content-Type: application/javascript; charset=utf-8');
+    readfile(__DIR__ . '/../../js/esteira-compra-divida.js');
+    exit;
+}
+if (!isset($_GET['flow'])) {
+    require __DIR__ . '/panel.php';
+    exit;
+}
 require_once __DIR__ . '/../../api/lib/MercantilCreditWorkflow.php';
 session_name('soublu_mercantil_preview');
 session_start();
-header('Cache-Control: no-store');
 
 const DEMO_PROSPECT = '00000000-0000-4000-8000-000000000001';
 const DEMO_OFFERS = [
@@ -49,7 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ];
         }
     }
-    header('Location: /', true, 303);
+    header('Location: /?flow=1', true, 303);
     exit;
 }
 function h(string $text): string { return htmlspecialchars($text, ENT_QUOTES, 'UTF-8'); }
@@ -66,7 +75,6 @@ function reais(int $amount): string { return 'R$ ' . number_format($amount, 2, '
 </style>
 </head>
 <body>
-<header>SOU+BLU / Gestão de Crédito</header>
 <main>
 <h1>Crédito Pessoal Mercantil</h1>
 <p class="notice">Demonstração local com dados fictícios. Nenhuma chamada é enviada ao banco.</p>

@@ -1036,6 +1036,36 @@ ${cdModalStyles()}
   }
 
   const EsteiraCompraDivida = {
+    mountMercantilPreview() {
+      const previewUrl = window.SoubluMercantilPreviewUrl;
+      if (!['localhost', '127.0.0.1'].includes(location.hostname)
+        || typeof previewUrl !== 'string' || !previewUrl.startsWith('/') || previewUrl.startsWith('//')) return;
+      const anchor = document.getElementById('navGestaoCredito');
+      const root = this.contentRoot();
+      if (!anchor || !root || document.getElementById('navMercantilCredito')) return;
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'nav-item';
+      button.id = 'navMercantilCredito';
+      button.dataset.section = 'secMercantilCredito';
+      button.innerHTML = `${credNavIcon()}<span class="nav-label">Crédito Pessoal Mercantil</span>`;
+      anchor.after(button);
+
+      const section = document.createElement('section');
+      section.id = 'secMercantilCredito';
+      section.className = 'section';
+      const frame = document.createElement('iframe');
+      frame.title = 'Crédito Pessoal Mercantil';
+      frame.style.cssText = 'width:100%;min-height:740px;border:0;display:block';
+      section.appendChild(frame);
+      root.appendChild(section);
+      button.addEventListener('click', (event) => {
+        event.preventDefault();
+        if (!frame.hasAttribute('src')) frame.src = previewUrl;
+        goSection(section.id);
+      });
+    },
+
     maskCpf(v) { return maskCpf(v); },
     onProdutoChange() { toggleRefinPort(); fillTabelaSelect(); },
     onFiltroTabela() { fillTabelaSelect(); },
@@ -1107,6 +1137,7 @@ ${cdModalStyles()}
       btn.style.display = '';
       btn.hidden = false;
       btn._cdOpenMode = mode;
+      this.mountMercantilPreview();
       // Um único handler: monta formulário + navigateTo (não deixar tela branca).
       if (!btn.dataset.cdOpenWired) {
         btn.dataset.cdOpenWired = '1';
