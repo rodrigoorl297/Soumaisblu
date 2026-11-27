@@ -28,11 +28,11 @@ if (PHP_SAPI !== 'cli-server' || !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.
     </nav>
   </aside>
   <div id="mainArea">
-    <header id="topbarTitle">Gestão de Crédito</header>
+    <header id="topbarTitle">Dashboard</header>
     <main class="page-content">
-      <section id="secCreditoLocal" class="section credit-home">
-        <h1>Gestão de Crédito</h1>
-        <p>Selecione Crédito Pessoal Mercantil no menu para abrir a demonstração.</p>
+      <section id="secCreditoLocal" class="section credit-home active">
+        <h1>Painel local do SOU+BLU</h1>
+        <p>Abra o botão Mercantil no canto inferior direito para testar o fluxo.</p>
       </section>
     </main>
   </div>
@@ -40,13 +40,6 @@ if (PHP_SAPI !== 'cli-server' || !in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.
   <script>
     window.SoubluMercantilPreviewUrl = '/?flow=1';
     window.EsteiraCompraDivida.mountMercantilPreview();
-    document.getElementById('navGestaoCredito').addEventListener('click', () => {
-      document.querySelectorAll('.section,.nav-item').forEach(element => {
-        element.classList.toggle('active', ['secCreditoLocal','navGestaoCredito'].includes(element.id));
-      });
-      document.getElementById('topbarTitle').textContent = 'Gestão de Crédito';
-    });
-    document.getElementById('navMercantilCredito').click();
   </script>
 </body>
 </html>
